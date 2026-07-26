@@ -1,0 +1,457 @@
+import { useMemo, useState } from 'react';
+import { Building2, Edit, Eye, Plus, Save, Search, Shield, Trash2, Users, X } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import type { User, Role, Permission, Branch } from '../types';
+
+const allPermissions: Permission[] = [
+  'dashboard:view',
+  'invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete',
+  'wo:view', 'wo:create', 'wo:edit', 'wo:delete',
+  'customer:view', 'customer:create', 'customer:edit', 'customer:delete',
+  'vehicle:view', 'vehicle:create', 'vehicle:edit', 'vehicle:delete',
+  'item:view', 'item:create', 'item:edit', 'item:delete',
+  'user:view', 'user:create', 'user:edit', 'user:delete',
+  'role:view', 'role:create', 'role:edit', 'role:delete',
+  'branch:view', 'branch:create', 'branch:edit', 'branch:delete',
+  'report:view',
+  'all_branches',
+];
+
+const permLabels: Record<string, string> = {
+  'dashboard:view': 'Lihat Dashboard',
+  'invoice:view': 'Lihat Faktur', 'invoice:create': 'Buat Faktur', 'invoice:edit': 'Edit Faktur', 'invoice:delete': 'Hapus Faktur',
+  'wo:view': 'Lihat WO', 'wo:create': 'Buat WO', 'wo:edit': 'Edit WO', 'wo:delete': 'Hapus WO',
+  'customer:view': 'Lihat Pelanggan', 'customer:create': 'Buat Pelanggan', 'customer:edit': 'Edit Pelanggan', 'customer:delete': 'Hapus Pelanggan',
+  'vehicle:view': 'Lihat Kendaraan', 'vehicle:create': 'Buat Kendaraan', 'vehicle:edit': 'Edit Kendaraan', 'vehicle:delete': 'Hapus Kendaraan',
+  'item:view': 'Lihat Barang/Jasa', 'item:create': 'Buat Barang/Jasa', 'item:edit': 'Edit Barang/Jasa', 'item:delete': 'Hapus Barang/Jasa',
+  'user:view': 'Lihat User', 'user:create': 'Buat User', 'user:edit': 'Edit User', 'user:delete': 'Hapus User',
+  'role:view': 'Lihat Role', 'role:create': 'Buat Role', 'role:edit': 'Edit Role', 'role:delete': 'Hapus Role',
+  'branch:view': 'Lihat Cabang', 'branch:create': 'Buat Cabang', 'branch:edit': 'Edit Cabang', 'branch:delete': 'Hapus Cabang',
+  'report:view': 'Lihat Laporan',
+  'all_branches': 'Akses Semua Cabang',
+};
+
+export default function UsersAndRoles() {
+  const { data, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, addBranch, updateBranch, deleteBranch, currentUser, hasPermission } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'branches'>('users');
+  const [search, setSearch] = useState('');
+
+  // User modal
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userForm, setUserForm] = useState({ username: '', name: '', email: '', password: '', roleId: '', branchId: '', isActive: true });
+  const [showPw, setShowPw] = useState(false);
+
+  // Role modal
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [roleForm, setRoleForm] = useState({ code: '', name: '', description: '', permissions: [] as Permission[], isActive: true });
+
+  // Branch modal
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+  const [branchForm, setBranchForm] = useState({ code: '', name: '', address: '', phone: '', isActive: true });
+
+  const filteredUsers = useMemo(() => {
+    const q = search.toLowerCase();
+    return data.users.filter((u) => u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q) || u.roleName.toLowerCase().includes(q));
+  }, [data.users, search]);
+
+  const openUserModal = (user?: User) => {
+    if (user) {
+      setEditingUser(user);
+      setUserForm({ username: user.username, name: user.name, email: user.email, password: '', roleId: user.roleId, branchId: user.branchId, isActive: user.isActive });
+    } else {
+      setEditingUser(null);
+      setUserForm({ username: '', name: '', email: '', password: '', roleId: data.roles[0]?.id || '', branchId: data.branches[0]?.id || '', isActive: true });
+    }
+    setShowUserModal(true);
+  };
+
+  const openRoleModal = (role?: Role) => {
+    if (role) {
+      setEditingRole(role);
+      setRoleForm({ code: role.code, name: role.name, description: role.description, permissions: [...role.permissions], isActive: role.isActive });
+    } else {
+      setEditingRole(null);
+      setRoleForm({ code: '', name: '', description: '', permissions: [], isActive: true });
+    }
+    setShowRoleModal(true);
+  };
+
+  const openBranchModal = (branch?: Branch) => {
+    if (branch) {
+      setEditingBranch(branch);
+      setBranchForm({ code: branch.code, name: branch.name, address: branch.address, phone: branch.phone, isActive: branch.isActive });
+    } else {
+      setEditingBranch(null);
+      setBranchForm({ code: '', name: '', address: '', phone: '', isActive: true });
+    }
+    setShowBranchModal(true);
+  };
+
+  const saveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    const role = data.roles.find((r) => r.id === userForm.roleId);
+    const branch = data.branches.find((b) => b.id === userForm.branchId);
+    const payload: User = {
+      id: editingUser?.id || Date.now().toString(),
+      username: userForm.username,
+      name: userForm.name.toUpperCase(),
+      email: userForm.email,
+      password: editingUser ? (userForm.password || editingUser.password) : userForm.password,
+      roleId: userForm.roleId,
+      roleName: role?.name || '-',
+      branchId: userForm.branchId,
+      branchName: branch?.name || '-',
+      isActive: userForm.isActive,
+      createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
+      lastLogin: editingUser?.lastLogin,
+    };
+    if (editingUser) updateUser(editingUser.id, payload);
+    else addUser(payload);
+    setShowUserModal(false);
+  };
+
+  const saveRole = (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: Role = { id: editingRole?.id || Date.now().toString(), ...roleForm };
+    if (editingRole) updateRole(editingRole.id, payload);
+    else addRole(payload);
+    setShowRoleModal(false);
+  };
+
+  const saveBranch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: Branch = { id: editingBranch?.id || Date.now().toString(), ...branchForm };
+    if (editingBranch) updateBranch(editingBranch.id, payload);
+    else addBranch(payload);
+    setShowBranchModal(false);
+  };
+
+  const togglePerm = (perm: Permission) => {
+    setRoleForm((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(perm) ? prev.permissions.filter((p) => p !== perm) : [...prev.permissions, perm],
+    }));
+  };
+
+  const canEdit = hasPermission('user:edit');
+  const canDelete = hasPermission('user:delete');
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Pengguna & Akses</h2>
+          <p className="mt-1 text-gray-500">Kelola user, grup akses (role), dan data cabang.</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-gray-200">
+        {[
+          { key: 'users' as const, label: 'Pengguna', icon: Users },
+          { key: 'roles' as const, label: 'Grup Akses (Role)', icon: Shield },
+          { key: 'branches' as const, label: 'Cabang', icon: Building2 },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setSearch(''); }}
+              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Icon className="h-4 w-4" /> {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ========== USERS TAB ========== */}
+      {activeTab === 'users' && (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama, username, role..." className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+            </div>
+            {hasPermission('user:create') && (
+              <button onClick={() => openUserModal()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> User Baru
+              </button>
+            )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredUsers.map((user) => (
+              <div key={user.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-lg font-bold text-white">
+                      {user.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{user.name}</p>
+                      <p className="text-xs text-gray-500">@{user.username}</p>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {user.isActive ? 'Aktif' : 'Nonaktif'}
+                  </span>
+                </div>
+                <div className="mt-3 space-y-1 text-sm text-gray-600">
+                  <p><span className="text-gray-400">Role:</span> <span className="font-medium text-gray-800">{user.roleName}</span></p>
+                  <p><span className="text-gray-400">Cabang:</span> <span className="font-medium text-gray-800">{user.branchName}</span></p>
+                  <p><span className="text-gray-400">Email:</span> {user.email}</p>
+                  {user.lastLogin && <p className="text-xs text-gray-400">Login terakhir: {user.lastLogin}</p>}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  {canEdit && (
+                    <button onClick={() => openUserModal(user)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                      <Edit className="h-3.5 w-3.5" /> Edit
+                    </button>
+                  )}
+                  {canDelete && user.id !== currentUser?.id && (
+                    <button onClick={() => { if (window.confirm(`Hapus user ${user.name}?`)) deleteUser(user.id); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
+                      <Trash2 className="h-3.5 w-3.5" /> Hapus
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ========== ROLES TAB ========== */}
+      {activeTab === 'roles' && (
+        <>
+          <div className="flex justify-end">
+            {hasPermission('role:create') && (
+              <button onClick={() => openRoleModal()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> Role Baru
+              </button>
+            )}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {data.roles.map((role) => (
+              <div key={role.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-red-600 text-white">
+                      <Shield className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{role.name}</p>
+                      <p className="font-mono text-xs text-blue-600">{role.code}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    {hasPermission('role:edit') && <button onClick={() => openRoleModal(role)} className="rounded p-1.5 text-blue-600 hover:bg-blue-100"><Edit className="h-4 w-4" /></button>}
+                    {hasPermission('role:delete') && <button onClick={() => { if (window.confirm(`Hapus role ${role.name}?`)) deleteRole(role.id); }} className="rounded p-1.5 text-red-600 hover:bg-red-100"><Trash2 className="h-4 w-4" /></button>}
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-gray-500">{role.description || '-'}</p>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {role.permissions.slice(0, 6).map((perm) => (
+                    <span key={perm} className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">{permLabels[perm] || perm}</span>
+                  ))}
+                  {role.permissions.length > 6 && <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">+{role.permissions.length - 6}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ========== BRANCHES TAB ========== */}
+      {activeTab === 'branches' && (
+        <>
+          <div className="flex justify-end">
+            {hasPermission('branch:create') && (
+              <button onClick={() => openBranchModal()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> Cabang Baru
+              </button>
+            )}
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {data.branches.map((branch) => (
+              <div key={branch.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 text-white">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{branch.name}</p>
+                      <p className="font-mono text-xs text-blue-600">{branch.code}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    {hasPermission('branch:edit') && <button onClick={() => openBranchModal(branch)} className="rounded p-1.5 text-blue-600 hover:bg-blue-100"><Edit className="h-4 w-4" /></button>}
+                    {hasPermission('branch:delete') && <button onClick={() => { if (window.confirm(`Hapus cabang ${branch.name}?`)) deleteBranch(branch.id); }} className="rounded p-1.5 text-red-600 hover:bg-red-100"><Trash2 className="h-4 w-4" /></button>}
+                  </div>
+                </div>
+                <div className="mt-3 space-y-1 text-sm text-gray-600">
+                  <p><span className="text-gray-400">Alamat:</span> {branch.address}</p>
+                  <p><span className="text-gray-400">Telepon:</span> {branch.phone}</p>
+                </div>
+                <div className="mt-3">
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${branch.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {branch.isActive ? 'Aktif' : 'Nonaktif'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ========== USER MODAL ========== */}
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">{editingUser ? 'Edit Pengguna' : 'Pengguna Baru'}</h3>
+              <button onClick={() => setShowUserModal(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
+            </div>
+            <form onSubmit={saveUser} className="space-y-4 p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Username *</label>
+                  <input required value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Nama Lengkap *</label>
+                  <input required value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Email *</label>
+                  <input type="email" required value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Password {editingUser ? '(kosongkan jika tidak diubah)' : '*'}</label>
+                  <div className="relative">
+                    <input type={showPw ? 'text' : 'password'} value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-10 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><Eye className="h-4 w-4" /></button>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Role *</label>
+                  <select required value={userForm.roleId} onChange={(e) => setUserForm({ ...userForm, roleId: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
+                    {data.roles.filter((r) => r.isActive).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Cabang *</label>
+                  <select required value={userForm.branchId} onChange={(e) => setUserForm({ ...userForm, branchId: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
+                    {data.branches.filter((b) => b.isActive).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={userForm.isActive} onChange={(e) => setUserForm({ ...userForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
+                Aktif
+              </label>
+              <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+                <button type="button" onClick={() => setShowUserModal(false)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
+                <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"><Save className="h-4 w-4" /> Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========== ROLE MODAL ========== */}
+      {showRoleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">{editingRole ? 'Edit Role' : 'Role Baru'}</h3>
+              <button onClick={() => setShowRoleModal(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
+            </div>
+            <form onSubmit={saveRole} className="space-y-4 p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Kode Role *</label>
+                  <input required value={roleForm.code} onChange={(e) => setRoleForm({ ...roleForm, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Nama Role *</label>
+                  <input required value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Keterangan</label>
+                <input value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Hak Akses</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+                  {allPermissions.map((perm) => (
+                    <label key={perm} className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2.5 transition-colors hover:bg-gray-50">
+                      <input type="checkbox" checked={roleForm.permissions.includes(perm)} onChange={() => togglePerm(perm)} className="h-4 w-4 rounded text-blue-600" />
+                      <span className="text-sm text-gray-700">{permLabels[perm] || perm}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={roleForm.isActive} onChange={(e) => setRoleForm({ ...roleForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
+                Aktif
+              </label>
+              <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+                <button type="button" onClick={() => setShowRoleModal(false)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
+                <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"><Save className="h-4 w-4" /> Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========== BRANCH MODAL ========== */}
+      {showBranchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">{editingBranch ? 'Edit Cabang' : 'Cabang Baru'}</h3>
+              <button onClick={() => setShowBranchModal(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
+            </div>
+            <form onSubmit={saveBranch} className="space-y-4 p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Kode Cabang *</label>
+                  <input required value={branchForm.code} onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Nama Cabang *</label>
+                  <input required value={branchForm.name} onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Alamat</label>
+                <input value={branchForm.address} onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Telepon</label>
+                <input value={branchForm.phone} onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={branchForm.isActive} onChange={(e) => setBranchForm({ ...branchForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
+                Aktif
+              </label>
+              <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+                <button type="button" onClick={() => setShowBranchModal(false)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
+                <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"><Save className="h-4 w-4" /> Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

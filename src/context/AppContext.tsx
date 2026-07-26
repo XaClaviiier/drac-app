@@ -1,0 +1,496 @@
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment } from '../types';
+import { api } from '../lib/apiClient';
+import { demoData } from '../lib/demoData';
+
+interface AppContextType {
+  data: AppData;
+  currentUser: User | null;
+  currentBranchId: string;
+  setCurrentBranchId: (id: string) => void;
+  login: (username: string, password: string) => Promise<User | null>;
+  logout: () => void;
+  hasPermission: (perm: Permission) => boolean;
+  isLoading: boolean;
+  isDemoMode: boolean;
+  refreshData: () => Promise<void>;
+  addVehicle: (vehicle: Vehicle) => Promise<void>;
+  updateVehicle: (id: string, vehicle: Vehicle) => Promise<void>;
+  deleteVehicle: (id: string) => Promise<void>;
+  addCustomer: (customer: Omit<Customer, 'customerCode'> & { customerCode?: string }) => Promise<Customer>;
+  updateCustomer: (id: string, customer: Customer) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
+  generateCustomerCode: () => string;
+  addInvoice: (invoice: SalesInvoice) => Promise<void>;
+  updateInvoice: (id: string, invoice: SalesInvoice) => Promise<void>;
+  deleteInvoice: (id: string) => Promise<void>;
+  addWorkOrder: (wo: WorkOrder) => Promise<void>;
+  updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
+  deleteWorkOrder: (id: string) => Promise<void>;
+  createInvoiceFromWO: (woId: string, payment: number) => Promise<SalesInvoice | null>;
+  addItem: (item: Item) => Promise<void>;
+  updateItem: (id: string, item: Item) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
+  addItemCategory: (category: ItemCategory) => Promise<void>;
+  updateItemCategory: (id: string, category: ItemCategory) => Promise<void>;
+  deleteItemCategory: (id: string) => Promise<void>;
+  addBranch: (branch: Branch) => Promise<void>;
+  updateBranch: (id: string, branch: Branch) => Promise<void>;
+  deleteBranch: (id: string) => Promise<void>;
+  addRole: (role: Role) => Promise<void>;
+  updateRole: (id: string, role: Role) => Promise<void>;
+  deleteRole: (id: string) => Promise<void>;
+  addUser: (user: User) => Promise<void>;
+  updateUser: (id: string, user: User) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  addSupplier: (supplier: Supplier) => Promise<Supplier>;
+  updateSupplier: (id: string, supplier: Supplier) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
+  generateSupplierCode: () => string;
+  addGoodsReceipt: (receipt: GoodsReceipt) => Promise<GoodsReceipt>;
+  updateGoodsReceipt: (id: string, receipt: GoodsReceipt) => Promise<void>;
+  deleteGoodsReceipt: (id: string) => Promise<void>;
+  generateReceiptNumber: (branchId: string) => string;
+  receiveGoods: (receiptId: string) => Promise<void>;
+  addPurchaseInvoice: (invoice: PurchaseInvoice) => Promise<PurchaseInvoice>;
+  updatePurchaseInvoice: (id: string, invoice: PurchaseInvoice) => Promise<void>;
+  deletePurchaseInvoice: (id: string) => Promise<void>;
+  generatePurchaseInvoiceNumber: (branchId: string) => string;
+  addPurchasePayment: (invoiceId: string, payment: PurchasePayment) => Promise<void>;
+  deletePurchasePayment: (invoiceId: string, paymentId: string) => Promise<void>;
+}
+
+const emptyData: AppData = {
+  vehicles: [], customers: [], invoices: [], workOrders: [],
+  itemCategories: [], items: [], branches: [], roles: [], users: [],
+  suppliers: [], goodsReceipts: [], purchaseInvoices: [],
+};
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [data, setData] = useState<AppData>(emptyData);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('currentUser');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+  const [currentBranchId, setCurrentBranchIdState] = useState<string>(() => {
+    return localStorage.getItem('currentBranchId') || 'ALL';
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  const setCurrentBranchId = (id: string) => {
+    setCurrentBranchIdState(id);
+    localStorage.setItem('currentBranchId', id);
+  };
+
+  // Track if using demo mode (backend not available)
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // Load all data from API (with demo fallback)
+  const refreshData = async () => {
+    setIsLoading(true);
+    const res = await api.loadAllData();
+    if (res.success && res.data) {
+      setData({
+        vehicles: res.data.vehicles || [],
+        customers: res.data.customers || [],
+        invoices: res.data.invoices || [],
+        workOrders: res.data.workOrders || [],
+        itemCategories: res.data.itemCategories || [],
+        items: res.data.items || [],
+        branches: res.data.branches || [],
+        roles: res.data.roles || [],
+        users: res.data.users || [],
+        suppliers: res.data.suppliers || [],
+        goodsReceipts: res.data.goodsReceipts || [],
+        purchaseInvoices: res.data.purchaseInvoices || [],
+      });
+      setIsDemoMode(false);
+    } else {
+      // Backend not available - fallback to demo data
+      console.warn('⚠️ Backend API tidak tersedia. Menggunakan DEMO MODE (data tidak akan tersimpan).');
+      setData(demoData);
+      setIsDemoMode(true);
+    }
+    setIsLoading(false);
+  };
+
+  // Load data on startup
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  // ===== AUTH =====
+  const login = async (username: string, password: string): Promise<User | null> => {
+    // Try backend API first
+    const res = await api.login(username, password);
+    let user: User | null = null;
+
+    if (res.success && res.data) {
+      user = res.data as User;
+      await refreshData();
+    } else {
+      // Fallback: cek dari demo data (untuk preview local)
+      const demoUser = demoData.users.find(u => u.username === username && u.password === password && u.isActive);
+      if (demoUser) {
+        user = { ...demoUser };
+        setData(demoData);
+        setIsDemoMode(true);
+      }
+    }
+
+    if (!user) return null;
+    setCurrentUser(user);
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    // Set branch based on permission
+    const roles = isDemoMode ? demoData.roles : data.roles;
+    const role = roles.find((r) => r.id === user!.roleId);
+    const startsAll = role?.permissions.includes('all_branches') ?? false;
+    const branch = startsAll ? 'ALL' : user.branchId;
+    setCurrentBranchId(branch);
+    return user;
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('currentUser');
+    setCurrentBranchId('ALL');
+  };
+
+  const hasPermission = (perm: Permission): boolean => {
+    if (!currentUser) return false;
+    const role = data.roles.find((r) => r.id === currentUser.roleId);
+    if (!role) return false;
+    return role.permissions.includes(perm);
+  };
+
+  // Helper: eksekusi CRUD - jika demo mode, langsung update state
+  const executeCRUD = async (
+    operation: () => Promise<any>,
+    localAction: () => void
+  ): Promise<void> => {
+    if (isDemoMode) {
+      localAction();
+      return;
+    }
+    await operation();
+    await refreshData();
+  };
+
+  // ===== VEHICLES =====
+  const addVehicle = async (v: Vehicle) => {
+    await executeCRUD(
+      () => api.create('vehicles', v),
+      () => setData(prev => ({ ...prev, vehicles: [...prev.vehicles, v] }))
+    );
+  };
+  const updateVehicle = async (id: string, v: Vehicle) => {
+    await executeCRUD(
+      () => api.update('vehicles', id, v),
+      () => setData(prev => ({ ...prev, vehicles: prev.vehicles.map(x => x.id === id ? v : x) }))
+    );
+  };
+  const deleteVehicle = async (id: string) => {
+    await executeCRUD(
+      () => api.remove('vehicles', id),
+      () => setData(prev => ({ ...prev, vehicles: prev.vehicles.filter(x => x.id !== id) }))
+    );
+  };
+
+  // ===== CUSTOMERS =====
+  const generateCustomerCode = () => {
+    const maxNum = data.customers.reduce((max, c) => {
+      const match = c.customerCode?.match(/PLG-(\d+)/);
+      const num = match ? parseInt(match[1]) : 0;
+      return num > max ? num : max;
+    }, 0);
+    return `PLG-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+
+  const addCustomer = async (customer: Omit<Customer, 'customerCode'> & { customerCode?: string }): Promise<Customer> => {
+    const newCustomer: Customer = { ...customer, customerCode: customer.customerCode || generateCustomerCode() };
+    await executeCRUD(
+      () => api.create('customers', newCustomer),
+      () => setData(prev => ({ ...prev, customers: [...prev.customers, newCustomer] }))
+    );
+    return newCustomer;
+  };
+  const updateCustomer = async (id: string, c: Customer) => {
+    await executeCRUD(
+      () => api.update('customers', id, c),
+      () => setData(prev => ({ ...prev, customers: prev.customers.map(x => x.id === id ? c : x) }))
+    );
+  };
+  const deleteCustomer = async (id: string) => {
+    await executeCRUD(
+      () => api.remove('customers', id),
+      () => setData(prev => ({ ...prev, customers: prev.customers.filter(x => x.id !== id) }))
+    );
+  };
+
+  // ===== INVOICES =====
+  const addInvoice = async (inv: SalesInvoice) => {
+    await executeCRUD(
+      () => api.create('sales-invoices', inv),
+      () => setData(prev => ({ ...prev, invoices: [...prev.invoices, inv] }))
+    );
+  };
+  const updateInvoice = async (id: string, inv: SalesInvoice) => {
+    await executeCRUD(
+      () => api.update('sales-invoices', id, inv),
+      () => setData(prev => ({ ...prev, invoices: prev.invoices.map(x => x.id === id ? inv : x) }))
+    );
+  };
+  const deleteInvoice = async (id: string) => {
+    await executeCRUD(
+      () => api.remove('sales-invoices', id),
+      () => setData(prev => ({ ...prev, invoices: prev.invoices.filter(x => x.id !== id) }))
+    );
+  };
+
+  // ===== WORK ORDERS =====
+  const addWorkOrder = async (wo: WorkOrder) => {
+    await executeCRUD(
+      () => api.create('work-orders', wo),
+      () => setData(prev => ({ ...prev, workOrders: [...prev.workOrders, wo] }))
+    );
+  };
+  const updateWorkOrder = async (id: string, wo: WorkOrder) => {
+    await executeCRUD(
+      () => api.update('work-orders', id, wo),
+      () => setData(prev => ({ ...prev, workOrders: prev.workOrders.map(x => x.id === id ? wo : x) }))
+    );
+  };
+  const deleteWorkOrder = async (id: string) => {
+    await executeCRUD(
+      () => api.remove('work-orders', id),
+      () => setData(prev => ({ ...prev, workOrders: prev.workOrders.filter(x => x.id !== id) }))
+    );
+  };
+
+  const createInvoiceFromWO = async (woId: string, payment: number): Promise<SalesInvoice | null> => {
+    const wo = data.workOrders.find((w) => w.id === woId);
+    if (!wo) return null;
+
+    const branchPrefixes: Record<string, string> = { 'BR-001': 'D-', 'BR-002': 'C-', 'BR-003': 'M-' };
+    const prefix = branchPrefixes[wo.branchId] || 'INV-';
+    const invoiceNumber = `${prefix}${1956 + data.invoices.length + 1}`;
+    const today = new Date().toISOString().split('T')[0];
+    const status: SalesInvoice['status'] = payment >= wo.total ? 'Lunas' : 'Belum Lunas';
+    const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
+
+    const newInvoice: SalesInvoice = {
+      id: Date.now().toString(),
+      invoiceNumber, date: today,
+      customerRefId: customer?.id || wo.customerRefId,
+      customerId: wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
+      customerName: wo.customerName,
+      vehicleInfo: `${wo.vehicleInfo} ${wo.plateNumber}`,
+      description: wo.services.map((s) => s.name).join(', '),
+      total: wo.total, payment, status, age: 0,
+      woId: wo.id, woNumber: wo.woNumber, items: wo.services,
+      branchId: wo.branchId,
+    };
+
+    await api.create('sales-invoices', newInvoice);
+    await api.update('work-orders', woId, {
+      ...wo, status: 'Dibayar', invoiceId: newInvoice.id, invoiceNumber,
+    });
+    await refreshData();
+    return newInvoice;
+  };
+
+  // ===== ITEMS =====
+  const addItem = async (item: Item) => {
+    await executeCRUD(() => api.create('items', item), () => setData(prev => ({ ...prev, items: [...prev.items, item] })));
+  };
+  const updateItem = async (id: string, item: Item) => {
+    await executeCRUD(() => api.update('items', id, item), () => setData(prev => ({ ...prev, items: prev.items.map(x => x.id === id ? item : x) })));
+  };
+  const deleteItem = async (id: string) => {
+    await executeCRUD(() => api.remove('items', id), () => setData(prev => ({ ...prev, items: prev.items.filter(x => x.id !== id) })));
+  };
+
+  // ===== ITEM CATEGORIES =====
+  const addItemCategory = async (c: ItemCategory) => {
+    await executeCRUD(() => api.create('item-categories', c), () => setData(prev => ({ ...prev, itemCategories: [...prev.itemCategories, c] })));
+  };
+  const updateItemCategory = async (id: string, c: ItemCategory) => {
+    await executeCRUD(() => api.update('item-categories', id, c), () => setData(prev => ({ ...prev, itemCategories: prev.itemCategories.map(x => x.id === id ? c : x) })));
+  };
+  const deleteItemCategory = async (id: string) => {
+    await executeCRUD(() => api.remove('item-categories', id), () => setData(prev => ({ ...prev, itemCategories: prev.itemCategories.filter(x => x.id !== id) })));
+  };
+
+  // ===== BRANCHES =====
+  const addBranch = async (b: Branch) => {
+    await executeCRUD(() => api.create('branches', b), () => setData(prev => ({ ...prev, branches: [...prev.branches, b] })));
+  };
+  const updateBranch = async (id: string, b: Branch) => {
+    await executeCRUD(() => api.update('branches', id, b), () => setData(prev => ({ ...prev, branches: prev.branches.map(x => x.id === id ? b : x) })));
+  };
+  const deleteBranch = async (id: string) => {
+    await executeCRUD(() => api.remove('branches', id), () => setData(prev => ({ ...prev, branches: prev.branches.filter(x => x.id !== id) })));
+  };
+
+  // ===== ROLES =====
+  const addRole = async (r: Role) => {
+    await executeCRUD(() => api.create('roles', r), () => setData(prev => ({ ...prev, roles: [...prev.roles, r] })));
+  };
+  const updateRole = async (id: string, r: Role) => {
+    await executeCRUD(() => api.update('roles', id, r), () => setData(prev => ({ ...prev, roles: prev.roles.map(x => x.id === id ? r : x) })));
+  };
+  const deleteRole = async (id: string) => {
+    await executeCRUD(() => api.remove('roles', id), () => setData(prev => ({ ...prev, roles: prev.roles.filter(x => x.id !== id) })));
+  };
+
+  // ===== USERS =====
+  const addUser = async (u: User) => {
+    await executeCRUD(() => api.create('users', u), () => setData(prev => ({ ...prev, users: [...prev.users, u] })));
+  };
+  const updateUser = async (id: string, u: User) => {
+    await executeCRUD(() => api.update('users', id, u), () => setData(prev => ({ ...prev, users: prev.users.map(x => x.id === id ? u : x) })));
+  };
+  const deleteUser = async (id: string) => {
+    await executeCRUD(() => api.remove('users', id), () => setData(prev => ({ ...prev, users: prev.users.filter(x => x.id !== id) })));
+  };
+
+  // ===== SUPPLIERS =====
+  const generateSupplierCode = () => {
+    const maxNum = data.suppliers.reduce((max, s) => {
+      const match = s.code?.match(/SUP-(\d+)/);
+      const num = match ? parseInt(match[1]) : 0;
+      return num > max ? num : max;
+    }, 0);
+    return `SUP-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+  const addSupplier = async (s: Supplier): Promise<Supplier> => {
+    await executeCRUD(() => api.create('suppliers', s), () => setData(prev => ({ ...prev, suppliers: [...prev.suppliers, s] })));
+    return s;
+  };
+  const updateSupplier = async (id: string, s: Supplier) => {
+    await executeCRUD(() => api.update('suppliers', id, s), () => setData(prev => ({ ...prev, suppliers: prev.suppliers.map(x => x.id === id ? s : x) })));
+  };
+  const deleteSupplier = async (id: string) => {
+    await executeCRUD(() => api.remove('suppliers', id), () => setData(prev => ({ ...prev, suppliers: prev.suppliers.filter(x => x.id !== id) })));
+  };
+
+  // ===== GOODS RECEIPTS =====
+  const generateReceiptNumber = (branchId: string) => {
+    const prefixes: Record<string, string> = { 'BR-001': 'GR-P', 'BR-002': 'GR-C', 'BR-003': 'GR-M' };
+    const prefix = prefixes[branchId] || 'GR';
+    const year = new Date().getFullYear();
+    const branchReceipts = data.goodsReceipts.filter((r) => r.branchId === branchId);
+    return `${prefix}-${year}-${String(branchReceipts.length + 1).padStart(4, '0')}`;
+  };
+
+  const addGoodsReceipt = async (receipt: GoodsReceipt): Promise<GoodsReceipt> => {
+    await executeCRUD(
+      () => api.create('goods-receipts', receipt),
+      () => setData(prev => ({ ...prev, goodsReceipts: [...prev.goodsReceipts, receipt] }))
+    );
+    return receipt;
+  };
+  const updateGoodsReceipt = async (id: string, receipt: GoodsReceipt) => {
+    await executeCRUD(
+      () => api.update('goods-receipts', id, receipt),
+      () => setData(prev => ({ ...prev, goodsReceipts: prev.goodsReceipts.map(x => x.id === id ? receipt : x) }))
+    );
+  };
+  const deleteGoodsReceipt = async (id: string) => {
+    await executeCRUD(
+      () => api.remove('goods-receipts', id),
+      () => setData(prev => ({ ...prev, goodsReceipts: prev.goodsReceipts.filter(x => x.id !== id) }))
+    );
+  };
+  const receiveGoods = async (receiptId: string) => {
+    const receipt = data.goodsReceipts.find((r) => r.id === receiptId);
+    if (!receipt) return;
+    const updated = { ...receipt, status: 'Diterima' as const, receivedBy: currentUser?.name || 'System' };
+    await updateGoodsReceipt(receiptId, updated);
+  };
+
+  // ===== PURCHASE INVOICES =====
+  const generatePurchaseInvoiceNumber = (branchId: string) => {
+    const prefixes: Record<string, string> = { 'BR-001': 'PI-P', 'BR-002': 'PI-C', 'BR-003': 'PI-M' };
+    const prefix = prefixes[branchId] || 'PI';
+    const year = new Date().getFullYear();
+    const branchInvoices = data.purchaseInvoices.filter((p) => p.branchId === branchId);
+    return `${prefix}-${year}-${String(branchInvoices.length + 1).padStart(4, '0')}`;
+  };
+
+  const addPurchaseInvoice = async (inv: PurchaseInvoice): Promise<PurchaseInvoice> => {
+    await executeCRUD(
+      () => api.create('purchase-invoices', inv),
+      () => setData(prev => ({ ...prev, purchaseInvoices: [...prev.purchaseInvoices, inv] }))
+    );
+    return inv;
+  };
+  const updatePurchaseInvoice = async (id: string, inv: PurchaseInvoice) => {
+    await executeCRUD(
+      () => api.update('purchase-invoices', id, inv),
+      () => setData(prev => ({ ...prev, purchaseInvoices: prev.purchaseInvoices.map(x => x.id === id ? inv : x) }))
+    );
+  };
+  const deletePurchaseInvoice = async (id: string) => {
+    await executeCRUD(
+      () => api.remove('purchase-invoices', id),
+      () => setData(prev => ({ ...prev, purchaseInvoices: prev.purchaseInvoices.filter(x => x.id !== id) }))
+    );
+  };
+  const addPurchasePayment = async (invoiceId: string, payment: PurchasePayment) => {
+    await executeCRUD(
+      () => api.addPurchasePayment(invoiceId, payment),
+      () => setData(prev => ({
+        ...prev,
+        purchaseInvoices: prev.purchaseInvoices.map(inv => {
+          if (inv.id !== invoiceId) return inv;
+          const newPayments = [...inv.payments, payment];
+          const paid = newPayments.reduce((s, p) => s + p.amount, 0);
+          const status: PurchaseInvoice['status'] = paid >= inv.total ? 'Lunas' : (paid > 0 ? 'Sebagian' : 'Belum Lunas');
+          return { ...inv, payments: newPayments, paidAmount: paid, status };
+        })
+      }))
+    );
+  };
+  const deletePurchasePayment = async (invoiceId: string, paymentId: string) => {
+    // Backend belum expose delete payment, workaround: skip or use PUT
+    // Untuk sekarang, refresh saja
+    console.warn('Delete payment endpoint not yet implemented on backend', invoiceId, paymentId);
+    await refreshData();
+  };
+
+  return (
+    <AppContext.Provider
+      value={{
+        data, currentUser, currentBranchId, setCurrentBranchId,
+        login, logout, hasPermission, isLoading, isDemoMode, refreshData,
+        addVehicle, updateVehicle, deleteVehicle,
+        addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,
+        addInvoice, updateInvoice, deleteInvoice,
+        addWorkOrder, updateWorkOrder, deleteWorkOrder, createInvoiceFromWO,
+        addItem, updateItem, deleteItem,
+        addItemCategory, updateItemCategory, deleteItemCategory,
+        addBranch, updateBranch, deleteBranch,
+        addRole, updateRole, deleteRole,
+        addUser, updateUser, deleteUser,
+        addSupplier, updateSupplier, deleteSupplier, generateSupplierCode,
+        addGoodsReceipt, updateGoodsReceipt, deleteGoodsReceipt,
+        generateReceiptNumber, receiveGoods,
+        addPurchaseInvoice, updatePurchaseInvoice, deletePurchaseInvoice,
+        generatePurchaseInvoiceNumber, addPurchasePayment, deletePurchasePayment,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useApp() {
+  const context = useContext(AppContext);
+  if (!context) throw new Error('useApp must be used within an AppProvider');
+  return context;
+}
