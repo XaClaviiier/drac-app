@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
@@ -8,15 +8,25 @@ import VehiclePicker from '../components/VehiclePicker';
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
 export default function WorkOrders() {
-  const { data, addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder, createInvoiceFromWO, addItem, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId, hasPermission } = useApp();
+  const {
+    data,
+    addWorkOrder, updateWorkOrder, deleteWorkOrder,
+    continueWorkOrder, findActiveWoByPlate, changeWorkOrderStatus,
+    createInvoiceFromWO, addItem,
+    currentUser, currentBranchId, resolveBranchId, hasPermission,
+  } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
+  const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
+  const [statusDialog, setStatusDialog] = useState<{ wo: WorkOrder; next: WorkOrder['status'] } | null>(null);
+  const [statusReason, setStatusReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [todayOnly, setTodayOnly] = useState(false);
-  const [enabledBranchIds, setEnabledBranchIds] = useState<string[]>([]);
-  const branchToggleSyncRef = useRef(false);
+  const [todayOnly, setTodayOnly] = useState(true);
+  const [activeBranchOnly, setActiveBranchOnly] = useState(true);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
   const [invoicePayment, setInvoicePayment] = useState(0);
   const [successMsg, setSuccessMsg] = useState('');
@@ -146,75 +156,58 @@ export default function WorkOrders() {
   const selectedBranchId = currentBranchId === 'ALL'
     ? (currentUser?.branchId || resolveBranchId())
     : currentBranchId;
-  const todayDate = new Date().toISOString().split('T')[0];
-  const filterBranches = canViewAllBranches
-    ? data.branches.filter(branch => branch.isActive)
-    : data.branches.filter(branch => branch.id === selectedBranchId);
+  const selectedBranch = data.branches.find(branch => branch.id === selectedBranchId);
+  const selectedBranchLabel = selectedBranch?.name.replace('CABANG ', '') || 'Cabang Aktif';
+  const toLocalDate = (date: Date) => {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().split('T')[0];
+  };
+  const todayDate = toLocalDate(new Date());
 
-  // Sinkronisasi dropdown cabang di header -> toggle cabang pada daftar WO.
-  // Semua Cabang = semua toggle ON, cabang tertentu = hanya toggle itu yang ON.
+  const activeBranchIds = data.branches.filter(branch => branch.isActive).map(branch => branch.id);
+
+  // Saat dropdown header berganti cabang, filter cabang tersebut otomatis ON.
   useEffect(() => {
-    const availableIds = canViewAllBranches
-      ? data.branches.filter(branch => branch.isActive).map(branch => branch.id)
-      : [selectedBranchId];
+    setActiveBranchOnly(true);
+  }, [currentBranchId]);
 
-    // Perubahan ini berasal dari klik toggle; state lokal sudah benar dan
-    // tidak perlu ditimpa kembali oleh efek dropdown.
-    if (branchToggleSyncRef.current) {
-      branchToggleSyncRef.current = false;
-      return;
-    }
+  const isAllBranchDropdown = currentBranchId === 'ALL';
+  const branchScopeLabel = isAllBranchDropdown || !activeBranchOnly
+    ? 'Semua Cabang'
+    : selectedBranchLabel;
 
-    if (!canViewAllBranches) {
-      setEnabledBranchIds(availableIds);
-      return;
-    }
+  const branchWoCount = data.workOrders.filter(wo => {
+    if (wo.branchId !== selectedBranchId) return false;
+    if (todayOnly) return wo.date === todayDate;
+    return (!dateFrom || wo.date >= dateFrom) && (!dateTo || wo.date <= dateTo);
+  }).length;
 
-    setEnabledBranchIds(
-      currentBranchId === 'ALL'
-        ? availableIds
-        : availableIds.filter(id => id === currentBranchId)
-    );
-  }, [canViewAllBranches, data.branches, selectedBranchId, currentBranchId]);
-
-  const toggleBranchFilter = (branchId: string) => {
-    if (!canViewAllBranches) return;
-    setEnabledBranchIds(previous => {
-      let next: string[];
-      if (previous.includes(branchId)) {
-        // Minimal satu cabang harus tetap ON supaya daftar tidak membingungkan.
-        if (previous.length === 1) {
-          window.alert('Minimal satu cabang harus tetap aktif.');
-          return previous;
-        }
-        next = previous.filter(id => id !== branchId);
-      } else {
-        next = [...previous, branchId];
-      }
-
-      // Sinkronisasi toggle -> dropdown header:
-      // satu toggle ON = nama cabang tersebut; lebih dari satu = Semua Cabang.
-      const dropdownBranchId = next.length === 1 ? next[0] : 'ALL';
-      if (dropdownBranchId !== currentBranchId) {
-        branchToggleSyncRef.current = true;
-        setCurrentBranchId(dropdownBranchId);
-      }
-
-      return next;
-    });
+  const setLastSevenDays = () => {
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    setDateFrom(toLocalDate(start));
+    setDateTo(todayDate);
   };
 
-  const enabledBranchLabels = filterBranches
-    .filter(branch => enabledBranchIds.includes(branch.id))
-    .map(branch => branch.name.replace('CABANG ', ''));
+  const setCurrentMonth = () => {
+    const now = new Date();
+    setDateFrom(toLocalDate(new Date(now.getFullYear(), now.getMonth(), 1)));
+    setDateTo(todayDate);
+  };
 
   const filteredWOs = useMemo(() => {
     return data.workOrders
       .filter((wo) => {
-        const branchMatch = enabledBranchIds.includes(wo.branchId);
+        // Dropdown Semua Cabang atau toggle cabang OFF = seluruh cabang aktif.
+        const branchMatch = isAllBranchDropdown || !activeBranchOnly
+          ? activeBranchIds.includes(wo.branchId)
+          : wo.branchId === selectedBranchId;
         if (!branchMatch) return false;
 
-        const dateMatch = !todayOnly || wo.date === todayDate;
+        // Hari Ini ON mengabaikan range. OFF tanpa range berarti semua tanggal.
+        const dateMatch = todayOnly
+          ? wo.date === todayDate
+          : (!dateFrom || wo.date >= dateFrom) && (!dateTo || wo.date <= dateTo);
         if (!dateMatch) return false;
 
         const matchesSearch =
@@ -234,9 +227,14 @@ export default function WorkOrders() {
     data.workOrders,
     searchTerm,
     filterStatus,
-    enabledBranchIds,
+    isAllBranchDropdown,
+    activeBranchOnly,
+    activeBranchIds,
+    selectedBranchId,
     todayOnly,
     todayDate,
+    dateFrom,
+    dateTo,
   ]);
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
@@ -390,6 +388,15 @@ export default function WorkOrders() {
       return;
     }
 
+    // Aturan: satu mobil hanya boleh punya satu WO aktif dalam satu waktu.
+    if (!editingWO) {
+      const active = findActiveWoByPlate(formData.plateNumber);
+      if (active) {
+        setActiveWoConflict(active);
+        return;
+      }
+    }
+
     const targetBranch = resolveBranchId();
     const prefixes: Record<string, string> = { 'BR-001': 'WO-P', 'BR-002': 'WO-C', 'BR-003': 'WO-M' };
     const prefix = prefixes[targetBranch] || 'WO';
@@ -430,11 +437,24 @@ export default function WorkOrders() {
     }
   };
 
-  const handleStatusChange = (id: string, status: WorkOrder['status']) => {
-    const wo = data.workOrders.find((w) => w.id === id);
-    if (wo) {
-      updateWorkOrder(id, { ...wo, status });
+  // Alur status berurutan: dipanggil dari tombol aksi di kartu WO.
+  const requestStatusChange = (wo: WorkOrder, next: WorkOrder['status']) => {
+    setStatusReason('');
+    setStatusDialog({ wo, next });
+  };
+
+  const confirmStatusChange = async () => {
+    if (!statusDialog) return;
+    const { wo, next } = statusDialog;
+    const result = await changeWorkOrderStatus(wo.id, next, statusReason);
+    if (!result.ok) {
+      window.alert(result.message || 'Perubahan status ditolak.');
+      return;
     }
+    setSuccessMsg(`${wo.woNumber}: status berubah menjadi ${next}.`);
+    setTimeout(() => setSuccessMsg(''), 4000);
+    setStatusDialog(null);
+    setStatusReason('');
   };
 
   const handleOpenInvoiceModal = (wo: WorkOrder) => {
@@ -551,54 +571,82 @@ export default function WorkOrders() {
               </span>
             </button>
 
-            {/* Satu toggle untuk setiap cabang aktif */}
-            {filterBranches.map(branch => {
-              const enabled = enabledBranchIds.includes(branch.id);
-              const woCount = data.workOrders.filter(wo => wo.branchId === branch.id && (!todayOnly || wo.date === todayDate)).length;
-              const activeStyle = branch.id === 'BR-001'
-                ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
-                : branch.id === 'BR-002'
-                ? 'border-violet-500 bg-violet-50 text-violet-800'
-                : 'border-orange-500 bg-orange-50 text-orange-800';
-              const switchStyle = branch.id === 'BR-001'
-                ? 'bg-emerald-600'
-                : branch.id === 'BR-002'
-                ? 'bg-violet-600'
-                : 'bg-orange-500';
-
-              return (
-                <button
-                  key={branch.id}
-                  type="button"
-                  role="switch"
-                  aria-checked={enabled}
-                  disabled={!canViewAllBranches}
-                  onClick={() => toggleBranchFilter(branch.id)}
-                  title={!canViewAllBranches ? 'Akun ini hanya boleh melihat cabangnya sendiri' : `${enabled ? 'Sembunyikan' : 'Tampilkan'} WO ${branch.name}`}
-                  className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-3 py-2 transition-all sm:min-w-[190px] ${
-                    enabled ? `${activeStyle} shadow-sm` : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
-                  } ${!canViewAllBranches ? 'cursor-not-allowed opacity-80' : ''}`}
-                >
-                  <span className="flex min-w-0 items-center gap-2 text-left">
-                    <Building2 className={`h-4 w-4 flex-shrink-0 ${enabled ? '' : 'text-gray-400'}`} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-bold">{branch.name.replace('CABANG ', '')}</span>
-                      <span className="block text-[10px] opacity-70">{woCount} WO {todayOnly ? 'hari ini' : 'tersimpan'}</span>
+            {/* Toggle cabang hanya muncul untuk cabang yang dipilih pada dropdown header. */}
+            {!isAllBranchDropdown && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={activeBranchOnly || !canViewAllBranches}
+                disabled={!canViewAllBranches}
+                onClick={() => canViewAllBranches && setActiveBranchOnly(value => !value)}
+                title={!canViewAllBranches ? 'Akun ini hanya boleh melihat cabangnya sendiri' : activeBranchOnly ? `Matikan untuk melihat semua cabang aktif` : `Aktifkan untuk hanya melihat ${selectedBranchLabel}`}
+                className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-3 py-2 transition-all sm:min-w-[205px] ${
+                  activeBranchOnly || !canViewAllBranches
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                } ${!canViewAllBranches ? 'cursor-not-allowed opacity-80' : ''}`}
+              >
+                <span className="flex min-w-0 items-center gap-2 text-left">
+                  <Building2 className={`h-4 w-4 flex-shrink-0 ${activeBranchOnly || !canViewAllBranches ? 'text-emerald-600' : 'text-gray-400'}`} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-bold">{selectedBranchLabel}</span>
+                    <span className="block text-[10px] opacity-70">
+                      {activeBranchOnly || !canViewAllBranches ? `${branchWoCount} WO cabang ini` : 'Tampilkan semua cabang aktif'}
                     </span>
                   </span>
-                  <span className={`relative flex h-7 w-16 flex-shrink-0 items-center rounded-full px-1 transition-colors ${enabled ? switchStyle : 'bg-gray-300'}`}>
-                    <span className={`absolute text-[8px] font-bold text-white ${enabled ? 'left-2' : 'right-1.5'}`}>{enabled ? 'ON' : 'OFF'}</span>
-                    <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-9' : 'translate-x-0'}`} />
-                  </span>
-                </button>
-              );
-            })}
+                </span>
+                <span className={`relative flex h-7 w-16 flex-shrink-0 items-center rounded-full px-1 transition-colors ${activeBranchOnly || !canViewAllBranches ? 'bg-emerald-600' : 'bg-gray-300'}`}>
+                  <span className={`absolute text-[8px] font-bold text-white ${activeBranchOnly || !canViewAllBranches ? 'left-2' : 'right-1.5'}`}>{activeBranchOnly || !canViewAllBranches ? 'ON' : 'OFF'}</span>
+                  <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${activeBranchOnly || !canViewAllBranches ? 'translate-x-9' : 'translate-x-0'}`} />
+                </span>
+              </button>
+            )}
 
             <div className="ml-auto hidden text-right text-xs text-gray-500 sm:block">
               <p className="font-semibold text-gray-700">{filteredWOs.length} WO ditampilkan</p>
-              <p>{todayOnly ? 'Hari ini' : 'Semua tanggal'} · {enabledBranchLabels.join(', ') || 'Tidak ada cabang'}</p>
+              <p>{todayOnly ? 'Hari ini' : (dateFrom || dateTo ? 'Range tanggal' : 'Semua tanggal')} · {branchScopeLabel}</p>
             </div>
           </div>
+
+          {/* Hari Ini OFF: range tanggal opsional. Kosong = semua tanggal. */}
+          {!todayOnly && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-indigo-800">Dari Tanggal</label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      max={dateTo || undefined}
+                      onChange={(event) => setDateFrom(event.target.value)}
+                      className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-indigo-800">Sampai Tanggal</label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      min={dateFrom || undefined}
+                      onChange={(event) => setDateTo(event.target.value)}
+                      className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={setLastSevenDays} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">7 Hari Terakhir</button>
+                  <button type="button" onClick={setCurrentMonth} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Bulan Ini</button>
+                  <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); }} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100">Reset</button>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-indigo-700">
+                {dateFrom || dateTo
+                  ? `Menampilkan ${dateFrom || 'awal'} sampai ${dateTo || 'akhir'}.`
+                  : 'Range kosong: menampilkan WO dari semua tanggal.'}
+              </p>
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
@@ -625,7 +673,14 @@ export default function WorkOrders() {
           </div>
 
           <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 sm:hidden">
-            <span>{todayOnly ? `Hari ini: ${todayDate}` : 'Semua tanggal'}</span>
+            <span>
+              {todayOnly
+                ? `Hari ini: ${todayDate}`
+                : dateFrom || dateTo
+                ? `${dateFrom || 'awal'} – ${dateTo || 'akhir'}`
+                : 'Semua tanggal'}
+              {' · '}{branchScopeLabel}
+            </span>
             <span className="font-semibold text-gray-800">{filteredWOs.length} WO</span>
           </div>
         </div>
@@ -639,7 +694,7 @@ export default function WorkOrders() {
             <p className="text-lg font-medium text-gray-900">Tidak ada order kerja</p>
             <p className="text-sm text-gray-500">
               {todayOnly
-                ? `Tidak ada WO hari ini di ${enabledBranchLabels.join(', ') || 'cabang yang dipilih'}. Matikan filter Hari Ini untuk melihat riwayat.`
+                ? `Tidak ada WO hari ini di ${branchScopeLabel}. Matikan filter Hari Ini untuk melihat riwayat.`
                 : 'Klik "Buat Order Kerja" untuk menambahkan order baru.'}
             </p>
           </div>
@@ -676,24 +731,82 @@ export default function WorkOrders() {
                       </div>
                       <p className="text-sm text-gray-500">
                         {wo.date} • {wo.plateNumber}
-                        {canViewAllBranches && enabledBranchIds.length > 1 && (
+                        {canViewAllBranches && (isAllBranchDropdown || !activeBranchOnly) && (
                           <> • <span className="font-medium text-blue-600">{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '')}</span></>
                         )}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={wo.status}
-                      disabled={!hasPermission('wo:edit')}
-                      onChange={(e) => handleStatusChange(wo.id, e.target.value as WorkOrder['status'])}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border-0 ${statusColors[wo.status]} ${!hasPermission('wo:edit') ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${statusColors[wo.status]}`}
+                      title={`Status saat ini: ${wo.status}`}
                     >
-                      <option value="Pengecekan">1. Pengecekan</option>
-                      <option value="Proses">2. Proses</option>
-                      <option value="Selesai">3. Selesai</option>
-                      <option value="Dibayar">4. Dibayar</option>
-                    </select>
+                      {wo.status === 'Pengecekan' && '1.'}
+                      {wo.status === 'Proses' && '2.'}
+                      {wo.status === 'Selesai' && '3.'}
+                      {wo.status === 'Dibayar' && '4.'}
+                      {wo.status === 'Batal' && '✕'}
+                      <span>{wo.status}</span>
+                    </span>
+
+                    {/* Tombol aksi status berurutan */}
+                    {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
+                      <>
+                        <button
+                          onClick={() => requestStatusChange(wo, 'Proses')}
+                          className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                          title="Pelanggan setuju → mulai pengerjaan"
+                        >
+                          Setujui &amp; Proses
+                        </button>
+                        <button
+                          onClick={() => requestStatusChange(wo, 'Batal')}
+                          className="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                          title="Pelanggan menolak / batal"
+                        >
+                          Batal
+                        </button>
+                      </>
+                    )}
+                    {hasPermission('wo:edit') && wo.status === 'Proses' && (
+                      <>
+                        <button
+                          onClick={() => requestStatusChange(wo, 'Selesai')}
+                          className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                          title="Pekerjaan selesai, siap dibuat faktur"
+                        >
+                          Tandai Selesai
+                        </button>
+                        <button
+                          onClick={() => requestStatusChange(wo, 'Pengecekan')}
+                          className="inline-flex items-center rounded-lg border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                          title="Kembalikan ke Pengecekan"
+                        >
+                          ← Pengecekan
+                        </button>
+                        <button
+                          onClick={() => requestStatusChange(wo, 'Batal')}
+                          className="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                        >
+                          Batal
+                        </button>
+                      </>
+                    )}
+                    {hasPermission('wo:edit') && wo.status === 'Selesai' && !wo.invoiceId && (
+                      <button
+                        onClick={() => requestStatusChange(wo, 'Proses')}
+                        className="inline-flex items-center rounded-lg border border-blue-300 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                        title="Perlu tambah item / koreksi"
+                      >
+                        ← Proses
+                      </button>
+                    )}
+                    {wo.status === 'Batal' && wo.cancelReason && (
+                      <span className="text-[11px] italic text-gray-500" title={wo.cancelReason}>
+                        Alasan: {wo.cancelReason}
+                      </span>
+                    )}
                     {wo.invoiceId ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-medium">
                         <FileText className="w-4 h-4" />
@@ -1191,6 +1304,121 @@ export default function WorkOrders() {
           </div>
         </div>
       )}
+
+      {/* ===== Peringatan: WO aktif sudah ada untuk plat ini ===== */}
+      {activeWoConflict && (() => {
+        const conflict = activeWoConflict;
+        const sameBranch = conflict.branchId === resolveBranchId();
+        const conflictBranchName = data.branches.find(b => b.id === conflict.branchId)?.name || conflict.branchId;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between rounded-t-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-4 text-white">
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5" />
+                  <h3 className="text-lg font-bold">Mobil sudah memiliki WO aktif</h3>
+                </div>
+                <button onClick={() => setActiveWoConflict(null)} className="rounded-lg p-2 hover:bg-white/20"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="space-y-4 p-6 text-sm">
+                <p className="text-gray-700">
+                  Plat <strong>{conflict.plateNumber}</strong> masih memiliki WO aktif:
+                </p>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1">
+                  <div className="flex justify-between"><span className="text-gray-500">Nomor WO</span><span className="font-mono font-semibold">{conflict.woNumber}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Cabang</span><span className="font-medium">{conflictBranchName}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Tanggal</span><span>{conflict.date}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Status</span><span className="font-semibold">{conflict.status}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Total sementara</span><span className="font-semibold">Rp {conflict.total.toLocaleString('id-ID')}</span></div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Satu mobil hanya boleh memiliki satu WO aktif. Selesaikan dulu WO ini atau lanjutkan pengerjaannya.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => { const target = conflict; setActiveWoConflict(null); handleOpenModal(target); }}
+                    className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    {sameBranch ? 'Buka & Lanjutkan WO Ini' : 'Buka WO (Read-only, cabang lain)'}
+                  </button>
+                  {!sameBranch && (
+                    <button
+                      onClick={() => { const target = conflict; setActiveWoConflict(null); setContinueWO(target); }}
+                      className="rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-700"
+                    >
+                      Lanjutkan di Cabang Ini (buat WO baru, WO lama ditandai selesai)
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setActiveWoConflict(null)}
+                    className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Batal
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===== Konfirmasi ubah status WO ===== */}
+      {statusDialog && (() => {
+        const { wo, next } = statusDialog;
+        const needsReason = next === 'Batal'
+          || (wo.status === 'Proses' && next === 'Pengecekan')
+          || (wo.status === 'Selesai' && next === 'Proses');
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between rounded-t-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white">
+                <div className="flex items-center gap-2">
+                  <ArrowLeftRight className="h-5 w-5" />
+                  <h3 className="text-lg font-bold">Ubah status WO</h3>
+                </div>
+                <button onClick={() => setStatusDialog(null)} className="rounded-lg p-2 hover:bg-white/20"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="space-y-4 p-6 text-sm">
+                <p className="text-gray-700">
+                  Ubah status <strong className="font-mono">{wo.woNumber}</strong> dari{' '}
+                  <span className={`rounded px-2 py-0.5 text-xs font-semibold ${statusColors[wo.status]}`}>{wo.status}</span>
+                  {' → '}
+                  <span className={`rounded px-2 py-0.5 text-xs font-semibold ${statusColors[next]}`}>{next}</span>?
+                </p>
+                <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 space-y-0.5">
+                  <p>Pelanggan: <strong>{wo.customerName}</strong> ({wo.plateNumber})</p>
+                  <p>Layanan: {wo.services.length} item</p>
+                  <p>Total: Rp {wo.total.toLocaleString('id-ID')}</p>
+                </div>
+                {needsReason && (
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">
+                      Alasan <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={statusReason}
+                      onChange={(e) => setStatusReason(e.target.value)}
+                      rows={3}
+                      placeholder={next === 'Batal' ? 'Contoh: pelanggan menolak estimasi' : 'Contoh: perlu tambah sparepart'}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                    />
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                  <button onClick={() => setStatusDialog(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Batal</button>
+                  <button
+                    onClick={confirmStatusChange}
+                    disabled={needsReason && !statusReason.trim()}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Ya, Ubah Status
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ===== Lanjutkan Pengecekan di Cabang Ini ===== */}
       {continueWO && (

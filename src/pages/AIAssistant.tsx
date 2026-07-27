@@ -53,99 +53,134 @@ export default function AIAssistant() {
   const hasKey = apiKey.trim().length > 10;
   const fmt = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
 
-  // ============ FULL DATA SNAPSHOT untuk AI ============
-  const buildFullContext = (): string => {
-    const p: string[] = [];
+  // ============ SMART CONTEXT (hemat token, hindari limit Groq) ============
+  // Ringkasan selalu dikirim; detail hanya kalau relevan dengan pertanyaan.
+  const cabangName = (branchId?: string) =>
+    data.branches.find(b => b.id === branchId)?.name || branchId || '-';
+
+  const buildSmartContext = (userMsgText: string): string => {
+    const parts: string[] = [];
     const today = new Date().toISOString().split('T')[0];
+    const lower = userMsgText.toLowerCase();
+    const words = lower.split(/[^a-z0-9]+/).filter(w => w.length > 2);
 
-    p.push(`=== TANGGAL: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })} ===`);
-    p.push(`User login: ${currentUser?.name} (${currentUser?.roleName}), cabang aktif: ${currentBranchId === 'ALL' ? 'Semua Cabang' : data.branches.find(b => b.id === currentBranchId)?.name}`);
-
-    // CABANG
-    p.push(`\n=== CABANG (${data.branches.length}) ===`);
-    data.branches.forEach(b => p.push(`${b.id} | ${b.name} | ${b.address} | ${b.phone}`));
-
-    // PELANGGAN — daftar lengkap
-    p.push(`\n=== PELANGGAN (${data.customers.length}) ===`);
-    data.customers.forEach(c => {
-      const vs = data.vehicles.filter(v => v.customerName === c.name).map(v => v.plateNumber).join(', ');
-      p.push(`${c.customerCode} | ${c.name} | HP: ${c.phone} | ${c.address || '-'} | Kendaraan: ${vs || 'belum ada'} | Cabang: ${data.branches.find(b => b.id === c.branchId)?.name || c.branchId}`);
-    });
-
-    // KENDARAAN — daftar lengkap
-    p.push(`\n=== KENDARAAN (${data.vehicles.length}) ===`);
-    data.vehicles.forEach(v => {
-      p.push(`${v.plateNumber} | ${v.brand} ${v.model} ${v.year} ${v.color} | Pemilik: ${v.customerName} (${v.phone}) | ${v.notes || ''}`);
-    });
-
-    // KATEGORI
-    p.push(`\n=== KATEGORI BARANG (${data.itemCategories.length}) ===`);
-    data.itemCategories.forEach(c => {
-      const n = data.items.filter(i => i.categoryId === c.id).length;
-      p.push(`${c.code} | ${c.name} | jenis: ${c.type} | ${n} item`);
-    });
-
-    // BARANG & JASA — daftar lengkap dengan harga
-    p.push(`\n=== BARANG & JASA (${data.items.length}) ===`);
-    data.items.forEach(i => {
-      const grp = i.groupMembers?.length ? ` | isi paket: ${i.groupMembers.map(m => `${m.itemName} x${m.qty}`).join(', ')}` : '';
-      p.push(`${i.code} | ${i.name} | ${i.type} | ${i.categoryName} | satuan ${i.unit} | stok ${i.stock} | beli ${i.purchasePrice} | JUAL ${i.sellingPrice}${i.isQuickService ? ' | layanan-cepat' : ''}${grp}`);
-    });
-
-    // ORDER KERJA
-    p.push(`\n=== ORDER KERJA (${data.workOrders.length}) ===`);
-    data.workOrders.slice(-25).forEach(w => {
-      p.push(`${w.woNumber} | ${w.date} | ${w.customerName} | ${w.plateNumber} | ${w.status} | ${fmt(w.total)} | ${data.branches.find(b => b.id === w.branchId)?.name} | keluhan: ${w.description || '-'}`);
-    });
-
-    // FAKTUR
-    p.push(`\n=== FAKTUR PENJUALAN (${data.invoices.length}) ===`);
-    data.invoices.slice(-20).forEach(i => {
-      p.push(`${i.invoiceNumber} | ${i.date} | ${i.customerName} | ${fmt(i.total)} | bayar ${fmt(i.payment)} | ${i.status}`);
-    });
-
-    // SUPPLIER
-    if (data.suppliers.length) {
-      p.push(`\n=== SUPPLIER (${data.suppliers.length}) ===`);
-      data.suppliers.forEach(s => p.push(`${s.code} | ${s.name} | ${s.phone} | ${s.contactPerson || '-'}`));
-    }
-
-    // RINGKASAN KEUANGAN
-    const totalRev = data.invoices.reduce((s, i) => s + i.payment, 0);
+    // Ringkasan (selalu dikirim, sangat kecil)
     const unpaid = data.invoices.filter(i => i.status === 'Belum Lunas');
     const todayRev = data.invoices.filter(i => i.date === today).reduce((s, i) => s + i.payment, 0);
+    const totalRev = data.invoices.reduce((s, i) => s + i.payment, 0);
     const lowStock = data.items.filter(i => i.type === 'Persediaan' && i.stock <= 3);
-    p.push(`\n=== RINGKASAN ===`);
-    p.push(`Total pendapatan: ${fmt(totalRev)} | Hari ini: ${fmt(todayRev)}`);
-    p.push(`Piutang: ${unpaid.length} faktur = ${fmt(unpaid.reduce((s, i) => s + (i.total - i.payment), 0))}`);
-    p.push(`Hutang supplier: ${fmt(data.purchaseInvoices.reduce((s, x) => s + (x.total - x.paidAmount), 0))}`);
-    if (lowStock.length) p.push(`Stok menipis: ${lowStock.map(i => `${i.name} (${i.stock})`).join(', ')}`);
 
-    return p.join('\n');
+    parts.push(`Hari ini: ${today}. User: ${currentUser?.name} (${currentUser?.roleName}). Cabang aktif: ${currentBranchId === 'ALL' ? 'Semua Cabang' : cabangName(currentBranchId)}.`);
+    parts.push(`RINGKASAN: ${data.branches.length} cabang, ${data.customers.length} pelanggan, ${data.vehicles.length} kendaraan, ${data.items.length} item, ${data.workOrders.length} WO, ${data.invoices.length} faktur.`);
+    parts.push(`KEUANGAN: total pendapatan ${fmt(totalRev)}, hari ini ${fmt(todayRev)}, piutang ${unpaid.length} faktur = ${fmt(unpaid.reduce((s, i) => s + (i.total - i.payment), 0))}.`);
+    if (lowStock.length) parts.push(`STOK MENIPIS: ${lowStock.slice(0, 6).map(i => `${i.name} (${i.stock})`).join(', ')}.`);
+
+    // Deteksi plat kendaraan
+    const plateMatches = userMsgText.toUpperCase().match(/\b[A-Z]{1,2}\s?\d{2,4}\s?[A-Z]{1,3}\b/g) || [];
+    const foundVehicleIds = new Set<string>();
+    plateMatches.forEach(plate => {
+      const clean = plate.replace(/\s+/g, '');
+      const v = data.vehicles.find(x => x.plateNumber.replace(/\s+/g, '').toUpperCase() === clean);
+      if (v) foundVehicleIds.add(v.id);
+    });
+
+    // Deteksi intent
+    const wantsCustomerList = /(sebutkan|semua|daftar|list|siapa saja|pelanggan)/.test(lower);
+    const wantsVehicleList = /(kendaraan|mobil|plat)/.test(lower) && /(semua|daftar|list|apa saja)/.test(lower);
+    const wantsItemList = /(barang|jasa|item|paket|group|harga|stok|persediaan|sparepart|freon)/.test(lower);
+    const wantsWOList = /(wo|work.?order|order kerja|servis|service)/.test(lower);
+    const wantsInvoiceList = /(faktur|invoice|piutang|penjualan)/.test(lower);
+    const wantsCategoryList = /(kategori|category)/.test(lower);
+    const wantsSupplierList = /(supplier|pemasok|hutang|purchase|pembelian)/.test(lower);
+
+    // Pelanggan yang namanya/kode/HP disebut
+    const matchedCustomers = data.customers.filter(c =>
+      words.some(w => c.name.toLowerCase().includes(w) || c.customerCode.toLowerCase().includes(w) || c.phone.includes(w))
+    );
+
+    // PELANGGAN
+    if (wantsCustomerList || matchedCustomers.length > 0) {
+      const list = matchedCustomers.length > 0 ? matchedCustomers.slice(0, 30) : data.customers.slice(0, 30);
+      parts.push(`\nPELANGGAN (${list.length} dari ${data.customers.length}):`);
+      list.forEach(c => {
+        const vs = data.vehicles.filter(v => v.customerName === c.name).map(v => v.plateNumber).join(', ');
+        parts.push(`- ${c.customerCode} ${c.name} | ${c.phone} | ${vs || 'belum ada kendaraan'}`);
+      });
+    }
+
+    // KENDARAAN yang dicari via plat
+    if (foundVehicleIds.size > 0) {
+      parts.push(`\nDATA KENDARAAN:`);
+      data.vehicles.filter(v => foundVehicleIds.has(v.id)).forEach(v => {
+        parts.push(`- ${v.plateNumber} | ${v.brand} ${v.model} ${v.year} ${v.color} | Pemilik: ${v.customerName} (${v.phone}) | ${v.notes || ''}`);
+        const wos = data.workOrders.filter(w => w.plateNumber === v.plateNumber).slice(-5);
+        if (wos.length) parts.push(`  Riwayat WO (${wos.length}): ${wos.map(w => `${w.woNumber} ${w.date} ${w.status}`).join(' | ')}`);
+      });
+    } else if (wantsVehicleList) {
+      parts.push(`\nKENDARAAN (30 dari ${data.vehicles.length}):`);
+      data.vehicles.slice(0, 30).forEach(v => parts.push(`- ${v.plateNumber} | ${v.brand} ${v.model} | ${v.customerName}`));
+    }
+
+    // BARANG & JASA
+    if (wantsItemList) {
+      const matched = data.items.filter(i =>
+        words.some(w => i.name.toLowerCase().includes(w) || i.code.toLowerCase().includes(w))
+      ).slice(0, 20);
+      const list = matched.length > 0 ? matched : data.items.slice(0, 20);
+      parts.push(`\nBARANG & JASA (${list.length} dari ${data.items.length}):`);
+      list.forEach(i => {
+        const grp = i.groupMembers?.length ? ` [paket: ${i.groupMembers.map(m => `${m.itemName}x${m.qty}`).join(',')}]` : '';
+        parts.push(`- ${i.code} ${i.name} | ${i.type} | stok ${i.stock} ${i.unit} | jual ${fmt(i.sellingPrice)}${grp}`);
+      });
+    }
+
+    // KATEGORI
+    if (wantsCategoryList) {
+      parts.push(`\nKATEGORI (${data.itemCategories.length}):`);
+      data.itemCategories.forEach(c => {
+        const n = data.items.filter(i => i.categoryId === c.id).length;
+        parts.push(`- ${c.code} ${c.name} (${n} item)`);
+      });
+    }
+
+    // WO
+    if (wantsWOList) {
+      const recent = data.workOrders.slice(-15);
+      parts.push(`\nWO TERAKHIR (${recent.length} dari ${data.workOrders.length}):`);
+      recent.forEach(w => parts.push(`- ${w.woNumber} ${w.date} | ${w.customerName} ${w.plateNumber} | ${w.status} | ${fmt(w.total)} | ${cabangName(w.branchId)}`));
+    }
+
+    // FAKTUR
+    if (wantsInvoiceList) {
+      const recent = data.invoices.slice(-15);
+      parts.push(`\nFAKTUR TERAKHIR (${recent.length} dari ${data.invoices.length}):`);
+      recent.forEach(i => parts.push(`- ${i.invoiceNumber} ${i.date} | ${i.customerName} | ${fmt(i.total)} bayar ${fmt(i.payment)} | ${i.status}`));
+    }
+
+    // SUPPLIER
+    if (wantsSupplierList && data.suppliers.length) {
+      parts.push(`\nSUPPLIER (${data.suppliers.length}):`);
+      data.suppliers.slice(0, 15).forEach(s => parts.push(`- ${s.code} ${s.name} | ${s.phone}`));
+    }
+
+    return parts.join('\n');
   };
 
-  const systemPrompt = `Kamu adalah "ASISTEN DOKTER AC" — asisten AI bengkel spesialis AC mobil "Dokter AC Mobil" (cabang Perintis, Cakalang, Mamuju).
+  const buildSystemPrompt = (userMsgText: string) => `Kamu adalah "ASISTEN DOKTER AC" — asisten AI bengkel AC mobil "Dokter AC Mobil" (Perintis, Cakalang, Mamuju).
 
-ATURAN JAWABAN:
-- Bahasa Indonesia, ringkas, gunakan **tebal** untuk poin penting & angka rupiah.
-- Gunakan DATA BENGKEL di bawah sebagai satu-satunya sumber kebenaran. JANGAN mengarang.
-- Kalau ditanya "siapa pelanggan", "kendaraan apa saja", "barang apa saja" — SEBUTKAN NAMA-NAMANYA dari data, jangan cuma jumlah.
-- Kalau data tidak ada, katakan tidak ditemukan.
+ATURAN:
+- Bahasa Indonesia, ringkas, gunakan **tebal** untuk angka & poin penting.
+- Gunakan DATA di bawah sebagai kebenaran. Jangan mengarang data.
+- Kalau data tidak muncul di bawah, minta user memperjelas (sebut nama/plat/kode barang).
 
-KEMAMPUAN AKSI:
-Kamu BISA membuat Order Kerja baru. Kalau user minta buat WO, balas penjelasan singkat LALU sertakan blok JSON persis format ini di akhir:
-
+MEMBUAT WO:
+Kalau user minta buat WO, balas singkat lalu sertakan blok JSON di akhir:
 \`\`\`json
-{"action":"create_wo","customerName":"NAMA","phone":"08xx","plateNumber":"DD1234XX","vehicleInfo":"Toyota Avanza 2020 - Hitam","description":"keluhan pelanggan","services":[{"name":"NAMA JASA/BARANG","price":150000,"qty":1}]}
+{"action":"create_wo","customerName":"NAMA","phone":"08xx","plateNumber":"DD1234XX","vehicleInfo":"Toyota Avanza 2020 - Hitam","description":"keluhan","services":[{"name":"NAMA","price":150000,"qty":1}]}
 \`\`\`
+Kalau info kurang (plat/pelanggan/keluhan), TANYA dulu tanpa keluarkan JSON.
 
-Aturan JSON aksi:
-- Ambil harga dari daftar BARANG & JASA. Kalau item tidak ada di master, tetap boleh dengan harga yang user sebut.
-- Kalau pelanggan sudah ada di data, pakai nama & HP persis dari data.
-- Kalau plat sudah terdaftar, pakai vehicleInfo dari data.
-- Kalau info kurang (plat/pelanggan/keluhan), TANYAKAN dulu, jangan keluarkan JSON.
-
-${buildFullContext()}`;
+${buildSmartContext(userMsgText)}`;
 
   // ============ Parse & eksekusi aksi ============
   const extractAction = (text: string) => {
@@ -267,10 +302,16 @@ ${buildFullContext()}`;
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model, temperature: 0.3, max_tokens: 1400,
+          model,
+          temperature: 0.3,
+          max_tokens: 1200,
           messages: [
-            { role: 'system', content: systemPrompt },
-            ...history.slice(-8).map(m => ({ role: m.role, content: m.content })),
+            // System prompt dibangun ulang dengan konteks yang relevan
+            // terhadap pesan terakhir user — hemat token & tidak kena limit Groq.
+            { role: 'system', content: buildSystemPrompt(content) },
+            // History dipangkas jadi 4 pesan terakhir (2 giliran) supaya
+            // total token tetap kecil.
+            ...history.slice(-4).map(m => ({ role: m.role, content: m.content })),
           ],
         }),
       });

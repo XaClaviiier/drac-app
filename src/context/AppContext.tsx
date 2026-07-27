@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment } from '../types';
+import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus } from '../types';
 import { api } from '../lib/apiClient';
 import { demoData } from '../lib/demoData';
 
@@ -30,6 +30,10 @@ interface AppContextType {
   updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
   continueWorkOrder: (sourceWoId: string, targetBranchId: string) => Promise<WorkOrder | null>;
+  /** Cari WO aktif (Pengecekan/Proses/Selesai, belum Dibayar & belum dilanjutkan) untuk plat nomor tertentu. */
+  findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
+  /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
+  changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
   createInvoiceFromWO: (woId: string, payment: number) => Promise<SalesInvoice | null>;
   addItem: (item: Item) => Promise<void>;
   updateItem: (id: string, item: Item) => Promise<void>;
@@ -310,6 +314,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Lanjutkan WO pengecekan di cabang lain — buat WO BARU, tandai WO lama sudah dilanjutkan
+  /** Cari WO aktif untuk plat nomor tertentu — dipakai untuk kunci "1 mobil 1 WO". */
+  const findActiveWoByPlate = (plateNumber: string): WorkOrder | null => {
+    const clean = plateNumber.replace(/\s+/g, '').toUpperCase();
+    if (!clean) return null;
+    return data.workOrders.find(wo => {
+      if (wo.plateNumber.replace(/\s+/g, '').toUpperCase() !== clean) return false;
+      if (wo.status === 'Dibayar' || wo.status === 'Batal') return false;
+      if (wo.continuedToWoId) return false; // sudah dilanjutkan di WO lain
+      return true;
+    }) || null;
+  };
+
+  /** Validasi alur status berurutan. */
+  const isStatusTransitionAllowed = (from: WOStatus, to: WOStatus): boolean => {
+    if (from === to) return false;
+    const forward: Record<WOStatus, WOStatus[]> = {
+      Pengecekan: ['Proses', 'Batal'],
+      Proses: ['Selesai', 'Pengecekan', 'Batal'],
+      Selesai: ['Dibayar', 'Proses'],
+      Dibayar: [],
+      Batal: [],
+    };
+    return forward[from]?.includes(to) ?? false;
+  };
+
+  const changeWorkOrderStatus = async (
+    woId: string,
+    nextStatus: WOStatus,
+    reason?: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    const wo = data.workOrders.find(w => w.id === woId);
+    if (!wo) return { ok: false, message: 'WO tidak ditemukan.' };
+
+    if (!isStatusTransitionAllowed(wo.status, nextStatus)) {
+      return { ok: false, message: `Perubahan status ${wo.status} → ${nextStatus} tidak diizinkan.` };
+    }
+
+    // Selesai → Dibayar harus lewat pembuatan faktur, bukan ubah manual.
+    if (wo.status === 'Selesai' && nextStatus === 'Dibayar' && !wo.invoiceId) {
+      return { ok: false, message: 'Untuk menandai Dibayar, buat faktur terlebih dahulu dari tombol Buat Faktur.' };
+    }
+
+    // Perubahan mundur atau Batal wajib punya alasan.
+    const needsReason = nextStatus === 'Batal'
+      || (wo.status === 'Proses' && nextStatus === 'Pengecekan')
+      || (wo.status === 'Selesai' && nextStatus === 'Proses');
+    if (needsReason && !reason?.trim()) {
+      return { ok: false, message: 'Alasan wajib diisi untuk perubahan ini.' };
+    }
+
+    const now = new Date().toISOString();
+    const log = [
+      ...(wo.statusLog || []),
+      {
+        from: wo.status,
+        to: nextStatus,
+        at: now,
+        byUserId: currentUser?.id || '-',
+        byUserName: currentUser?.name || 'System',
+        reason: reason?.trim() || undefined,
+      },
+    ];
+
+    const patch: WorkOrder = {
+      ...wo,
+      status: nextStatus,
+      statusLog: log,
+      cancelReason: nextStatus === 'Batal' ? reason?.trim() : wo.cancelReason,
+      approvedAt: wo.status === 'Pengecekan' && nextStatus === 'Proses'
+        ? new Date().toISOString().split('T')[0]
+        : wo.approvedAt,
+      estimateTotal: wo.status === 'Pengecekan' && nextStatus === 'Proses' && !wo.estimateTotal
+        ? wo.total
+        : wo.estimateTotal,
+    };
+
+    await updateWorkOrder(woId, patch);
+    return { ok: true };
+  };
+
   const continueWorkOrder = async (sourceWoId: string, targetBranchId: string): Promise<WorkOrder | null> => {
     const src = data.workOrders.find(w => w.id === sourceWoId);
     if (!src) return null;
@@ -559,7 +643,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addVehicle, updateVehicle, deleteVehicle,
         addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,
         addInvoice, updateInvoice, deleteInvoice,
-        addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder, createInvoiceFromWO,
+        addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder,
+        findActiveWoByPlate, changeWorkOrderStatus,
+        createInvoiceFromWO,
         addItem, updateItem, deleteItem,
         addItemCategory, updateItemCategory, deleteItemCategory,
         addBranch, updateBranch, deleteBranch,

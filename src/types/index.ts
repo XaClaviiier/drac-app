@@ -44,7 +44,16 @@ export interface SalesInvoice {
   branchId: string;
 }
 
-export type WOStatus = 'Pengecekan' | 'Proses' | 'Selesai' | 'Dibayar';
+export type WOStatus = 'Pengecekan' | 'Proses' | 'Selesai' | 'Dibayar' | 'Batal';
+
+export interface WOStatusLog {
+  from: WOStatus;
+  to: WOStatus;
+  at: string;              // ISO datetime
+  byUserId: string;
+  byUserName: string;
+  reason?: string;         // wajib untuk Batal atau perubahan mundur
+}
 
 export interface WorkOrder {
   id: string;
@@ -63,6 +72,8 @@ export interface WorkOrder {
   estimateTotal?: number;     // estimasi saat pengecekan (dikunci saat masuk Proses)
   approvedAt?: string;        // tanggal pelanggan menyetujui estimasi
   status: WOStatus;
+  statusLog?: WOStatusLog[];  // jejak audit perubahan status
+  cancelReason?: string;      // alasan pembatalan bila status Batal
   notes: string;
   invoiceId?: string;
   invoiceNumber?: string;
