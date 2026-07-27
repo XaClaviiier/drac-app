@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Car, FileText, Users, Wrench, Boxes, PackageCheck, Truck, ReceiptText,
-  Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield,
+  Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
@@ -16,6 +16,7 @@ const navItems = [
   { path: '/suppliers', label: 'Supplier', icon: Truck, perm: 'supplier:view' as const },
   { path: '/receipts', label: 'Penerimaan Barang', icon: PackageCheck, perm: 'receipt:view' as const },
   { path: '/purchase-invoices', label: 'Faktur Pembelian', icon: ReceiptText, perm: 'purchase:view' as const },
+  { path: '/ai', label: 'Asisten AI', icon: Bot, perm: 'dashboard:view' as const },
   { path: '/users', label: 'Pengguna & Akses', icon: Shield, perm: 'user:view' as const },
 ];
 

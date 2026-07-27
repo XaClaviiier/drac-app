@@ -12,6 +12,7 @@ import UsersAndRoles from './pages/UsersAndRoles';
 import GoodsReceiptPage from './pages/GoodsReceipt';
 import Suppliers from './pages/Suppliers';
 import PurchaseInvoicesPage from './pages/PurchaseInvoices';
+import AIAssistant from './pages/AIAssistant';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useApp();
@@ -45,6 +46,7 @@ function AppRoutes() {
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="receipts" element={<GoodsReceiptPage />} />
         <Route path="purchase-invoices" element={<PurchaseInvoicesPage />} />
+        <Route path="ai" element={<AIAssistant />} />
         <Route path="users" element={<UsersAndRoles />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
