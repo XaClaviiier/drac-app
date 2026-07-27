@@ -43,6 +43,9 @@ export default function AIAssistant() {
   const [model, setModel] = useState(() => localStorage.getItem('groq_model') || GROQ_MODELS[0].id);
   const [showSettings, setShowSettings] = useState(false);
   const [keyDraft, setKeyDraft] = useState(apiKey);
+  const [showKeyText, setShowKeyDraftText] = useState(false);
+  const [testingKey, setTestingKey] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -350,11 +353,45 @@ ${buildSmartContext(userMsgText)}`;
     }
   };
 
+  const testApiKey = async () => {
+    const trimmed = keyDraft.trim();
+    if (!trimmed) {
+      setTestResult({ ok: false, msg: 'API Key kosong.' });
+      return;
+    }
+    setTestingKey(true);
+    setTestResult(null);
+    try {
+      const payload = {
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 5,
+      };
+      const res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${trimmed}` },
+        body: JSON.stringify(payload),
+      });
+      const dataJson = await res.json().catch(() => null);
+      if (res.ok && dataJson?.choices) {
+        setTestResult({ ok: true, msg: 'Koneksi Sukses! API Key valid.' });
+      } else {
+        const errorMsg = dataJson?.error?.message || `Error HTTP ${res.status}`;
+        setTestResult({ ok: false, msg: `Gagal: ${errorMsg}` });
+      }
+    } catch (e: any) {
+      setTestResult({ ok: false, msg: `Koneksi gagal: ${e.message}` });
+    } finally {
+      setTestingKey(false);
+    }
+  };
+
   const saveKey = () => {
     localStorage.setItem('groq_api_key', keyDraft.trim());
     localStorage.setItem('groq_model', model);
     setApiKey(keyDraft.trim());
     setShowSettings(false);
+    setTestResult(null);
   };
 
   const chips = [
@@ -573,18 +610,61 @@ ${buildSmartContext(userMsgText)}`;
               </div>
               <div>
                 <label className="mb-1 block text-sm font-semibold text-slate-700">Groq API Key</label>
-                <input type="password" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="gsk_xxxx" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 font-mono text-sm outline-none focus:border-cyan-500" />
+                <div className="relative">
+                  <input
+                    type={showKeyText ? 'text' : 'password'}
+                    value={keyDraft}
+                    onChange={e => { setKeyDraft(e.target.value); setTestResult(null); }}
+                    placeholder="gsk_xxxx"
+                    className="w-full rounded-lg border border-slate-300 pl-4 pr-10 py-2.5 font-mono text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyDraftText(!showKeyText)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    title={showKeyText ? 'Sembunyikan' : 'Tampilkan'}
+                  >
+                    {showKeyText ? '👁️' : '🔒'}
+                  </button>
+                </div>
                 <p className="mt-1 text-[11px] text-slate-500">Disimpan di browser Anda saja.</p>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-semibold text-slate-700">Model</label>
-                <select value={model} onChange={e => setModel(e.target.value)} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-cyan-500">
+                <select value={model} onChange={e => { setModel(e.target.value); setTestResult(null); }} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-cyan-500">
                   {GROQ_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
               </div>
+
+              {/* Test Connection Button & Result */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={testApiKey}
+                  disabled={testingKey || !keyDraft.trim()}
+                  className="w-full rounded-lg border border-cyan-300 bg-cyan-50 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {testingKey ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Sedang menguji koneksi...
+                    </>
+                  ) : 'Uji Koneksi API Key'}
+                </button>
+                {testResult && (
+                  <div className={`mt-2 rounded-lg p-2.5 text-xs font-medium border ${
+                    testResult.ok
+                      ? 'bg-green-50 border-green-200 text-green-700'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                  }`}>
+                    {testResult.msg}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
-                <button onClick={() => setShowSettings(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
-                <button onClick={saveKey} className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-sm font-bold text-white">Simpan</button>
+                <button onClick={() => { setShowSettings(false); setTestResult(null); }} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
+                <button onClick={saveKey} disabled={testingKey} className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-55">Simpan</button>
               </div>
             </div>
           </div>
