@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
@@ -8,7 +8,7 @@ import VehiclePicker from '../components/VehiclePicker';
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
 export default function WorkOrders() {
-  const { data, addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder, createInvoiceFromWO, addItem, currentUser, currentBranchId, resolveBranchId, hasPermission } = useApp();
+  const { data, addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder, createInvoiceFromWO, addItem, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId, hasPermission } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
@@ -16,6 +16,7 @@ export default function WorkOrders() {
   const [filterStatus, setFilterStatus] = useState('');
   const [todayOnly, setTodayOnly] = useState(false);
   const [enabledBranchIds, setEnabledBranchIds] = useState<string[]>([]);
+  const branchToggleSyncRef = useRef(false);
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
   const [invoicePayment, setInvoicePayment] = useState(0);
   const [successMsg, setSuccessMsg] = useState('');
@@ -150,32 +151,56 @@ export default function WorkOrders() {
     ? data.branches.filter(branch => branch.isActive)
     : data.branches.filter(branch => branch.id === selectedBranchId);
 
-  // Administrator/Supervisor: semua cabang aktif ON secara default.
-  // User cabang: hanya cabang sendiri dan toggle dikunci.
+  // Sinkronisasi dropdown cabang di header -> toggle cabang pada daftar WO.
+  // Semua Cabang = semua toggle ON, cabang tertentu = hanya toggle itu yang ON.
   useEffect(() => {
     const availableIds = canViewAllBranches
       ? data.branches.filter(branch => branch.isActive).map(branch => branch.id)
       : [selectedBranchId];
 
-    setEnabledBranchIds(previous => {
-      if (!canViewAllBranches) return availableIds;
-      const valid = previous.filter(id => availableIds.includes(id));
-      return valid.length > 0 ? valid : availableIds;
-    });
-  }, [canViewAllBranches, data.branches, selectedBranchId]);
+    // Perubahan ini berasal dari klik toggle; state lokal sudah benar dan
+    // tidak perlu ditimpa kembali oleh efek dropdown.
+    if (branchToggleSyncRef.current) {
+      branchToggleSyncRef.current = false;
+      return;
+    }
+
+    if (!canViewAllBranches) {
+      setEnabledBranchIds(availableIds);
+      return;
+    }
+
+    setEnabledBranchIds(
+      currentBranchId === 'ALL'
+        ? availableIds
+        : availableIds.filter(id => id === currentBranchId)
+    );
+  }, [canViewAllBranches, data.branches, selectedBranchId, currentBranchId]);
 
   const toggleBranchFilter = (branchId: string) => {
     if (!canViewAllBranches) return;
     setEnabledBranchIds(previous => {
+      let next: string[];
       if (previous.includes(branchId)) {
         // Minimal satu cabang harus tetap ON supaya daftar tidak membingungkan.
         if (previous.length === 1) {
           window.alert('Minimal satu cabang harus tetap aktif.');
           return previous;
         }
-        return previous.filter(id => id !== branchId);
+        next = previous.filter(id => id !== branchId);
+      } else {
+        next = [...previous, branchId];
       }
-      return [...previous, branchId];
+
+      // Sinkronisasi toggle -> dropdown header:
+      // satu toggle ON = nama cabang tersebut; lebih dari satu = Semua Cabang.
+      const dropdownBranchId = next.length === 1 ? next[0] : 'ALL';
+      if (dropdownBranchId !== currentBranchId) {
+        branchToggleSyncRef.current = true;
+        setCurrentBranchId(dropdownBranchId);
+      }
+
+      return next;
     });
   };
 
