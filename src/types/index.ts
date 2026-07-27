@@ -44,6 +44,8 @@ export interface SalesInvoice {
   branchId: string;
 }
 
+export type WOStatus = 'Pengecekan' | 'Proses' | 'Selesai' | 'Dibayar';
+
 export interface WorkOrder {
   id: string;
   woNumber: string;
@@ -54,14 +56,25 @@ export interface WorkOrder {
   vehicleRefId?: string;
   plateNumber: string;
   vehicleInfo: string;
-  description?: string;
+  description?: string;       // keluhan pelanggan
+  findings?: string;          // hasil pemeriksaan teknisi
   services: WorkOrderService[];
   total: number;
-  status: 'Draft' | 'Proses' | 'Selesai' | 'Dibayar';
+  estimateTotal?: number;     // estimasi saat pengecekan (dikunci saat masuk Proses)
+  approvedAt?: string;        // tanggal pelanggan menyetujui estimasi
+  status: WOStatus;
   notes: string;
   invoiceId?: string;
   invoiceNumber?: string;
   branchId: string;
+  // Lintas cabang: WO ini lanjutan dari WO lain
+  continuedFromWoId?: string;
+  continuedFromWoNumber?: string;
+  continuedFromBranchName?: string;
+  // Lintas cabang: WO ini sudah dilanjutkan di WO lain
+  continuedToWoId?: string;
+  continuedToWoNumber?: string;
+  continuedToBranchName?: string;
 }
 
 export interface WorkOrderService {

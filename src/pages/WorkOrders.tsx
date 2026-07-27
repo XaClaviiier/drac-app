@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -8,11 +8,14 @@ import VehiclePicker from '../components/VehiclePicker';
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
 export default function WorkOrders() {
-  const { data, addWorkOrder, updateWorkOrder, deleteWorkOrder, createInvoiceFromWO, addItem, currentBranchId, hasPermission } = useApp();
+  const { data, addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder, createInvoiceFromWO, addItem, currentUser, currentBranchId, resolveBranchId, hasPermission } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [todayOnly, setTodayOnly] = useState(false);
+  const [enabledBranchIds, setEnabledBranchIds] = useState<string[]>([]);
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
   const [invoicePayment, setInvoicePayment] = useState(0);
   const [successMsg, setSuccessMsg] = useState('');
@@ -28,11 +31,11 @@ export default function WorkOrders() {
     description: '',
     services: [] as WorkOrderService[],
     notes: '',
-    status: 'Draft' as WorkOrder['status'],
+    status: 'Pengecekan' as WorkOrder['status'],
   });
 
-  const [newService, setNewService] = useState({ itemId: '', code: '', name: '', description: '', price: 0, qty: 1 });
   const [showServiceForm, setShowServiceForm] = useState(false);
+  const [serviceSearch, setServiceSearch] = useState('');
   const availableServiceItems = data.items.filter((item) => item.isActive);
 
   // Quick-add Item modal state
@@ -73,7 +76,7 @@ export default function WorkOrders() {
       isActive: true,
       isQuickService: false,
       description: '',
-      branchId: currentBranchId === 'ALL' ? 'BR-001' : (currentBranchId || 'BR-001'),
+      branchId: resolveBranchId(),
     };
     addItem(newItem);
 
@@ -96,7 +99,6 @@ export default function WorkOrders() {
 
     setQuickItemForm({ name: '', type: 'Jasa', unit: 'JASA', sellingPrice: 0, categoryId: '' });
     setShowQuickAddItem(false);
-    setShowServiceForm(false);
   };
 
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
@@ -139,11 +141,56 @@ export default function WorkOrders() {
     }));
   };
 
+  const canViewAllBranches = hasPermission('all_branches');
+  const selectedBranchId = currentBranchId === 'ALL'
+    ? (currentUser?.branchId || resolveBranchId())
+    : currentBranchId;
+  const todayDate = new Date().toISOString().split('T')[0];
+  const filterBranches = canViewAllBranches
+    ? data.branches.filter(branch => branch.isActive)
+    : data.branches.filter(branch => branch.id === selectedBranchId);
+
+  // Administrator/Supervisor: semua cabang aktif ON secara default.
+  // User cabang: hanya cabang sendiri dan toggle dikunci.
+  useEffect(() => {
+    const availableIds = canViewAllBranches
+      ? data.branches.filter(branch => branch.isActive).map(branch => branch.id)
+      : [selectedBranchId];
+
+    setEnabledBranchIds(previous => {
+      if (!canViewAllBranches) return availableIds;
+      const valid = previous.filter(id => availableIds.includes(id));
+      return valid.length > 0 ? valid : availableIds;
+    });
+  }, [canViewAllBranches, data.branches, selectedBranchId]);
+
+  const toggleBranchFilter = (branchId: string) => {
+    if (!canViewAllBranches) return;
+    setEnabledBranchIds(previous => {
+      if (previous.includes(branchId)) {
+        // Minimal satu cabang harus tetap ON supaya daftar tidak membingungkan.
+        if (previous.length === 1) {
+          window.alert('Minimal satu cabang harus tetap aktif.');
+          return previous;
+        }
+        return previous.filter(id => id !== branchId);
+      }
+      return [...previous, branchId];
+    });
+  };
+
+  const enabledBranchLabels = filterBranches
+    .filter(branch => enabledBranchIds.includes(branch.id))
+    .map(branch => branch.name.replace('CABANG ', ''));
+
   const filteredWOs = useMemo(() => {
     return data.workOrders
       .filter((wo) => {
-        const branchMatch = currentBranchId === 'ALL' || wo.branchId === currentBranchId;
+        const branchMatch = enabledBranchIds.includes(wo.branchId);
         if (!branchMatch) return false;
+
+        const dateMatch = !todayOnly || wo.date === todayDate;
+        if (!dateMatch) return false;
 
         const matchesSearch =
           wo.woNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -158,7 +205,14 @@ export default function WorkOrders() {
         if (dateCompare !== 0) return dateCompare;
         return b.woNumber.localeCompare(a.woNumber);
       });
-  }, [data.workOrders, searchTerm, filterStatus, currentBranchId]);
+  }, [
+    data.workOrders,
+    searchTerm,
+    filterStatus,
+    enabledBranchIds,
+    todayOnly,
+    todayDate,
+  ]);
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
 
@@ -174,10 +228,10 @@ export default function WorkOrders() {
       description: '',
       services: [],
       notes: '',
-      status: 'Draft',
+      status: 'Pengecekan',
     });
-    setNewService({ itemId: '', code: '', name: '', description: '', price: 0, qty: 1 });
     setShowServiceForm(false);
+    setServiceSearch('');
     setEditingWO(null);
   };
 
@@ -211,22 +265,6 @@ export default function WorkOrders() {
     resetForm();
   };
 
-  const handleAddService = () => {
-    if (newService.name) {
-      setFormData({
-        ...formData,
-        services: [
-          ...formData.services,
-          { ...newService, id: Date.now().toString() },
-        ],
-      });
-      setNewService({ itemId: '', code: '', name: '', description: '', price: 0, qty: 1 });
-      setShowServiceForm(false);
-    } else {
-      window.alert('Nama layanan/barang harus diisi');
-    }
-  };
-
   const handleRemoveService = (id: string) => {
     setFormData({
       ...formData,
@@ -241,26 +279,46 @@ export default function WorkOrders() {
     }));
   };
 
+  const getDuplicateServices = (itemId: string) => {
+    const item = data.items.find((entry) => entry.id === itemId);
+    if (!item) return [];
+
+    const candidateIds = item.type === 'Group'
+      ? [item.id, ...(item.groupMembers || []).map(member => member.itemId)]
+      : [item.id];
+
+    return formData.services.filter(service => service.itemId && candidateIds.includes(service.itemId));
+  };
+
+  const isItemAdded = (itemId: string) => getDuplicateServices(itemId).length > 0;
+
+  // Klik item/favorit langsung menambah satu baris. Panel tetap terbuka agar bisa tambah banyak.
   const handleUseItem = (itemId: string) => {
     const item = data.items.find((entry) => entry.id === itemId);
     if (!item) return;
 
-    // If Group, add header line with fixed group price and members with 0 price
+    const duplicates = getDuplicateServices(itemId);
+    if (duplicates.length > 0) {
+      const names = [...new Set(duplicates.map(service => service.name.replace(/^\s*-\s*/, '')))];
+      window.alert(`Tidak ditambahkan karena sudah ada di WO:\n• ${names.join('\n• ')}`);
+      return;
+    }
+
+    // Group ditampilkan sebagai header harga paket + komponen harga 0.
     if (item.type === 'Group' && item.groupMembers && item.groupMembers.length > 0) {
-      // 1. Group Header Line (Carries the price)
+      const stamp = Date.now();
       const groupHeader: WorkOrderService = {
-        id: `head-${Date.now()}`,
+        id: `head-${stamp}`,
         itemId: item.id,
         code: item.code,
-        name: `📦 ${item.name}`,
+        name: `[PAKET] ${item.name}`,
         description: 'Harga Paket / Group',
         price: item.sellingPrice,
         qty: 1,
       };
 
-      // 2. Individual Member Lines (Informational, price 0)
       const memberLines: WorkOrderService[] = item.groupMembers.map((member, index) => ({
-        id: `mem-${Date.now()}-${index}`,
+        id: `mem-${stamp}-${index}`,
         itemId: member.itemId,
         code: member.itemCode,
         name: `   - ${member.itemName}`,
@@ -273,43 +331,72 @@ export default function WorkOrders() {
         ...prev,
         services: [...prev.services, groupHeader, ...memberLines],
       }));
-      
-      setNewService({ itemId: '', code: '', name: '', description: '', price: 0, qty: 1 });
-      setShowServiceForm(false);
       return;
     }
 
-    setNewService({
+    const service: WorkOrderService = {
+      id: `svc-${Date.now()}-${item.id}`,
       itemId: item.id,
       code: item.code,
       name: item.name,
       description: item.description,
       price: item.sellingPrice,
       qty: 1,
-    });
+    };
+
+    setFormData(prev => ({ ...prev, services: [...prev.services, service] }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const woCount = data.workOrders.length + 1;
-    const woNumber = `WO-2026-${String(woCount).padStart(3, '0')}`;
 
-    if (editingWO) {
-      updateWorkOrder(editingWO.id, {
-        ...editingWO,
-        ...formData,
-        total: totalServices,
-      });
-    } else {
-      addWorkOrder({
-        id: Date.now().toString(),
-        woNumber,
-        ...formData,
-        total: totalServices,
-        branchId: currentBranchId || 'BR-001',
-      });
+    // Validasi wajib
+    if (!formData.customerName?.trim()) {
+      setSuccessMsg('');
+      window.alert('Pelanggan wajib dipilih atau diisi terlebih dahulu.');
+      return;
     }
-    handleCloseModal();
+    if (!formData.plateNumber?.trim()) {
+      window.alert('Nomor plat kendaraan wajib diisi.');
+      return;
+    }
+    if (formData.services.length === 0) {
+      window.alert('Tambahkan minimal 1 layanan/barang sebelum menyimpan.');
+      return;
+    }
+
+    const targetBranch = resolveBranchId();
+    const prefixes: Record<string, string> = { 'BR-001': 'WO-P', 'BR-002': 'WO-C', 'BR-003': 'WO-M' };
+    const prefix = prefixes[targetBranch] || 'WO';
+    const year = new Date().getFullYear();
+    const branchCount = data.workOrders.filter(w => w.branchId === targetBranch).length + 1;
+    const woNumber = `${prefix}-${year}-${String(branchCount).padStart(3, '0')}`;
+
+    try {
+      if (editingWO) {
+        await updateWorkOrder(editingWO.id, {
+          ...editingWO,
+          ...formData,
+          total: totalServices,
+        });
+        setSuccessMsg(`${editingWO.woNumber} berhasil diperbarui.`);
+      } else {
+        await addWorkOrder({
+          id: Date.now().toString(),
+          woNumber,
+          ...formData,
+          total: totalServices,
+          estimateTotal: formData.status === 'Pengecekan' ? totalServices : undefined,
+          branchId: targetBranch,
+        });
+        const bName = data.branches.find(b => b.id === targetBranch)?.name || targetBranch;
+        setSuccessMsg(`${woNumber} berhasil dibuat di ${bName}.`);
+      }
+      setTimeout(() => setSuccessMsg(''), 4000);
+      handleCloseModal();
+    } catch (err: any) {
+      window.alert('Gagal menyimpan Order Kerja: ' + (err?.message || 'terjadi kesalahan'));
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -330,6 +417,22 @@ export default function WorkOrders() {
     setInvoicePayment(wo.total);
   };
 
+  // Cabang aktif user saat ini (untuk melanjutkan pekerjaan)
+  const activeBranchId = currentBranchId === 'ALL'
+    ? (currentUser?.branchId || 'BR-001')
+    : currentBranchId;
+
+  const submitContinue = async () => {
+    if (!continueWO) return;
+    const created = await continueWorkOrder(continueWO.id, activeBranchId);
+    if (created) {
+      const tgt = data.branches.find(b => b.id === activeBranchId);
+      setSuccessMsg(`${created.woNumber} dibuat di ${tgt?.name} sebagai lanjutan dari ${continueWO.woNumber}.`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+    }
+    setContinueWO(null);
+  };
+
   const handleCreateInvoice = async () => {
     if (invoiceWO) {
       const invoice = await createInvoiceFromWO(invoiceWO.id, invoicePayment);
@@ -342,8 +445,8 @@ export default function WorkOrders() {
     }
   };
 
-  const statusColors = {
-    Draft: 'bg-gray-100 text-gray-800',
+  const statusColors: Record<string, string> = {
+    Pengecekan: 'bg-amber-100 text-amber-800',
     Proses: 'bg-blue-100 text-blue-800',
     Selesai: 'bg-green-100 text-green-800',
     Dibayar: 'bg-purple-100 text-purple-800',
@@ -378,12 +481,17 @@ export default function WorkOrders() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {(['Draft', 'Proses', 'Selesai', 'Dibayar'] as const).map((status) => {
-          const count = data.workOrders.filter((w) => w.status === status).length;
+        {([
+          { s: 'Pengecekan', label: '1. Pengecekan', color: 'text-amber-600' },
+          { s: 'Proses', label: '2. Proses', color: 'text-blue-600' },
+          { s: 'Selesai', label: '3. Selesai', color: 'text-green-600' },
+          { s: 'Dibayar', label: '4. Dibayar', color: 'text-purple-600' },
+        ] as const).map(({ s, label, color }) => {
+          const count = filteredWOs.filter((w) => w.status === s).length;
           return (
-            <div key={status} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p className="text-sm text-gray-500">{status}</p>
-              <p className="text-2xl font-bold text-gray-900">{count}</p>
+            <div key={s} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <p className="text-sm text-gray-500">{label}</p>
+              <p className={`text-2xl font-bold ${color}`}>{count}</p>
             </div>
           );
         })}
@@ -391,7 +499,83 @@ export default function WorkOrders() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col gap-4">
+          {/* Quick list toggles */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={todayOnly}
+              onClick={() => setTodayOnly(value => !value)}
+              className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-3 py-2 transition-all sm:min-w-[180px] ${
+                todayOnly
+                  ? 'border-blue-500 bg-blue-50 text-blue-800 shadow-sm'
+                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <span className="flex items-center gap-2 text-left">
+                <CalendarDays className={`h-4 w-4 ${todayOnly ? 'text-blue-600' : 'text-gray-400'}`} />
+                <span>
+                  <span className="block text-xs font-semibold">Hari Ini</span>
+                  <span className="block text-[10px] opacity-70">{todayOnly ? todayDate : 'Semua tanggal'}</span>
+                </span>
+              </span>
+              <span className={`relative flex h-7 w-16 flex-shrink-0 items-center rounded-full px-1 transition-colors ${todayOnly ? 'bg-blue-600' : 'bg-gray-300'}`}>
+                <span className={`absolute text-[8px] font-bold text-white ${todayOnly ? 'left-2' : 'right-1.5'}`}>{todayOnly ? 'ON' : 'OFF'}</span>
+                <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${todayOnly ? 'translate-x-9' : 'translate-x-0'}`} />
+              </span>
+            </button>
+
+            {/* Satu toggle untuk setiap cabang aktif */}
+            {filterBranches.map(branch => {
+              const enabled = enabledBranchIds.includes(branch.id);
+              const woCount = data.workOrders.filter(wo => wo.branchId === branch.id && (!todayOnly || wo.date === todayDate)).length;
+              const activeStyle = branch.id === 'BR-001'
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                : branch.id === 'BR-002'
+                ? 'border-violet-500 bg-violet-50 text-violet-800'
+                : 'border-orange-500 bg-orange-50 text-orange-800';
+              const switchStyle = branch.id === 'BR-001'
+                ? 'bg-emerald-600'
+                : branch.id === 'BR-002'
+                ? 'bg-violet-600'
+                : 'bg-orange-500';
+
+              return (
+                <button
+                  key={branch.id}
+                  type="button"
+                  role="switch"
+                  aria-checked={enabled}
+                  disabled={!canViewAllBranches}
+                  onClick={() => toggleBranchFilter(branch.id)}
+                  title={!canViewAllBranches ? 'Akun ini hanya boleh melihat cabangnya sendiri' : `${enabled ? 'Sembunyikan' : 'Tampilkan'} WO ${branch.name}`}
+                  className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-3 py-2 transition-all sm:min-w-[190px] ${
+                    enabled ? `${activeStyle} shadow-sm` : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                  } ${!canViewAllBranches ? 'cursor-not-allowed opacity-80' : ''}`}
+                >
+                  <span className="flex min-w-0 items-center gap-2 text-left">
+                    <Building2 className={`h-4 w-4 flex-shrink-0 ${enabled ? '' : 'text-gray-400'}`} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-bold">{branch.name.replace('CABANG ', '')}</span>
+                      <span className="block text-[10px] opacity-70">{woCount} WO {todayOnly ? 'hari ini' : 'tersimpan'}</span>
+                    </span>
+                  </span>
+                  <span className={`relative flex h-7 w-16 flex-shrink-0 items-center rounded-full px-1 transition-colors ${enabled ? switchStyle : 'bg-gray-300'}`}>
+                    <span className={`absolute text-[8px] font-bold text-white ${enabled ? 'left-2' : 'right-1.5'}`}>{enabled ? 'ON' : 'OFF'}</span>
+                    <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-9' : 'translate-x-0'}`} />
+                  </span>
+                </button>
+              );
+            })}
+
+            <div className="ml-auto hidden text-right text-xs text-gray-500 sm:block">
+              <p className="font-semibold text-gray-700">{filteredWOs.length} WO ditampilkan</p>
+              <p>{todayOnly ? 'Hari ini' : 'Semua tanggal'} · {enabledBranchLabels.join(', ') || 'Tidak ada cabang'}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -408,11 +592,17 @@ export default function WorkOrders() {
             className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
           >
             <option value="">Semua Status</option>
-            <option value="Draft">Draft</option>
-            <option value="Proses">Proses</option>
-            <option value="Selesai">Selesai</option>
-            <option value="Dibayar">Dibayar</option>
+            <option value="Pengecekan">1. Pengecekan (Gratis)</option>
+            <option value="Proses">2. Proses</option>
+            <option value="Selesai">3. Selesai</option>
+            <option value="Dibayar">4. Dibayar</option>
           </select>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 sm:hidden">
+            <span>{todayOnly ? `Hari ini: ${todayDate}` : 'Semua tanggal'}</span>
+            <span className="font-semibold text-gray-800">{filteredWOs.length} WO</span>
+          </div>
         </div>
       </div>
 
@@ -422,7 +612,11 @@ export default function WorkOrders() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Wrench className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p className="text-lg font-medium text-gray-900">Tidak ada order kerja</p>
-            <p className="text-sm text-gray-500">Klik "Buat Order Kerja" untuk menambahkan order baru</p>
+            <p className="text-sm text-gray-500">
+              {todayOnly
+                ? `Tidak ada WO hari ini di ${enabledBranchLabels.join(', ') || 'cabang yang dipilih'}. Matikan filter Hari Ini untuk melihat riwayat.`
+                : 'Klik "Buat Order Kerja" untuk menambahkan order baru.'}
+            </p>
           </div>
         ) : (
           filteredWOs.map((wo) => (
@@ -434,8 +628,33 @@ export default function WorkOrders() {
                       <Wrench className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900 text-lg">{wo.woNumber}</h3>
-                      <p className="text-sm text-gray-500">{wo.date} • {wo.plateNumber}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-gray-900 text-lg">{wo.woNumber}</h3>
+                        {wo.continuedFromWoNumber && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold text-cyan-700"
+                            title={`Lanjutan dari ${wo.continuedFromWoNumber} di ${wo.continuedFromBranchName}`}
+                          >
+                            <ArrowLeftRight className="h-3 w-3" />
+                            Lanjutan {wo.continuedFromWoNumber}
+                          </span>
+                        )}
+                        {wo.continuedToWoNumber && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                            title={`Sudah dilanjutkan di ${wo.continuedToWoNumber} (${wo.continuedToBranchName})`}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            Dilanjutkan → {wo.continuedToWoNumber}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {wo.date} • {wo.plateNumber}
+                        {canViewAllBranches && enabledBranchIds.length > 1 && (
+                          <> • <span className="font-medium text-blue-600">{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '')}</span></>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -445,10 +664,10 @@ export default function WorkOrders() {
                       onChange={(e) => handleStatusChange(wo.id, e.target.value as WorkOrder['status'])}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium border-0 ${statusColors[wo.status]} ${!hasPermission('wo:edit') ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
-                      <option value="Draft">Draft</option>
-                      <option value="Proses">Proses</option>
-                      <option value="Selesai">Selesai</option>
-                      <option value="Dibayar">Dibayar</option>
+                      <option value="Pengecekan">1. Pengecekan</option>
+                      <option value="Proses">2. Proses</option>
+                      <option value="Selesai">3. Selesai</option>
+                      <option value="Dibayar">4. Dibayar</option>
                     </select>
                     {wo.invoiceId ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-medium">
@@ -466,6 +685,18 @@ export default function WorkOrders() {
                           Buat Faktur
                         </button>
                       )
+                    )}
+                    {hasPermission('wo:create')
+                      && wo.status === 'Pengecekan'
+                      && !wo.continuedToWoId
+                      && wo.branchId !== activeBranchId && (
+                      <button
+                        onClick={() => setContinueWO(wo)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition-colors hover:bg-cyan-100"
+                        title="Buat WO baru di cabang ini, tarik data pengecekan"
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5" /> Lanjutkan di Sini
+                      </button>
                     )}
                     {hasPermission('wo:edit') && (
                       <button
@@ -521,6 +752,37 @@ export default function WorkOrders() {
                     </span>
                   </div>
                 </div>
+
+                {wo.continuedToWoNumber && (
+                  <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-300 bg-slate-100 p-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-600" />
+                    <p className="text-xs text-slate-700">
+                      Pengecekan ini <strong>sudah dilanjutkan</strong> di{' '}
+                      <strong className="font-mono">{wo.continuedToWoNumber}</strong> ({wo.continuedToBranchName}).
+                      WO ini tidak perlu ditagih.
+                    </p>
+                  </div>
+                )}
+
+                {wo.continuedFromWoNumber && (
+                  <div className="mt-4 flex items-start gap-2 rounded-lg border border-cyan-200 bg-cyan-50 p-3">
+                    <ArrowLeftRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-cyan-600" />
+                    <p className="text-xs text-cyan-800">
+                      Lanjutan dari pengecekan <strong className="font-mono">{wo.continuedFromWoNumber}</strong>
+                      {' '}di <strong>{wo.continuedFromBranchName}</strong>. Keluhan & hasil pemeriksaan sudah tersalin.
+                    </p>
+                  </div>
+                )}
+
+                {wo.status === 'Pengecekan' && !wo.continuedToWoId && (
+                  <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <CalendarClock className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                    <p className="text-xs text-amber-800">
+                      <strong>Pengecekan gratis</strong> — estimasi Rp {wo.total.toLocaleString('id-ID')}.
+                      Menunggu persetujuan pelanggan sebelum lanjut ke Proses.
+                    </p>
+                  </div>
+                )}
 
                 {(wo.description || wo.notes) && (
                   <div className="mt-4 space-y-2">
@@ -587,10 +849,10 @@ export default function WorkOrders() {
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as WorkOrder['status'] })}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                   >
-                    <option value="Draft">Draft</option>
-                    <option value="Proses">Proses</option>
-                    <option value="Selesai">Selesai</option>
-                    <option value="Dibayar">Dibayar</option>
+                    <option value="Pengecekan">1. Pengecekan (gratis, belum disetujui)</option>
+                    <option value="Proses">2. Proses (disetujui, sedang dikerjakan)</option>
+                    <option value="Selesai">3. Selesai (siap difakturkan)</option>
+                    <option value="Dibayar">4. Dibayar</option>
                   </select>
                 </div>
               </div>
@@ -648,229 +910,220 @@ export default function WorkOrders() {
                 </div>
 
                 {showServiceForm && (
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Pilih dari Master Barang & Jasa</label>
-                      <div className="flex gap-2">
-                        <select
-                          value={newService.itemId}
-                          onChange={(e) => handleUseItem(e.target.value)}
-                          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">Pilih barang/jasa...</option>
-                          {availableServiceItems.filter((i) => i.type === 'Group').length > 0 && (
-                            <optgroup label="📦 Group / Paket">
-                              {availableServiceItems.filter((i) => i.type === 'Group').map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.code} - {item.name} ({item.groupMembers?.length || 0} item) - Rp {item.sellingPrice.toLocaleString('id-ID')}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          <optgroup label="Barang & Jasa">
-                            {availableServiceItems.filter((i) => i.type !== 'Group').map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.code} - {item.name} - Rp {item.sellingPrice.toLocaleString('id-ID')}
-                              </option>
-                            ))}
-                          </optgroup>
-                        </select>
+                  <div className="mb-4 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
+                    <div className="border-b border-blue-100 bg-blue-50 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+                            <ListPlus className="h-4 w-4" /> Pilih beberapa layanan
+                          </p>
+                          <p className="mt-0.5 text-xs text-blue-700">Klik favorit atau tombol Tambah. Item yang sudah dipilih tidak dapat ditambahkan dua kali.</p>
+                        </div>
                         {hasPermission('item:create') && (
                           <button
                             type="button"
                             onClick={() => setShowQuickAddItem(true)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-green-600 hover:bg-green-700 px-3 py-2 text-sm font-medium text-white shadow-sm"
-                            title="Tambah barang/jasa baru (tidak ada di master)"
+                            className="inline-flex flex-shrink-0 items-center justify-center gap-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700"
+                            title="Tambah barang/jasa baru"
                           >
-                            <Plus className="w-4 h-4" /> Baru
+                            <Plus className="h-4 w-4" /> Barang/Jasa Baru
                           </button>
                         )}
                       </div>
-                      <p className="mt-1 text-[10px] text-gray-500">
-                        Tidak ketemu? Klik tombol <strong className="text-green-700">+ Baru</strong> untuk menambahkan barang/jasa baru.
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Layanan Cepat (Jasa & Paket)</label>
-                      <div className="flex flex-wrap gap-2">
-                        {availableServiceItems
-                          .filter((i) => i.isActive && i.isQuickService)
-                          .map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => handleUseItem(item.id)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                                item.type === 'Group'
-                                  ? 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100'
-                                  : 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-                              }`}
-                              title={item.name}
-                            >
-                              {item.name}
-                            </button>
-                          ))}
-                        {availableServiceItems.filter((i) => i.isActive && i.isQuickService).length === 0 && (
-                          <p className="text-[10px] text-gray-400 italic">Belum ada master layanan cepat yang dipilih</p>
-                        )}
+
+                      {/* Favorit: sekali klik langsung masuk */}
+                      <div className="mt-3">
+                        <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
+                          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" /> Favorit
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {availableServiceItems.filter(item => item.isQuickService).map(item => {
+                            const added = isItemAdded(item.id);
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                disabled={added}
+                                onClick={() => handleUseItem(item.id)}
+                                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
+                                  added
+                                    ? 'cursor-not-allowed border-green-200 bg-green-100 text-green-700'
+                                    : item.type === 'Group'
+                                    ? 'border-purple-200 bg-purple-50 text-purple-700 hover:border-purple-400 hover:bg-purple-100'
+                                    : 'border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-400 hover:bg-amber-100'
+                                }`}
+                              >
+                                {added ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                                {item.name}
+                              </button>
+                            );
+                          })}
+                          {availableServiceItems.filter(item => item.isQuickService).length === 0 && (
+                            <span className="text-xs italic text-gray-400">Belum ada layanan favorit.</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div className="md:col-span-2">
+
+                    {/* Search */}
+                    <div className="border-b border-gray-200 p-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                         <input
                           type="text"
-                          placeholder="Nama layanan"
-                          value={newService.name}
-                          onChange={(e) => setNewService({ ...newService, name: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <input
-                          type="number"
-                          placeholder="Harga"
-                          min="0"
-                          value={newService.price || ''}
-                          onChange={(e) => setNewService({ ...newService, price: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <input
-                          type="number"
-                          placeholder="Qty"
-                          min="1"
-                          value={newService.qty}
-                          onChange={(e) => setNewService({ ...newService, qty: parseInt(e.target.value) || 1 })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                          value={serviceSearch}
+                          onChange={(e) => setServiceSearch(e.target.value)}
+                          placeholder="Cari kode, nama, kategori, atau jenis…"
+                          className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     </div>
-                    <div>
-                      <input
-                        type="text"
-                        placeholder="Deskripsi (opsional)"
-                        value={newService.description}
-                        onChange={(e) => setNewService({ ...newService, description: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
+
+                    {/* Master service table */}
+                    <div className="max-h-64 overflow-auto">
+                      <table className="min-w-[650px] w-full text-sm">
+                        <thead className="sticky top-0 z-[1] bg-gray-100 text-xs text-gray-600">
+                          <tr>
+                            <th className="w-12 px-3 py-2 text-center font-medium">Fav</th>
+                            <th className="px-3 py-2 text-left font-medium">Kode</th>
+                            <th className="px-3 py-2 text-left font-medium">Barang / Jasa</th>
+                            <th className="px-3 py-2 text-left font-medium">Jenis</th>
+                            <th className="px-3 py-2 text-right font-medium">Harga</th>
+                            <th className="w-24 px-3 py-2 text-center font-medium">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {availableServiceItems
+                            .filter(item => {
+                              const q = serviceSearch.toLowerCase().trim();
+                              return !q || item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q) || item.categoryName.toLowerCase().includes(q);
+                            })
+                            .map(item => {
+                              const added = isItemAdded(item.id);
+                              return (
+                                <tr key={item.id} className={added ? 'bg-green-50/70' : 'hover:bg-blue-50/50'}>
+                                  <td className="px-3 py-2 text-center">
+                                    <Star className={`mx-auto h-4 w-4 ${item.isQuickService ? 'fill-amber-400 text-amber-500' : 'text-gray-300'}`} />
+                                  </td>
+                                  <td className="px-3 py-2 font-mono text-xs text-gray-600">{item.code}</td>
+                                  <td className="px-3 py-2">
+                                    <p className="font-medium text-gray-900">{item.name}</p>
+                                    <p className="text-[10px] text-gray-400">{item.categoryName}{item.type === 'Group' ? ` • ${item.groupMembers?.length || 0} komponen` : ''}</p>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                      item.type === 'Group' ? 'bg-purple-100 text-purple-700' :
+                                      item.type === 'Jasa' ? 'bg-green-100 text-green-700' :
+                                      item.type === 'Persediaan' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                                    }`}>{item.type}</span>
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-medium text-gray-900">Rp {item.sellingPrice.toLocaleString('id-ID')}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    <button
+                                      type="button"
+                                      disabled={added}
+                                      onClick={() => handleUseItem(item.id)}
+                                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                                        added ? 'cursor-not-allowed bg-green-100 text-green-700' : 'bg-blue-600 text-white hover:bg-blue-700'
+                                      }`}
+                                    >
+                                      {added ? <><CheckCircle2 className="h-3.5 w-3.5" /> Dipilih</> : <><Plus className="h-3.5 w-3.5" /> Tambah</>}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddService}
-                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-                    >
-                      Tambahkan Layanan
-                    </button>
+
+                    <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-600">
+                      <span>{formData.services.length} baris sudah dipilih</span>
+                      <button type="button" onClick={() => setShowServiceForm(false)} className="font-semibold text-blue-600 hover:text-blue-800">Selesai Memilih</button>
+                    </div>
                   </div>
                 )}
 
                 {formData.services.length > 0 ? (
-                  <div className="space-y-2">
-                    {formData.services.map((service) => {
-                      const isGroupHeader = service.name.startsWith('📦');
-                      const isGroupMember = service.name.startsWith('   -');
-                      return (
-                        <div
-                          key={service.id}
-                          className={`rounded-lg border p-3 transition-colors ${
-                            isGroupHeader
-                              ? 'bg-purple-50 border-purple-200'
-                              : isGroupMember
-                              ? 'bg-gray-50 border-gray-200 ml-6'
-                              : 'bg-white border-gray-200'
-                          }`}
-                        >
-                          {/* Name + Delete */}
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>
-                                {service.name}
-                              </p>
-                              {service.code && (
-                                <p className="font-mono text-[10px] text-gray-400">{service.code}</p>
-                              )}
-                              {service.description && (
-                                <p className="text-xs text-gray-500 italic mt-0.5">{service.description}</p>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveService(service.id)}
-                              className="p-1 text-red-500 hover:bg-red-100 rounded transition-colors flex-shrink-0"
-                              title="Hapus"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          {/* Editable Qty, Price, Subtotal */}
-                          <div className="grid grid-cols-12 gap-2 items-center">
-                            <div className="col-span-3">
-                              <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Qty</label>
-                              <input
-                                type="number"
-                                min="1"
-                                value={service.qty}
-                                onChange={(e) => handleUpdateService(service.id, 'qty', parseInt(e.target.value) || 1)}
-                                className="w-full rounded border border-gray-300 px-2 py-1.5 text-center text-sm font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                            <div className="col-span-5">
-                              <label className="block text-[10px] font-medium text-gray-500 mb-0.5">
-                                Harga Satuan {isGroupHeader && '(Group)'}
-                              </label>
-                              <div className="relative">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                    <table className="min-w-[720px] w-full text-sm">
+                      <thead className="bg-slate-100 text-xs text-slate-600">
+                        <tr>
+                          <th className="w-10 px-3 py-2.5 text-center font-medium">#</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Layanan / Barang</th>
+                          <th className="w-24 px-3 py-2.5 text-center font-medium">Qty</th>
+                          <th className="w-40 px-3 py-2.5 text-right font-medium">Harga Satuan</th>
+                          <th className="w-36 px-3 py-2.5 text-right font-medium">Subtotal</th>
+                          <th className="w-14 px-3 py-2.5 text-center font-medium">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {formData.services.map((service, index) => {
+                          const isGroupHeader = service.name.startsWith('[PAKET]');
+                          const isGroupMember = service.name.startsWith('   -');
+                          return (
+                            <tr key={service.id} className={isGroupHeader ? 'bg-purple-50' : isGroupMember ? 'bg-slate-50' : 'hover:bg-blue-50/40'}>
+                              <td className="px-3 py-2 text-center text-xs text-gray-400">{index + 1}</td>
+                              <td className={`px-3 py-2 ${isGroupMember ? 'pl-8' : ''}`}>
+                                <div className="flex items-start gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <p className={`font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>{service.name}</p>
+                                      {isGroupHeader && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">Harga Paket</span>}
+                                      {isGroupMember && <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">Komponen</span>}
+                                    </div>
+                                    {service.code && <p className="font-mono text-[10px] text-gray-400">{service.code}</p>}
+                                    <input
+                                      type="text"
+                                      value={service.description || ''}
+                                      onChange={(e) => handleUpdateService(service.id, 'description', e.target.value)}
+                                      placeholder="Keterangan (opsional)"
+                                      className="mt-1 w-full border-b border-dashed border-gray-200 bg-transparent py-0.5 text-xs text-gray-500 outline-none focus:border-blue-500"
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2">
                                 <input
                                   type="number"
-                                  min="0"
-                                  value={service.price}
-                                  onChange={(e) => handleUpdateService(service.id, 'price', parseInt(e.target.value) || 0)}
-                                  className={`w-full rounded border-2 px-7 py-1.5 text-right text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
-                                    isGroupHeader
-                                      ? 'font-bold text-purple-700 border-purple-300 bg-purple-50'
-                                      : service.price === 0
-                                      ? 'border-yellow-300 bg-yellow-50 text-gray-700'
-                                      : 'border-gray-300 bg-white'
-                                  }`}
+                                  min="1"
+                                  value={service.qty}
+                                  onChange={(e) => handleUpdateService(service.id, 'qty', parseInt(e.target.value) || 1)}
+                                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-center font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 />
-                              </div>
-                              {service.price === 0 && !isGroupMember && !isGroupHeader && (
-                                <p className="text-[10px] text-yellow-600 mt-0.5">⚠ Harga 0</p>
-                              )}
-                            </div>
-                            <div className="col-span-4">
-                              <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Subtotal</label>
-                              <div className={`rounded border px-2 py-1.5 text-right text-sm font-bold whitespace-nowrap ${
-                                isGroupHeader
-                                  ? 'border-purple-300 bg-purple-100 text-purple-700'
-                                  : 'border-gray-200 bg-gray-50 text-gray-900'
-                              }`}>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={service.price}
+                                    onChange={(e) => handleUpdateService(service.id, 'price', parseInt(e.target.value) || 0)}
+                                    className={`w-full rounded-lg border px-7 py-1.5 text-right outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isGroupHeader ? 'border-purple-300 bg-purple-50 font-bold text-purple-700' : service.price === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-300 bg-white'}`}
+                                  />
+                                </div>
+                              </td>
+                              <td className={`px-3 py-2 text-right font-bold whitespace-nowrap ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>
                                 Rp {(service.price * service.qty).toLocaleString('id-ID')}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Editable Description */}
-                          <input
-                            type="text"
-                            value={service.description || ''}
-                            onChange={(e) => handleUpdateService(service.id, 'description', e.target.value)}
-                            placeholder="Tambah keterangan (opsional)..."
-                            className="mt-2 w-full bg-transparent text-xs text-gray-500 border-b border-dashed border-gray-200 hover:border-gray-400 focus:border-blue-500 outline-none py-1"
-                          />
-                        </div>
-                      );
-                    })}
-
-                    {/* TOTAL */}
-                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-2 border-blue-300">
-                      <span className="font-semibold text-gray-900">TOTAL</span>
-                      <span className="text-xl font-bold text-blue-700">
-                        Rp {totalServices.toLocaleString('id-ID')}
-                      </span>
-                    </div>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button type="button" onClick={() => handleRemoveService(service.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-100" title="Hapus">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-blue-300 bg-blue-50">
+                          <td colSpan={4} className="px-3 py-3 text-right font-semibold text-gray-900">TOTAL ESTIMASI</td>
+                          <td className="px-3 py-3 text-right text-lg font-bold text-blue-700 whitespace-nowrap">Rp {totalServices.toLocaleString('id-ID')}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
@@ -910,6 +1163,88 @@ export default function WorkOrders() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Lanjutkan Pengecekan di Cabang Ini ===== */}
+      {continueWO && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between rounded-t-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <ArrowLeftRight className="h-6 w-6" />
+                <div>
+                  <h3 className="text-lg font-bold">Lanjutkan Pengerjaan</h3>
+                  <p className="text-sm text-cyan-100">Dari {continueWO.woNumber}</p>
+                </div>
+              </div>
+              <button onClick={() => setContinueWO(null)} className="rounded-lg p-2 hover:bg-white/20"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="space-y-4 p-6">
+              <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                <div className="flex justify-between py-0.5"><span className="text-gray-500">Pelanggan</span><span className="font-medium">{continueWO.customerName}</span></div>
+                <div className="flex justify-between py-0.5"><span className="text-gray-500">Kendaraan</span><span className="font-medium">{continueWO.plateNumber}</span></div>
+                <div className="flex justify-between py-0.5"><span className="text-gray-500">Estimasi</span><span className="font-medium">Rp {continueWO.total.toLocaleString('id-ID')}</span></div>
+                <div className="mt-2 flex items-center justify-between border-t border-gray-200 pt-2">
+                  <span className="text-gray-500">Dicek di</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                    <Building2 className="h-3 w-3" />
+                    {data.branches.find(b => b.id === continueWO.branchId)?.name}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-gray-500">Dikerjakan di</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-cyan-100 px-2 py-0.5 text-xs font-semibold text-cyan-700">
+                    <Building2 className="h-3 w-3" />
+                    {data.branches.find(b => b.id === activeBranchId)?.name}
+                  </span>
+                </div>
+              </div>
+
+              {continueWO.description && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                  <p className="text-xs font-semibold text-blue-800">Keluhan Pelanggan</p>
+                  <p className="mt-0.5 text-sm text-blue-900">{continueWO.description}</p>
+                </div>
+              )}
+
+              {continueWO.services.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-700">Rekomendasi dari pengecekan ({continueWO.services.length} item)</p>
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-2">
+                    {continueWO.services.map(s => (
+                      <div key={s.id} className="flex justify-between text-xs">
+                        <span className="text-gray-700">{s.name} ×{s.qty}</span>
+                        <span className="font-medium text-gray-900">Rp {(s.price * s.qty).toLocaleString('id-ID')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-800">
+                <p className="mb-1 font-semibold">Yang akan terjadi:</p>
+                <ul className="list-inside list-disc space-y-0.5 text-cyan-700">
+                  <li>WO baru dibuat di <strong>{data.branches.find(b => b.id === activeBranchId)?.name}</strong> dengan status <strong>Proses</strong></li>
+                  <li>Data pelanggan, kendaraan, keluhan & rekomendasi <strong>tersalin otomatis</strong></li>
+                  <li>{continueWO.woNumber} ditandai <strong>"sudah dilanjutkan"</strong> dan tidak akan ditagih</li>
+                  <li>Stok & omzet nanti masuk ke cabang ini saat difakturkan</li>
+                </ul>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+                <button type="button" onClick={() => setContinueWO(null)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
+                <button
+                  type="button"
+                  onClick={submitContinue}
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-cyan-500/30 hover:opacity-90"
+                >
+                  <ArrowLeftRight className="h-4 w-4" /> Buat WO Lanjutan
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import type { Customer } from '../types';
 
 export default function Customers() {
-  const { data, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, currentBranchId, hasPermission } = useApp();
+  const { data, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,17 +17,15 @@ export default function Customers() {
   });
 
   const filteredCustomers = useMemo(() => {
+    // Pelanggan bersifat GLOBAL — tampil di semua cabang
     return data.customers.filter((c) => {
-      const branchMatch = currentBranchId === 'ALL' || c.branchId === currentBranchId;
-      if (!branchMatch) return false;
-
       const matchesSearch =
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.phone.includes(searchTerm) ||
         c.email.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
-  }, [data.customers, searchTerm, currentBranchId]);
+  }, [data.customers, searchTerm]);
 
   const resetForm = () => {
     setFormData({ name: '', phone: '', address: '', email: '' });
@@ -68,7 +66,7 @@ export default function Customers() {
         id: Date.now().toString(),
         ...formData,
         createdAt: now,
-        branchId: currentBranchId || 'BR-001',
+        branchId: resolveBranchId(),
       });
     }
     handleCloseModal();

@@ -8,6 +8,8 @@ interface AppContextType {
   currentUser: User | null;
   currentBranchId: string;
   setCurrentBranchId: (id: string) => void;
+  /** Cabang efektif untuk menyimpan data baru — tidak pernah mengembalikan 'ALL' */
+  resolveBranchId: () => string;
   login: (username: string, password: string) => Promise<User | null>;
   logout: () => void;
   hasPermission: (perm: Permission) => boolean;
@@ -27,6 +29,7 @@ interface AppContextType {
   addWorkOrder: (wo: WorkOrder) => Promise<void>;
   updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
+  continueWorkOrder: (sourceWoId: string, targetBranchId: string) => Promise<WorkOrder | null>;
   createInvoiceFromWO: (woId: string, payment: number) => Promise<SalesInvoice | null>;
   addItem: (item: Item) => Promise<void>;
   updateItem: (id: string, item: Item) => Promise<void>;
@@ -167,6 +170,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return role.permissions.includes(perm);
   };
 
+  /**
+   * Cabang efektif untuk menyimpan data baru.
+   * Jika user sedang melihat "Semua Cabang" (ALL), pakai cabang asal user.
+   * Tidak pernah mengembalikan 'ALL' supaya data tidak nyangkut.
+   */
+  const resolveBranchId = (): string => {
+    if (currentBranchId && currentBranchId !== 'ALL') return currentBranchId;
+    if (currentUser?.branchId && currentUser.branchId !== 'ALL') return currentUser.branchId;
+    const firstActive = data.branches.find(b => b.isActive);
+    return firstActive?.id || 'BR-001';
+  };
+
   // Helper: eksekusi CRUD - jika demo mode, langsung update state
   const executeCRUD = async (
     operation: () => Promise<any>,
@@ -235,7 +250,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addInvoice = async (inv: SalesInvoice) => {
     await executeCRUD(
       () => api.create('sales-invoices', inv),
-      () => setData(prev => ({ ...prev, invoices: [...prev.invoices, inv] }))
+      () => setData(prev => {
+        const nextItems = prev.items.map(item => {
+          if (item.type !== 'Persediaan') return item;
+          const soldQty = (inv.items || [])
+            .filter(detail => detail.itemId === item.id)
+            .reduce((sum, detail) => sum + detail.qty, 0);
+          return soldQty > 0
+            ? { ...item, stock: Math.max(0, item.stock - soldQty), sellableStock: Math.max(0, item.sellableStock - soldQty) }
+            : item;
+        });
+        return { ...prev, items: nextItems, invoices: [...prev.invoices, inv] };
+      })
     );
   };
   const updateInvoice = async (id: string, inv: SalesInvoice) => {
@@ -247,7 +273,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteInvoice = async (id: string) => {
     await executeCRUD(
       () => api.remove('sales-invoices', id),
-      () => setData(prev => ({ ...prev, invoices: prev.invoices.filter(x => x.id !== id) }))
+      () => setData(prev => {
+        const invoice = prev.invoices.find(x => x.id === id);
+        const nextItems = prev.items.map(item => {
+          if (item.type !== 'Persediaan' || !invoice) return item;
+          const returnedQty = (invoice.items || [])
+            .filter(detail => detail.itemId === item.id)
+            .reduce((sum, detail) => sum + detail.qty, 0);
+          return returnedQty > 0
+            ? { ...item, stock: item.stock + returnedQty, sellableStock: item.sellableStock + returnedQty }
+            : item;
+        });
+        return { ...prev, items: nextItems, invoices: prev.invoices.filter(x => x.id !== id) };
+      })
     );
   };
 
@@ -269,6 +307,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
       () => api.remove('work-orders', id),
       () => setData(prev => ({ ...prev, workOrders: prev.workOrders.filter(x => x.id !== id) }))
     );
+  };
+
+  // Lanjutkan WO pengecekan di cabang lain — buat WO BARU, tandai WO lama sudah dilanjutkan
+  const continueWorkOrder = async (sourceWoId: string, targetBranchId: string): Promise<WorkOrder | null> => {
+    const src = data.workOrders.find(w => w.id === sourceWoId);
+    if (!src) return null;
+    const srcBranch = data.branches.find(b => b.id === src.branchId);
+    const tgtBranch = data.branches.find(b => b.id === targetBranchId);
+    if (!tgtBranch) return null;
+
+    const today = new Date().toISOString().split('T')[0];
+    const prefixes: Record<string, string> = { 'BR-001': 'WO-P', 'BR-002': 'WO-C', 'BR-003': 'WO-M' };
+    const prefix = prefixes[targetBranchId] || 'WO';
+    const year = new Date().getFullYear();
+    const count = data.workOrders.filter(w => w.branchId === targetBranchId).length + 1;
+    const newWoNumber = `${prefix}-${year}-${String(count).padStart(3, '0')}`;
+    const newId = Date.now().toString();
+
+    const newWo: WorkOrder = {
+      id: newId,
+      woNumber: newWoNumber,
+      date: today,
+      customerRefId: src.customerRefId,
+      customerId: src.customerId,
+      customerName: src.customerName,
+      vehicleRefId: src.vehicleRefId,
+      plateNumber: src.plateNumber,
+      vehicleInfo: src.vehicleInfo,
+      description: src.description,
+      findings: src.findings,
+      services: src.services.map((s, i) => ({ ...s, id: `${newId}-${i}` })),
+      total: src.total,
+      estimateTotal: src.total,
+      status: 'Proses',
+      notes: `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,
+      branchId: targetBranchId,
+      continuedFromWoId: src.id,
+      continuedFromWoNumber: src.woNumber,
+      continuedFromBranchName: srcBranch?.name || '-',
+    };
+
+    await addWorkOrder(newWo);
+    await updateWorkOrder(src.id, {
+      ...src,
+      continuedToWoId: newId,
+      continuedToWoNumber: newWoNumber,
+      continuedToBranchName: tgtBranch.name,
+      notes: `${src.notes || ''}\n[${today}] Dilanjutkan di ${newWoNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
+    });
+
+    return newWo;
   };
 
   const createInvoiceFromWO = async (woId: string, payment: number): Promise<SalesInvoice | null> => {
@@ -295,11 +384,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       branchId: wo.branchId,
     };
 
-    await api.create('sales-invoices', newInvoice);
-    await api.update('work-orders', woId, {
+    await addInvoice(newInvoice);
+    await updateWorkOrder(woId, {
       ...wo, status: 'Dibayar', invoiceId: newInvoice.id, invoiceNumber,
     });
-    await refreshData();
     return newInvoice;
   };
 
@@ -466,12 +554,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider
       value={{
-        data, currentUser, currentBranchId, setCurrentBranchId,
+        data, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId,
         login, logout, hasPermission, isLoading, isDemoMode, refreshData,
         addVehicle, updateVehicle, deleteVehicle,
         addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,
         addInvoice, updateInvoice, deleteInvoice,
-        addWorkOrder, updateWorkOrder, deleteWorkOrder, createInvoiceFromWO,
+        addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder, createInvoiceFromWO,
         addItem, updateItem, deleteItem,
         addItemCategory, updateItemCategory, deleteItemCategory,
         addBranch, updateBranch, deleteBranch,

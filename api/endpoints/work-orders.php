@@ -14,6 +14,15 @@ switch ($method) {
             $r['invoiceId'] = $r['invoice_id'];
             $r['invoiceNumber'] = $r['invoice_number'];
             $r['total'] = (float)$r['total'];
+            $r['findings'] = $r['findings'] ?? null;
+            $r['estimateTotal'] = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
+            $r['approvedAt'] = $r['approved_at'] ?? null;
+            $r['continuedFromWoId'] = $r['continued_from_wo_id'] ?? null;
+            $r['continuedFromWoNumber'] = $r['continued_from_wo_number'] ?? null;
+            $r['continuedFromBranchName'] = $r['continued_from_branch_name'] ?? null;
+            $r['continuedToWoId'] = $r['continued_to_wo_id'] ?? null;
+            $r['continuedToWoNumber'] = $r['continued_to_wo_number'] ?? null;
+            $r['continuedToBranchName'] = $r['continued_to_branch_name'] ?? null;
             // Load services
             $stmt = $pdo->prepare("SELECT * FROM work_order_services WHERE wo_id = ?");
             $stmt->execute([$r['id']]);
@@ -38,13 +47,16 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             $woId = $d['id'] ?? generateId();
-            $stmt = $pdo->prepare("INSERT INTO work_orders (id, wo_number, date, customer_ref_id, customer_id, customer_name, vehicle_ref_id, plate_number, vehicle_info, description, total, status, notes, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO work_orders (id, wo_number, date, customer_ref_id, customer_id, customer_name, vehicle_ref_id, plate_number, vehicle_info, description, findings, total, estimate_total, approved_at, status, notes, branch_id, continued_from_wo_id, continued_from_wo_number, continued_from_branch_name, continued_to_wo_id, continued_to_wo_number, continued_to_branch_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $woId, $d['woNumber'], $d['date'],
                 $d['customerRefId'] ?? '', $d['customerId'] ?? '', $d['customerName'] ?? '',
                 $d['vehicleRefId'] ?? '', $d['plateNumber'] ?? '', $d['vehicleInfo'] ?? '',
-                $d['description'] ?? '', $d['total'] ?? 0,
-                $d['status'] ?? 'Draft', $d['notes'] ?? '', $d['branchId'] ?? 'BR-001'
+                $d['description'] ?? '', $d['findings'] ?? null, $d['total'] ?? 0,
+                $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
+                $d['status'] ?? 'Pengecekan', $d['notes'] ?? '', $d['branchId'] ?? 'BR-001',
+                $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
+                $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null
             ]);
 
             if (!empty($d['services'])) {
@@ -68,14 +80,17 @@ switch ($method) {
         $d = getInput();
         $pdo->beginTransaction();
         try {
-            $stmt = $pdo->prepare("UPDATE work_orders SET wo_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_ref_id=?, plate_number=?, vehicle_info=?, description=?, total=?, status=?, notes=?, branch_id=?, invoice_id=?, invoice_number=? WHERE id=?");
+            $stmt = $pdo->prepare("UPDATE work_orders SET wo_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_ref_id=?, plate_number=?, vehicle_info=?, description=?, findings=?, total=?, estimate_total=?, approved_at=?, status=?, notes=?, branch_id=?, invoice_id=?, invoice_number=?, continued_from_wo_id=?, continued_from_wo_number=?, continued_from_branch_name=?, continued_to_wo_id=?, continued_to_wo_number=?, continued_to_branch_name=? WHERE id=?");
             $stmt->execute([
                 $d['woNumber'], $d['date'],
                 $d['customerRefId'] ?? '', $d['customerId'] ?? '', $d['customerName'] ?? '',
                 $d['vehicleRefId'] ?? '', $d['plateNumber'] ?? '', $d['vehicleInfo'] ?? '',
-                $d['description'] ?? '', $d['total'] ?? 0,
-                $d['status'] ?? 'Draft', $d['notes'] ?? '', $d['branchId'] ?? 'BR-001',
+                $d['description'] ?? '', $d['findings'] ?? null, $d['total'] ?? 0,
+                $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
+                $d['status'] ?? 'Pengecekan', $d['notes'] ?? '', $d['branchId'] ?? 'BR-001',
                 $d['invoiceId'] ?? null, $d['invoiceNumber'] ?? null,
+                $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
+                $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
                 $id
             ]);
 

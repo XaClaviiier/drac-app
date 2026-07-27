@@ -422,6 +422,9 @@ switch ($method) {
         break;
     case "POST":
         $d = getInput();
+        $dup = $pdo->prepare("SELECT id FROM item_categories WHERE UPPER(code) = UPPER(?) OR LOWER(name) = LOWER(?) LIMIT 1");
+        $dup->execute([$d["code"], $d["name"]]);
+        if ($dup->fetch()) respondError("Kode atau nama kategori sudah digunakan", 409);
         $pdo->prepare("INSERT INTO item_categories (id, code, name, type, description, is_active) VALUES (?, ?, ?, ?, ?, ?)")
             ->execute([$d["id"] ?? generateId(), $d["code"], $d["name"], $d["type"] ?? "Semua", $d["description"] ?? "", $d["isActive"] ?? 1]);
         respondSuccess(null, "Kategori ditambahkan");
@@ -429,12 +432,18 @@ switch ($method) {
     case "PUT":
         if (!$id) respondError("ID required");
         $d = getInput();
+        $dup = $pdo->prepare("SELECT id FROM item_categories WHERE (UPPER(code) = UPPER(?) OR LOWER(name) = LOWER(?)) AND id <> ? LIMIT 1");
+        $dup->execute([$d["code"], $d["name"], $id]);
+        if ($dup->fetch()) respondError("Kode atau nama kategori sudah digunakan", 409);
         $pdo->prepare("UPDATE item_categories SET code=?, name=?, type=?, description=?, is_active=? WHERE id=?")
             ->execute([$d["code"], $d["name"], $d["type"] ?? "Semua", $d["description"] ?? "", $d["isActive"] ?? 1, $id]);
         respondSuccess(null, "Kategori diupdate");
         break;
     case "DELETE":
         if (!$id) respondError("ID required");
+        $used = $pdo->prepare("SELECT COUNT(*) FROM items WHERE category_id = ?");
+        $used->execute([$id]);
+        if ((int)$used->fetchColumn() > 0) respondError("Kategori masih digunakan oleh barang/jasa", 409);
         $pdo->prepare("DELETE FROM item_categories WHERE id=?")->execute([$id]);
         respondSuccess(null, "Kategori dihapus");
         break;
@@ -521,6 +530,15 @@ switch ($method) {
             $r["vehicleRefId"] = $r["vehicle_ref_id"]; $r["plateNumber"] = $r["plate_number"]; $r["vehicleInfo"] = $r["vehicle_info"];
             $r["branchId"] = $r["branch_id"]; $r["invoiceId"] = $r["invoice_id"]; $r["invoiceNumber"] = $r["invoice_number"];
             $r["total"] = (float)$r["total"];
+            $r["findings"] = $r["findings"] ?? null;
+            $r["estimateTotal"] = isset($r["estimate_total"]) ? (float)$r["estimate_total"] : null;
+            $r["approvedAt"] = $r["approved_at"] ?? null;
+            $r["continuedFromWoId"] = $r["continued_from_wo_id"] ?? null;
+            $r["continuedFromWoNumber"] = $r["continued_from_wo_number"] ?? null;
+            $r["continuedFromBranchName"] = $r["continued_from_branch_name"] ?? null;
+            $r["continuedToWoId"] = $r["continued_to_wo_id"] ?? null;
+            $r["continuedToWoNumber"] = $r["continued_to_wo_number"] ?? null;
+            $r["continuedToBranchName"] = $r["continued_to_branch_name"] ?? null;
             $stmt = $pdo->prepare("SELECT * FROM work_order_services WHERE wo_id = ?");
             $stmt->execute([$r["id"]]);
             $r["services"] = array_map(function($s) { return ["id" => (string)$s["id"], "itemId" => $s["item_id"], "code" => $s["code"], "name" => $s["name"], "description" => $s["description"], "price" => (float)$s["price"], "qty" => (int)$s["qty"]]; }, $stmt->fetchAll());
@@ -532,8 +550,8 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             $woId = $d["id"] ?? generateId();
-            $pdo->prepare("INSERT INTO work_orders (id, wo_number, date, customer_ref_id, customer_id, customer_name, vehicle_ref_id, plate_number, vehicle_info, description, total, status, notes, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                ->execute([$woId, $d["woNumber"], $d["date"], $d["customerRefId"] ?? "", $d["customerId"] ?? "", $d["customerName"] ?? "", $d["vehicleRefId"] ?? "", $d["plateNumber"] ?? "", $d["vehicleInfo"] ?? "", $d["description"] ?? "", $d["total"] ?? 0, $d["status"] ?? "Draft", $d["notes"] ?? "", $d["branchId"] ?? "BR-001"]);
+            $pdo->prepare("INSERT INTO work_orders (id, wo_number, date, customer_ref_id, customer_id, customer_name, vehicle_ref_id, plate_number, vehicle_info, description, findings, total, estimate_total, approved_at, status, notes, branch_id, continued_from_wo_id, continued_from_wo_number, continued_from_branch_name, continued_to_wo_id, continued_to_wo_number, continued_to_branch_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                ->execute([$woId, $d["woNumber"], $d["date"], $d["customerRefId"] ?? "", $d["customerId"] ?? "", $d["customerName"] ?? "", $d["vehicleRefId"] ?? "", $d["plateNumber"] ?? "", $d["vehicleInfo"] ?? "", $d["description"] ?? "", $d["findings"] ?? null, $d["total"] ?? 0, $d["estimateTotal"] ?? null, $d["approvedAt"] ?? null, $d["status"] ?? "Pengecekan", $d["notes"] ?? "", $d["branchId"] ?? "BR-001", $d["continuedFromWoId"] ?? null, $d["continuedFromWoNumber"] ?? null, $d["continuedFromBranchName"] ?? null, $d["continuedToWoId"] ?? null, $d["continuedToWoNumber"] ?? null, $d["continuedToBranchName"] ?? null]);
             if (!empty($d["services"])) {
                 $sStmt = $pdo->prepare("INSERT INTO work_order_services (wo_id, item_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 foreach ($d["services"] as $s) {
@@ -550,8 +568,8 @@ switch ($method) {
         $d = getInput();
         $pdo->beginTransaction();
         try {
-            $pdo->prepare("UPDATE work_orders SET wo_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_ref_id=?, plate_number=?, vehicle_info=?, description=?, total=?, status=?, notes=?, branch_id=?, invoice_id=?, invoice_number=? WHERE id=?")
-                ->execute([$d["woNumber"], $d["date"], $d["customerRefId"] ?? "", $d["customerId"] ?? "", $d["customerName"] ?? "", $d["vehicleRefId"] ?? "", $d["plateNumber"] ?? "", $d["vehicleInfo"] ?? "", $d["description"] ?? "", $d["total"] ?? 0, $d["status"] ?? "Draft", $d["notes"] ?? "", $d["branchId"] ?? "BR-001", $d["invoiceId"] ?? null, $d["invoiceNumber"] ?? null, $id]);
+            $pdo->prepare("UPDATE work_orders SET wo_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_ref_id=?, plate_number=?, vehicle_info=?, description=?, findings=?, total=?, estimate_total=?, approved_at=?, status=?, notes=?, branch_id=?, invoice_id=?, invoice_number=?, continued_from_wo_id=?, continued_from_wo_number=?, continued_from_branch_name=?, continued_to_wo_id=?, continued_to_wo_number=?, continued_to_branch_name=? WHERE id=?")
+                ->execute([$d["woNumber"], $d["date"], $d["customerRefId"] ?? "", $d["customerId"] ?? "", $d["customerName"] ?? "", $d["vehicleRefId"] ?? "", $d["plateNumber"] ?? "", $d["vehicleInfo"] ?? "", $d["description"] ?? "", $d["findings"] ?? null, $d["total"] ?? 0, $d["estimateTotal"] ?? null, $d["approvedAt"] ?? null, $d["status"] ?? "Pengecekan", $d["notes"] ?? "", $d["branchId"] ?? "BR-001", $d["invoiceId"] ?? null, $d["invoiceNumber"] ?? null, $d["continuedFromWoId"] ?? null, $d["continuedFromWoNumber"] ?? null, $d["continuedFromBranchName"] ?? null, $d["continuedToWoId"] ?? null, $d["continuedToWoNumber"] ?? null, $d["continuedToBranchName"] ?? null, $id]);
             $pdo->prepare("DELETE FROM work_order_services WHERE wo_id = ?")->execute([$id]);
             if (!empty($d["services"])) {
                 $sStmt = $pdo->prepare("INSERT INTO work_order_services (wo_id, item_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
@@ -588,9 +606,23 @@ switch ($method) {
         break;
     case "POST":
         $d = getInput();
-        $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            ->execute([$d["id"] ?? generateId(), $d["invoiceNumber"], $d["date"], $d["customerRefId"] ?? "", $d["customerId"] ?? "", $d["customerName"] ?? "", $d["vehicleInfo"] ?? "", $d["description"] ?? "", $d["total"] ?? 0, $d["payment"] ?? 0, $d["status"] ?? "Belum Lunas", $d["age"] ?? 0, $d["woId"] ?? null, $d["woNumber"] ?? null, $d["branchId"] ?? "BR-001"]);
-        respondSuccess(null, "Faktur disimpan");
+        $pdo->beginTransaction();
+        try {
+            $invoiceId = $d["id"] ?? generateId();
+            $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                ->execute([$invoiceId, $d["invoiceNumber"], $d["date"], $d["customerRefId"] ?? "", $d["customerId"] ?? "", $d["customerName"] ?? "", $d["vehicleInfo"] ?? "", $d["description"] ?? "", $d["total"] ?? 0, $d["payment"] ?? 0, $d["status"] ?? "Belum Lunas", $d["age"] ?? 0, $d["woId"] ?? null, $d["woNumber"] ?? null, $d["branchId"] ?? "BR-001"]);
+            if (!empty($d["items"])) {
+                $detailStmt = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id, item_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                $stockStmt = $pdo->prepare("UPDATE items SET stock = GREATEST(0, stock - ?), sellable_stock = GREATEST(0, sellable_stock - ?) WHERE id = ? AND type = ?");
+                foreach ($d["items"] as $item) {
+                    $qty = (int)($item["qty"] ?? 1); $price = (float)($item["price"] ?? 0);
+                    $detailStmt->execute([$invoiceId, $item["itemId"] ?? null, $item["code"] ?? "", $item["name"] ?? "", $item["description"] ?? "", $price, $qty, $price * $qty]);
+                    if (!empty($item["itemId"])) $stockStmt->execute([$qty, $qty, $item["itemId"], "Persediaan"]);
+                }
+            }
+            $pdo->commit();
+            respondSuccess(["id" => $invoiceId], "Faktur disimpan dan stok diperbarui");
+        } catch (Exception $e) { $pdo->rollBack(); respondError("Gagal simpan faktur", 500, $e->getMessage()); }
         break;
     case "PUT":
         if (!$id) respondError("ID required");
@@ -601,8 +633,18 @@ switch ($method) {
         break;
     case "DELETE":
         if (!$id) respondError("ID required");
-        $pdo->prepare("DELETE FROM sales_invoices WHERE id=?")->execute([$id]);
-        respondSuccess(null, "Faktur dihapus");
+        $pdo->beginTransaction();
+        try {
+            $details = $pdo->prepare("SELECT item_id, qty FROM sales_invoice_items WHERE invoice_id = ?");
+            $details->execute([$id]);
+            $restore = $pdo->prepare("UPDATE items SET stock = stock + ?, sellable_stock = sellable_stock + ? WHERE id = ? AND type = ?");
+            foreach ($details->fetchAll() as $detail) {
+                if (!empty($detail["item_id"])) $restore->execute([(int)$detail["qty"], (int)$detail["qty"], $detail["item_id"], "Persediaan"]);
+            }
+            $pdo->prepare("DELETE FROM sales_invoices WHERE id=?")->execute([$id]);
+            $pdo->commit();
+            respondSuccess(null, "Faktur dihapus dan stok dikembalikan");
+        } catch (Exception $e) { $pdo->rollBack(); respondError("Gagal hapus faktur", 500, $e->getMessage()); }
         break;
     default: respondError("Method not allowed", 405);
 }
@@ -851,6 +893,15 @@ try {
         $r["vehicleRefId"] = $r["vehicle_ref_id"]; $r["plateNumber"] = $r["plate_number"]; $r["vehicleInfo"] = $r["vehicle_info"];
         $r["branchId"] = $r["branch_id"]; $r["invoiceId"] = $r["invoice_id"]; $r["invoiceNumber"] = $r["invoice_number"];
         $r["total"] = (float)$r["total"];
+        $r["findings"] = $r["findings"] ?? null;
+        $r["estimateTotal"] = isset($r["estimate_total"]) ? (float)$r["estimate_total"] : null;
+        $r["approvedAt"] = $r["approved_at"] ?? null;
+        $r["continuedFromWoId"] = $r["continued_from_wo_id"] ?? null;
+        $r["continuedFromWoNumber"] = $r["continued_from_wo_number"] ?? null;
+        $r["continuedFromBranchName"] = $r["continued_from_branch_name"] ?? null;
+        $r["continuedToWoId"] = $r["continued_to_wo_id"] ?? null;
+        $r["continuedToWoNumber"] = $r["continued_to_wo_number"] ?? null;
+        $r["continuedToBranchName"] = $r["continued_to_branch_name"] ?? null;
         $r["services"] = $servicesByWO[$r["id"]] ?? [];
     }
     $data["workOrders"] = $rows;

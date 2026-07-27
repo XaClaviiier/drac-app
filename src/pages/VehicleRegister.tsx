@@ -10,7 +10,7 @@ const carBrands = [
 ];
 
 export default function VehicleRegister() {
-  const { data, addVehicle, updateVehicle, deleteVehicle, currentBranchId, hasPermission } = useApp();
+  const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,10 +29,8 @@ export default function VehicleRegister() {
   });
 
   const filteredVehicles = useMemo(() => {
+    // Kendaraan bersifat GLOBAL — tampil di semua cabang
     return data.vehicles.filter((v) => {
-      const branchMatch = currentBranchId === 'ALL' || v.branchId === currentBranchId;
-      if (!branchMatch) return false;
-
       const matchesSearch =
         v.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -41,7 +39,7 @@ export default function VehicleRegister() {
       const matchesBrand = !filterBrand || v.brand === filterBrand;
       return matchesSearch && matchesBrand;
     });
-  }, [data.vehicles, searchTerm, filterBrand, currentBranchId]);
+  }, [data.vehicles, searchTerm, filterBrand]);
 
   const resetForm = () => {
     setFormData({
@@ -99,7 +97,7 @@ export default function VehicleRegister() {
         ...formData,
         customerId,
         registrationDate: now,
-        branchId: currentBranchId || 'BR-001',
+        branchId: resolveBranchId(),
       });
     }
     handleCloseModal();
@@ -364,7 +362,7 @@ export default function VehicleRegister() {
               {/* Info Pelanggan */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <span className="w-4 h-4 flex items-center justify-center text-xs">👤</span> Informasi Pelanggan
+                  <span className="w-4 h-4 flex items-center justify-center text-xs">��</span> Informasi Pelanggan
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>

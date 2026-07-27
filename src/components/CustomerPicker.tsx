@@ -12,7 +12,7 @@ interface CustomerPickerProps {
 }
 
 export default function CustomerPicker({ value, onChange, onNewCustomerCreated }: CustomerPickerProps) {
-  const { data, addCustomer, generateCustomerCode, currentBranchId } = useApp();
+  const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
@@ -60,7 +60,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
       email: newCustomer.email,
       address: newCustomer.address,
       createdAt: today,
-      branchId: currentBranchId || 'BR-001',
+      branchId: resolveBranchId(),
     });
     onChange(created.id);
     if (onNewCustomerCreated) onNewCustomerCreated(created);

@@ -159,7 +159,8 @@ CREATE TABLE IF NOT EXISTS `item_categories` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `code` (`code`)
+  UNIQUE KEY `code` (`code`),
+  UNIQUE KEY `unique_category_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `item_categories` (`id`, `code`, `name`, `type`, `description`, `is_active`) VALUES
@@ -227,12 +228,21 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   `plate_number` VARCHAR(20),
   `vehicle_info` VARCHAR(200),
   `description` TEXT,
+  `findings` TEXT,
   `total` DECIMAL(15,2) DEFAULT 0,
-  `status` ENUM('Draft', 'Proses', 'Selesai', 'Dibayar') DEFAULT 'Draft',
+  `estimate_total` DECIMAL(15,2) DEFAULT NULL,
+  `approved_at` DATE DEFAULT NULL,
+  `status` ENUM('Pengecekan', 'Proses', 'Selesai', 'Dibayar') DEFAULT 'Pengecekan',
   `notes` TEXT,
   `invoice_id` VARCHAR(20),
   `invoice_number` VARCHAR(30),
   `branch_id` VARCHAR(20) NOT NULL,
+  `continued_from_wo_id` VARCHAR(20) DEFAULT NULL,
+  `continued_from_wo_number` VARCHAR(30) DEFAULT NULL,
+  `continued_from_branch_name` VARCHAR(100) DEFAULT NULL,
+  `continued_to_wo_id` VARCHAR(20) DEFAULT NULL,
+  `continued_to_wo_number` VARCHAR(30) DEFAULT NULL,
+  `continued_to_branch_name` VARCHAR(100) DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

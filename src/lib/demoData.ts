@@ -80,14 +80,30 @@ export const demoData: AppData = {
   ],
   workOrders: [
     {
-      id: '1', woNumber: 'WO-2026-001', date: '2026-06-27', customerId: 'PLG-001', customerName: 'AHMAD',
+      id: '1', woNumber: 'WO-P-2026-001', date: '2026-06-27', customerId: 'PLG-001', customerName: 'AHMAD',
       plateNumber: 'DD1486QZ', vehicleInfo: 'Suzuki APV 2018 - Putih',
+      description: 'AC tidak dingin, keluar bau tidak sedap',
+      findings: 'Evaporator kotor, freon berkurang. Perlu flushing & isi ulang.',
       services: [
         { id: '1', name: 'Flushing AC', description: '', price: 500000, qty: 1 },
         { id: '2', name: 'Isi Freon R134a', description: '', price: 400000, qty: 2 },
         { id: '3', name: 'Jasa Service', description: '', price: 250000, qty: 1 },
       ],
-      total: 1550000, status: 'Selesai', notes: 'AC bocor', branchId: 'BR-001',
+      total: 1550000, estimateTotal: 1550000, status: 'Selesai', notes: 'Sudah dikerjakan, siap difakturkan', branchId: 'BR-001',
+    },
+    {
+      id: '2', woNumber: 'WO-C-2026-001', date: '2026-06-28', customerId: 'PLG-004', customerName: 'INTAN',
+      plateNumber: 'DD1915KB', vehicleInfo: 'Toyota Avanza 2021 - Merah',
+      description: 'AC bunyi berisik saat dinyalakan',
+      findings: 'Bearing kompresor aus. Rekomendasi ganti kompresor.',
+      services: [
+        { id: '4', name: 'Ganti Kompresor AC', description: 'Estimasi', price: 1650000, qty: 1 },
+        { id: '5', name: 'Isi Freon R134a', description: 'Estimasi', price: 150000, qty: 2 },
+        { id: '6', name: 'Jasa Pemasangan', description: 'Estimasi', price: 400000, qty: 1 },
+      ],
+      total: 2350000, status: 'Pengecekan',
+      notes: 'Pelanggan minta waktu untuk pertimbangkan. Follow up 3 hari lagi.',
+      branchId: 'BR-002',
     },
   ],
   goodsReceipts: [

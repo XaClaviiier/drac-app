@@ -170,7 +170,10 @@ export default function SalesInvoice() {
     }
   };
 
-  const unbilledWOs = data.workOrders.filter((wo) => !wo.invoiceId && wo.status !== 'Draft');
+  // Hanya WO Selesai/Proses yang boleh difakturkan. Pengecekan gratis & WO yang sudah dilanjutkan dikecualikan.
+  const unbilledWOs = data.workOrders.filter(
+    (wo) => !wo.invoiceId && !wo.continuedToWoId && (wo.status === 'Selesai' || wo.status === 'Proses')
+  );
   const selectedWO = data.workOrders.find((wo) => wo.id === selectedWOId);
 
   const handleOpenWOPicker = () => {

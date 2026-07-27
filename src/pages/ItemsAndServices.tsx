@@ -47,6 +47,7 @@ export default function ItemsAndServices() {
     updateItemCategory,
     deleteItemCategory,
     currentBranchId,
+    resolveBranchId,
     hasPermission,
   } = useApp();
 
@@ -225,7 +226,7 @@ export default function ItemsAndServices() {
       isQuickService: itemForm.isQuickService,
       description: itemForm.description,
       groupMembers: isGroup ? itemForm.groupMembers : undefined,
-      branchId: editingItem?.branchId || currentBranchId || 'BR-001',
+      branchId: editingItem?.branchId || resolveBranchId(),
     };
 
     if (editingItem) updateItem(editingItem.id, payload);
@@ -236,9 +237,38 @@ export default function ItemsAndServices() {
 
   const saveCategory = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const code = categoryForm.code.trim().toUpperCase();
+    const name = categoryForm.name.trim();
+
+    if (!code || !name) {
+      window.alert('Kode dan Nama kategori wajib diisi.');
+      return;
+    }
+
+    // Validasi UNIQUE kode
+    const dupCode = data.itemCategories.find(
+      c => c.code.trim().toUpperCase() === code && c.id !== editingCategory?.id
+    );
+    if (dupCode) {
+      window.alert(`Kode kategori "${code}" sudah dipakai oleh "${dupCode.name}". Gunakan kode lain.`);
+      return;
+    }
+
+    // Validasi UNIQUE nama
+    const dupName = data.itemCategories.find(
+      c => c.name.trim().toLowerCase() === name.toLowerCase() && c.id !== editingCategory?.id
+    );
+    if (dupName) {
+      window.alert(`Nama kategori "${name}" sudah ada (kode ${dupName.code}). Gunakan nama lain.`);
+      return;
+    }
+
     const payload: ItemCategory = {
       id: editingCategory?.id || Date.now().toString(),
       ...categoryForm,
+      code,
+      name,
     };
     if (editingCategory) updateItemCategory(editingCategory.id, payload);
     else addItemCategory(payload);
@@ -487,6 +517,9 @@ export default function ItemsAndServices() {
       // Category
       let category = data.itemCategories.find(c => c.name.toLowerCase() === kategori.toLowerCase() || c.code.toLowerCase() === kategori.toLowerCase());
       if (!category && kategori) {
+        category = preview.find(row => row._category?.name?.toLowerCase() === kategori.toLowerCase())?._category;
+      }
+      if (!category && kategori) {
         category = { id: Date.now().toString() + rowIdx, code: 'KAT-AUTO-' + rowIdx, name: kategori, type: 'Semua', description: 'Auto-created from import', isActive: true };
       }
       if (!category) {
@@ -578,14 +611,16 @@ export default function ItemsAndServices() {
   const confirmImport = async () => {
     if (importPreview.length === 0) return;
     let success = 0, failed = 0;
+    const createdCategoryIds = new Set<string>();
 
     for (const row of importPreview) {
       try {
-        if (row._isNewCategory && row._category) {
+        if (row._isNewCategory && row._category && !createdCategoryIds.has(row._category.id)) {
           await addItemCategory({
             id: row._category.id, code: row._category.code, name: row._category.name,
             type: row._category.type, description: row._category.description, isActive: row._category.isActive
           });
+          createdCategoryIds.add(row._category.id);
         }
         await addItem({
           id: Date.now().toString() + Math.random().toString(36).slice(2, 5),
@@ -595,7 +630,7 @@ export default function ItemsAndServices() {
           purchasePrice: row.purchasePrice, sellingPrice: row.sellingPrice,
           isActive: row.isActive, isQuickService: row.isQuickService,
           description: row.description,
-          branchId: currentBranchId === 'ALL' ? 'BR-001' : currentBranchId || 'BR-001',
+          branchId: resolveBranchId(),
         });
         success++;
       } catch (err) {
@@ -611,12 +646,20 @@ export default function ItemsAndServices() {
   };
 
   const removeCategory = (category: ItemCategory) => {
-    const used = data.items.some((item) => item.categoryId === category.id);
-    if (used) {
-      window.alert('Kategori masih digunakan oleh barang/jasa. Pindahkan item terlebih dahulu.');
+    const usedItems = data.items.filter((item) => item.categoryId === category.id);
+    if (usedItems.length > 0) {
+      const names = usedItems.slice(0, 5).map(i => `• ${i.code} - ${i.name}`).join('\n');
+      window.alert(
+        `Kategori "${category.name}" tidak bisa dihapus.\n\n` +
+        `Masih dipakai oleh ${usedItems.length} barang/jasa:\n${names}` +
+        (usedItems.length > 5 ? `\n… dan ${usedItems.length - 5} lainnya` : '') +
+        `\n\nPindahkan item ke kategori lain terlebih dahulu.`
+      );
       return;
     }
-    if (window.confirm(`Hapus kategori ${category.name}?`)) deleteItemCategory(category.id);
+    if (window.confirm(`Hapus kategori "${category.name}" (${category.code})?`)) {
+      deleteItemCategory(category.id);
+    }
   };
 
   const toggleGroup = (id: string) => {

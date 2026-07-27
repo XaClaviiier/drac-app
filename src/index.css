@@ -25,3 +25,20 @@
   50% { box-shadow: 0 0 0 8px rgba(34,211,238,0); }
 }
 .animate-glow { animation: glow-pulse 2.2s infinite; }
+
+html, body, #root { min-height: 100%; }
+body { margin: 0; background: #f3f4f6; }
+
+/* Android/iOS: cegah zoom otomatis saat input dan beri area sentuh nyaman. */
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  .fixed.inset-0 > div { max-width: calc(100vw - 16px); }
+}
+
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}

@@ -122,6 +122,15 @@ try {
         $r['invoiceId'] = $r['invoice_id'];
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['total'] = (float)$r['total'];
+        $r['findings'] = $r['findings'] ?? null;
+        $r['estimateTotal'] = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
+        $r['approvedAt'] = $r['approved_at'] ?? null;
+        $r['continuedFromWoId'] = $r['continued_from_wo_id'] ?? null;
+        $r['continuedFromWoNumber'] = $r['continued_from_wo_number'] ?? null;
+        $r['continuedFromBranchName'] = $r['continued_from_branch_name'] ?? null;
+        $r['continuedToWoId'] = $r['continued_to_wo_id'] ?? null;
+        $r['continuedToWoNumber'] = $r['continued_to_wo_number'] ?? null;
+        $r['continuedToBranchName'] = $r['continued_to_branch_name'] ?? null;
         $r['services'] = $servicesByWO[$r['id']] ?? [];
     }
     $data['workOrders'] = $rows;

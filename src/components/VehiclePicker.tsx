@@ -16,7 +16,7 @@ const carBrands = [
 ];
 
 export default function VehiclePicker({ customer, value, onChange, onNewVehicleCreated }: VehiclePickerProps) {
-  const { data, addVehicle, currentBranchId } = useApp();
+  const { data, addVehicle, resolveBranchId } = useApp();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
@@ -82,7 +82,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       address: customer.address,
       registrationDate: today,
       notes: '',
-      branchId: currentBranchId || 'BR-001',
+      branchId: resolveBranchId(),
     };
     addVehicle(vehicle);
     onChange(vehicle.id);
