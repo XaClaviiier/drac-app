@@ -43,8 +43,7 @@ export default function AIAssistant() {
   const [model, setModel] = useState(() => localStorage.getItem('groq_model') || GROQ_MODELS[0].id);
   const [showSettings, setShowSettings] = useState(false);
   const [keyDraft, setKeyDraft] = useState(apiKey);
-  const [showKeyText, setShowKeyDraftText] = useState(false);
-  const [testingKey, setTestingKey] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -320,7 +319,20 @@ ${buildSmartContext(userMsgText)}`;
       });
       if (!res.ok) {
         const e = await res.json().catch(() => null);
-        throw new Error(e?.error?.message || `HTTP ${res.status}`);
+        const raw = e?.error?.message || `HTTP ${res.status}`;
+        if (res.status === 401) {
+          throw new Error(
+            'API Key ditolak Groq (401).\n\n' +
+            'Kemungkinan penyebab:\n' +
+            '- Key salah ketik atau tidak lengkap saat disalin\n' +
+            '- Key sudah dihapus / di-regenerate di Groq\n' +
+            '- Key milik layanan lain (bukan Groq)\n\n' +
+            'Solusi: buka console.groq.com/keys, buat key baru (diawali gsk_), lalu tempel di menu Pengaturan dan klik Tes Koneksi.'
+          );
+        }
+        if (res.status === 404) throw new Error(`Model "${model}" tidak tersedia untuk akun ini. Ganti model di Pengaturan.`);
+        if (res.status === 429) throw new Error('Limit Groq tercapai. Tunggu ±1 menit lalu coba lagi.');
+        throw new Error(raw);
       }
       const json = await res.json();
       const reply = json.choices?.[0]?.message?.content || 'Maaf, tidak ada jawaban.';
@@ -353,45 +365,53 @@ ${buildSmartContext(userMsgText)}`;
     }
   };
 
-  const testApiKey = async () => {
-    const trimmed = keyDraft.trim();
-    if (!trimmed) {
-      setTestResult({ ok: false, msg: 'API Key kosong.' });
+  const saveKey = () => {
+    const clean = keyDraft.trim();
+    if (!clean.startsWith('gsk_')) {
+      setTestResult({ ok: false, msg: 'API Key Groq harus diawali "gsk_". Pastikan key disalin lengkap dari console.groq.com/keys.' });
       return;
     }
-    setTestingKey(true);
+    localStorage.setItem('groq_api_key', clean);
+    localStorage.setItem('groq_model', model);
+    setApiKey(clean);
     setTestResult(null);
-    try {
-      const payload = {
-        model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 5,
-      };
-      const res = await fetch(GROQ_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${trimmed}` },
-        body: JSON.stringify(payload),
-      });
-      const dataJson = await res.json().catch(() => null);
-      if (res.ok && dataJson?.choices) {
-        setTestResult({ ok: true, msg: 'Koneksi Sukses! API Key valid.' });
-      } else {
-        const errorMsg = dataJson?.error?.message || `Error HTTP ${res.status}`;
-        setTestResult({ ok: false, msg: `Gagal: ${errorMsg}` });
-      }
-    } catch (e: any) {
-      setTestResult({ ok: false, msg: `Koneksi gagal: ${e.message}` });
-    } finally {
-      setTestingKey(false);
-    }
+    setShowSettings(false);
   };
 
-  const saveKey = () => {
-    localStorage.setItem('groq_api_key', keyDraft.trim());
-    localStorage.setItem('groq_model', model);
-    setApiKey(keyDraft.trim());
-    setShowSettings(false);
+  // Tes koneksi ke Groq dengan request super kecil (hemat token).
+  const testConnection = async () => {
+    const clean = keyDraft.trim();
     setTestResult(null);
+
+    if (!clean) { setTestResult({ ok: false, msg: 'API Key masih kosong.' }); return; }
+    if (!clean.startsWith('gsk_')) { setTestResult({ ok: false, msg: 'Format salah. Key Groq selalu diawali "gsk_".' }); return; }
+    if (clean.length < 40) { setTestResult({ ok: false, msg: 'Key terlihat terpotong. Salin ulang seluruh key dari Groq.' }); return; }
+    if (/\s/.test(clean)) { setTestResult({ ok: false, msg: 'Key mengandung spasi/baris baru. Hapus spasi lalu coba lagi.' }); return; }
+
+    setTesting(true);
+    try {
+      const res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${clean}` },
+        body: JSON.stringify({ model, max_tokens: 5, messages: [{ role: 'user', content: 'hi' }] }),
+      });
+
+      if (res.ok) {
+        setTestResult({ ok: true, msg: 'Berhasil terhubung ke Groq. Silakan simpan.' });
+      } else {
+        const err = await res.json().catch(() => null);
+        const raw = err?.error?.message || `HTTP ${res.status}`;
+        let hint = raw;
+        if (res.status === 401) hint = 'Key ditolak (401). Key mungkin salah, sudah dihapus, atau di-regenerate di Groq. Buat key baru lalu tempel ulang.';
+        else if (res.status === 404) hint = `Model "${model}" tidak tersedia untuk akun ini. Coba pilih model lain di bawah.`;
+        else if (res.status === 429) hint = 'Kena limit sementara. Tunggu ±1 menit lalu tes lagi.';
+        setTestResult({ ok: false, msg: hint });
+      }
+    } catch (e: any) {
+      setTestResult({ ok: false, msg: `Tidak bisa menghubungi Groq: ${e.message}. Cek koneksi internet atau firewall.` });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const chips = [
@@ -610,24 +630,26 @@ ${buildSmartContext(userMsgText)}`;
               </div>
               <div>
                 <label className="mb-1 block text-sm font-semibold text-slate-700">Groq API Key</label>
-                <div className="relative">
-                  <input
-                    type={showKeyText ? 'text' : 'password'}
-                    value={keyDraft}
-                    onChange={e => { setKeyDraft(e.target.value); setTestResult(null); }}
-                    placeholder="gsk_xxxx"
-                    className="w-full rounded-lg border border-slate-300 pl-4 pr-10 py-2.5 font-mono text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKeyDraftText(!showKeyText)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    title={showKeyText ? 'Sembunyikan' : 'Tampilkan'}
-                  >
-                    {showKeyText ? '👁️' : '🔒'}
-                  </button>
+                <input
+                  type="text"
+                  value={keyDraft}
+                  onChange={e => { setKeyDraft(e.target.value); setTestResult(null); }}
+                  placeholder="gsk_xxxxxxxxxxxxxxxxxxxx"
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 font-mono text-sm outline-none focus:border-cyan-500"
+                />
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                  <span className={keyDraft.trim().startsWith('gsk_') ? 'text-emerald-600' : 'text-slate-500'}>
+                    {keyDraft.trim().startsWith('gsk_') ? '✓ format gsk_' : 'harus diawali gsk_'}
+                  </span>
+                  <span className="text-slate-400">•</span>
+                  <span className={keyDraft.trim().length >= 40 ? 'text-emerald-600' : 'text-slate-500'}>
+                    {keyDraft.trim().length} karakter
+                  </span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-500">disimpan di browser Anda saja</span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500">Disimpan di browser Anda saja.</p>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-semibold text-slate-700">Model</label>
@@ -636,35 +658,24 @@ ${buildSmartContext(userMsgText)}`;
                 </select>
               </div>
 
-              {/* Test Connection Button & Result */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={testApiKey}
-                  disabled={testingKey || !keyDraft.trim()}
-                  className="w-full rounded-lg border border-cyan-300 bg-cyan-50 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  {testingKey ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Sedang menguji koneksi...
-                    </>
-                  ) : 'Uji Koneksi API Key'}
-                </button>
-                {testResult && (
-                  <div className={`mt-2 rounded-lg p-2.5 text-xs font-medium border ${
-                    testResult.ok
-                      ? 'bg-green-50 border-green-200 text-green-700'
-                      : 'bg-red-50 border-red-200 text-red-700'
-                  }`}>
-                    {testResult.msg}
-                  </div>
-                )}
-              </div>
+              {testResult && (
+                <div className={`rounded-lg border p-3 text-xs ${testResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+                  <p className="font-semibold">{testResult.ok ? '✓ Koneksi berhasil' : '✕ Koneksi gagal'}</p>
+                  <p className="mt-0.5 whitespace-pre-line">{testResult.msg}</p>
+                </div>
+              )}
 
-              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
-                <button onClick={() => { setShowSettings(false); setTestResult(null); }} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
-                <button onClick={saveKey} disabled={testingKey} className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-55">Simpan</button>
+              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
+                <button onClick={() => setShowSettings(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
+                <button
+                  onClick={testConnection}
+                  disabled={testing}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50 disabled:opacity-50"
+                >
+                  {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                  {testing ? 'Menguji…' : 'Tes Koneksi'}
+                </button>
+                <button onClick={saveKey} className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-sm font-bold text-white">Simpan</button>
               </div>
             </div>
           </div>

@@ -61,6 +61,15 @@ export default function WorkOrders() {
 
   const handleQuickAddItem = () => {
     if (!quickItemForm.name) { window.alert('Nama barang/jasa harus diisi'); return; }
+
+    // Nama barang/jasa wajib unik
+    const nameUpper = quickItemForm.name.trim().toUpperCase();
+    const dupName = data.items.find(i => i.name.trim().toUpperCase() === nameUpper);
+    if (dupName) {
+      window.alert(`Nama "${nameUpper}" sudah ada di master (kode ${dupName.code}).\nGunakan item tersebut dari daftar, atau beri nama lain.`);
+      return;
+    }
+
     if (!quickItemForm.categoryId) {
       const firstCat = data.itemCategories.find(c => c.isActive);
       if (!firstCat) { window.alert('Belum ada kategori barang. Buat kategori dulu di menu Barang & Jasa.'); return; }

@@ -207,12 +207,39 @@ export default function ItemsAndServices() {
 
   const saveItem = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const code = itemForm.code.trim().toUpperCase();
+    const name = itemForm.name.trim().toUpperCase();
+
+    if (!code || !name) {
+      window.alert('Kode dan Nama barang/jasa wajib diisi.');
+      return;
+    }
+
+    // Kode wajib unik
+    const dupCode = data.items.find(
+      i => i.code.trim().toUpperCase() === code && i.id !== editingItem?.id
+    );
+    if (dupCode) {
+      window.alert(`Kode "${code}" sudah dipakai oleh "${dupCode.name}". Gunakan kode lain.`);
+      return;
+    }
+
+    // Nama wajib unik
+    const dupName = data.items.find(
+      i => i.name.trim().toUpperCase() === name && i.id !== editingItem?.id
+    );
+    if (dupName) {
+      window.alert(`Nama "${name}" sudah ada (kode ${dupName.code}). Gunakan nama lain.`);
+      return;
+    }
+
     const category = data.itemCategories.find((cat) => cat.id === itemForm.categoryId);
     const isGroup = itemForm.type === 'Group';
     const payload: Item = {
       id: editingItem?.id || Date.now().toString(),
-      code: itemForm.code,
-      name: itemForm.name,
+      code,
+      name,
       categoryId: itemForm.categoryId,
       categoryName: category?.name || '-',
       type: itemForm.type,
@@ -447,6 +474,14 @@ export default function ItemsAndServices() {
     const errors: string[] = [];
     const preview: any[] = [];
 
+    // Kategori baru yang dibuat selama proses import ini.
+    // Key = nama kategori huruf kecil, supaya tidak terduplikasi antar baris.
+    const newCategoryMap = new Map<string, ItemCategory>();
+    let autoCatSeq = data.itemCategories.reduce((max, c) => {
+      const n = parseInt(String(c.code).replace(/\D/g, '')) || 0;
+      return n > max ? n : max;
+    }, 0);
+
     if (idxKode === -1 || idxNama === -1) {
       setImportErrors([`Header wajib tidak ditemukan (butuh Kode Barang & Nama Barang). Terdeteksi header: ${headersRaw.join(', ')}. Untuk Accurate: pastikan export Barang & Jasa lengkap.`]);
       return;
@@ -497,11 +532,22 @@ export default function ItemsAndServices() {
       if (!code) rowErrs.push(`Baris ${rowIdx + 2}: kode kosong`);
       if (!name) rowErrs.push(`Baris ${rowIdx + 2}: nama kosong`);
       if (!jenis) rowErrs.push(`Baris ${rowIdx + 2}: jenis "${jenisRaw}" tidak dikenali`);
-      if (data.items.some(x => x.code === code)) {
+
+      // Kode barang wajib unik
+      if (code && data.items.some(x => x.code.toUpperCase() === code)) {
         rowErrs.push(`Baris ${rowIdx + 2}: kode "${code}" sudah ada di sistem`);
       }
-      if (preview.some(x => x.code === code)) {
+      if (code && preview.some(x => x.code === code)) {
         rowErrs.push(`Baris ${rowIdx + 2}: kode "${code}" duplikat dalam file`);
+      }
+
+      // Nama barang/jasa wajib unik
+      if (name && data.items.some(x => x.name.trim().toUpperCase() === name)) {
+        const existing = data.items.find(x => x.name.trim().toUpperCase() === name);
+        rowErrs.push(`Baris ${rowIdx + 2}: nama "${name}" sudah ada di sistem (kode ${existing?.code})`);
+      }
+      if (name && preview.some(x => x.name === name)) {
+        rowErrs.push(`Baris ${rowIdx + 2}: nama "${name}" duplikat dalam file`);
       }
 
       // Untuk Accurate: Varian tetap bisa diimport sebagai Persediaan (hanya info)
@@ -514,20 +560,44 @@ export default function ItemsAndServices() {
         return;
       }
 
-      // Category
-      let category = data.itemCategories.find(c => c.name.toLowerCase() === kategori.toLowerCase() || c.code.toLowerCase() === kategori.toLowerCase());
-      if (!category && kategori) {
-        category = preview.find(row => row._category?.name?.toLowerCase() === kategori.toLowerCase())?._category;
+      // ---- Resolusi kategori (anti-duplikat) ----
+      const katKey = kategori.toLowerCase();
+      let category: ItemCategory | undefined;
+      let isNewCategory = false;
+
+      if (kategori) {
+        // 1) Cari di kategori yang sudah tersimpan di sistem
+        category = data.itemCategories.find(
+          c => c.name.trim().toLowerCase() === katKey || c.code.trim().toLowerCase() === katKey
+        );
+
+        // 2) Cari di kategori yang baru dibuat pada file import ini
+        if (!category && newCategoryMap.has(katKey)) {
+          category = newCategoryMap.get(katKey);
+        }
+
+        // 3) Belum ada di mana pun -> buat sekali saja, lalu simpan ke map
+        if (!category) {
+          autoCatSeq += 1;
+          category = {
+            id: `${Date.now()}-cat-${autoCatSeq}`,
+            code: `KAT-${String(autoCatSeq).padStart(3, '0')}`,
+            name: kategori,
+            type: 'Semua',
+            description: 'Dibuat otomatis saat import',
+            isActive: true,
+          };
+          newCategoryMap.set(katKey, category);
+          isNewCategory = true; // hanya baris pertama yang menandai kategori ini baru
+        }
       }
-      if (!category && kategori) {
-        category = { id: Date.now().toString() + rowIdx, code: 'KAT-AUTO-' + rowIdx, name: kategori, type: 'Semua', description: 'Auto-created from import', isActive: true };
-      }
+
       if (!category) {
         category = data.itemCategories[0];
       }
 
       preview.push({
-        _isNewCategory: !!category && !data.itemCategories.some(c => c.id === category!.id),
+        _isNewCategory: isNewCategory,
         _category: category,
         _isAccurate: isAccurateMode,
         code, name,
@@ -613,14 +683,26 @@ export default function ItemsAndServices() {
     let success = 0, failed = 0;
     const createdCategoryIds = new Set<string>();
 
+    const createdCategoryNames = new Set(
+      data.itemCategories.map(c => c.name.trim().toLowerCase())
+    );
+
     for (const row of importPreview) {
       try {
-        if (row._isNewCategory && row._category && !createdCategoryIds.has(row._category.id)) {
+        // Kategori hanya dibuat sekali: cek berdasarkan ID dan nama.
+        const catName = String(row._category?.name || '').trim().toLowerCase();
+        if (
+          row._isNewCategory &&
+          row._category &&
+          !createdCategoryIds.has(row._category.id) &&
+          !createdCategoryNames.has(catName)
+        ) {
           await addItemCategory({
             id: row._category.id, code: row._category.code, name: row._category.name,
             type: row._category.type, description: row._category.description, isActive: row._category.isActive
           });
           createdCategoryIds.add(row._category.id);
+          createdCategoryNames.add(catName);
         }
         await addItem({
           id: Date.now().toString() + Math.random().toString(36).slice(2, 5),
