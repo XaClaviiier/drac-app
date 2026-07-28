@@ -196,6 +196,7 @@ export default function VehicleRegister() {
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Pelanggan</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Telepon</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Tgl Daftar</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Cabang Input</th>
                 <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Aksi</th>
               </tr>
             </thead>
@@ -228,6 +229,13 @@ export default function VehicleRegister() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{vehicle.phone}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{vehicle.registrationDate}</td>
+                    <td className="px-4 py-3">
+                      {vehicle.firstSeenBranchId ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                          📍 {data.branches.find(b => b.id === vehicle.firstSeenBranchId)?.name.replace('CABANG ', '') || vehicle.firstSeenBranchId}
+                        </span>
+                      ) : <span className="text-xs text-gray-400">-</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
                         {hasPermission('vehicle:edit') && (
@@ -362,7 +370,7 @@ export default function VehicleRegister() {
               {/* Info Pelanggan */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <span className="w-4 h-4 flex items-center justify-center text-xs">��</span> Informasi Pelanggan
+                  <span className="w-4 h-4 flex items-center justify-center text-xs">👤</span> Informasi Pelanggan
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>

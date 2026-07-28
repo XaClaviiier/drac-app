@@ -3,16 +3,16 @@ switch ($method) {
     case 'GET':
         $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
         foreach ($rows as &$r) {
-            $r['customerCode'] = $r['customer_code'];
-            $r['branchId'] = $r['branch_id'];
-            $r['createdAt'] = $r['created_at'];
+            $r['customerCode']       = $r['customer_code'];
+            $r['branchId']           = $r['branch_id'];
+            $r['firstSeenBranchId']  = $r['first_seen_branch_id'] ?? $r['branch_id'];
+            $r['createdAt']          = $r['created_at'];
         }
         respondSuccess($rows);
         break;
 
     case 'POST':
         $d = getInput();
-        // Auto-generate customer_code jika kosong
         $code = $d['customerCode'] ?? '';
         if (!$code) {
             $maxRow = $pdo->query("SELECT customer_code FROM customers ORDER BY id DESC LIMIT 1")->fetch();
@@ -22,12 +22,15 @@ switch ($method) {
             }
             $code = 'PLG-' . str_pad($num, 3, '0', STR_PAD_LEFT);
         }
-        $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, phone, email, address, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $branchId          = $d['branchId'] ?? 'BR-001';
+        $firstSeenBranchId = $d['firstSeenBranchId'] ?? $branchId;
+
+        $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $d['id'] ?? generateId(),
             $code, $d['name'], $d['phone'] ?? '',
             $d['email'] ?? '', $d['address'] ?? '',
-            $d['branchId'] ?? 'BR-001'
+            $branchId, $firstSeenBranchId
         ]);
         respondSuccess(['customerCode' => $code], 'Pelanggan ditambahkan');
         break;

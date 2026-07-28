@@ -35,20 +35,22 @@ try {
     // Customers
     $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
     foreach ($rows as &$r) {
-        $r['customerCode'] = $r['customer_code'];
-        $r['branchId'] = $r['branch_id'];
-        $r['createdAt'] = $r['created_at'];
+        $r['customerCode']      = $r['customer_code'];
+        $r['branchId']          = $r['branch_id'];
+        $r['firstSeenBranchId'] = $r['first_seen_branch_id'] ?? $r['branch_id'];
+        $r['createdAt']         = $r['created_at'];
     }
     $data['customers'] = $rows;
 
     // Vehicles
     $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
     foreach ($rows as &$r) {
-        $r['plateNumber'] = $r['plate_number'];
-        $r['customerId'] = $r['customer_code'] ?: $r['customer_id'];
-        $r['customerName'] = $r['customer_name'];
-        $r['registrationDate'] = $r['registration_date'];
-        $r['branchId'] = $r['branch_id'];
+        $r['plateNumber']       = $r['plate_number'];
+        $r['customerId']        = $r['customer_code'] ?: $r['customer_id'];
+        $r['customerName']      = $r['customer_name'];
+        $r['registrationDate']  = $r['registration_date'];
+        $r['branchId']          = $r['branch_id'];
+        $r['firstSeenBranchId'] = $r['first_seen_branch_id'] ?? $r['branch_id'];
     }
     $data['vehicles'] = $rows;
 
@@ -122,16 +124,18 @@ try {
         $r['invoiceId'] = $r['invoice_id'];
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['total'] = (float)$r['total'];
-        $r['findings'] = $r['findings'] ?? null;
-        $r['estimateTotal'] = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
-        $r['approvedAt'] = $r['approved_at'] ?? null;
-        $r['continuedFromWoId'] = $r['continued_from_wo_id'] ?? null;
-        $r['continuedFromWoNumber'] = $r['continued_from_wo_number'] ?? null;
+        $r['findings']                = $r['findings'] ?? null;
+        $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
+        $r['approvedAt']              = $r['approved_at'] ?? null;
+        $r['cancelReason']            = $r['cancel_reason'] ?? null;
+        $r['statusLog']               = isset($r['status_log']) && $r['status_log'] ? json_decode($r['status_log'], true) : [];
+        $r['continuedFromWoId']       = $r['continued_from_wo_id'] ?? null;
+        $r['continuedFromWoNumber']   = $r['continued_from_wo_number'] ?? null;
         $r['continuedFromBranchName'] = $r['continued_from_branch_name'] ?? null;
-        $r['continuedToWoId'] = $r['continued_to_wo_id'] ?? null;
-        $r['continuedToWoNumber'] = $r['continued_to_wo_number'] ?? null;
-        $r['continuedToBranchName'] = $r['continued_to_branch_name'] ?? null;
-        $r['services'] = $servicesByWO[$r['id']] ?? [];
+        $r['continuedToWoId']         = $r['continued_to_wo_id'] ?? null;
+        $r['continuedToWoNumber']     = $r['continued_to_wo_number'] ?? null;
+        $r['continuedToBranchName']   = $r['continued_to_branch_name'] ?? null;
+        $r['services']                = $servicesByWO[$r['id']] ?? [];
     }
     $data['workOrders'] = $rows;
 

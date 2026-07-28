@@ -201,9 +201,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ===== VEHICLES =====
   const addVehicle = async (v: Vehicle) => {
+    const vehicle: Vehicle = { ...v, firstSeenBranchId: v.firstSeenBranchId || v.branchId };
     await executeCRUD(
-      () => api.create('vehicles', v),
-      () => setData(prev => ({ ...prev, vehicles: [...prev.vehicles, v] }))
+      () => api.create('vehicles', vehicle),
+      () => setData(prev => ({ ...prev, vehicles: [...prev.vehicles, vehicle] }))
     );
   };
   const updateVehicle = async (id: string, v: Vehicle) => {
@@ -230,7 +231,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addCustomer = async (customer: Omit<Customer, 'customerCode'> & { customerCode?: string }): Promise<Customer> => {
-    const newCustomer: Customer = { ...customer, customerCode: customer.customerCode || generateCustomerCode() };
+    const newCustomer: Customer = {
+      ...customer,
+      customerCode: customer.customerCode || generateCustomerCode(),
+      // Catat cabang pertama kali input; tidak berubah meski dilihat dari cabang lain.
+      firstSeenBranchId: customer.firstSeenBranchId || customer.branchId,
+    };
     await executeCRUD(
       () => api.create('customers', newCustomer),
       () => setData(prev => ({ ...prev, customers: [...prev.customers, newCustomer] }))

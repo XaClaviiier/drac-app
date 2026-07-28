@@ -6,9 +6,9 @@
 // ==========================================================
 
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'GANTI_NAMA_DATABASE');      // contoh: bengkel_dokterac
-define('DB_USER', 'GANTI_USER_DATABASE');       // contoh: bengkel_admin
-define('DB_PASS', 'GANTI_PASSWORD_DATABASE');   // password DB Anda
+define('DB_NAME', 'cer46181_dokterac');
+define('DB_USER', 'cer46181_dokterac');
+define('DB_PASS', '12345678');
 
 // ==========================================================
 // CORS - agar frontend bisa akses API

@@ -168,21 +168,44 @@ export default function AIAssistant() {
     return parts.join('\n');
   };
 
-  const buildSystemPrompt = (userMsgText: string) => `Kamu adalah "ASISTEN DOKTER AC" — asisten AI bengkel AC mobil "Dokter AC Mobil" (Perintis, Cakalang, Mamuju).
+  const buildSystemPrompt = (userMsgText: string) => {
+    // Ambil daftar layanan cepat dari master untuk referensi harga nyata
+    const quickServices = data.items
+      .filter(i => i.isActive && i.isQuickService && i.type !== 'Group')
+      .slice(0, 10)
+      .map(i => `${i.name} (${i.type}) harga ${i.sellingPrice === 0 ? 'GRATIS Rp 0' : `Rp ${i.sellingPrice.toLocaleString('id-ID')}`}`)
+      .join(', ');
+
+    return `Kamu adalah "ASISTEN DOKTER AC" — asisten AI bengkel AC mobil "Dokter AC Mobil" (Perintis, Cakalang, Mamuju).
 
 ATURAN:
 - Bahasa Indonesia, ringkas, gunakan **tebal** untuk angka & poin penting.
 - Gunakan DATA di bawah sebagai kebenaran. Jangan mengarang data.
 - Kalau data tidak muncul di bawah, minta user memperjelas (sebut nama/plat/kode barang).
 
+NAMA PELANGGAN/KENDARAAN:
+- Selalu pakai nama/plat PERSIS seperti di DATA. Jangan diubah atau ditebak.
+- Kalau user sebut nama/plat yang mirip tapi tidak persis sama, tampilkan semua kemungkinan & minta konfirmasi.
+
 MEMBUAT WO:
-Kalau user minta buat WO, balas singkat lalu sertakan blok JSON di akhir:
+Kalau user minta buat WO tanpa menyebut layanan, OTOMATIS tambahkan default:
+  {"name":"CEK AC","price":0,"qty":1}
+Ini adalah pengecekan gratis. Jangan tanya layanan kalau sudah ada keluhan yang jelas.
+
+Kalau user MENYEBUT layanan (misalnya "flushing", "isi freon"):
+- Cari nama PERSIS di LAYANAN CEPAT berikut: ${quickServices || 'tidak ada data layanan'}
+- Kalau tidak ada, gunakan nama yang user sebut & harga 0 (tanyakan ke user untuk konfirmasi harga).
+
+Setelah ada plat, pelanggan, dan keluhan — LANGSUNG keluarkan JSON tanpa bertanya lebih lanjut:
 \`\`\`json
-{"action":"create_wo","customerName":"NAMA","phone":"08xx","plateNumber":"DD1234XX","vehicleInfo":"Toyota Avanza 2020 - Hitam","description":"keluhan","services":[{"name":"NAMA","price":150000,"qty":1}]}
+{"action":"create_wo","customerName":"NAMA_PERSIS","phone":"08xx","plateNumber":"PLAT_PERSIS","vehicleInfo":"Merek Model Tahun - Warna","description":"keluhan","services":[{"name":"CEK AC","price":0,"qty":1}]}
 \`\`\`
-Kalau info kurang (plat/pelanggan/keluhan), TANYA dulu tanpa keluarkan JSON.
+
+Kalau plat/pelanggan tidak ditemukan di data, sertakan nama/plat yang user sebut apa adanya.
+Kalau info KURANG (tidak ada plat SAMA SEKALI), TANYA dulu.
 
 ${buildSmartContext(userMsgText)}`;
+  };
 
   // ============ Parse & eksekusi aksi ============
   const extractAction = (text: string) => {
@@ -241,19 +264,27 @@ ${buildSmartContext(userMsgText)}`;
       vehicle = newV;
     }
 
-    // 3. Layanan
-    const services: WorkOrderService[] = (a.services || []).map((s: any, idx: number) => {
+    // 3. Layanan — gunakan nama persis dari master jika cocok
+    const rawServices: any[] = a.services?.length > 0 ? a.services : [{ name: 'CEK AC', price: 0, qty: 1 }];
+    const services: WorkOrderService[] = rawServices.map((s: any, idx: number) => {
+      const sNameUp = String(s.name || '').toUpperCase().trim();
+      // Cari di master: cocok nama persis, partial, atau kode
       const master = data.items.find(i =>
-        i.name.toUpperCase() === String(s.name || '').toUpperCase() ||
-        i.code.toUpperCase() === String(s.name || '').toUpperCase()
+        i.name.trim().toUpperCase() === sNameUp ||
+        i.code.trim().toUpperCase() === sNameUp ||
+        (sNameUp.length > 4 && i.name.trim().toUpperCase().includes(sNameUp)) ||
+        (sNameUp.length > 4 && sNameUp.includes(i.name.trim().toUpperCase()))
       );
       return {
         id: `${Date.now()}-${idx}`,
         itemId: master?.id,
         code: master?.code,
-        name: master?.name || String(s.name || 'Layanan'),
+        // Pakai nama dari master (bukan tebakan AI) supaya konsisten
+        name: master?.name || s.name || 'Layanan',
         description: '',
-        price: Number(s.price) || master?.sellingPrice || 0,
+        // Kalau AI kirim harga 0 tapi master punya harga, pakai harga master.
+        // Kalau AI kirim harga > 0, pakai harga AI (user mungkin sudah konfirmasi).
+        price: Number(s.price) > 0 ? Number(s.price) : (master?.sellingPrice ?? 0),
         qty: Number(s.qty) || 1,
       };
     });

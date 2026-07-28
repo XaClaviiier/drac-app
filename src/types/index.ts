@@ -12,6 +12,8 @@ export interface Vehicle {
   registrationDate: string;
   notes: string;
   branchId: string;
+  /** Cabang tempat kendaraan pertama kali diinput */
+  firstSeenBranchId?: string;
 }
 
 export interface Customer {
@@ -23,6 +25,8 @@ export interface Customer {
   email: string;
   createdAt: string;
   branchId: string;
+  /** Cabang tempat pelanggan pertama kali diinput (tidak berubah meski data dilihat di cabang lain) */
+  firstSeenBranchId?: string;
 }
 
 export interface SalesInvoice {

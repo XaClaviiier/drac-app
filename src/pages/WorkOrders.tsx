@@ -7,6 +7,21 @@ import VehiclePicker from '../components/VehiclePicker';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
+const DEFAULT_COMPLAINT_TEMPLATES = [
+  'AC tidak dingin',
+  'AC kurang dingin',
+  'AC bunyi berisik',
+  'AC berbau tidak sedap',
+  'AC bocor / berembun',
+  'Pengecekan rutin AC',
+  'Service AC lengkap',
+  'Isi freon',
+  'Ganti kompresor AC',
+  'Ganti evaporator',
+];
+
+const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
+
 export default function WorkOrders() {
   const {
     data,
@@ -30,6 +45,20 @@ export default function WorkOrders() {
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
   const [invoicePayment, setInvoicePayment] = useState(0);
   const [successMsg, setSuccessMsg] = useState('');
+  const [showComplaintEditor, setShowComplaintEditor] = useState(false);
+  const [newComplaintTemplate, setNewComplaintTemplate] = useState('');
+  const [complaintTemplates, setComplaintTemplates] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(COMPLAINT_TEMPLATE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback ke default
+    }
+    return DEFAULT_COMPLAINT_TEMPLATES;
+  });
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -44,6 +73,41 @@ export default function WorkOrders() {
     notes: '',
     status: 'Pengecekan' as WorkOrder['status'],
   });
+
+  const saveComplaintTemplates = (next: string[]) => {
+    const cleaned = [...new Set(next.map(t => t.trim()).filter(Boolean))];
+    setComplaintTemplates(cleaned);
+    localStorage.setItem(COMPLAINT_TEMPLATE_KEY, JSON.stringify(cleaned));
+  };
+
+  const addComplaintTemplate = () => {
+    const value = newComplaintTemplate.trim();
+    if (!value) return;
+    const exists = complaintTemplates.some(t => t.toLowerCase() === value.toLowerCase());
+    if (exists) {
+      window.alert(`Template "${value}" sudah ada.`);
+      return;
+    }
+    saveComplaintTemplates([...complaintTemplates, value]);
+    setNewComplaintTemplate('');
+  };
+
+  const updateComplaintTemplate = (index: number, value: string) => {
+    const next = [...complaintTemplates];
+    next[index] = value;
+    saveComplaintTemplates(next);
+  };
+
+  const deleteComplaintTemplate = (index: number) => {
+    const next = complaintTemplates.filter((_, i) => i !== index);
+    saveComplaintTemplates(next.length > 0 ? next : DEFAULT_COMPLAINT_TEMPLATES);
+  };
+
+  const resetComplaintTemplates = () => {
+    if (window.confirm('Kembalikan list keluhan ke template bawaan?')) {
+      saveComplaintTemplates(DEFAULT_COMPLAINT_TEMPLATES);
+    }
+  };
 
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [serviceSearch, setServiceSearch] = useState('');
@@ -248,6 +312,17 @@ export default function WorkOrders() {
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
 
+  // Default layanan saat WO baru: pengecekan gratis
+  const defaultCekAcService = {
+    id: `svc-cek-${Date.now()}`,
+    itemId: undefined as string | undefined,
+    code: 'CEK-AC',
+    name: 'CEK AC - PENGECEKAN GRATIS',
+    description: 'Pengecekan kondisi AC kendaraan',
+    price: 0,
+    qty: 1,
+  };
+
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split('T')[0],
@@ -258,7 +333,7 @@ export default function WorkOrders() {
       plateNumber: '',
       vehicleInfo: '',
       description: '',
-      services: [],
+      services: [{ ...defaultCekAcService, id: `svc-cek-${Date.now()}` }],
       notes: '',
       status: 'Pengecekan',
     });
@@ -516,7 +591,14 @@ export default function WorkOrders() {
         </div>
         {hasPermission('wo:create') && (
           <button
-            onClick={() => handleOpenModal()}
+            onClick={() => {
+              // Jika mode Semua Cabang, minta pilih cabang dulu sebelum buat WO
+              if (currentBranchId === 'ALL') {
+                window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
+                return;
+              }
+              handleOpenModal();
+            }}
             className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
           >
             <Plus className="w-5 h-5" />
@@ -975,6 +1057,19 @@ export default function WorkOrders() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Blok simpan jika masih Semua Cabang */}
+              {currentBranchId === 'ALL' && !editingWO && (
+                <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 flex items-start gap-3">
+                  <Building2 className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">Pilih cabang aktif dulu</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Anda sedang dalam mode <strong>Semua Cabang</strong>. WO tidak bisa disimpan tanpa cabang tertentu.
+                      Tutup form ini, pilih cabang di header (Perintis / Cakalang / Mamuju), lalu buat WO baru.
+                    </p>
+                  </div>
+                </div>
+              )}
               {/* Tanggal & Status */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1030,15 +1125,57 @@ export default function WorkOrders() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Keterangan
-                  </label>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Keterangan / Keluhan
+                      <span className="ml-1 text-xs font-normal text-gray-400">(pilih template atau ketik langsung)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowComplaintEditor(true)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                      title="Edit daftar template keluhan"
+                    >
+                      <Edit className="h-3 w-3" /> Edit List
+                    </button>
+                  </div>
+                  {/* Template keluhan cepat */}
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {complaintTemplates.map((template) => (
+                      <button
+                        key={template}
+                        type="button"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          description: prev.description
+                            ? prev.description + ', ' + template
+                            : template
+                        }))}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          formData.description.includes(template)
+                            ? 'border-blue-400 bg-blue-100 text-blue-700'
+                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'
+                        }`}
+                      >
+                        {template}
+                      </button>
+                    ))}
+                    {formData.description && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, description: '' }))}
+                        className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-500 hover:bg-red-100"
+                      >
+                        × Hapus
+                      </button>
+                    )}
+                  </div>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Keluhan pelanggan / catatan kendaraan / masalah AC..."
+                    placeholder="Pilih template di atas atau ketik keluhan langsung..."
                     rows={2}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-sm"
                   />
                 </div>
               </div>
@@ -1273,9 +1410,37 @@ export default function WorkOrders() {
                     </table>
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                    <Wrench className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                    <p className="text-sm">Belum ada layanan ditambahkan</p>
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center space-y-3">
+                    <div>
+                      <Wrench className="w-8 h-8 mx-auto mb-1 text-amber-400" />
+                      <p className="text-sm text-amber-700 font-medium">Belum ada layanan</p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        Klik tombol di bawah untuk mulai dengan pengecekan gratis,
+                        atau tambah layanan manual.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defaultService = {
+                          id: `svc-cek-${Date.now()}`,
+                          itemId: undefined,
+                          code: 'CEK-AC',
+                          name: 'CEK AC - PENGECEKAN GRATIS',
+                          description: 'Pengecekan kondisi AC kendaraan',
+                          price: 0,
+                          qty: 1,
+                        };
+                        setFormData(prev => ({
+                          ...prev,
+                          services: [defaultService],
+                        }));
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      + Mulai dengan Pengecekan Gratis (Rp 0)
+                    </button>
                   </div>
                 )}
               </div>
@@ -1504,6 +1669,87 @@ export default function WorkOrders() {
                   className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-cyan-500/30 hover:opacity-90"
                 >
                   <ArrowLeftRight className="h-4 w-4" /> Buat WO Lanjutan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Edit Template Keluhan Modal ===== */}
+      {showComplaintEditor && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between rounded-t-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white">
+              <div>
+                <h3 className="text-lg font-bold">Edit List Keluhan</h3>
+                <p className="text-sm text-blue-100">Template ini muncul sebagai chip di field Keterangan WO.</p>
+              </div>
+              <button onClick={() => setShowComplaintEditor(false)} className="rounded-lg p-2 hover:bg-white/20">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-6">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                Perubahan list keluhan disimpan di browser pengguna ini. Untuk mode database penuh, nanti bisa kita pindahkan ke tabel template agar sama di semua komputer.
+              </div>
+
+              {/* Add new */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newComplaintTemplate}
+                  onChange={(e) => setNewComplaintTemplate(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addComplaintTemplate(); } }}
+                  placeholder="Tambah template baru, mis: AC hidup mati sendiri"
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={addComplaintTemplate}
+                  className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4" /> Tambah
+                </button>
+              </div>
+
+              {/* Editable list */}
+              <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-2">
+                {complaintTemplates.map((template, index) => (
+                  <div key={`${template}-${index}`} className="flex items-center gap-2 rounded-lg bg-gray-50 p-2">
+                    <input
+                      type="text"
+                      value={template}
+                      onChange={(e) => updateComplaintTemplate(index, e.target.value)}
+                      className="flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => deleteComplaintTemplate(index)}
+                      className="rounded-lg p-2 text-red-600 hover:bg-red-100"
+                      title="Hapus template"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between gap-3 border-t border-gray-200 pt-4">
+                <button
+                  type="button"
+                  onClick={resetComplaintTemplates}
+                  className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50"
+                >
+                  Reset Default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowComplaintEditor(false)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <Save className="h-4 w-4" /> Selesai
                 </button>
               </div>
             </div>
