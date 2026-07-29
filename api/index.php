@@ -88,6 +88,10 @@ try {
             require 'endpoints/all-data.php';
             break;
 
+        case 'settings':
+            require 'endpoints/settings.php';
+            break;
+
         // ----- API INFO -----
         case '':
         case 'info':

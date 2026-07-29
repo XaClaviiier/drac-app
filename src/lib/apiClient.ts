@@ -65,6 +65,8 @@ export const api = {
 
   // ========== ALL DATA ==========
   loadAllData: () => request('/all-data', { method: 'GET' }),
+  updateSettings: (data: any) =>
+    request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 
   // ========== GENERIC CRUD ==========
   get: (resource: string) => request(`/${resource}`, { method: 'GET' }),

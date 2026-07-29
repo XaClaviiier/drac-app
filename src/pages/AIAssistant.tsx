@@ -33,7 +33,7 @@ const render = (t: string) =>
 export default function AIAssistant() {
   const {
     data, currentUser, currentBranchId, resolveBranchId,
-    addWorkOrder, addCustomer, generateCustomerCode, addVehicle,
+    addWorkOrder, addCustomer, generateCustomerCode, addVehicle, generateDocumentNumber,
   } = useApp();
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -291,10 +291,7 @@ ${buildSmartContext(userMsgText)}`;
     const total = services.reduce((sum, s) => sum + s.price * s.qty, 0);
 
     // 4. WO
-    const prefixes: Record<string, string> = { 'BR-001': 'WO-P', 'BR-002': 'WO-C', 'BR-003': 'WO-M' };
-    const prefix = prefixes[branchId] || 'WO';
-    const count = data.workOrders.filter(w => w.branchId === branchId).length + 1;
-    const woNumber = `${prefix}-${new Date().getFullYear()}-${String(count).padStart(3, '0')}`;
+    const woNumber = generateDocumentNumber('workOrder', branchId);
 
     const wo: WorkOrder = {
       id: Date.now().toString() + 'w',

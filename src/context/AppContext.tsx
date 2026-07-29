@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus } from '../types';
+import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus } from '../types';
 import { api } from '../lib/apiClient';
 import { demoData } from '../lib/demoData';
 
@@ -16,6 +16,8 @@ interface AppContextType {
   isLoading: boolean;
   isDemoMode: boolean;
   refreshData: () => Promise<void>;
+  updateSettings: (settings: AppSettings) => Promise<void>;
+  generateDocumentNumber: (type: 'workOrder' | 'invoice', branchId: string, date?: Date) => string;
   addVehicle: (vehicle: Vehicle) => Promise<void>;
   updateVehicle: (id: string, vehicle: Vehicle) => Promise<void>;
   deleteVehicle: (id: string) => Promise<void>;
@@ -71,6 +73,7 @@ const emptyData: AppData = {
   vehicles: [], customers: [], invoices: [], workOrders: [],
   itemCategories: [], items: [], branches: [], roles: [], users: [],
   suppliers: [], goodsReceipts: [], purchaseInvoices: [],
+  settings: demoData.settings,
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -114,12 +117,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         suppliers: res.data.suppliers || [],
         goodsReceipts: res.data.goodsReceipts || [],
         purchaseInvoices: res.data.purchaseInvoices || [],
+        settings: res.data.settings || demoData.settings,
       });
       setIsDemoMode(false);
     } else {
       // Backend not available - fallback to demo data
       console.warn('⚠️ Backend API tidak tersedia. Menggunakan DEMO MODE (data tidak akan tersimpan).');
-      setData(demoData);
+      let savedSettings = demoData.settings;
+      try {
+        const stored = localStorage.getItem('appSettings');
+        if (stored) savedSettings = JSON.parse(stored);
+      } catch { /* gunakan pengaturan bawaan */ }
+      setData({ ...demoData, settings: savedSettings });
       setIsDemoMode(true);
     }
     setIsLoading(false);
@@ -169,9 +178,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = (perm: Permission): boolean => {
     if (!currentUser) return false;
+    if (currentUser.isOwner) return true;
     const role = data.roles.find((r) => r.id === currentUser.roleId);
     if (!role) return false;
     return role.permissions.includes(perm);
+  };
+
+  const updateSettings = async (settings: AppSettings) => {
+    if (isDemoMode) {
+      setData(prev => ({ ...prev, settings }));
+      localStorage.setItem('appSettings', JSON.stringify(settings));
+      return;
+    }
+    const res = await api.updateSettings(settings);
+    if (!res.success) throw new Error(res.message || 'Gagal menyimpan pengaturan');
+    setData(prev => ({ ...prev, settings }));
+  };
+
+  const generateDocumentNumber = (type: 'workOrder' | 'invoice', branchId: string, date = new Date()) => {
+    const settings = data.settings || demoData.settings;
+    const code = (settings.branchDocumentCodes[branchId] || 'X').toUpperCase();
+    const yy = String(date.getFullYear()).slice(-2);
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateKey = `${yy}${mm}${dd}`;
+    const prefix = type === 'workOrder' ? settings.documents.workOrderPrefix : settings.documents.invoicePrefix;
+    const source = type === 'workOrder' ? data.workOrders : data.invoices;
+    const numberPrefix = `${prefix}${code}${dateKey}`;
+    const maxSequence = source
+      .filter(doc => doc.branchId === branchId)
+      .reduce((max, doc) => {
+        const value = type === 'workOrder'
+          ? (doc as WorkOrder).woNumber
+          : (doc as SalesInvoice).invoiceNumber;
+        if (!value.startsWith(numberPrefix)) return max;
+        const sequence = Number(value.slice(numberPrefix.length));
+        return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+      }, 0);
+    return `${numberPrefix}${String(maxSequence + 1).padStart(settings.documents.sequenceDigits, '0')}`;
   };
 
   /**
@@ -408,11 +452,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!tgtBranch) return null;
 
     const today = new Date().toISOString().split('T')[0];
-    const prefixes: Record<string, string> = { 'BR-001': 'WO-P', 'BR-002': 'WO-C', 'BR-003': 'WO-M' };
-    const prefix = prefixes[targetBranchId] || 'WO';
-    const year = new Date().getFullYear();
-    const count = data.workOrders.filter(w => w.branchId === targetBranchId).length + 1;
-    const newWoNumber = `${prefix}-${year}-${String(count).padStart(3, '0')}`;
+    const newWoNumber = generateDocumentNumber('workOrder', targetBranchId);
     const newId = Date.now().toString();
 
     const newWo: WorkOrder = {
@@ -454,9 +494,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
 
-    const branchPrefixes: Record<string, string> = { 'BR-001': 'D-', 'BR-002': 'C-', 'BR-003': 'M-' };
-    const prefix = branchPrefixes[wo.branchId] || 'INV-';
-    const invoiceNumber = `${prefix}${1956 + data.invoices.length + 1}`;
+    const invoiceNumber = generateDocumentNumber('invoice', wo.branchId);
     const today = new Date().toISOString().split('T')[0];
     const status: SalesInvoice['status'] = payment >= wo.total ? 'Lunas' : 'Belum Lunas';
     const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
@@ -530,9 +568,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await executeCRUD(() => api.create('users', u), () => setData(prev => ({ ...prev, users: [...prev.users, u] })));
   };
   const updateUser = async (id: string, u: User) => {
+    const existing = data.users.find(x => x.id === id);
+    if (existing?.isProtected && (!u.isActive || u.roleId !== existing.roleId)) {
+      throw new Error('Akun Owner tidak dapat dinonaktifkan atau diganti rolenya');
+    }
     await executeCRUD(() => api.update('users', id, u), () => setData(prev => ({ ...prev, users: prev.users.map(x => x.id === id ? u : x) })));
   };
   const deleteUser = async (id: string) => {
+    if (data.users.find(x => x.id === id)?.isProtected) {
+      throw new Error('Akun Owner tidak dapat dihapus');
+    }
     await executeCRUD(() => api.remove('users', id), () => setData(prev => ({ ...prev, users: prev.users.filter(x => x.id !== id) })));
   };
 
@@ -646,6 +691,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         data, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId,
         login, logout, hasPermission, isLoading, isDemoMode, refreshData,
+        updateSettings, generateDocumentNumber,
         addVehicle, updateVehicle, deleteVehicle,
         addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,
         addInvoice, updateInvoice, deleteInvoice,

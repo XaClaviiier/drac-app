@@ -14,11 +14,35 @@ const allPermissions: any[] = [
   'supplier:view', 'supplier:create', 'supplier:edit', 'supplier:delete',
   'receipt:view', 'receipt:create', 'receipt:edit', 'receipt:delete',
   'purchase:view', 'purchase:create', 'purchase:edit', 'purchase:delete', 'purchase:pay',
+  'settings:view', 'settings:edit',
   'report:view',
   'all_branches',
 ];
 
 export const demoData: AppData = {
+  settings: {
+    company: {
+      name: 'DOKTER AC MOBIL',
+      legalName: '',
+      phone: '',
+      email: 'admin@dokterac.id',
+      taxNumber: '',
+      address: 'Makassar, Sulawesi Selatan',
+      timezone: 'Asia/Makassar',
+      invoiceFooter: 'Terima kasih telah mempercayakan kendaraan Anda kepada kami.',
+    },
+    branchDocumentCodes: { 'BR-001': 'D', 'BR-002': 'C', 'BR-003': 'M' },
+    documents: { workOrderPrefix: 'WO-', invoicePrefix: 'INV-', sequenceDigits: 3, resetPeriod: 'daily' },
+    security: { sessionHours: 8, maxLoginAttempts: 5, auditLogEnabled: true },
+    ai: {
+      provider: 'groq',
+      model: 'llama-3.3-70b-versatile',
+      allowCustomerData: true,
+      allowInventoryData: true,
+      allowFinancialData: false,
+      allowCreateWorkOrder: true,
+    },
+  },
   branches: [
     { id: 'BR-001', code: 'CBG-001', name: 'CABANG PERINTIS', address: 'Jl. Perintis Kemerdekaan No. 45, Makassar', phone: '0411-123456', isActive: true },
     { id: 'BR-002', code: 'CBG-002', name: 'CABANG CAKALANG', address: 'Jl. Cakalang No. 12, Makassar', phone: '0411-234567', isActive: true },
@@ -31,7 +55,7 @@ export const demoData: AppData = {
     { id: '4', code: 'TKN', name: 'Teknisi', permissions: ['dashboard:view','wo:view','wo:create','wo:edit','customer:view','customer:create','vehicle:view','vehicle:create','item:view'], description: 'Teknisi', isActive: true },
   ],
   users: [
-    { id: '1', username: 'admin', name: 'ADMIN UTAMA', email: 'admin@dokterac.id', password: 'admin123', roleId: '1', roleName: 'Administrator', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01' },
+    { id: '1', username: 'admin', name: 'OWNER UTAMA', email: 'admin@dokterac.id', password: 'admin123', roleId: '1', roleName: 'Owner', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01', isOwner: true, isProtected: true },
     { id: '2', username: 'kasir1', name: 'SITI KASIR', email: 'kasir1@dokterac.id', password: 'kasir123', roleId: '3', roleName: 'Kasir', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-15' },
     { id: '3', username: 'teknisi1', name: 'BUDI TEKNISI', email: 'teknisi1@dokterac.id', password: 'teknisi123', roleId: '4', roleName: 'Teknisi', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-02-01' },
     { id: '4', username: 'spv1', name: 'AGUS SUPERVISOR', email: 'spv1@dokterac.id', password: 'spv123', roleId: '2', roleName: 'Supervisor', branchId: 'BR-002', branchName: 'CABANG CAKALANG', isActive: true, createdAt: '2026-01-10' },

@@ -151,6 +151,47 @@ export interface Branch {
   isActive: boolean;
 }
 
+export interface CompanyProfile {
+  name: string;
+  legalName: string;
+  phone: string;
+  email: string;
+  taxNumber: string;
+  address: string;
+  timezone: string;
+  invoiceFooter: string;
+}
+
+export interface DocumentNumberSettings {
+  workOrderPrefix: string;
+  invoicePrefix: string;
+  sequenceDigits: number;
+  resetPeriod: 'daily';
+}
+
+export interface SecuritySettings {
+  sessionHours: number;
+  maxLoginAttempts: number;
+  auditLogEnabled: boolean;
+}
+
+export interface AISettings {
+  provider: 'groq';
+  model: string;
+  allowCustomerData: boolean;
+  allowInventoryData: boolean;
+  allowFinancialData: boolean;
+  allowCreateWorkOrder: boolean;
+}
+
+export interface AppSettings {
+  company: CompanyProfile;
+  branchDocumentCodes: Record<string, string>;
+  documents: DocumentNumberSettings;
+  security: SecuritySettings;
+  ai: AISettings;
+}
+
 export type Permission =
   | 'dashboard:view'
   | 'invoice:view' | 'invoice:create' | 'invoice:edit' | 'invoice:delete'
@@ -164,6 +205,7 @@ export type Permission =
   | 'supplier:view' | 'supplier:create' | 'supplier:edit' | 'supplier:delete'
   | 'receipt:view' | 'receipt:create' | 'receipt:edit' | 'receipt:delete'
   | 'purchase:view' | 'purchase:create' | 'purchase:edit' | 'purchase:delete' | 'purchase:pay'
+  | 'settings:view' | 'settings:edit'
   | 'report:view'
   | 'all_branches';
 
@@ -189,6 +231,8 @@ export interface User {
   isActive: boolean;
   createdAt: string;
   lastLogin?: string;
+  isOwner?: boolean;
+  isProtected?: boolean;
 }
 
 export interface Supplier {
@@ -287,4 +331,5 @@ export interface AppData {
   suppliers: Supplier[];
   goodsReceipts: GoodsReceipt[];
   purchaseInvoices: PurchaseInvoice[];
+  settings: AppSettings;
 }

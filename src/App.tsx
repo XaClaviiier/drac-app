@@ -14,6 +14,7 @@ import Suppliers from './pages/Suppliers';
 import PurchaseInvoicesPage from './pages/PurchaseInvoices';
 import AIAssistant from './pages/AIAssistant';
 import Categories from './pages/Categories';
+import SettingsPage from './pages/SettingsPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useApp();
@@ -50,6 +51,7 @@ function AppRoutes() {
         <Route path="categories" element={<Categories />} />
         <Route path="ai" element={<AIAssistant />} />
         <Route path="users" element={<UsersAndRoles />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

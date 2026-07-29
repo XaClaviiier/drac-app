@@ -28,6 +28,8 @@ try {
         $r['roleName'] = $r['role_name']; $r['roleId'] = $r['role_id'];
         $r['branchName'] = $r['branch_name']; $r['branchId'] = $r['branch_id'];
         $r['isActive'] = (bool)$r['is_active'];
+        $r['isOwner'] = (bool)($r['is_owner'] ?? false);
+        $r['isProtected'] = (bool)($r['is_protected'] ?? false);
         $r['lastLogin'] = $r['last_login']; $r['createdAt'] = $r['created_at'];
     }
     $data['users'] = $rows;
@@ -233,6 +235,12 @@ try {
         $r['receiptIds'] = array_values(array_unique(array_map(function($x) { return $x['receiptId']; }, $r['items'])));
     }
     $data['purchaseInvoices'] = $rows;
+
+    $settingsTable = $pdo->query("SHOW TABLES LIKE 'app_settings'")->fetch();
+    if ($settingsTable) {
+        $settingsRow = $pdo->query("SELECT settings_json FROM app_settings WHERE id = 1")->fetch();
+        if ($settingsRow) $data['settings'] = json_decode($settingsRow['settings_json'], true);
+    }
 
     respondSuccess($data, 'All data loaded');
 } catch (Exception $e) {

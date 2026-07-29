@@ -35,5 +35,7 @@ $user['roleId'] = $user['role_id'];
 $user['branchName'] = $user['branch_name'];
 $user['branchId'] = $user['branch_id'];
 $user['isActive'] = (bool)$user['is_active'];
+$user['isOwner'] = (bool)($user['is_owner'] ?? false);
+$user['isProtected'] = (bool)($user['is_protected'] ?? false);
 
 respondSuccess($user, 'Login berhasil');

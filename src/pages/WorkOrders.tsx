@@ -28,7 +28,7 @@ export default function WorkOrders() {
     addWorkOrder, updateWorkOrder, deleteWorkOrder,
     continueWorkOrder, findActiveWoByPlate, changeWorkOrderStatus,
     createInvoiceFromWO, addItem,
-    currentUser, currentBranchId, resolveBranchId, hasPermission,
+    currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
@@ -482,11 +482,7 @@ export default function WorkOrders() {
     }
 
     const targetBranch = resolveBranchId();
-    const prefixes: Record<string, string> = { 'BR-001': 'WO-P', 'BR-002': 'WO-C', 'BR-003': 'WO-M' };
-    const prefix = prefixes[targetBranch] || 'WO';
-    const year = new Date().getFullYear();
-    const branchCount = data.workOrders.filter(w => w.branchId === targetBranch).length + 1;
-    const woNumber = `${prefix}-${year}-${String(branchCount).padStart(3, '0')}`;
+    const woNumber = generateDocumentNumber('workOrder', targetBranch);
 
     try {
       if (editingWO) {

@@ -6,7 +6,7 @@ import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 
 export default function SalesInvoice() {
-  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser } = useApp();
+  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -138,13 +138,7 @@ export default function SalesInvoice() {
     e.preventDefault();
 
     const targetBranchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
-    const branchPrefixes: Record<string, string> = {
-      'BR-001': 'D-',
-      'BR-002': 'C-',
-      'BR-003': 'M-',
-    };
-    const prefix = branchPrefixes[targetBranchId] || 'INV-';
-    const invoiceNumber = `${prefix}${1956 + data.invoices.length + 1}`;
+    const invoiceNumber = generateDocumentNumber('invoice', targetBranchId, new Date(`${formData.date}T12:00:00`));
 
     if (editingInvoice) {
       updateInvoice(editingInvoice.id, {

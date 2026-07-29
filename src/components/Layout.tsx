@@ -19,6 +19,7 @@ const navItems = [
   { path: '/purchase-invoices', label: 'Faktur Pembelian', short: 'Pembelian', icon: ReceiptText, perm: 'purchase:view' as const, color: 'from-fuchsia-500 to-purple-600' },
   { path: '/ai', label: 'Asisten AI', short: 'AI', icon: Bot, perm: 'dashboard:view' as const, color: 'from-cyan-400 to-blue-600' },
   { path: '/users', label: 'Pengguna & Akses', short: 'Pengguna', icon: Shield, perm: 'user:view' as const, color: 'from-slate-500 to-slate-700' },
+  { path: '/settings', label: 'Pengaturan', short: 'Atur', icon: Settings, perm: 'settings:view' as const, color: 'from-indigo-500 to-violet-700' },
 ];
 
 export default function Layout() {
@@ -195,7 +196,7 @@ export default function Layout() {
                       <p className="mt-1 text-xs text-blue-600">{currentUser?.roleName}</p>
                       <p className="text-xs text-gray-400">{isAll ? 'Semua Cabang' : currentBranch?.name}</p>
                     </div>
-                    <button className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <button onClick={() => { setUserMenuOpen(false); navigate('/settings'); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                       <Settings className="h-4 w-4" /> Pengaturan
                     </button>
                     <button onClick={handleLogout} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">
