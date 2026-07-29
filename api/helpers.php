@@ -131,7 +131,7 @@ function requireAuthenticatedUser(PDO $pdo): array {
     if ($token === '') respondError('Sesi login diperlukan', 401);
     $stmt = $pdo->prepare("
         SELECT u.* FROM api_sessions s
-        JOIN users u ON u.id = s.user_id
+        JOIN users u ON u.id = s.user_id COLLATE utf8mb4_unicode_ci
         WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = 1
     ");
     $stmt->execute([hash('sha256', $token)]);
