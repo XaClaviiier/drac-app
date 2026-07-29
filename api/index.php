@@ -4,6 +4,7 @@
 // ==========================================================
 require_once 'config.php';
 require_once 'helpers.php';
+ensureApiSupportTables($pdo);
 
 $route = $_GET['route'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];

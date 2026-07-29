@@ -2,18 +2,31 @@
 // Helper API ditempatkan terpisah agar pembaruan fungsi tidak perlu
 // menimpa config.php yang berisi kredensial database hosting.
 
+function ensureApiSupportTables(PDO $pdo): void {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS document_sequences (
+            document_type ENUM('work_order','sales_invoice') NOT NULL,
+            branch_id VARCHAR(20) NOT NULL,
+            sequence_date DATE NOT NULL,
+            last_sequence INT UNSIGNED NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (document_type, branch_id, sequence_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS branch_item_stocks (
+            branch_id VARCHAR(20) NOT NULL,
+            item_id VARCHAR(20) NOT NULL,
+            stock INT NOT NULL DEFAULT 0,
+            sellable_stock INT NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (branch_id, item_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+}
+
 if (!function_exists('nextDocumentNumber')) {
     function nextDocumentNumber(PDO $pdo, string $type, string $branchId, ?string $date = null): string {
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS document_sequences (
-                document_type ENUM('work_order','sales_invoice') NOT NULL,
-                branch_id VARCHAR(20) NOT NULL,
-                sequence_date DATE NOT NULL,
-                last_sequence INT UNSIGNED NOT NULL DEFAULT 0,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                PRIMARY KEY (document_type, branch_id, sequence_date)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        ");
         $date = $date ?: date('Y-m-d');
         $prefix = $type === 'work_order' ? 'WO-' : 'INV-';
         $branchCodes = ['BR-001' => 'D', 'BR-002' => 'C', 'BR-003' => 'M'];
@@ -55,16 +68,6 @@ if (!function_exists('nextDocumentNumber')) {
 
 if (!function_exists('adjustBranchStock')) {
     function adjustBranchStock(PDO $pdo, string $branchId, string $itemId, int $delta): void {
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS branch_item_stocks (
-                branch_id VARCHAR(20) NOT NULL,
-                item_id VARCHAR(20) NOT NULL,
-                stock INT NOT NULL DEFAULT 0,
-                sellable_stock INT NOT NULL DEFAULT 0,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                PRIMARY KEY (branch_id, item_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        ");
         $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id = ?");
         $itemStmt->execute([$itemId]);
         $item = $itemStmt->fetch();
