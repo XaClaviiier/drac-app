@@ -83,6 +83,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payment),
     }),
+  createInvoiceFromWorkOrder: (woId: string, payment: number) =>
+    request('/sales-invoices/from-work-order', {
+      method: 'POST',
+      body: JSON.stringify({ woId, payment }),
+    }),
 };
 
 export const API_URL = API_BASE_URL;

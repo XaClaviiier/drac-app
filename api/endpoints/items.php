@@ -2,6 +2,17 @@
 switch ($method) {
     case 'GET':
         $rows = $pdo->query("SELECT * FROM items ORDER BY code")->fetchAll();
+        $stockTable = $pdo->query("SHOW TABLES LIKE 'branch_item_stocks'")->fetch();
+        $stockRows = $stockTable
+            ? $pdo->query("SELECT branch_id, item_id, stock, sellable_stock FROM branch_item_stocks")->fetchAll()
+            : [];
+        $stocksByItem = [];
+        foreach ($stockRows as $stockRow) {
+            $stocksByItem[$stockRow['item_id']][$stockRow['branch_id']] = [
+                'stock' => (int)$stockRow['stock'],
+                'sellableStock' => (int)$stockRow['sellable_stock'],
+            ];
+        }
         foreach ($rows as &$r) {
             $r['categoryId'] = $r['category_id'];
             $r['categoryName'] = $r['category_name'];
@@ -11,6 +22,7 @@ switch ($method) {
             $r['isActive'] = (bool)$r['is_active'];
             $r['isQuickService'] = (bool)$r['is_quick_service'];
             $r['branchId'] = $r['branch_id'];
+            $r['branchStocks'] = $stocksByItem[$r['id']] ?? [];
             // Load group members
             if ($r['type'] === 'Group') {
                 $stmt = $pdo->prepare("SELECT * FROM item_group_members WHERE group_item_id = ?");
@@ -47,6 +59,16 @@ switch ($method) {
                 $d['description'] ?? '', $d['branchId'] ?? 'BR-001'
             ]);
 
+            $stockStmt = $pdo->prepare("
+                INSERT INTO branch_item_stocks (branch_id, item_id, stock, sellable_stock)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE stock = VALUES(stock), sellable_stock = VALUES(sellable_stock)
+            ");
+            $stockStmt->execute([
+                $d['branchId'] ?? 'BR-001', $itemId,
+                max(0, (int)($d['stock'] ?? 0)), max(0, (int)($d['sellableStock'] ?? 0)),
+            ]);
+
             // Insert group members
             if (($d['type'] ?? '') === 'Group' && !empty($d['groupMembers'])) {
                 $memStmt = $pdo->prepare("INSERT INTO item_group_members (group_item_id, member_item_id, member_code, member_name, member_type, qty, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?)");
@@ -76,6 +98,16 @@ switch ($method) {
                 $d['purchasePrice'] ?? 0, $d['sellingPrice'] ?? 0,
                 $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
                 $d['description'] ?? '', $d['branchId'] ?? 'BR-001', $id
+            ]);
+
+            $stockStmt = $pdo->prepare("
+                INSERT INTO branch_item_stocks (branch_id, item_id, stock, sellable_stock)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE stock = VALUES(stock), sellable_stock = VALUES(sellable_stock)
+            ");
+            $stockStmt->execute([
+                $d['branchId'] ?? 'BR-001', $id,
+                max(0, (int)($d['stock'] ?? 0)), max(0, (int)($d['sellableStock'] ?? 0)),
             ]);
 
             // Refresh group members

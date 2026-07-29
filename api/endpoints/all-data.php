@@ -72,6 +72,17 @@ try {
 
     // Items (with group members)
     $rows = $pdo->query("SELECT * FROM items ORDER BY code")->fetchAll();
+    $stockTable = $pdo->query("SHOW TABLES LIKE 'branch_item_stocks'")->fetch();
+    $stockRows = $stockTable
+        ? $pdo->query("SELECT branch_id, item_id, stock, sellable_stock FROM branch_item_stocks")->fetchAll()
+        : [];
+    $stocksByItem = [];
+    foreach ($stockRows as $stockRow) {
+        $stocksByItem[$stockRow['item_id']][$stockRow['branch_id']] = [
+            'stock' => (int)$stockRow['stock'],
+            'sellableStock' => (int)$stockRow['sellable_stock'],
+        ];
+    }
     $groupMembersAll = $pdo->query("SELECT * FROM item_group_members")->fetchAll();
     $membersByGroup = [];
     foreach ($groupMembersAll as $m) {
@@ -93,6 +104,7 @@ try {
         $r['isActive'] = (bool)$r['is_active'];
         $r['isQuickService'] = (bool)$r['is_quick_service'];
         $r['branchId'] = $r['branch_id'];
+        $r['branchStocks'] = $stocksByItem[$r['id']] ?? [];
         if ($r['type'] === 'Group') {
             $r['groupMembers'] = $membersByGroup[$r['id']] ?? [];
         }

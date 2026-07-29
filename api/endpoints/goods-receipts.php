@@ -34,12 +34,13 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             $rId = $d['id'] ?? generateId();
+            $branchId = $d['branchId'] ?? 'BR-001';
             $stmt = $pdo->prepare("INSERT INTO goods_receipts (id, receipt_number, date, supplier_id, supplier_name, do_number, status, notes, branch_id, received_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $rId, $d['receiptNumber'], $d['date'],
                 $d['supplierId'], $d['supplierName'], $d['doNumber'] ?? '',
                 $d['status'] ?? 'Draft', $d['notes'] ?? '',
-                $d['branchId'] ?? 'BR-001', $d['receivedBy'] ?? null
+                $branchId, $d['receivedBy'] ?? null
             ]);
 
             if (!empty($d['items'])) {
@@ -52,8 +53,7 @@ switch ($method) {
             // Auto-increment stock jika status Diterima
             if (($d['status'] ?? '') === 'Diterima' && !empty($d['items'])) {
                 foreach ($d['items'] as $i) {
-                    $pdo->prepare("UPDATE items SET stock = stock + ?, sellable_stock = sellable_stock + ? WHERE id = ? AND type = 'Persediaan'")
-                        ->execute([$i['qty'], $i['qty'], $i['itemId']]);
+                    adjustBranchStock($pdo, $branchId, $i['itemId'], (int)$i['qty']);
                 }
             }
 
@@ -71,8 +71,12 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             // Get old status untuk logic stock
-            $oldRow = $pdo->query("SELECT status FROM goods_receipts WHERE id = " . $pdo->quote($id))->fetch();
+            $oldRowStmt = $pdo->prepare("SELECT status, branch_id FROM goods_receipts WHERE id = ?");
+            $oldRowStmt->execute([$id]);
+            $oldRow = $oldRowStmt->fetch();
             $oldStatus = $oldRow['status'] ?? '';
+            $oldBranchId = $oldRow['branch_id'] ?? ($d['branchId'] ?? 'BR-001');
+            $newBranchId = $d['branchId'] ?? 'BR-001';
             $oldItems = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
             $oldItems->execute([$id]);
             $oldItemsList = $oldItems->fetchAll();
@@ -99,17 +103,16 @@ switch ($method) {
             $wasReceived = in_array($oldStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
             $isReceived = in_array($newStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
 
-            if (!$wasReceived && $isReceived) {
-                // Add stock
-                foreach ($d['items'] as $i) {
-                    $pdo->prepare("UPDATE items SET stock = stock + ?, sellable_stock = sellable_stock + ? WHERE id = ? AND type = 'Persediaan'")
-                        ->execute([$i['qty'], $i['qty'], $i['itemId']]);
-                }
-            } elseif ($wasReceived && !$isReceived) {
-                // Reverse stock (pakai data lama)
+            // Selalu balikkan dampak lama lalu terapkan dampak baru.
+            // Ini juga menangani perubahan qty, item, atau cabang.
+            if ($wasReceived) {
                 foreach ($oldItemsList as $i) {
-                    $pdo->prepare("UPDATE items SET stock = stock - ?, sellable_stock = sellable_stock - ? WHERE id = ? AND type = 'Persediaan'")
-                        ->execute([$i['qty'], $i['qty'], $i['item_id']]);
+                    adjustBranchStock($pdo, $oldBranchId, $i['item_id'], -(int)$i['qty']);
+                }
+            }
+            if ($isReceived) {
+                foreach ($d['items'] as $i) {
+                    adjustBranchStock($pdo, $newBranchId, $i['itemId'], (int)$i['qty']);
                 }
             }
 
@@ -123,18 +126,27 @@ switch ($method) {
 
     case 'DELETE':
         if (!$id) respondError('ID required');
-        // Reverse stock kalau status Diterima
-        $row = $pdo->query("SELECT status FROM goods_receipts WHERE id = " . $pdo->quote($id))->fetch();
-        if ($row && $row['status'] === 'Diterima') {
-            $items = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
-            $items->execute([$id]);
-            foreach ($items->fetchAll() as $i) {
-                $pdo->prepare("UPDATE items SET stock = stock - ?, sellable_stock = sellable_stock - ? WHERE id = ? AND type = 'Persediaan'")
-                    ->execute([$i['qty'], $i['qty'], $i['item_id']]);
+        $pdo->beginTransaction();
+        try {
+            $rowStmt = $pdo->prepare("SELECT status, branch_id FROM goods_receipts WHERE id = ? FOR UPDATE");
+            $rowStmt->execute([$id]);
+            $row = $rowStmt->fetch();
+            if ($row && in_array($row['status'], ['Diterima', 'Difakturkan', 'Sebagian'])) {
+                $items = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
+                $items->execute([$id]);
+                foreach ($items->fetchAll() as $i) {
+                    if (!empty($i['item_id'])) {
+                        adjustBranchStock($pdo, $row['branch_id'], $i['item_id'], -(int)$i['qty']);
+                    }
+                }
             }
+            $pdo->prepare("DELETE FROM goods_receipts WHERE id=?")->execute([$id]);
+            $pdo->commit();
+            respondSuccess(null, 'Penerimaan dihapus');
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            respondError('Gagal menghapus penerimaan', 500, $e->getMessage());
         }
-        $pdo->prepare("DELETE FROM goods_receipts WHERE id=?")->execute([$id]);
-        respondSuccess(null, 'Penerimaan dihapus');
         break;
 
     default: respondError('Method not allowed', 405);

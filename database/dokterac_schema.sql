@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   `total` DECIMAL(15,2) DEFAULT 0,
   `estimate_total` DECIMAL(15,2) DEFAULT NULL,
   `approved_at` DATE DEFAULT NULL,
-  `status` ENUM('Pengecekan', 'Proses', 'Selesai', 'Dibayar') DEFAULT 'Pengecekan',
+  `status` ENUM('Pengecekan', 'Proses', 'Selesai', 'Dibayar', 'Batal') DEFAULT 'Pengecekan',
   `notes` TEXT,
   `invoice_id` VARCHAR(20),
   `invoice_number` VARCHAR(30),

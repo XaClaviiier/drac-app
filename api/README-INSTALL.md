@@ -36,6 +36,17 @@ DB_PASS: [password Anda]
 2. Klik nama database `username_dokterac` di panel kiri
 3. Klik tab **"Import"**
 4. Upload file: `database/dokterac_schema.sql`
+
+Untuk database yang sudah berjalan, lakukan backup lalu jalankan migrasi berikut
+secara berurutan:
+
+1. `database/migrate_updates.sql`
+2. `database/migrate_wo_workflow.sql`
+3. `database/migrate_settings.sql`
+4. `database/migrate_relational_integrity.sql`
+
+Migrasi terakhir menambahkan foreign key, stok per cabang, dan sequence nomor
+dokumen. Jangan menjalankannya sebelum tiga migrasi sebelumnya selesai.
 5. Klik **"Go"** → Sukses!
 
 Cek: Di panel kiri akan muncul **18 tabel** (branches, users, items, dll)

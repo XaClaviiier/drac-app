@@ -239,7 +239,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localAction();
       return;
     }
-    await operation();
+    const result = await operation();
+    if (!result?.success) {
+      throw new Error(result?.message || result?.error || 'Operasi gagal disimpan');
+    }
     await refreshData();
   };
 
@@ -494,13 +497,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
 
-    const invoiceNumber = generateDocumentNumber('invoice', wo.branchId);
     const today = new Date().toISOString().split('T')[0];
     const status: SalesInvoice['status'] = payment >= wo.total ? 'Lunas' : 'Belum Lunas';
     const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
+    let invoiceNumber = generateDocumentNumber('invoice', wo.branchId);
+    let invoiceId = Date.now().toString();
+
+    if (!isDemoMode) {
+      const result = await api.createInvoiceFromWorkOrder(woId, payment);
+      if (!result.success || !result.data) {
+        throw new Error(result.message || 'Gagal membuat faktur dari WO');
+      }
+      invoiceNumber = result.data.invoiceNumber;
+      invoiceId = result.data.id;
+    }
 
     const newInvoice: SalesInvoice = {
-      id: Date.now().toString(),
+      id: invoiceId,
       invoiceNumber, date: today,
       customerRefId: customer?.id || wo.customerRefId,
       customerId: wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
@@ -511,6 +524,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       woId: wo.id, woNumber: wo.woNumber, items: wo.services,
       branchId: wo.branchId,
     };
+
+    if (!isDemoMode) {
+      await refreshData();
+      return newInvoice;
+    }
 
     await addInvoice(newInvoice);
     await updateWorkOrder(woId, {

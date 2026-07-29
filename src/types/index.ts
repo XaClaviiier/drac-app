@@ -140,6 +140,7 @@ export interface Item {
   description: string;
   groupMembers?: GroupMember[];
   branchId: string;
+  branchStocks?: Record<string, { stock: number; sellableStock: number }>;
 }
 
 export interface Branch {

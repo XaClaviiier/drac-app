@@ -48,6 +48,8 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             $woId = $d['id'] ?? generateId();
+            $branchId = $d['branchId'] ?? 'BR-001';
+            $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $d['date'] ?? null);
             $stmt = $pdo->prepare("
                 INSERT INTO work_orders (
                     id, wo_number, date,
@@ -60,7 +62,7 @@ switch ($method) {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
-                $woId, $d['woNumber'], $d['date'],
+                $woId, $woNumber, $d['date'],
                 $d['customerRefId'] ?? '', $d['customerId'] ?? '', $d['customerName'] ?? '',
                 $d['vehicleRefId'] ?? '', $d['plateNumber'] ?? '', $d['vehicleInfo'] ?? '',
                 $d['description'] ?? '', $d['findings'] ?? null,
@@ -68,7 +70,7 @@ switch ($method) {
                 $d['status'] ?? 'Pengecekan',
                 $d['cancelReason'] ?? null,
                 isset($d['statusLog']) ? json_encode($d['statusLog']) : null,
-                $d['notes'] ?? '', $d['branchId'] ?? 'BR-001',
+                $d['notes'] ?? '', $branchId,
                 $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
                 $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
             ]);
@@ -82,7 +84,7 @@ switch ($method) {
                 }
             }
             $pdo->commit();
-            respondSuccess(['id' => $woId], 'WO disimpan');
+            respondSuccess(['id' => $woId, 'woNumber' => $woNumber], 'WO disimpan');
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal simpan WO', 500, $e->getMessage());
