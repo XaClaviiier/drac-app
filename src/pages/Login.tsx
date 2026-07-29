@@ -3,7 +3,7 @@ import { Wrench, Eye, EyeOff, Building2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function Login() {
-  const { login, data } = useApp();
+  const { login, data, isDemoMode } = useApp();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,7 +17,7 @@ export default function Login() {
     try {
       const user = await login(username, password);
       if (!user) {
-        setError('Username atau password salah. Coba: admin / admin123');
+        setError('Username atau password salah.');
       }
     } catch (err: any) {
       setError('Koneksi ke server gagal. Pastikan backend API sudah diupload.');
@@ -94,7 +94,7 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="mt-6 border-t border-gray-200 pt-4">
+          {isDemoMode && <div className="mt-6 border-t border-gray-200 pt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Akun Demo</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {data.users.slice(0, 4).map((user) => (
@@ -110,7 +110,7 @@ export default function Login() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
         </div>
 
         <p className="mt-6 text-center text-xs text-blue-300">

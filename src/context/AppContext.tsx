@@ -77,6 +77,7 @@ const emptyData: AppData = {
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+const allowDemoMode = import.meta.env.DEV;
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData);
@@ -131,7 +132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         settings: res.data.settings || demoData.settings,
       });
       setIsDemoMode(false);
-    } else {
+    } else if (allowDemoMode) {
       // Backend not available - fallback to demo data
       console.warn('⚠️ Backend API tidak tersedia. Menggunakan DEMO MODE (data tidak akan tersimpan).');
       let savedSettings = demoData.settings;
@@ -141,6 +142,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch { /* gunakan pengaturan bawaan */ }
       setData({ ...demoData, settings: savedSettings });
       setIsDemoMode(true);
+    } else {
+      console.error('Backend API tidak tersedia. Data demo dinonaktifkan di production.');
+      setIsDemoMode(false);
     }
     if (requestId === refreshRequestId.current) setIsLoading(false);
   };
@@ -159,7 +163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (res.success && res.data) {
       user = res.data as User;
       await refreshData();
-    } else {
+    } else if (allowDemoMode) {
       // Fallback: cek dari demo data (untuk preview local)
       const demoUser = demoData.users.find(u => u.username === username && u.password === password && u.isActive);
       if (demoUser) {
