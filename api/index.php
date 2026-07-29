@@ -39,6 +39,12 @@ try {
         case 'users':
             require 'endpoints/users.php';
             break;
+        case 'warehouses':
+            require 'endpoints/warehouses.php';
+            break;
+        case 'stock-movements':
+            require 'endpoints/stock-movements.php';
+            break;
 
         // ----- CUSTOMERS -----
         case 'customers':

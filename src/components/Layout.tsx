@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Car, FileText, Users, Wrench, Boxes, PackageCheck, Truck, ReceiptText,
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
+  Warehouse,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
@@ -13,6 +14,7 @@ const navItems = [
   { path: '/customers', label: 'Pelanggan', short: 'Pelanggan', icon: Users, perm: 'customer:view' as const, color: 'from-violet-500 to-purple-600' },
   { path: '/vehicles', label: 'Register Kendaraan', short: 'Kendaraan', icon: Car, perm: 'vehicle:view' as const, color: 'from-sky-500 to-blue-600' },
   { path: '/items', label: 'Barang & Jasa', short: 'Barang', icon: Boxes, perm: 'item:view' as const, color: 'from-teal-500 to-cyan-600' },
+  { path: '/warehouses', label: 'Gudang & Mutasi', short: 'Gudang', icon: Warehouse, perm: 'item:view' as const, color: 'from-cyan-500 to-blue-700' },
   { path: '/categories', label: 'Kategori', short: 'Kategori', icon: FolderTree, perm: 'item:view' as const, color: 'from-lime-500 to-green-600' },
   { path: '/suppliers', label: 'Supplier', short: 'Supplier', icon: Truck, perm: 'supplier:view' as const, color: 'from-amber-500 to-orange-600' },
   { path: '/receipts', label: 'Penerimaan Barang', short: 'Terima', icon: PackageCheck, perm: 'receipt:view' as const, color: 'from-rose-500 to-pink-600' },

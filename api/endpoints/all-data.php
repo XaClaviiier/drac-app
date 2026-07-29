@@ -30,6 +30,7 @@ try {
         $r['isActive'] = (bool)$r['is_active'];
         $r['isOwner'] = (bool)($r['is_owner'] ?? false);
         $r['isProtected'] = (bool)($r['is_protected'] ?? false);
+        $r['branchIds'] = getUserBranchIds($pdo, $r['id']);
         $r['lastLogin'] = $r['last_login']; $r['createdAt'] = $r['created_at'];
     }
     $data['users'] = $rows;
@@ -73,10 +74,12 @@ try {
 
     // Items (with group members)
     $rows = $pdo->query("SELECT * FROM items ORDER BY code")->fetchAll();
-    $stockTable = $pdo->query("SHOW TABLES LIKE 'branch_item_stocks'")->fetch();
-    $stockRows = $stockTable
-        ? $pdo->query("SELECT branch_id, item_id, stock, sellable_stock FROM branch_item_stocks")->fetchAll()
-        : [];
+    $stockRows = $pdo->query("
+        SELECT w.branch_id, ws.item_id, SUM(ws.quantity) stock,
+               SUM(GREATEST(0, ws.quantity-ws.reserved_quantity)) sellable_stock
+        FROM warehouse_stocks ws JOIN warehouses w ON w.id=ws.warehouse_id
+        WHERE w.is_active=1 GROUP BY w.branch_id,ws.item_id
+    ")->fetchAll();
     $stocksByItem = [];
     foreach ($stockRows as $stockRow) {
         $stocksByItem[$stockRow['item_id']][$stockRow['branch_id']] = [
@@ -106,11 +109,24 @@ try {
         $r['isQuickService'] = (bool)$r['is_quick_service'];
         $r['branchId'] = $r['branch_id'];
         $r['branchStocks'] = $stocksByItem[$r['id']] ?? [];
+        $r['stock'] = array_sum(array_column($r['branchStocks'], 'stock'));
+        $r['sellableStock'] = array_sum(array_column($r['branchStocks'], 'sellableStock'));
         if ($r['type'] === 'Group') {
             $r['groupMembers'] = $membersByGroup[$r['id']] ?? [];
         }
     }
     $data['items'] = $rows;
+
+    // Gudang, saldo stok per gudang, dan histori mutasi.
+    $warehouses = $pdo->query("SELECT w.*,b.name branch_name FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id ORDER BY b.name,w.is_default DESC,w.name")->fetchAll();
+    foreach($warehouses as &$w){$w['branchId']=$w['branch_id'];$w['branchName']=$w['branch_name'];$w['isDefault']=(bool)$w['is_default'];$w['isSellable']=(bool)$w['is_sellable'];$w['isActive']=(bool)$w['is_active'];}
+    $data['warehouses']=$warehouses;
+    $warehouseStocks=$pdo->query("SELECT warehouse_id,item_id,quantity,reserved_quantity FROM warehouse_stocks")->fetchAll();
+    foreach($warehouseStocks as &$s){$s['warehouseId']=$s['warehouse_id'];$s['itemId']=$s['item_id'];$s['quantity']=(int)$s['quantity'];$s['reservedQuantity']=(int)$s['reserved_quantity'];}
+    $data['warehouseStocks']=$warehouseStocks;
+    $movements=$pdo->query("SELECT m.*,i.name item_name,sw.name source_name,dw.name destination_name FROM stock_movements m JOIN items i ON i.id=m.item_id LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id ORDER BY m.created_at DESC LIMIT 200")->fetchAll();
+    foreach($movements as &$m){$m['itemId']=$m['item_id'];$m['itemName']=$m['item_name'];$m['sourceWarehouseId']=$m['source_warehouse_id'];$m['sourceName']=$m['source_name'];$m['destinationWarehouseId']=$m['destination_warehouse_id'];$m['destinationName']=$m['destination_name'];$m['movementType']=$m['movement_type'];$m['quantity']=(int)$m['quantity'];$m['createdAt']=$m['created_at'];}
+    $data['stockMovements']=$movements;
 
     // Work Orders
     $rows = $pdo->query("SELECT * FROM work_orders ORDER BY date DESC, wo_number DESC")->fetchAll();

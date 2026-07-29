@@ -20,9 +20,16 @@ $user = $stmt->fetch();
 
 if (!$user) respondError('Username tidak ditemukan', 401);
 
-// Simple password check (untuk production, gunakan password_verify + password_hash)
-if ($user['password'] !== $password) {
+$storedPassword = (string)$user['password'];
+$isHashed = str_starts_with($storedPassword, '$2y$') || str_starts_with($storedPassword, '$argon2');
+$passwordValid = $isHashed ? password_verify($password, $storedPassword) : hash_equals($storedPassword, $password);
+if (!$passwordValid) {
     respondError('Password salah', 401);
+}
+// Upgrade otomatis password lama (plain text) ketika login berhasil.
+if (!$isHashed) {
+    $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
+        ->execute([password_hash($password, PASSWORD_DEFAULT), $user['id']]);
 }
 
 // Update last login
@@ -38,6 +45,7 @@ $user['roleName'] = $user['role_name'];
 $user['roleId'] = $user['role_id'];
 $user['branchName'] = $user['branch_name'];
 $user['branchId'] = $user['branch_id'];
+$user['branchIds'] = getUserBranchIds($pdo, $user['id']);
 $user['isActive'] = (bool)$user['is_active'];
 $user['isOwner'] = (bool)($user['is_owner'] ?? false);
 $user['isProtected'] = (bool)($user['is_protected'] ?? false);

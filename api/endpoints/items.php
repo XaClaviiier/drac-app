@@ -68,6 +68,13 @@ switch ($method) {
                 $d['branchId'] ?? 'BR-001', $itemId,
                 max(0, (int)($d['stock'] ?? 0)), max(0, (int)($d['sellableStock'] ?? 0)),
             ]);
+            $warehouseStock = $pdo->prepare("
+                INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity)
+                VALUES (?,?,?,?)
+                ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),reserved_quantity=VALUES(reserved_quantity)
+            ");
+            $initialStock=max(0,(int)($d['stock']??0));
+            $warehouseStock->execute([defaultWarehouseId($pdo,$d['branchId']??'BR-001'),$itemId,$initialStock,max(0,$initialStock-(int)($d['sellableStock']??0))]);
 
             // Insert group members
             if (($d['type'] ?? '') === 'Group' && !empty($d['groupMembers'])) {
@@ -109,6 +116,13 @@ switch ($method) {
                 $d['branchId'] ?? 'BR-001', $id,
                 max(0, (int)($d['stock'] ?? 0)), max(0, (int)($d['sellableStock'] ?? 0)),
             ]);
+            $warehouseStock = $pdo->prepare("
+                INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity)
+                VALUES (?,?,?,?)
+                ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),reserved_quantity=VALUES(reserved_quantity)
+            ");
+            $updatedStock=max(0,(int)($d['stock']??0));
+            $warehouseStock->execute([defaultWarehouseId($pdo,$d['branchId']??'BR-001'),$id,$updatedStock,max(0,$updatedStock-(int)($d['sellableStock']??0))]);
 
             // Refresh group members
             $pdo->prepare("DELETE FROM item_group_members WHERE group_item_id = ?")->execute([$id]);

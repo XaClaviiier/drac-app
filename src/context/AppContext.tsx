@@ -73,6 +73,7 @@ const emptyData: AppData = {
   vehicles: [], customers: [], invoices: [], workOrders: [],
   itemCategories: [], items: [], branches: [], roles: [], users: [],
   suppliers: [], goodsReceipts: [], purchaseInvoices: [],
+  warehouses: [], warehouseStocks: [], stockMovements: [],
   settings: demoData.settings,
 };
 
@@ -132,6 +133,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         suppliers: res.data.suppliers || [],
         goodsReceipts: res.data.goodsReceipts || [],
         purchaseInvoices: res.data.purchaseInvoices || [],
+        warehouses: res.data.warehouses || [],
+        warehouseStocks: res.data.warehouseStocks || [],
+        stockMovements: res.data.stockMovements || [],
         settings: res.data.settings || demoData.settings,
       });
       setIsDemoMode(false);

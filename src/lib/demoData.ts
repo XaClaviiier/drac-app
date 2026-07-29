@@ -20,6 +20,9 @@ const allPermissions: any[] = [
 ];
 
 export const demoData: AppData = {
+  warehouses: [],
+  warehouseStocks: [],
+  stockMovements: [],
   settings: {
     company: {
       name: 'DOKTER AC MOBIL',

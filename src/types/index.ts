@@ -233,11 +233,44 @@ export interface User {
   roleName: string;
   branchId: string;
   branchName: string;
+  branchIds?: string[];
   isActive: boolean;
   createdAt: string;
   lastLogin?: string;
   isOwner?: boolean;
   isProtected?: boolean;
+}
+
+export interface Warehouse {
+  id: string;
+  code: string;
+  name: string;
+  branchId: string;
+  branchName: string;
+  isDefault: boolean;
+  isSellable: boolean;
+  isActive: boolean;
+}
+
+export interface WarehouseStock {
+  warehouseId: string;
+  itemId: string;
+  quantity: number;
+  reservedQuantity: number;
+}
+
+export interface StockMovement {
+  id: string;
+  itemId: string;
+  itemName: string;
+  sourceWarehouseId?: string;
+  sourceName?: string;
+  destinationWarehouseId?: string;
+  destinationName?: string;
+  quantity: number;
+  movementType: string;
+  notes: string;
+  createdAt: string;
 }
 
 export interface Supplier {
@@ -336,5 +369,8 @@ export interface AppData {
   suppliers: Supplier[];
   goodsReceipts: GoodsReceipt[];
   purchaseInvoices: PurchaseInvoice[];
+  warehouses: Warehouse[];
+  warehouseStocks: WarehouseStock[];
+  stockMovements: StockMovement[];
   settings: AppSettings;
 }

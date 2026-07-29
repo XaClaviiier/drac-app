@@ -1,68 +1,98 @@
 <?php
+$actor = requireAuthenticatedUser($pdo);
+
+function mapUserRow(PDO $pdo, array $row): array {
+    unset($row['password']);
+    $row['roleName'] = $row['role_name'] ?? '';
+    $row['roleId'] = $row['role_id'];
+    $row['branchName'] = $row['branch_name'] ?? '';
+    $row['branchId'] = $row['branch_id'];
+    $row['branchIds'] = getUserBranchIds($pdo, $row['id']);
+    $row['isActive'] = (bool)$row['is_active'];
+    $row['isOwner'] = (bool)($row['is_owner'] ?? false);
+    $row['isProtected'] = (bool)($row['is_protected'] ?? false);
+    $row['lastLogin'] = $row['last_login'];
+    $row['createdAt'] = $row['created_at'];
+    return $row;
+}
+
+function saveUserBranches(PDO $pdo, string $userId, array $branchIds): void {
+    $pdo->prepare("DELETE FROM user_branch_access WHERE user_id = ?")->execute([$userId]);
+    $insert = $pdo->prepare("INSERT IGNORE INTO user_branch_access (user_id, branch_id) VALUES (?, ?)");
+    foreach (array_unique(array_filter($branchIds)) as $branchId) $insert->execute([$userId, $branchId]);
+}
+
+if ($action === 'password' && $method === 'PUT') {
+    if (!$id) respondError('ID required');
+    $d = getInput();
+    $isSelf = $actor['id'] === $id;
+    $isOwner = (bool)($actor['is_owner'] ?? false);
+    if (!$isSelf && !$isOwner) respondError('Tidak berhak mengubah password user lain', 403);
+    $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+    $stmt->execute([$id]);
+    $target = $stmt->fetch();
+    if (!$target) respondError('User tidak ditemukan', 404);
+    if ($isSelf && !$isOwner) {
+        $current = (string)($d['currentPassword'] ?? '');
+        $valid = password_verify($current, $target['password']) || hash_equals((string)$target['password'], $current);
+        if (!$valid) respondError('Password saat ini salah', 422);
+    }
+    $newPassword = trim((string)($d['newPassword'] ?? ''));
+    if (strlen($newPassword) < 6) respondError('Password minimal 6 karakter', 422);
+    $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")->execute([password_hash($newPassword, PASSWORD_DEFAULT), $id]);
+    respondSuccess(null, 'Password berhasil diubah');
+}
+
 switch ($method) {
     case 'GET':
         $rows = $pdo->query("
-            SELECT u.*, r.name as role_name, b.name as branch_name
-            FROM users u
-            LEFT JOIN roles r ON u.role_id = r.id
-            LEFT JOIN branches b ON u.branch_id = b.id
-            ORDER BY u.username
+            SELECT u.*, r.name role_name, b.name branch_name
+            FROM users u LEFT JOIN roles r ON u.role_id=r.id LEFT JOIN branches b ON u.branch_id=b.id
+            ORDER BY u.is_owner DESC, u.name
         ")->fetchAll();
-        foreach ($rows as &$r) {
-            unset($r['password']);
-            $r['roleName'] = $r['role_name'];
-            $r['roleId'] = $r['role_id'];
-            $r['branchName'] = $r['branch_name'];
-            $r['branchId'] = $r['branch_id'];
-            $r['isActive'] = (bool)$r['is_active'];
-            $r['isOwner'] = (bool)($r['is_owner'] ?? false);
-            $r['isProtected'] = (bool)($r['is_protected'] ?? false);
-            $r['lastLogin'] = $r['last_login'];
-            $r['createdAt'] = $r['created_at'];
-        }
-        respondSuccess($rows);
+        respondSuccess(array_map(fn($r) => mapUserRow($pdo, $r), $rows));
         break;
 
     case 'POST':
+        if (!(bool)($actor['is_owner'] ?? false)) respondError('Hanya Owner dapat menambah pengguna', 403);
         $d = getInput();
-        $stmt = $pdo->prepare("INSERT INTO users (id, username, name, email, password, role_id, branch_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([
-            $d['id'] ?? generateId(),
-            $d['username'], $d['name'], $d['email'] ?? '',
-            $d['password'], $d['roleId'], $d['branchId'],
-            $d['isActive'] ?? 1
-        ]);
+        $userId = $d['id'] ?? generateId();
+        $branchIds = $d['branchIds'] ?? [$d['branchId']];
+        if (!$branchIds) respondError('Pilih minimal satu cabang', 422);
+        $stmt = $pdo->prepare("INSERT INTO users (id,username,name,email,password,role_id,branch_id,is_active) VALUES (?,?,?,?,?,?,?,?)");
+        $stmt->execute([$userId,$d['username'],$d['name'],$d['email']??'',password_hash($d['password'], PASSWORD_DEFAULT),$d['roleId'],$d['branchId']??$branchIds[0],$d['isActive']??1]);
+        saveUserBranches($pdo, $userId, $branchIds);
         respondSuccess(null, 'User ditambahkan');
         break;
 
     case 'PUT':
         if (!$id) respondError('ID required');
+        if (!(bool)($actor['is_owner'] ?? false)) respondError('Hanya Owner dapat mengubah pengguna', 403);
         $d = getInput();
-        $protected = $pdo->prepare("SELECT is_protected FROM users WHERE id = ?");
-        $protected->execute([$id]);
-        $existing = $protected->fetch();
-        if ($existing && !empty($existing['is_protected']) && (($d['isActive'] ?? true) == false || ($d['roleId'] ?? '1') !== '1')) {
-            respondError('Akun Owner tidak dapat dinonaktifkan atau diganti rolenya', 403);
+        $stmt = $pdo->prepare("SELECT is_owner,is_protected FROM users WHERE id=?");
+        $stmt->execute([$id]);
+        $existing = $stmt->fetch();
+        if (!$existing) respondError('User tidak ditemukan', 404);
+        $branchIds = $d['branchIds'] ?? [$d['branchId']];
+        if (!empty($existing['is_owner'])) {
+            $branchIds = array_column($pdo->query("SELECT id FROM branches WHERE is_active=1")->fetchAll(), 'id');
+            $d['isActive'] = true;
         }
-        if (!empty($d['password'])) {
-            $stmt = $pdo->prepare("UPDATE users SET username=?, name=?, email=?, password=?, role_id=?, branch_id=?, is_active=? WHERE id=?");
-            $stmt->execute([$d['username'], $d['name'], $d['email'] ?? '', $d['password'], $d['roleId'], $d['branchId'], $d['isActive'] ?? 1, $id]);
-        } else {
-            $stmt = $pdo->prepare("UPDATE users SET username=?, name=?, email=?, role_id=?, branch_id=?, is_active=? WHERE id=?");
-            $stmt->execute([$d['username'], $d['name'], $d['email'] ?? '', $d['roleId'], $d['branchId'], $d['isActive'] ?? 1, $id]);
-        }
+        if (!$branchIds) respondError('Pilih minimal satu cabang', 422);
+        $pdo->prepare("UPDATE users SET username=?,name=?,email=?,role_id=?,branch_id=?,is_active=? WHERE id=?")
+            ->execute([$d['username'],$d['name'],$d['email']??'',$d['roleId'],$d['branchId']??$branchIds[0],$d['isActive']??1,$id]);
+        saveUserBranches($pdo, $id, $branchIds);
         respondSuccess(null, 'User diupdate');
         break;
 
     case 'DELETE':
         if (!$id) respondError('ID required');
-        $protected = $pdo->prepare("SELECT is_protected FROM users WHERE id = ?");
-        $protected->execute([$id]);
-        $existing = $protected->fetch();
-        if ($existing && !empty($existing['is_protected'])) respondError('Akun Owner tidak dapat dihapus', 403);
+        if (!(bool)($actor['is_owner'] ?? false)) respondError('Hanya Owner dapat menghapus pengguna', 403);
+        $stmt=$pdo->prepare("SELECT is_protected FROM users WHERE id=?"); $stmt->execute([$id]);
+        if ($stmt->fetchColumn()) respondError('Akun Owner tidak dapat dihapus',403);
+        $pdo->prepare("DELETE FROM user_branch_access WHERE user_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
-        respondSuccess(null, 'User dihapus');
+        respondSuccess(null,'User dihapus');
         break;
-
-    default: respondError('Method not allowed', 405);
+    default: respondError('Method not allowed',405);
 }

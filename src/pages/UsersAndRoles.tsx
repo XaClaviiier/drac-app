@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Building2, Edit, Eye, Plus, Save, Search, Shield, Trash2, Users, X } from 'lucide-react';
+import { Building2, Edit, Eye, KeyRound, Plus, Save, Search, Shield, Trash2, Users, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { api } from '../lib/apiClient';
 import type { User, Role, Permission, Branch } from '../types';
 
 const allPermissions: Permission[] = [
@@ -40,8 +41,10 @@ export default function UsersAndRoles() {
   // User modal
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userForm, setUserForm] = useState({ username: '', name: '', email: '', password: '', roleId: '', branchId: '', isActive: true });
+  const [userForm, setUserForm] = useState({ username: '', name: '', email: '', password: '', roleId: '', branchId: '', branchIds: [] as string[], isActive: true });
   const [showPw, setShowPw] = useState(false);
+  const [passwordUser, setPasswordUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
 
   // Role modal
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -61,10 +64,10 @@ export default function UsersAndRoles() {
   const openUserModal = (user?: User) => {
     if (user) {
       setEditingUser(user);
-      setUserForm({ username: user.username, name: user.name, email: user.email, password: '', roleId: user.roleId, branchId: user.branchId, isActive: user.isActive });
+      setUserForm({ username: user.username, name: user.name, email: user.email, password: '', roleId: user.roleId, branchId: user.branchId, branchIds: user.branchIds?.length ? user.branchIds : [user.branchId], isActive: user.isActive });
     } else {
       setEditingUser(null);
-      setUserForm({ username: '', name: '', email: '', password: '', roleId: data.roles[0]?.id || '', branchId: data.branches[0]?.id || '', isActive: true });
+      setUserForm({ username: '', name: '', email: '', password: '', roleId: data.roles[0]?.id || '', branchId: data.branches[0]?.id || '', branchIds: data.branches[0] ? [data.branches[0].id] : [], isActive: true });
     }
     setShowUserModal(true);
   };
@@ -105,6 +108,7 @@ export default function UsersAndRoles() {
       roleName: role?.name || '-',
       branchId: userForm.branchId,
       branchName: branch?.name || '-',
+      branchIds: editingUser?.isOwner ? data.branches.filter(b=>b.isActive).map(b=>b.id) : userForm.branchIds,
       isActive: userForm.isActive,
       createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
       lastLogin: editingUser?.lastLogin,
@@ -186,39 +190,28 @@ export default function UsersAndRoles() {
             )}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="hidden grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 bg-slate-100 px-4 py-3 text-xs font-semibold uppercase text-slate-600 md:grid"><span>Pengguna</span><span>Role</span><span>Akses Cabang</span><span>Status</span><span>Aksi</span></div>
             {filteredUsers.map((user) => (
-              <div key={user.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between">
+              <div key={user.id} className="grid gap-3 border-t border-gray-100 p-4 first:border-0 md:grid-cols-[2fr_1fr_2fr_1fr_auto] md:items-center">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 font-bold text-white">{user.name.charAt(0)}</div>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-lg font-bold text-white">
-                      {user.name.charAt(0)}
-                    </div>
                     <div>
-                      <p className="font-semibold text-gray-900">{user.name}</p>
-                      <p className="text-xs text-gray-500">@{user.username}</p>
+                      <p className="font-semibold text-gray-900">{user.name} {user.isOwner && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">OWNER UTAMA</span>}</p>
+                      <p className="text-xs text-gray-500">@{user.username} · {user.email}</p>
                     </div>
                   </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {user.isActive ? 'Aktif' : 'Nonaktif'}
-                  </span>
                 </div>
-                <div className="mt-3 space-y-1 text-sm text-gray-600">
-                  <p><span className="text-gray-400">Role:</span> <span className="font-medium text-gray-800">{user.roleName}</span></p>
-                  <p><span className="text-gray-400">Cabang:</span> <span className="font-medium text-gray-800">{user.branchName}</span></p>
-                  <p><span className="text-gray-400">Email:</span> {user.email}</p>
-                  {user.lastLogin && <p className="text-xs text-gray-400">Login terakhir: {user.lastLogin}</p>}
-                </div>
-                <div className="mt-4 flex gap-2">
+                <span className="text-sm">{user.roleName}</span>
+                <div className="flex flex-wrap gap-1">{(user.branchIds||[user.branchId]).map(id=><span key={id} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{data.branches.find(b=>b.id===id)?.name||id}</span>)}</div>
+                <span className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{user.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                <div className="flex gap-2">
                   {canEdit && (
-                    <button onClick={() => openUserModal(user)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                      <Edit className="h-3.5 w-3.5" /> Edit
-                    </button>
+                    <><button title="Edit" onClick={() => openUserModal(user)} className="rounded-lg border p-2 text-gray-700"><Edit className="h-4 w-4" /></button><button title="Ubah password" onClick={()=>{setPasswordUser(user);setNewPassword('')}} className="rounded-lg border p-2 text-blue-600"><KeyRound className="h-4 w-4"/></button></>
                   )}
-                  {canDelete && user.id !== currentUser?.id && (
-                    <button onClick={() => { if (window.confirm(`Hapus user ${user.name}?`)) deleteUser(user.id); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
-                      <Trash2 className="h-3.5 w-3.5" /> Hapus
-                    </button>
+                  {canDelete && !user.isProtected && user.id !== currentUser?.id && (
+                    <button title="Hapus" onClick={() => { if (window.confirm(`Hapus user ${user.name}?`)) deleteUser(user.id); }} className="rounded-lg border border-red-200 p-2 text-red-600"><Trash2 className="h-4 w-4" /></button>
                   )}
                 </div>
               </div>
@@ -347,12 +340,13 @@ export default function UsersAndRoles() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Cabang *</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Cabang Utama *</label>
                   <select required value={userForm.branchId} onChange={(e) => setUserForm({ ...userForm, branchId: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
                     {data.branches.filter((b) => b.isActive).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
               </div>
+              <div><label className="mb-2 block text-sm font-medium text-gray-700">Hak Akses Cabang *</label><div className="grid gap-2 sm:grid-cols-2">{data.branches.filter(b=>b.isActive).map(b=><label key={b.id} className="flex items-center gap-2 rounded-lg border p-3 text-sm"><input type="checkbox" disabled={!!editingUser?.isOwner} checked={!!editingUser?.isOwner||userForm.branchIds.includes(b.id)} onChange={e=>setUserForm({...userForm,branchIds:e.target.checked?[...userForm.branchIds,b.id]:userForm.branchIds.filter(id=>id!==b.id)})}/>{b.name}</label>)}</div></div>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={userForm.isActive} onChange={(e) => setUserForm({ ...userForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
                 Aktif
@@ -365,6 +359,8 @@ export default function UsersAndRoles() {
           </div>
         </div>
       )}
+
+      {passwordUser && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><form onSubmit={async e=>{e.preventDefault();const r=await api.update('users',passwordUser.id+'/password',{newPassword});if(r.success){setPasswordUser(null);alert('Password berhasil diubah')}else alert(r.message)}} className="w-full max-w-sm space-y-4 rounded-xl bg-white p-6"><h3 className="font-semibold">Ubah Password — {passwordUser.name}</h3><input required minLength={6} type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Password baru, minimal 6 karakter" className="w-full rounded-lg border px-3 py-2"/><div className="flex justify-end gap-2"><button type="button" onClick={()=>setPasswordUser(null)} className="rounded-lg border px-4 py-2">Batal</button><button className="rounded-lg bg-blue-600 px-4 py-2 text-white">Simpan</button></div></form></div>}
 
       {/* ========== ROLE MODAL ========== */}
       {showRoleModal && (

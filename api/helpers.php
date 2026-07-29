@@ -43,6 +43,82 @@ function ensureApiSupportTables(PDO $pdo): void {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS user_branch_access (
+            user_id VARCHAR(20) NOT NULL,
+            branch_id VARCHAR(20) NOT NULL,
+            PRIMARY KEY (user_id, branch_id),
+            INDEX idx_user_branch (branch_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS warehouses (
+            id VARCHAR(20) NOT NULL PRIMARY KEY,
+            code VARCHAR(30) NOT NULL UNIQUE,
+            name VARCHAR(100) NOT NULL,
+            branch_id VARCHAR(20) NOT NULL,
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            is_sellable TINYINT(1) NOT NULL DEFAULT 1,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_warehouse_branch (branch_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS warehouse_stocks (
+            warehouse_id VARCHAR(20) NOT NULL,
+            item_id VARCHAR(20) NOT NULL,
+            quantity INT NOT NULL DEFAULT 0,
+            reserved_quantity INT NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (warehouse_id, item_id),
+            INDEX idx_stock_item (item_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS stock_movements (
+            id VARCHAR(30) NOT NULL PRIMARY KEY,
+            item_id VARCHAR(20) NOT NULL,
+            source_warehouse_id VARCHAR(20) NULL,
+            destination_warehouse_id VARCHAR(20) NULL,
+            quantity INT NOT NULL,
+            movement_type ENUM('transfer','adjustment','receipt','sale') NOT NULL DEFAULT 'transfer',
+            notes VARCHAR(255) NOT NULL DEFAULT '',
+            created_by VARCHAR(20) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_movement_item (item_id),
+            INDEX idx_movement_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // Setiap cabang memiliki satu gudang utama. ID mengikuti cabang agar deterministik.
+    $branches = $pdo->query("SELECT id, code, name FROM branches")->fetchAll();
+    $warehouseInsert = $pdo->prepare("
+        INSERT IGNORE INTO warehouses (id, code, name, branch_id, is_default, is_sellable, is_active)
+        VALUES (?, ?, ?, ?, 1, 1, 1)
+    ");
+    foreach ($branches as $branch) {
+        $warehouseInsert->execute([
+            'WH-' . substr(preg_replace('/[^A-Za-z0-9]/', '', $branch['id']), -12),
+            'GD-' . $branch['code'],
+            'GUDANG UTAMA ' . $branch['name'],
+            $branch['id'],
+        ]);
+    }
+    $pdo->exec("
+        INSERT IGNORE INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
+        SELECT w.id, s.item_id, s.stock, GREATEST(0, s.stock - s.sellable_stock)
+        FROM branch_item_stocks s
+        JOIN warehouses w ON w.branch_id = s.branch_id AND w.is_default = 1
+    ");
+    $pdo->exec("
+        INSERT IGNORE INTO user_branch_access (user_id, branch_id)
+        SELECT u.id, b.id FROM users u JOIN branches b WHERE u.is_owner = 1
+    ");
+    $pdo->exec("
+        INSERT IGNORE INTO user_branch_access (user_id, branch_id)
+        SELECT id, branch_id FROM users WHERE branch_id IS NOT NULL AND branch_id <> ''
+    ");
 }
 
 function getBearerToken(): string {
@@ -68,6 +144,20 @@ function requireOwner(PDO $pdo): array {
     $user = requireAuthenticatedUser($pdo);
     if (!(bool)($user['is_owner'] ?? false)) respondError('Hanya Owner yang dapat mengatur Integrasi AI', 403);
     return $user;
+}
+
+function getUserBranchIds(PDO $pdo, string $userId): array {
+    $stmt = $pdo->prepare("SELECT branch_id FROM user_branch_access WHERE user_id = ? ORDER BY branch_id");
+    $stmt->execute([$userId]);
+    return array_column($stmt->fetchAll(), 'branch_id');
+}
+
+function defaultWarehouseId(PDO $pdo, string $branchId): string {
+    $stmt = $pdo->prepare("SELECT id FROM warehouses WHERE branch_id = ? AND is_default = 1 AND is_active = 1 LIMIT 1");
+    $stmt->execute([$branchId]);
+    $id = $stmt->fetchColumn();
+    if (!$id) throw new Exception("Gudang utama cabang {$branchId} tidak ditemukan");
+    return (string)$id;
 }
 
 function aiEncryptionKey(): string {
@@ -136,6 +226,23 @@ if (!function_exists('adjustBranchStock')) {
         $itemStmt->execute([$itemId]);
         $item = $itemStmt->fetch();
         if (!$item || $item['type'] !== 'Persediaan') return;
+        $warehouseId = defaultWarehouseId($pdo, $branchId);
+
+        $warehouseCurrent = $pdo->prepare("
+            SELECT quantity FROM warehouse_stocks
+            WHERE warehouse_id = ? AND item_id = ? FOR UPDATE
+        ");
+        $warehouseCurrent->execute([$warehouseId, $itemId]);
+        $warehouseQty = $warehouseCurrent->fetchColumn();
+        if ($delta < 0 && (($warehouseQty === false ? 0 : (int)$warehouseQty) + $delta < 0)) {
+            throw new Exception("Stok item {$itemId} di gudang utama cabang {$branchId} tidak mencukupi");
+        }
+        $warehouseUpsert = $pdo->prepare("
+            INSERT INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
+            VALUES (?, ?, ?, 0)
+            ON DUPLICATE KEY UPDATE quantity = GREATEST(0, quantity + VALUES(quantity))
+        ");
+        $warehouseUpsert->execute([$warehouseId, $itemId, $delta]);
 
         $currentStmt = $pdo->prepare("
             SELECT stock, sellable_stock FROM branch_item_stocks
