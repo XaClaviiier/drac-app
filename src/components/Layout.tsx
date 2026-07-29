@@ -139,8 +139,8 @@ export default function Layout() {
                   <span className={`hidden sm:inline ${isAll ? 'font-semibold text-blue-700' : ''}`}>
                     {isAll ? 'Semua Cabang' : currentBranch?.name}
                   </span>
-                  <span className={`sm:hidden ${isAll ? 'font-semibold text-blue-700' : ''}`}>
-                    {isAll ? 'Semua' : currentBranch?.name.replace('CABANG ', '').slice(0, 4)}
+                  <span className={`max-w-24 truncate sm:hidden ${isAll ? 'font-semibold text-blue-700' : ''}`}>
+                    {isAll ? 'Semua Cabang' : currentBranch?.name.replace('CABANG ', '')}
                   </span>
                   <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
                 </button>
@@ -237,13 +237,30 @@ export default function Layout() {
                 </div>
                 <div>
                   <h1 className="font-display text-base font-bold text-white">DOKTER AC MOBIL</h1>
-                  <p className="text-xs text-blue-300">{isAll ? 'Semua Cabang' : currentBranch?.name}</p>
+                  <p className="text-xs text-blue-300">Management System</p>
                 </div>
               </div>
               <button onClick={() => setMobileMenuOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white backdrop-blur active:scale-95">
                 <X className="h-6 w-6" />
               </button>
             </div>
+
+            {/* Cabang aktif selalu terlihat di bagian atas menu HP */}
+            {hasPermission('all_branches') && (
+              <div className="mx-5 mb-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-blue-300">Cabang aktif</p>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  <button onClick={() => handleBranchChange('ALL')} className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${isAll ? 'bg-cyan-400 text-slate-950' : 'bg-white/10 text-slate-200'}`}>
+                    <Building2 className="h-4 w-4" /> Semua Cabang
+                  </button>
+                  {data.branches.filter(b => b.isActive).map(b => (
+                    <button key={b.id} onClick={() => handleBranchChange(b.id)} className={`flex-shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${currentBranchId === b.id ? 'bg-cyan-400 text-slate-950' : 'bg-white/10 text-slate-200'}`}>
+                      {b.name.replace('CABANG ', '')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* User card */}
             <div className="mx-5 mb-4 flex items-center gap-3 rounded-2xl bg-white/10 p-3 backdrop-blur">
@@ -293,18 +310,6 @@ export default function Layout() {
 
             {/* Bottom actions */}
             <div className="border-t border-white/10 p-4">
-              {hasPermission('all_branches') && (
-                <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-                  <button onClick={() => handleBranchChange('ALL')} className={`flex-shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold transition-all ${isAll ? 'bg-cyan-400 text-slate-900' : 'bg-white/10 text-slate-300'}`}>
-                    Semua Cabang
-                  </button>
-                  {data.branches.filter(b => b.isActive).map(b => (
-                    <button key={b.id} onClick={() => handleBranchChange(b.id)} className={`flex-shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold transition-all ${currentBranchId === b.id ? 'bg-cyan-400 text-slate-900' : 'bg-white/10 text-slate-300'}`}>
-                      {b.name.replace('CABANG ', '')}
-                    </button>
-                  ))}
-                </div>
-              )}
               <button onClick={handleLogout} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/20 py-3 text-sm font-semibold text-red-200 active:scale-[.98]">
                 <LogOut className="h-4 w-4" /> Keluar
               </button>

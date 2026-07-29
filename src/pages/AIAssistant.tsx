@@ -46,6 +46,7 @@ export default function AIAssistant() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<any>(null);
+  const [pendingBranchId, setPendingBranchId] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -220,8 +221,8 @@ ${buildSmartContext(userMsgText)}`;
     } catch { return null; }
   };
 
-  const executeCreateWO = async (a: any) => {
-    const branchId = resolveBranchId();
+  const executeCreateWO = async (a: any, selectedBranchId: string) => {
+    const branchId = selectedBranchId;
     const branchName = data.branches.find(b => b.id === branchId)?.name || branchId;
 
     // 1. Pelanggan
@@ -384,7 +385,10 @@ ${buildSmartContext(userMsgText)}`;
       const action = extractAction(reply);
 
       setMessages(h => [...h, { role: 'assistant', content: reply, time: now(), action }]);
-      if (action?.action === 'create_wo') setPendingAction(action);
+      if (action?.action === 'create_wo') {
+        setPendingAction(action);
+        setPendingBranchId(currentBranchId === 'ALL' ? '' : currentBranchId);
+      }
     } catch (e: any) {
       setMessages(h => [...h, { role: 'assistant', content: `⚠️ Gagal: ${e.message}`, error: true, time: now() }]);
     } finally {
@@ -393,10 +397,10 @@ ${buildSmartContext(userMsgText)}`;
   };
 
   const confirmAction = async () => {
-    if (!pendingAction) return;
+    if (!pendingAction || !pendingBranchId) return;
     setBusy(true);
     try {
-      const r = await executeCreateWO(pendingAction);
+      const r = await executeCreateWO(pendingAction, pendingBranchId);
       setMessages(h => [...h, {
         role: 'assistant',
         time: now(),
@@ -406,6 +410,7 @@ ${buildSmartContext(userMsgText)}`;
       setMessages(h => [...h, { role: 'assistant', content: `⚠️ Gagal membuat WO: ${e.message}`, error: true, time: now() }]);
     } finally {
       setPendingAction(null);
+      setPendingBranchId('');
       setBusy(false);
     }
   };
@@ -476,17 +481,8 @@ ${buildSmartContext(userMsgText)}`;
         <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-blue-200/50 blur-3xl" />
       </div>
 
-      {/* Header */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/30 animate-glow">
-            <Bot className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-slate-900">Asisten AI Bengkel</h2>
-            <p className="text-xs text-slate-500">Groq · akses penuh data · bisa buat Order Kerja</p>
-          </div>
-        </div>
+      {/* Status dan pengaturan; judul halaman sudah tampil di header utama */}
+      <div className="mb-3 flex items-center justify-end gap-2">
         <div className="flex items-center gap-2">
           <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${hasKey ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
             <span className={`h-2 w-2 rounded-full ${hasKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
@@ -605,6 +601,26 @@ ${buildSmartContext(userMsgText)}`;
                   <p>Pelanggan: <b className="text-white">{pendingAction.customerName}</b> {pendingAction.phone && `(${pendingAction.phone})`}</p>
                   <p>Kendaraan: <b className="text-white">{pendingAction.plateNumber}</b> — {pendingAction.vehicleInfo}</p>
                   <p>Keluhan: {pendingAction.description || '-'}</p>
+                  <div className="mt-3">
+                    <p className="mb-2 font-semibold text-white">Cabang tempat WO dibuat:</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {data.branches.filter(branch => branch.isActive).map(branch => (
+                        <button
+                          key={branch.id}
+                          type="button"
+                          onClick={() => setPendingBranchId(branch.id)}
+                          className={`rounded-lg border px-3 py-2 text-left font-semibold transition-colors ${
+                            pendingBranchId === branch.id
+                              ? 'border-cyan-400 bg-cyan-500 text-slate-950'
+                              : 'border-slate-600 bg-slate-800 text-slate-200 hover:border-cyan-500'
+                          }`}
+                        >
+                          {branch.name.replace('CABANG ', '')}
+                        </button>
+                      ))}
+                    </div>
+                    {!pendingBranchId && <p className="mt-2 text-amber-300">Pilih cabang sebelum membuat WO.</p>}
+                  </div>
                   <div className="mt-2 rounded bg-slate-800 p-2">
                     {(pendingAction.services || []).map((s: any, i: number) => (
                       <div key={i} className="flex justify-between"><span>{s.name} ×{s.qty}</span><span className="font-medium text-white">{fmt((s.price || 0) * (s.qty || 1))}</span></div>
@@ -616,9 +632,9 @@ ${buildSmartContext(userMsgText)}`;
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setPendingAction(null)} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
-                  <button onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400">
-                    <CheckCircle2 className="h-4 w-4" /> Buat Sekarang
+                  <button onClick={() => { setPendingAction(null); setPendingBranchId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
+                  <button disabled={!pendingBranchId} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
+                    <CheckCircle2 className="h-4 w-4" /> {pendingBranchId ? `Buat di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang'}
                   </button>
                 </div>
               </div>
