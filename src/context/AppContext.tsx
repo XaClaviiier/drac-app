@@ -191,6 +191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('apiToken');
     setCurrentBranchId('ALL');
   };
 

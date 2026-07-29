@@ -4,9 +4,10 @@ import {
   AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { api } from '../lib/apiClient';
 import type { WorkOrder, WorkOrderService } from '../types';
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_URL = `${window.location.origin}/api/ai-chat`;
 const GROQ_MODELS = [
   { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (cerdas)' },
   { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (super cepat)' },
@@ -39,8 +40,9 @@ export default function AIAssistant() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('groq_api_key') || '');
-  const [model, setModel] = useState(() => localStorage.getItem('groq_model') || GROQ_MODELS[0].id);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('apiToken') || '');
+  const [model, setModel] = useState(GROQ_MODELS[0].id);
+  const [aiConfigured, setAiConfigured] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [testing, setTesting] = useState(false);
@@ -53,7 +55,19 @@ export default function AIAssistant() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, busy]);
 
-  const hasKey = apiKey.trim().length > 10;
+  useEffect(() => {
+    // Hapus key lama yang pernah disimpan di browser; key perusahaan kini hanya di server.
+    localStorage.removeItem('groq_api_key');
+    localStorage.removeItem('groq_model');
+    api.getAISettings().then(result => {
+      if (result.success && result.data) {
+        setAiConfigured(Boolean(result.data.configured && result.data.isActive));
+        if (result.data.model) setModel(result.data.model);
+      }
+    });
+  }, []);
+
+  const hasKey = aiConfigured;
   const fmt = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
 
   // ============ SMART CONTEXT (hemat token, hindari limit Groq) ============
@@ -337,7 +351,10 @@ ${buildSmartContext(userMsgText)}`;
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || busy) return;
-    if (!hasKey) { setShowSettings(true); return; }
+    if (!hasKey) {
+      setMessages(history => [...history, { role: 'assistant', content: 'Integrasi AI belum diatur oleh Owner.', error: true, time: now() }]);
+      return;
+    }
 
     setInput('');
     const userMsg: ChatMsg = { role: 'user', content, time: now() };
@@ -488,7 +505,7 @@ ${buildSmartContext(userMsgText)}`;
             <span className={`h-2 w-2 rounded-full ${hasKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
             {hasKey ? 'Terhubung' : 'Belum Diatur'}
           </span>
-          <button onClick={() => { setKeyDraft(apiKey); setShowSettings(true); }} className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+          <button onClick={() => { window.location.href = '/settings'; }} className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             <KeyRound className="h-3.5 w-3.5" /> Pengaturan
           </button>
         </div>
@@ -563,7 +580,7 @@ ${buildSmartContext(userMsgText)}`;
                   {hasKey ? 'Saya bisa cek data, jawab pertanyaan, dan membuatkan Order Kerja.' : 'Atur API Key Groq gratis dulu.'}
                 </p>
                 {!hasKey && (
-                  <button onClick={() => setShowSettings(true)} className="mt-4 flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-cyan-400">
+                  <button onClick={() => { window.location.href = '/settings'; }} className="mt-4 flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-cyan-400">
                     <KeyRound className="h-4 w-4" /> Dapatkan Key Gratis
                   </button>
                 )}

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
+import { api } from '../lib/apiClient';
 
 type Tab = 'company' | 'branches' | 'documents' | 'security' | 'ai';
 
@@ -25,11 +26,22 @@ export default function SettingsPage() {
   const [draft, setDraft] = useState<AppSettings>(() => structuredClone(data.settings));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [aiKey, setAiKey] = useState('');
+  const [aiConfigured, setAiConfigured] = useState(false);
   const canEdit = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator');
 
   useEffect(() => {
     setDraft(structuredClone(data.settings));
   }, [data.settings]);
+
+  useEffect(() => {
+    api.getAISettings().then(result => {
+      if (result.success && result.data) {
+        setAiConfigured(Boolean(result.data.configured));
+        if (result.data.model) setDraft(prev => ({ ...prev, ai: { ...prev.ai, model: result.data.model } }));
+      }
+    });
+  }, []);
 
   const previews = useMemo(() => {
     const firstBranch = data.branches[0]?.id || 'BR-001';
@@ -48,6 +60,12 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await updateSettings(draft);
+      if (tab === 'ai' && currentUser?.isOwner && aiKey.trim()) {
+        const result = await api.updateAISettings(aiKey.trim(), draft.ai.model);
+        if (!result.success) throw new Error(result.message || 'Gagal menyimpan API Key Groq');
+        setAiConfigured(true);
+        setAiKey('');
+      }
       setSaved(true);
       window.setTimeout(() => setSaved(false), 3000);
     } catch (error: any) {
@@ -164,6 +182,25 @@ export default function SettingsPage() {
           {tab === 'ai' && (
             <div>
               <TabHeader title="Integrasi AI" description="Atur model dan jenis data yang boleh digunakan Asisten AI." />
+              {currentUser?.isOwner ? (
+                <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <label className={labelClass}>
+                    API Key Groq perusahaan
+                    <input
+                      className={inputClass}
+                      type="password"
+                      value={aiKey}
+                      onChange={event => setAiKey(event.target.value)}
+                      placeholder={aiConfigured ? 'Sudah tersimpan — isi hanya untuk mengganti key' : 'Masukkan key yang diawali gsk_'}
+                    />
+                  </label>
+                  <p className="mt-2 text-xs text-blue-700">
+                    {aiConfigured ? 'Key perusahaan sudah aktif dan tidak ditampilkan kembali.' : 'Belum ada key perusahaan.'}
+                  </p>
+                </div>
+              ) : (
+                <p className="mb-4 rounded-lg bg-gray-100 p-3 text-sm text-gray-600">API Key hanya dapat dikelola oleh Owner.</p>
+              )}
               <label className={labelClass}>Model Groq<select className={inputClass} value={draft.ai.model} onChange={e => setDraft(prev => ({ ...prev, ai: { ...prev.ai, model: e.target.value } }))}><option value="llama-3.3-70b-versatile">Llama 3.3 70B</option><option value="llama-3.1-8b-instant">Llama 3.1 8B</option><option value="openai/gpt-oss-120b">GPT-OSS 120B</option></select></label>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <Toggle label="Data pelanggan & kendaraan" checked={draft.ai.allowCustomerData} onChange={checked => setDraft(prev => ({ ...prev, ai: { ...prev.ai, allowCustomerData: checked } }))} />
@@ -171,7 +208,7 @@ export default function SettingsPage() {
                 <Toggle label="Data keuangan" checked={draft.ai.allowFinancialData} onChange={checked => setDraft(prev => ({ ...prev, ai: { ...prev.ai, allowFinancialData: checked } }))} />
                 <Toggle label="Boleh membuat WO setelah konfirmasi" checked={draft.ai.allowCreateWorkOrder} onChange={checked => setDraft(prev => ({ ...prev, ai: { ...prev.ai, allowCreateWorkOrder: checked } }))} />
               </div>
-              <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-700">API key tetap dikelola melalui dialog Asisten AI. Pada tahap backend berikutnya, key sebaiknya dipindahkan ke penyimpanan server.</p>
+              <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-700">Satu key digunakan seluruh perusahaan melalui server. Pengguna lain tidak dapat melihat API Key.</p>
             </div>
           )}
 

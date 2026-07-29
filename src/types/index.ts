@@ -227,6 +227,7 @@ export interface User {
   username: string;
   name: string;
   email: string;
+  apiToken?: string;
   password: string;
   roleId: string;
   roleName: string;

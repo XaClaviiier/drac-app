@@ -27,6 +27,10 @@ if ($user['password'] !== $password) {
 
 // Update last login
 $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
+$token = bin2hex(random_bytes(32));
+$pdo->prepare("DELETE FROM api_sessions WHERE expires_at <= NOW()")->execute();
+$pdo->prepare("INSERT INTO api_sessions (token_hash, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 8 HOUR))")
+    ->execute([hash('sha256', $token), $user['id']]);
 
 // Remove password from response
 unset($user['password']);
@@ -37,5 +41,6 @@ $user['branchId'] = $user['branch_id'];
 $user['isActive'] = (bool)$user['is_active'];
 $user['isOwner'] = (bool)($user['is_owner'] ?? false);
 $user['isProtected'] = (bool)($user['is_protected'] ?? false);
+$user['apiToken'] = $token;
 
 respondSuccess($user, 'Login berhasil');

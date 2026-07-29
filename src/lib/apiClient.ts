@@ -36,6 +36,7 @@ async function request<T = any>(
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(localStorage.getItem('apiToken') ? { Authorization: `Bearer ${localStorage.getItem('apiToken')}` } : {}),
         ...(options.headers || {}),
       },
     });
@@ -60,13 +61,21 @@ async function request<T = any>(
 
 export const api = {
   // ========== AUTH ==========
-  login: (username: string, password: string) =>
-    request('/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  login: async (username: string, password: string) => {
+    const response = await request('/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+    if (response.success && response.data?.apiToken) localStorage.setItem('apiToken', response.data.apiToken);
+    return response;
+  },
 
   // ========== ALL DATA ==========
   loadAllData: () => request('/all-data', { method: 'GET' }),
   updateSettings: (data: any) =>
     request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  getAISettings: () => request('/ai-settings', { method: 'GET' }),
+  updateAISettings: (apiKey: string, model: string) =>
+    request('/ai-settings', { method: 'PUT', body: JSON.stringify({ apiKey, model }) }),
+  aiChat: (messages: Array<{ role: string; content: string }>) =>
+    request('/ai-chat', { method: 'POST', body: JSON.stringify({ messages }) }),
 
   // ========== GENERIC CRUD ==========
   get: (resource: string) => request(`/${resource}`, { method: 'GET' }),

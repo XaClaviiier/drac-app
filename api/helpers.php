@@ -23,6 +23,70 @@ function ensureApiSupportTables(PDO $pdo): void {
             PRIMARY KEY (branch_id, item_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS api_sessions (
+            token_hash CHAR(64) NOT NULL PRIMARY KEY,
+            user_id VARCHAR(20) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_session_user (user_id),
+            INDEX idx_session_expiry (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ai_config (
+            id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+            encrypted_api_key TEXT NOT NULL,
+            model VARCHAR(100) NOT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            updated_by VARCHAR(20) NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+}
+
+function getBearerToken(): string {
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    return preg_match('/^Bearer\s+(.+)$/i', $header, $match) ? trim($match[1]) : '';
+}
+
+function requireAuthenticatedUser(PDO $pdo): array {
+    $token = getBearerToken();
+    if ($token === '') respondError('Sesi login diperlukan', 401);
+    $stmt = $pdo->prepare("
+        SELECT u.* FROM api_sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = 1
+    ");
+    $stmt->execute([hash('sha256', $token)]);
+    $user = $stmt->fetch();
+    if (!$user) respondError('Sesi login tidak valid atau kedaluwarsa', 401);
+    return $user;
+}
+
+function requireOwner(PDO $pdo): array {
+    $user = requireAuthenticatedUser($pdo);
+    if (!(bool)($user['is_owner'] ?? false)) respondError('Hanya Owner yang dapat mengatur Integrasi AI', 403);
+    return $user;
+}
+
+function aiEncryptionKey(): string {
+    return hash('sha256', DB_PASS . '|dokter-ac-mobil|ai', true);
+}
+
+function encryptSecret(string $value): string {
+    $iv = random_bytes(16);
+    $encrypted = openssl_encrypt($value, 'AES-256-CBC', aiEncryptionKey(), OPENSSL_RAW_DATA, $iv);
+    if ($encrypted === false) throw new Exception('Gagal mengenkripsi API Key');
+    return base64_encode($iv . $encrypted);
+}
+
+function decryptSecret(string $value): string {
+    $raw = base64_decode($value, true);
+    if ($raw === false || strlen($raw) <= 16) throw new Exception('Data API Key tidak valid');
+    $decrypted = openssl_decrypt(substr($raw, 16), 'AES-256-CBC', aiEncryptionKey(), OPENSSL_RAW_DATA, substr($raw, 0, 16));
+    if ($decrypted === false) throw new Exception('Gagal membaca API Key');
+    return $decrypted;
 }
 
 if (!function_exists('nextDocumentNumber')) {

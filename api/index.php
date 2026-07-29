@@ -94,6 +94,14 @@ try {
             require 'endpoints/settings.php';
             break;
 
+        case 'ai-settings':
+            require 'endpoints/ai-settings.php';
+            break;
+
+        case 'ai-chat':
+            require 'endpoints/ai-chat.php';
+            break;
+
         // ----- API INFO -----
         case '':
         case 'info':
