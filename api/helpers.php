@@ -90,6 +90,10 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_movement_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    // Hosting lama memakai utf8mb4_unicode_ci; samakan agar JOIN tidak gagal.
+    foreach (['user_branch_access','warehouses','warehouse_stocks','stock_movements'] as $table) {
+        $pdo->exec("ALTER TABLE {$table} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    }
 
     // Setiap cabang memiliki satu gudang utama. ID mengikuti cabang agar deterministik.
     $branches = $pdo->query("SELECT id, code, name FROM branches")->fetchAll();
