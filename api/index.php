@@ -136,6 +136,6 @@ try {
         default:
             respondError('Endpoint not found: ' . $resource, 404);
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
     respondError('Server error', 500, $e->getMessage());
 }

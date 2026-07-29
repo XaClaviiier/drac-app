@@ -62,7 +62,7 @@ export default function SettingsPage() {
       await updateSettings(draft);
       if (tab === 'ai' && currentUser?.isOwner && aiKey.trim()) {
         const result = await api.updateAISettings(aiKey.trim(), draft.ai.model);
-        if (!result.success) throw new Error(result.message || 'Gagal menyimpan API Key Groq');
+        if (!result.success) throw new Error([result.message, result.error].filter(Boolean).join(': ') || 'Gagal menyimpan API Key Groq');
         setAiConfigured(true);
         setAiKey('');
       }
