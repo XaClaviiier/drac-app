@@ -193,11 +193,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    void api.logout();
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('apiToken');
     setCurrentBranchId('ALL');
   };
+
+  useEffect(() => {
+    if (!currentUser?.sessionExpiresAt) return;
+    const expires = new Date(currentUser.sessionExpiresAt.replace(' ', 'T')).getTime();
+    const delay = expires - Date.now();
+    if (delay <= 0) { logout(); return; }
+    const timer = window.setTimeout(() => logout(), Math.min(delay, 2147483647));
+    return () => window.clearTimeout(timer);
+  }, [currentUser?.sessionExpiresAt]);
 
   const hasPermission = (perm: Permission): boolean => {
     if (!currentUser) return false;

@@ -228,6 +228,7 @@ export interface User {
   name: string;
   email: string;
   apiToken?: string;
+  sessionExpiresAt?: string;
   password: string;
   roleId: string;
   roleName: string;

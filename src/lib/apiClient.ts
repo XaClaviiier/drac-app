@@ -48,6 +48,11 @@ async function request<T = any>(
     }
 
     const data = await response.json();
+    if (response.status === 401 && !path.includes('/login')) {
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('apiToken');
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') window.location.assign('/login');
+    }
     return data;
   } catch (error: any) {
     console.error('API Error:', url, error);
@@ -66,6 +71,7 @@ export const api = {
     if (response.success && response.data?.apiToken) localStorage.setItem('apiToken', response.data.apiToken);
     return response;
   },
+  logout: () => request('/logout', { method: 'POST' }),
 
   // ========== ALL DATA ==========
   loadAllData: () => request('/all-data', { method: 'GET' }),

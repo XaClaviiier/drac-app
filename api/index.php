@@ -24,6 +24,9 @@ try {
         case 'login':
             require 'endpoints/auth.php';
             break;
+        case 'logout':
+            require 'endpoints/logout.php';
+            break;
 
         // ----- BRANCHES -----
         case 'branches':
@@ -38,6 +41,9 @@ try {
         // ----- USERS -----
         case 'users':
             require 'endpoints/users.php';
+            break;
+        case 'user-sessions':
+            require 'endpoints/user-sessions.php';
             break;
         case 'warehouses':
             require 'endpoints/warehouses.php';

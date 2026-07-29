@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Building2, Edit, Eye, KeyRound, Plus, Save, Search, Shield, Trash2, Users, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
+import UserSessionsTab from '../components/UserSessionsTab';
 import type { User, Role, Permission, Branch } from '../types';
 
 const allPermissions: Permission[] = [
@@ -35,7 +36,7 @@ const permLabels: Record<string, string> = {
 export default function UsersAndRoles() {
   const { data, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, addBranch, updateBranch, deleteBranch, currentUser, hasPermission } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'branches'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'branches' | 'sessions'>('users');
   const [search, setSearch] = useState('');
 
   // User modal
@@ -159,6 +160,7 @@ export default function UsersAndRoles() {
           { key: 'users' as const, label: 'Pengguna', icon: Users },
           { key: 'roles' as const, label: 'Grup Akses (Role)', icon: Shield },
           { key: 'branches' as const, label: 'Cabang', icon: Building2 },
+          ...(currentUser?.isOwner ? [{ key: 'sessions' as const, label: 'Sesi Pengguna', icon: KeyRound }] : []),
         ].map((tab) => {
           const Icon = tab.icon;
           return (
@@ -174,6 +176,8 @@ export default function UsersAndRoles() {
           );
         })}
       </div>
+
+      {activeTab === 'sessions' && <UserSessionsTab />}
 
       {/* ========== USERS TAB ========== */}
       {activeTab === 'users' && (

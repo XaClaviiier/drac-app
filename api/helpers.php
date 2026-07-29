@@ -33,6 +33,36 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_session_expiry (expires_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    $sessionColumns = array_column($pdo->query("SHOW COLUMNS FROM api_sessions")->fetchAll(), 'Field');
+    if (!in_array('last_activity', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD last_activity DATETIME NULL AFTER created_at");
+    if (!in_array('ip_address', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD ip_address VARCHAR(45) NOT NULL DEFAULT '' AFTER last_activity");
+    if (!in_array('user_agent', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD user_agent VARCHAR(255) NOT NULL DEFAULT '' AFTER ip_address");
+    if (!in_array('revoked_at', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD revoked_at DATETIME NULL AFTER user_agent");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS user_login_rules (
+            user_id VARCHAR(20) NOT NULL PRIMARY KEY,
+            session_hours TINYINT UNSIGNED NOT NULL DEFAULT 8,
+            schedule_mode ENUM('unrestricted','custom') NOT NULL DEFAULT 'unrestricted',
+            schedule_json TEXT NULL,
+            single_device TINYINT(1) NOT NULL DEFAULT 0,
+            auto_logout TINYINT(1) NOT NULL DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS login_audit_logs (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id VARCHAR(20) NULL,
+            username VARCHAR(100) NOT NULL,
+            event_type ENUM('login_success','login_failed','logout','session_revoked','login_blocked') NOT NULL,
+            ip_address VARCHAR(45) NOT NULL DEFAULT '',
+            user_agent VARCHAR(255) NOT NULL DEFAULT '',
+            notes VARCHAR(255) NOT NULL DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_login_user (user_id),
+            INDEX idx_login_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ai_config (
             id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
@@ -132,12 +162,26 @@ function requireAuthenticatedUser(PDO $pdo): array {
     $stmt = $pdo->prepare("
         SELECT u.* FROM api_sessions s
         JOIN users u ON u.id = s.user_id COLLATE utf8mb4_unicode_ci
-        WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = 1
+        WHERE s.token_hash = ? AND s.expires_at > NOW() AND s.revoked_at IS NULL AND u.is_active = 1
     ");
     $stmt->execute([hash('sha256', $token)]);
     $user = $stmt->fetch();
     if (!$user) respondError('Sesi login tidak valid atau kedaluwarsa', 401);
+    $pdo->prepare("UPDATE api_sessions SET last_activity=NOW() WHERE token_hash=?")->execute([hash('sha256', $token)]);
     return $user;
+}
+
+function requestIp(): string {
+    return substr((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+}
+
+function requestUserAgent(): string {
+    return substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
+}
+
+function writeLoginAudit(PDO $pdo, ?string $userId, string $username, string $event, string $notes = ''): void {
+    $pdo->prepare("INSERT INTO login_audit_logs(user_id,username,event_type,ip_address,user_agent,notes) VALUES(?,?,?,?,?,?)")
+        ->execute([$userId,$username,$event,requestIp(),requestUserAgent(),substr($notes,0,255)]);
 }
 
 function requireOwner(PDO $pdo): array {
