@@ -11,7 +11,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             last_sequence INT UNSIGNED NOT NULL DEFAULT 0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (document_type, branch_id, sequence_date)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS branch_item_stocks (
@@ -21,7 +21,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             sellable_stock INT NOT NULL DEFAULT 0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (branch_id, item_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS api_sessions (
@@ -31,7 +31,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_session_user (user_id),
             INDEX idx_session_expiry (expires_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ai_config (
@@ -41,7 +41,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             updated_by VARCHAR(20) NULL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS user_branch_access (
@@ -90,10 +90,6 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_movement_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
-    // Hosting lama memakai utf8mb4_unicode_ci; samakan agar JOIN tidak gagal.
-    foreach (['user_branch_access','warehouses','warehouse_stocks','stock_movements'] as $table) {
-        $pdo->exec("ALTER TABLE {$table} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-    }
 
     // Setiap cabang memiliki satu gudang utama. ID mengikuti cabang agar deterministik.
     $branches = $pdo->query("SELECT id, code, name FROM branches")->fetchAll();
@@ -113,7 +109,7 @@ function ensureApiSupportTables(PDO $pdo): void {
         INSERT IGNORE INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
         SELECT w.id, s.item_id, s.stock, GREATEST(0, s.stock - s.sellable_stock)
         FROM branch_item_stocks s
-        JOIN warehouses w ON w.branch_id = s.branch_id AND w.is_default = 1
+        JOIN warehouses w ON w.branch_id COLLATE utf8mb4_unicode_ci = s.branch_id AND w.is_default = 1
     ");
     $pdo->exec("
         INSERT IGNORE INTO user_branch_access (user_id, branch_id)

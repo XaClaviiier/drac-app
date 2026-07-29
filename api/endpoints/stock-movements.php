@@ -1,7 +1,7 @@
 <?php
 $actor=requireAuthenticatedUser($pdo);
 if($method==='GET'){
-    $rows=$pdo->query("SELECT m.*,i.name item_name,sw.name source_name,dw.name destination_name FROM stock_movements m JOIN items i ON i.id=m.item_id LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id ORDER BY m.created_at DESC LIMIT 200")->fetchAll();
+    $rows=$pdo->query("SELECT m.*,i.name item_name,sw.name source_name,dw.name destination_name FROM stock_movements m JOIN items i ON i.id=m.item_id COLLATE utf8mb4_unicode_ci LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id ORDER BY m.created_at DESC LIMIT 200")->fetchAll();
     foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['createdAt']=$r['created_at'];}
     respondSuccess($rows);
 }

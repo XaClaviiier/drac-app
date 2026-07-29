@@ -3,7 +3,7 @@ requireAuthenticatedUser($pdo);
 
 switch ($method) {
     case 'GET':
-        $rows=$pdo->query("SELECT w.*,b.name branch_name FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id ORDER BY b.name,w.is_default DESC,w.name")->fetchAll();
+        $rows=$pdo->query("SELECT w.*,b.name branch_name FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id COLLATE utf8mb4_unicode_ci ORDER BY b.name,w.is_default DESC,w.name")->fetchAll();
         foreach($rows as &$r){$r['branchId']=$r['branch_id'];$r['branchName']=$r['branch_name'];$r['isDefault']=(bool)$r['is_default'];$r['isSellable']=(bool)$r['is_sellable'];$r['isActive']=(bool)$r['is_active'];}
         respondSuccess($rows);
         break;

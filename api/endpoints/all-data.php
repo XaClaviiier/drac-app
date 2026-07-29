@@ -118,13 +118,13 @@ try {
     $data['items'] = $rows;
 
     // Gudang, saldo stok per gudang, dan histori mutasi.
-    $warehouses = $pdo->query("SELECT w.*,b.name branch_name FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id ORDER BY b.name,w.is_default DESC,w.name")->fetchAll();
+    $warehouses = $pdo->query("SELECT w.*,b.name branch_name FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id COLLATE utf8mb4_unicode_ci ORDER BY b.name,w.is_default DESC,w.name")->fetchAll();
     foreach($warehouses as &$w){$w['branchId']=$w['branch_id'];$w['branchName']=$w['branch_name'];$w['isDefault']=(bool)$w['is_default'];$w['isSellable']=(bool)$w['is_sellable'];$w['isActive']=(bool)$w['is_active'];}
     $data['warehouses']=$warehouses;
     $warehouseStocks=$pdo->query("SELECT warehouse_id,item_id,quantity,reserved_quantity FROM warehouse_stocks")->fetchAll();
     foreach($warehouseStocks as &$s){$s['warehouseId']=$s['warehouse_id'];$s['itemId']=$s['item_id'];$s['quantity']=(int)$s['quantity'];$s['reservedQuantity']=(int)$s['reserved_quantity'];}
     $data['warehouseStocks']=$warehouseStocks;
-    $movements=$pdo->query("SELECT m.*,i.name item_name,sw.name source_name,dw.name destination_name FROM stock_movements m JOIN items i ON i.id=m.item_id LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id ORDER BY m.created_at DESC LIMIT 200")->fetchAll();
+    $movements=$pdo->query("SELECT m.*,i.name item_name,sw.name source_name,dw.name destination_name FROM stock_movements m JOIN items i ON i.id=m.item_id COLLATE utf8mb4_unicode_ci LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id ORDER BY m.created_at DESC LIMIT 200")->fetchAll();
     foreach($movements as &$m){$m['itemId']=$m['item_id'];$m['itemName']=$m['item_name'];$m['sourceWarehouseId']=$m['source_warehouse_id'];$m['sourceName']=$m['source_name'];$m['destinationWarehouseId']=$m['destination_warehouse_id'];$m['destinationName']=$m['destination_name'];$m['movementType']=$m['movement_type'];$m['quantity']=(int)$m['quantity'];$m['createdAt']=$m['created_at'];}
     $data['stockMovements']=$movements;
 
