@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus } from '../types';
 import { api } from '../lib/apiClient';
 import { demoData } from '../lib/demoData';
@@ -98,11 +98,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Track if using demo mode (backend not available)
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const refreshRequestId = useRef(0);
 
   // Load all data from API (with demo fallback)
   const refreshData = async () => {
+    const requestId = ++refreshRequestId.current;
     setIsLoading(true);
-    const res = await api.loadAllData();
+    let res = await api.loadAllData();
+    // Koneksi pertama setelah login/redirect HTTPS kadang belum siap.
+    // Coba sekali lagi sebelum memutuskan menggunakan data demo.
+    if (!res.success) {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      if (requestId !== refreshRequestId.current) return;
+      res = await api.loadAllData();
+    }
+    // Hanya request terbaru yang boleh mengubah state aplikasi.
+    if (requestId !== refreshRequestId.current) return;
     if (res.success && res.data) {
       setData({
         vehicles: res.data.vehicles || [],
@@ -131,7 +142,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setData({ ...demoData, settings: savedSettings });
       setIsDemoMode(true);
     }
-    setIsLoading(false);
+    if (requestId === refreshRequestId.current) setIsLoading(false);
   };
 
   // Load data on startup
