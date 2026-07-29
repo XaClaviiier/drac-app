@@ -4,6 +4,7 @@ switch ($method) {
         $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
         foreach ($rows as &$r) {
             $r['plateNumber']        = $r['plate_number'];
+            $r['customerRefId']      = $r['customer_id'];
             $r['customerId']         = $r['customer_code'] ?: $r['customer_id'];
             $r['customerName']       = $r['customer_name'];
             $r['registrationDate']   = $r['registration_date'];
@@ -21,9 +22,9 @@ switch ($method) {
         $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $d['id'] ?? generateId(),
-            $d['plateNumber'], $d['brand'] ?? '', $d['model'] ?? '',
+            preg_replace('/[^A-Za-z0-9]/', '', strtoupper($d['plateNumber'])), $d['brand'] ?? '', $d['model'] ?? '',
             $d['year'] ?? 0, $d['color'] ?? '',
-            $d['customerRefId'] ?? '', $d['customerName'] ?? '',
+            $d['customerRefId'] ?? null, $d['customerName'] ?? '',
             $d['customerId'] ?? '', $d['phone'] ?? '', $d['address'] ?? '',
             $d['registrationDate'] ?? nowDate(),
             $d['notes'] ?? '',
@@ -37,9 +38,9 @@ switch ($method) {
         $d = getInput();
         $stmt = $pdo->prepare("UPDATE vehicles SET plate_number=?, brand=?, model=?, year=?, color=?, customer_id=?, customer_name=?, customer_code=?, phone=?, address=?, notes=?, branch_id=? WHERE id=?");
         $stmt->execute([
-            $d['plateNumber'], $d['brand'] ?? '', $d['model'] ?? '',
+            preg_replace('/[^A-Za-z0-9]/', '', strtoupper($d['plateNumber'])), $d['brand'] ?? '', $d['model'] ?? '',
             $d['year'] ?? 0, $d['color'] ?? '',
-            $d['customerRefId'] ?? '', $d['customerName'] ?? '',
+            $d['customerRefId'] ?? null, $d['customerName'] ?? '',
             $d['customerId'] ?? '', $d['phone'] ?? '', $d['address'] ?? '',
             $d['notes'] ?? '', $d['branchId'] ?? 'BR-001', $id
         ]);

@@ -48,6 +48,7 @@ try {
     $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
     foreach ($rows as &$r) {
         $r['plateNumber']       = $r['plate_number'];
+        $r['customerRefId']     = $r['customer_id'];
         $r['customerId']        = $r['customer_code'] ?: $r['customer_id'];
         $r['customerName']      = $r['customer_name'];
         $r['registrationDate']  = $r['registration_date'];

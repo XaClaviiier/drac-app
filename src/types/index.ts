@@ -5,7 +5,10 @@ export interface Vehicle {
   model: string;
   year: number;
   color: string;
+  /** Relasi internal ke customers.id */
+  customerRefId?: string;
   customerName: string;
+  /** Kode pelanggan untuk tampilan, misalnya PLG-001 */
   customerId: string;
   phone: string;
   address: string;

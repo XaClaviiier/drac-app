@@ -2,12 +2,8 @@ import { useState, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, Car, X, Save, Filter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Vehicle } from '../types';
-
-const carBrands = [
-  'Toyota', 'Honda', 'Suzuki', 'Daihatsu', 'Mitsubishi',
-  'Nissan', 'Hyundai', 'Kia', 'BMW', 'Mercedes-Benz',
-  'Wuling', 'DFSK', 'Lexus', 'Isuzu', 'Mazda', 'Lainnya',
-];
+import CustomerPicker from '../components/CustomerPicker';
+import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
 
 export default function VehicleRegister() {
   const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission } = useApp();
@@ -15,6 +11,9 @@ export default function VehicleRegister() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
+  const [filterModel, setFilterModel] = useState('');
+  const [filterColor, setFilterColor] = useState('');
+  const [filterYear, setFilterYear] = useState('');
 
   const [formData, setFormData] = useState({
     plateNumber: '',
@@ -22,6 +21,7 @@ export default function VehicleRegister() {
     model: '',
     year: new Date().getFullYear(),
     color: '',
+    customerRefId: '',
     customerName: '',
     phone: '',
     address: '',
@@ -34,12 +34,17 @@ export default function VehicleRegister() {
       const matchesSearch =
         v.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.customerId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.model.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesBrand = !filterBrand || v.brand === filterBrand;
-      return matchesSearch && matchesBrand;
+      const matchesModel = !filterModel || v.model === filterModel;
+      const matchesColor = !filterColor || v.color === filterColor;
+      const matchesYear = !filterYear || String(v.year) === filterYear;
+      return matchesSearch && matchesBrand && matchesModel && matchesColor && matchesYear;
     });
-  }, [data.vehicles, searchTerm, filterBrand]);
+  }, [data.vehicles, searchTerm, filterBrand, filterModel, filterColor, filterYear]);
 
   const resetForm = () => {
     setFormData({
@@ -48,6 +53,7 @@ export default function VehicleRegister() {
       model: '',
       year: new Date().getFullYear(),
       color: '',
+      customerRefId: '',
       customerName: '',
       phone: '',
       address: '',
@@ -58,6 +64,11 @@ export default function VehicleRegister() {
 
   const handleOpenModal = (vehicle?: Vehicle) => {
     if (vehicle) {
+      const owner = data.customers.find(customer =>
+        customer.id === vehicle.customerRefId ||
+        customer.customerCode === vehicle.customerId ||
+        customer.name === vehicle.customerName
+      );
       setEditingVehicle(vehicle);
       setFormData({
         plateNumber: vehicle.plateNumber,
@@ -65,9 +76,10 @@ export default function VehicleRegister() {
         model: vehicle.model,
         year: vehicle.year,
         color: vehicle.color,
-        customerName: vehicle.customerName,
-        phone: vehicle.phone,
-        address: vehicle.address,
+        customerRefId: owner?.id || '',
+        customerName: owner?.name || vehicle.customerName,
+        phone: owner?.phone || vehicle.phone,
+        address: owner?.address || vehicle.address,
         notes: vehicle.notes,
       });
     } else {
@@ -81,26 +93,59 @@ export default function VehicleRegister() {
     resetForm();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const now = new Date().toISOString().split('T')[0];
-    const customerId = formData.plateNumber.replace(/[^a-zA-Z0-9]/g, '');
+    const normalizedPlate = formData.plateNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const duplicate = data.vehicles.find(vehicle =>
+      vehicle.id !== editingVehicle?.id &&
+      vehicle.plateNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === normalizedPlate
+    );
+    if (duplicate) {
+      window.alert(`Plat ${formData.plateNumber} sudah terdaftar atas nama ${duplicate.customerName}.`);
+      return;
+    }
+    const customer = data.customers.find(item => item.id === formData.customerRefId);
+    if (!customer) {
+      window.alert('Pilih pelanggan dari data pelanggan terlebih dahulu.');
+      return;
+    }
+    const normalizedForm = {
+      ...formData,
+      plateNumber: normalizedPlate,
+      customerRefId: customer.id,
+      customerId: customer.customerCode,
+      customerName: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+    };
 
     if (editingVehicle) {
-      updateVehicle(editingVehicle.id, {
+      await updateVehicle(editingVehicle.id, {
         ...editingVehicle,
-        ...formData,
+        ...normalizedForm,
       });
     } else {
-      addVehicle({
+      await addVehicle({
         id: Date.now().toString(),
-        ...formData,
-        customerId,
+        ...normalizedForm,
         registrationDate: now,
         branchId: resolveBranchId(),
+        firstSeenBranchId: resolveBranchId(),
       });
     }
     handleCloseModal();
+  };
+
+  const handleCustomerSelect = (customerRefId: string) => {
+    const customer = data.customers.find(item => item.id === customerRefId);
+    setFormData(current => ({
+      ...current,
+      customerRefId,
+      customerName: customer?.name || '',
+      phone: customer?.phone || '',
+      address: customer?.address || '',
+    }));
   };
 
   const handleDelete = (id: string) => {
@@ -130,7 +175,7 @@ export default function VehicleRegister() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -142,18 +187,30 @@ export default function VehicleRegister() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-400" />
+            <Filter className="w-5 h-5 text-gray-400 flex-shrink-0" />
             <select
               value={filterBrand}
               onChange={(e) => setFilterBrand(e.target.value)}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
             >
               <option value="">Semua Merek</option>
-              {carBrands.map((brand) => (
+              {[...new Set(data.vehicles.map(vehicle => vehicle.brand))].sort().map((brand) => (
                 <option key={brand} value={brand}>{brand}</option>
               ))}
             </select>
           </div>
+          <select value={filterModel} onChange={e => setFilterModel(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white">
+            <option value="">Semua Tipe</option>
+            {[...new Set(data.vehicles.filter(v => !filterBrand || v.brand === filterBrand).map(v => v.model))].sort().map(model => <option key={model} value={model}>{model}</option>)}
+          </select>
+          <select value={filterColor} onChange={e => setFilterColor(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white">
+            <option value="">Semua Warna</option>
+            {[...new Set(data.vehicles.map(v => v.color))].sort().map(color => <option key={color} value={color}>{color}</option>)}
+          </select>
+          <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white">
+            <option value="">Semua Tahun</option>
+            {[...new Set(data.vehicles.map(v => v.year))].sort((a, b) => b - a).map(year => <option key={year} value={year}>{year}</option>)}
+          </select>
         </div>
       </div>
 
@@ -312,57 +369,68 @@ export default function VehicleRegister() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Merek <span className="text-red-500">*</span>
                     </label>
-                    <select
+                    <input
+                      list="vehicle-brand-options"
                       required
                       value={formData.brand}
-                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                    >
-                      <option value="">Pilih Merek</option>
-                      {carBrands.map((brand) => (
+                      onChange={(e) => setFormData({ ...formData, brand: e.target.value, model: '' })}
+                      placeholder="Pilih atau ketik merek"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                    <datalist id="vehicle-brand-options">
+                      {vehicleBrands.map((brand) => (
                         <option key={brand} value={brand}>{brand}</option>
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Model <span className="text-red-500">*</span>
                     </label>
                     <input
-                      type="text"
+                      list="vehicle-model-options"
                       required
                       value={formData.model}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      placeholder="Contoh: Avanza, CR-V, APV"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder={formData.brand ? 'Pilih atau ketik tipe/model' : 'Pilih merek dahulu'}
+                      disabled={!formData.brand}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100"
                     />
+                    <datalist id="vehicle-model-options">
+                      {(vehicleModels[formData.brand] || []).map(model => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </datalist>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Tahun <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="number"
+                    <select
                       required
-                      min="1990"
-                      max={new Date().getFullYear() + 1}
                       value={formData.year}
                       onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {vehicleYears.map(year => <option key={year} value={year}>{year}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Warna <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
+                    <select
                       required
                       value={formData.color}
                       onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                      placeholder="Contoh: Putih, Hitam, Merah"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      <option value="">Pilih Warna</option>
+                      {vehicleColors.map(color => <option key={color} value={color}>{color}</option>)}
+                      {formData.color && !vehicleColors.includes(formData.color) && (
+                        <option value={formData.color}>{formData.color}</option>
+                      )}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -372,46 +440,27 @@ export default function VehicleRegister() {
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <span className="w-4 h-4 flex items-center justify-center text-xs">👤</span> Informasi Pelanggan
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                <div className="space-y-4">
+                  <div className="relative z-20">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nama Pelanggan <span className="text-red-500">*</span>
+                      Cari dan Pilih Pelanggan <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.customerName}
-                      onChange={(e) => setFormData({ ...formData, customerName: e.target.value.toUpperCase() })}
-                      placeholder="Nama lengkap pelanggan"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none uppercase"
-                    />
+                    <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      No. Telepon <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="08xxxxxxxxxx"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
+                  {formData.customerRefId && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                      <div className="font-semibold text-gray-900">{formData.customerName}</div>
+                      <div className="mt-1 text-sm text-gray-600">{formData.phone || 'Nomor telepon belum diisi'}</div>
+                      <div className="text-sm text-gray-600">{formData.address || 'Alamat belum diisi'}</div>
+                      <div className="mt-2 text-xs text-blue-700">Data kontak mengikuti master pelanggan.</div>
+                    </div>
+                  )}
+                  {!data.customers.length && (
+                    <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                      Belum ada pelanggan. Tambahkan pelanggan terlebih dahulu melalui menu Pelanggan.
+                    </p>
+                  )}
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Alamat
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      placeholder="Alamat lengkap pelanggan"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                  </div>
-                </div>
               </div>
 
               {/* Notes */}

@@ -157,6 +157,7 @@ WHERE d.item_id IS NOT NULL AND i.id IS NULL;
 
 -- Tambahkan FK utama yang sebelumnya hanya berupa ID teks.
 ALTER TABLE `vehicles`
+  ADD UNIQUE KEY `uq_vehicle_plate` (`plate_number`),
   ADD CONSTRAINT `fk_vehicle_customer`
     FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`)
     ON UPDATE CASCADE ON DELETE SET NULL;

@@ -117,7 +117,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (requestId !== refreshRequestId.current) return;
     if (res.success && res.data) {
       setData({
-        vehicles: res.data.vehicles || [],
+        vehicles: (res.data.vehicles || []).map((vehicle: any) => ({
+          ...vehicle,
+          customerRefId: vehicle.customerRefId || vehicle.customer_id || undefined,
+        })),
         customers: res.data.customers || [],
         invoices: res.data.invoices || [],
         workOrders: res.data.workOrders || [],

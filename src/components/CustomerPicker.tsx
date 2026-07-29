@@ -209,7 +209,10 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
                   </div>
                 ) : (
                   filtered.map((customer) => {
-                    const vehs = data.vehicles.filter(v => v.customerName === customer.name);
+                    const vehs = data.vehicles.filter(v =>
+                      v.customerRefId === customer.id ||
+                      (!v.customerRefId && v.customerId === customer.customerCode)
+                    );
                     return (
                       <button
                         key={customer.id}

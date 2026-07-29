@@ -33,7 +33,7 @@ const render = (t: string) =>
 export default function AIAssistant() {
   const {
     data, currentUser, currentBranchId, resolveBranchId,
-    addWorkOrder, addCustomer, generateCustomerCode, addVehicle, generateDocumentNumber,
+    addWorkOrder, addCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
   } = useApp();
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -105,7 +105,10 @@ export default function AIAssistant() {
       const list = matchedCustomers.length > 0 ? matchedCustomers.slice(0, 30) : data.customers.slice(0, 30);
       parts.push(`\nPELANGGAN (${list.length} dari ${data.customers.length}):`);
       list.forEach(c => {
-        const vs = data.vehicles.filter(v => v.customerName === c.name).map(v => v.plateNumber).join(', ');
+        const vs = data.vehicles.filter(v =>
+          v.customerRefId === c.id ||
+          (!v.customerRefId && v.customerId === c.customerCode)
+        ).map(v => v.plateNumber).join(', ');
         parts.push(`- ${c.customerCode} ${c.name} | ${c.phone} | ${vs || 'belum ada kendaraan'}`);
       });
     }
@@ -223,6 +226,7 @@ ${buildSmartContext(userMsgText)}`;
 
     // 1. Pelanggan
     let customer = data.customers.find(c =>
+      c.customerCode.toUpperCase() === String(a.customerId || '').toUpperCase() ||
       c.name.toUpperCase() === String(a.customerName || '').toUpperCase() ||
       (a.phone && c.phone.replace(/\D/g, '') === String(a.phone).replace(/\D/g, ''))
     );
@@ -252,6 +256,7 @@ ${buildSmartContext(userMsgText)}`;
         model: parts[1] || '-',
         year: parseInt(parts.find((x: string) => /^\d{4}$/.test(x)) || '0') || new Date().getFullYear(),
         color: parts[parts.length - 1] || '-',
+        customerRefId: customer?.id,
         customerName: customer?.name || String(a.customerName || '').toUpperCase(),
         customerId: customer?.customerCode || '',
         phone: customer?.phone || a.phone || '',
@@ -262,6 +267,18 @@ ${buildSmartContext(userMsgText)}`;
       };
       await addVehicle(newV);
       vehicle = newV;
+    } else if (vehicle && customer && vehicle.customerRefId !== customer.id) {
+      // Setelah aksi dikonfirmasi, pelanggan yang dipilih menjadi pemilik aktif.
+      const updatedVehicle = {
+        ...vehicle,
+        customerRefId: customer.id,
+        customerId: customer.customerCode,
+        customerName: customer.name,
+        phone: customer.phone,
+        address: customer.address,
+      };
+      await updateVehicle(vehicle.id, updatedVehicle);
+      vehicle = updatedVehicle;
     }
 
     // 3. Layanan — gunakan nama persis dari master jika cocok

@@ -53,7 +53,10 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   // Kendaraan milik pelanggan yang dipilih
   const customerVehicles = useMemo(() => {
     if (!customer) return [];
-    return data.vehicles.filter((v) => v.customerName === customer.name);
+    return data.vehicles.filter((v) =>
+      v.customerRefId === customer.id ||
+      (!v.customerRefId && v.customerId === customer.customerCode)
+    );
   }, [data.vehicles, customer]);
 
   const selectedVehicle = data.vehicles.find((v) => v.id === value);
@@ -154,6 +157,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       model: newVehicle.model,
       year: newVehicle.year || new Date().getFullYear(),
       color: newVehicle.color,
+      customerRefId: customer.id,
       customerName: customer.name,
       customerId: customer.customerCode,
       phone: customer.phone,

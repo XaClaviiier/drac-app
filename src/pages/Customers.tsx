@@ -121,7 +121,10 @@ export default function Customers() {
           </div>
         ) : (
           filteredCustomers.map((customer) => {
-            const vehicleCount = data.vehicles.filter((v) => v.customerName === customer.name).length;
+            const vehicleCount = data.vehicles.filter((v) =>
+              v.customerRefId === customer.id ||
+              (!v.customerRefId && v.customerId === customer.customerCode)
+            ).length;
             const invoiceCount = data.invoices.filter(
               (invoice) => invoice.customerRefId === customer.id || invoice.customerName.includes(customer.name)
             ).length;
