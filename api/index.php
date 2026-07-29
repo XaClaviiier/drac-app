@@ -3,6 +3,7 @@
 // DOKTER AC MOBIL - Main API Router
 // ==========================================================
 require_once 'config.php';
+require_once 'helpers.php';
 
 $route = $_GET['route'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
