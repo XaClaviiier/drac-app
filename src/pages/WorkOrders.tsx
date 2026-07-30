@@ -915,7 +915,7 @@ export default function WorkOrders() {
                         <FileText className="w-4 h-4" />
                         {wo.invoiceNumber}
                       </span>
-                    ) : (
+                    ) : wo.status === 'Selesai' ? (
                       hasPermission('invoice:create') && (
                         <button
                           onClick={() => handleOpenInvoiceModal(wo)}
@@ -926,7 +926,15 @@ export default function WorkOrders() {
                           Buat Faktur
                         </button>
                       )
-                    )}
+                    ) : (wo.status === 'Pengecekan' || wo.status === 'Proses') ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500"
+                        title="Tombol faktur tersedia setelah status WO menjadi Selesai"
+                      >
+                        <Receipt className="h-3.5 w-3.5" />
+                        Selesaikan WO untuk membuat faktur
+                      </span>
+                    ) : null}
                     {hasPermission('wo:create')
                       && wo.status === 'Pengecekan'
                       && !wo.continuedToWoId
