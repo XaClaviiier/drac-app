@@ -109,7 +109,7 @@ export default function Layout() {
       {/* ========== MAIN ========== */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3">
+        <header className={`${location.pathname === '/' ? 'hidden lg:flex' : 'flex'} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3`}>
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
             {/* Hamburger (mobile) */}
             <button
@@ -217,7 +217,7 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto p-3 pb-6 sm:p-6">
+        <main className={`flex-1 overflow-y-auto ${location.pathname === '/' ? 'p-0 lg:p-6' : 'p-3 pb-6 sm:p-6'}`}>
           <Outlet />
         </main>
       </div>

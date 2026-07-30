@@ -4,6 +4,7 @@ import {
   Clock, AlertCircle, ArrowRight, Building2, CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import MobileDashboard from '../components/MobileDashboard';
 
 const BRANCH_COLORS: Record<string, { bg: string; text: string; ring: string; gradient: string }> = {
   'ALL':    { bg: 'bg-blue-600',   text: 'text-white',    ring: 'ring-blue-400',   gradient: 'from-blue-600 to-blue-800' },
@@ -48,7 +49,9 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-6">
+    <>
+    <MobileDashboard />
+    <div className="hidden space-y-6 lg:block">
 
       {/* ===== BRANCH SELECTOR (Admin / Supervisor only) ===== */}
       {canSeeAllBranches && (
@@ -398,5 +401,6 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+    </>
   );
 }
