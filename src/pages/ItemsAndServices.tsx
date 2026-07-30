@@ -80,9 +80,6 @@ export default function ItemsAndServices() {
   const filteredItems = useMemo(() => {
     const q = search.toLowerCase();
     return data.items.filter((item) => {
-      const branchMatch = currentBranchId === 'ALL' || item.branchId === currentBranchId;
-      if (!branchMatch) return false;
-
       const activeMatch = filterActive === 'all' || (filterActive === 'active' ? item.isActive : !item.isActive);
       const categoryMatch = !filterCategory || item.categoryId === filterCategory;
       const typeMatch = !filterType || item.type === filterType;
@@ -94,7 +91,13 @@ export default function ItemsAndServices() {
         item.brand.toLowerCase().includes(q);
       return activeMatch && categoryMatch && typeMatch && brandMatch && searchMatch;
     });
-  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand, currentBranchId]);
+  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand]);
+
+  // Master barang bersifat global. Hanya saldo stok yang mengikuti cabang aktif.
+  const displayStock = (item: Item) =>
+    currentBranchId === 'ALL'
+      ? item.stock
+      : (item.branchStocks?.[currentBranchId]?.stock ?? 0);
 
   // Items available for group picking (exclude Groups and current item)
   const pickableItems = useMemo(() => {
@@ -821,10 +824,10 @@ export default function ItemsAndServices() {
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode, nama barang, merek, kategori..." className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
           </div>
-          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
-            <option value="active">Non Aktif: Tidak</option>
-            <option value="inactive">Non Aktif: Ya</option>
-            <option value="all">Non Aktif: Semua</option>
+          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className={`rounded-lg border-2 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 ${filterActive === 'active' ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : filterActive === 'inactive' ? 'border-red-400 bg-red-50 text-red-800' : 'border-blue-300 bg-blue-50 text-blue-800'}`}>
+            <option value="active">Status: Aktif</option>
+            <option value="inactive">Status: Nonaktif</option>
+            <option value="all">Status: Semua</option>
           </select>
           <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
             <option value="">Kategori: Semua</option>
@@ -877,7 +880,7 @@ export default function ItemsAndServices() {
                 const isGroup = item.type === 'Group' && item.groupMembers && item.groupMembers.length > 0;
                 const expanded = expandedGroups.has(item.id);
                 return (
-                  <tr key={item.id} className="group">
+                    <tr key={item.id} className={`group ${!item.isActive ? 'bg-red-50/50 opacity-75' : ''}`}>
                     <td colSpan={9} className="p-0">
                       {/* Main row */}
                       <div className={`flex items-center transition-colors hover:bg-blue-50/50 ${isGroup ? 'cursor-pointer' : ''}`} onClick={isGroup ? () => toggleGroup(item.id) : undefined}>
@@ -890,6 +893,7 @@ export default function ItemsAndServices() {
                         <div className="flex-1 px-4 py-3">
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                            {!item.isActive && <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">NONAKTIF</span>}
                             {isGroup && (
                               <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
                                 <Layers className="h-3 w-3" /> {item.groupMembers!.length} item
@@ -898,7 +902,7 @@ export default function ItemsAndServices() {
                           </div>
                           <p className="text-xs text-gray-500">{item.brand && item.brand !== '-' ? item.brand : ''} {item.description ? (item.brand && item.brand !== '-' ? '- ' : '') + item.description : ''}</p>
                         </div>
-                        <div className="w-16 px-4 py-3 text-right text-sm text-gray-900">{item.stock}</div>
+                        <div className="w-16 px-4 py-3 text-right text-sm font-semibold text-gray-900">{displayStock(item)}</div>
                         <div className="w-20 px-4 py-3 text-sm text-gray-700">{item.unit}</div>
                         <div className="w-28 px-4 py-3">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>
