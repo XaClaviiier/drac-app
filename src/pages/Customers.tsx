@@ -111,8 +111,101 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Customer Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Desktop Customer Table */}
+      {filteredCustomers.length > 0 && (
+        <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1050px] text-left">
+              <thead className="bg-blue-800 text-xs uppercase tracking-wide text-white">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Kode / Nama Pelanggan</th>
+                  <th className="px-4 py-3 font-semibold">No. Telepon</th>
+                  <th className="px-4 py-3 font-semibold">Email</th>
+                  <th className="px-4 py-3 font-semibold">Alamat</th>
+                  <th className="px-4 py-3 text-center font-semibold">Kendaraan</th>
+                  <th className="px-4 py-3 text-center font-semibold">WO</th>
+                  <th className="px-4 py-3 text-center font-semibold">Faktur</th>
+                  <th className="px-4 py-3 text-right font-semibold">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredCustomers.map((customer) => {
+                  const vehicleCount = data.vehicles.filter((v) =>
+                    v.customerRefId === customer.id ||
+                    (!v.customerRefId && v.customerId === customer.customerCode)
+                  ).length;
+                  const invoiceCount = data.invoices.filter(
+                    (invoice) => invoice.customerRefId === customer.id || invoice.customerName.includes(customer.name)
+                  ).length;
+                  const workOrderCount = data.workOrders.filter(
+                    (wo) => wo.customerRefId === customer.id || wo.customerName === customer.name
+                  ).length;
+                  return (
+                    <tr key={customer.id} className="transition-colors hover:bg-blue-50/50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-sm font-bold text-white">
+                            {customer.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="max-w-[220px] truncate text-sm font-semibold text-gray-900">{customer.name}</p>
+                            <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-800">{customer.phone || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        <span className="block max-w-[190px] truncate" title={customer.email}>{customer.email || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        <span className="block max-w-[260px] truncate" title={customer.address}>{customer.address || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex min-w-8 justify-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">{vehicleCount}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex min-w-8 justify-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800">{workOrderCount}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex min-w-8 justify-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">{invoiceCount}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {hasPermission('customer:edit') && (
+                            <button onClick={() => handleOpenModal(customer)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit pelanggan">
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          )}
+                          {hasPermission('customer:delete') && (
+                            <button onClick={() => handleDelete(customer.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus pelanggan">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
+            <span>Data pelanggan bersifat global dan dapat digunakan oleh seluruh cabang.</span>
+            <span className="font-semibold">{filteredCustomers.length} pelanggan</span>
+          </div>
+        </div>
+      )}
+
+      {filteredCustomers.length === 0 && (
+        <div className="hidden rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm lg:block">
+          <Users className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+          <p className="text-lg font-medium text-gray-900">Tidak ada data pelanggan</p>
+          <p className="text-sm text-gray-500">Ubah pencarian atau tambahkan pelanggan baru.</p>
+        </div>
+      )}
+
+      {/* Mobile Customer Cards */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:hidden">
         {filteredCustomers.length === 0 ? (
           <div className="col-span-full bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
