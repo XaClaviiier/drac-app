@@ -393,7 +393,9 @@ if (!function_exists('adjustBranchStock')) {
 
         $sync = $pdo->prepare("
             UPDATE items i
-            JOIN branch_item_stocks s ON s.item_id = i.id AND s.branch_id = i.branch_id
+            JOIN branch_item_stocks s
+              ON s.item_id COLLATE utf8mb4_unicode_ci = i.id COLLATE utf8mb4_unicode_ci
+             AND s.branch_id COLLATE utf8mb4_unicode_ci = i.branch_id COLLATE utf8mb4_unicode_ci
             SET i.stock = s.stock, i.sellable_stock = s.sellable_stock
             WHERE i.id = ? AND i.branch_id = ?
         ");
@@ -430,7 +432,9 @@ function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $item
 
     $sync = $pdo->prepare("
         UPDATE items i
-        JOIN branch_item_stocks s ON s.item_id = i.id AND s.branch_id = i.branch_id
+        JOIN branch_item_stocks s
+          ON s.item_id COLLATE utf8mb4_unicode_ci = i.id COLLATE utf8mb4_unicode_ci
+         AND s.branch_id COLLATE utf8mb4_unicode_ci = i.branch_id COLLATE utf8mb4_unicode_ci
         SET i.stock = s.stock, i.sellable_stock = s.sellable_stock
         WHERE i.id = ? AND i.branch_id = ?
     ");
