@@ -315,6 +315,45 @@ export default function WorkOrders() {
     dateTo,
   ]);
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      Pengecekan: 0,
+      Proses: 0,
+      Selesai: 0,
+      Dibayar: 0,
+    };
+    data.workOrders.forEach((wo) => {
+      const branchMatch = isAllBranchDropdown || !activeBranchOnly
+        ? activeBranchIds.includes(wo.branchId)
+        : wo.branchId === selectedBranchId;
+      if (!branchMatch) return;
+
+      const dateMatch = todayOnly
+        ? wo.date === todayDate
+        : (!dateFrom || wo.date >= dateFrom) && (!dateTo || wo.date <= dateTo);
+      if (!dateMatch) return;
+
+      const normalizedSearch = searchTerm.toLowerCase();
+      const matchesSearch =
+        wo.woNumber.toLowerCase().includes(normalizedSearch) ||
+        wo.customerName.toLowerCase().includes(normalizedSearch) ||
+        wo.plateNumber.toLowerCase().includes(normalizedSearch);
+      if (matchesSearch && counts[wo.status] !== undefined) counts[wo.status] += 1;
+    });
+    return counts;
+  }, [
+    data.workOrders,
+    searchTerm,
+    isAllBranchDropdown,
+    activeBranchOnly,
+    activeBranchIds,
+    selectedBranchId,
+    todayOnly,
+    todayDate,
+    dateFrom,
+    dateTo,
+  ]);
+
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
 
   // Default layanan saat WO baru: pengecekan gratis
@@ -636,12 +675,30 @@ export default function WorkOrders() {
           { s: 'Selesai', label: '3. Selesai', color: 'text-green-600' },
           { s: 'Dibayar', label: '4. Dibayar', color: 'text-purple-600' },
         ] as const).map(({ s, label, color }) => {
-          const count = filteredWOs.filter((w) => w.status === s).length;
+          const count = statusCounts[s];
+          const isActive = filterStatus === s;
           return (
-            <div key={s} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <p className="text-sm text-gray-500">{label}</p>
+            <button
+              key={s}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => setFilterStatus(isActive ? '' : s)}
+              className={`rounded-xl border p-4 text-left shadow-sm transition-all ${
+                isActive
+                  ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/20'
+                  : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md'
+              }`}
+              title={isActive ? 'Klik untuk menampilkan semua status' : `Filter status ${s}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className={`text-sm ${isActive ? 'font-semibold text-blue-800' : 'text-gray-500'}`}>{label}</p>
+                {isActive && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">AKTIF</span>}
+              </div>
               <p className={`text-2xl font-bold ${color}`}>{count}</p>
-            </div>
+              <p className={`mt-1 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
+                {isActive ? 'Klik lagi untuk reset' : 'Klik untuk memfilter'}
+              </p>
+            </button>
           );
         })}
       </div>
