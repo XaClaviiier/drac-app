@@ -17,7 +17,7 @@ if($method==='GET'){
         $s['status']=strtotime($s['last_activity']??$s['created_at'])>=time()-300?'online':'idle';
     }
     $rules=$pdo->query("SELECT * FROM user_login_rules")->fetchAll();
-    foreach($rules as &$r){$r['userId']=$r['user_id'];$r['sessionHours']=(int)$r['session_hours'];$r['scheduleMode']=$r['schedule_mode'];$r['schedule']=$r['schedule_json']?json_decode($r['schedule_json'],true):[];$r['singleDevice']=(bool)$r['single_device'];$r['autoLogout']=(bool)$r['auto_logout'];}
+    foreach($rules as &$r){$r['userId']=$r['user_id'];$r['sessionHours']=(int)$r['session_hours'];$r['scheduleMode']=$r['schedule_mode'];$r['schedule']=$r['schedule_json']?json_decode($r['schedule_json'],true):[];$r['singleDevice']=(bool)$r['single_device'];$r['autoLogout']=(bool)$r['auto_logout'];$r['idleTimeoutMinutes']=(int)$r['idle_timeout_minutes'];}
     $logs=$pdo->query("SELECT * FROM login_audit_logs ORDER BY created_at DESC LIMIT 100")->fetchAll();
     foreach($logs as &$l){$l['userId']=$l['user_id'];$l['eventType']=$l['event_type'];$l['ipAddress']=$l['ip_address'];$l['userAgent']=$l['user_agent'];$l['createdAt']=$l['created_at'];}
     respondSuccess(['sessions'=>$sessions,'rules'=>$rules,'logs'=>$logs]);
@@ -28,8 +28,9 @@ if($method==='PUT'&&$action==='rules'){
     $d=getInput();$target=$pdo->prepare("SELECT is_owner FROM users WHERE id=?");$target->execute([$id]);
     if($target->fetchColumn())respondError('Owner Utama tidak dapat dibatasi',403);
     $hours=max(1,min(24,(int)($d['sessionHours']??8)));$mode=($d['scheduleMode']??'unrestricted')==='custom'?'custom':'unrestricted';
-    $pdo->prepare("INSERT INTO user_login_rules(user_id,session_hours,schedule_mode,schedule_json,single_device,auto_logout) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE session_hours=VALUES(session_hours),schedule_mode=VALUES(schedule_mode),schedule_json=VALUES(schedule_json),single_device=VALUES(single_device),auto_logout=VALUES(auto_logout)")
-        ->execute([$id,$hours,$mode,json_encode($d['schedule']??[],JSON_UNESCAPED_UNICODE),!empty($d['singleDevice'])?1:0,!empty($d['autoLogout'])?1:0]);
+    $idle=max(0,min(240,(int)($d['idleTimeoutMinutes']??30)));
+    $pdo->prepare("INSERT INTO user_login_rules(user_id,session_hours,schedule_mode,schedule_json,single_device,auto_logout,idle_timeout_minutes) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE session_hours=VALUES(session_hours),schedule_mode=VALUES(schedule_mode),schedule_json=VALUES(schedule_json),single_device=VALUES(single_device),auto_logout=VALUES(auto_logout),idle_timeout_minutes=VALUES(idle_timeout_minutes)")
+        ->execute([$id,$hours,$mode,json_encode($d['schedule']??[],JSON_UNESCAPED_UNICODE),!empty($d['singleDevice'])?1:0,!empty($d['autoLogout'])?1:0,$idle]);
     respondSuccess(null,'Aturan login disimpan');
 }
 

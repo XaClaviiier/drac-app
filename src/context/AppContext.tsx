@@ -209,6 +209,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [currentUser?.sessionExpiresAt]);
 
+  useEffect(() => {
+    const minutes = currentUser?.idleTimeoutMinutes || 0;
+    if (!currentUser || currentUser.isOwner || minutes <= 0) return;
+    let timer = window.setTimeout(logout, minutes * 60 * 1000);
+    const reset = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(logout, minutes * 60 * 1000);
+    };
+    const events = ['mousedown','keydown','touchstart','scroll'] as const;
+    events.forEach(event => window.addEventListener(event, reset, { passive: true }));
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach(event => window.removeEventListener(event, reset));
+    };
+  }, [currentUser?.id, currentUser?.idleTimeoutMinutes, currentUser?.isOwner]);
+
   const hasPermission = (perm: Permission): boolean => {
     if (!currentUser) return false;
     if (currentUser.isOwner) return true;

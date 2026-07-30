@@ -38,11 +38,13 @@ if (!$isHashed) {
 
 // Owner selalu bebas pembatasan. User lain mengikuti durasi/jadwal login.
 $sessionHours=8;
+$idleTimeoutMinutes=30;
 $scheduleEnd=null;
 if(empty($user['is_owner'])){
     $ruleStmt=$pdo->prepare("SELECT * FROM user_login_rules WHERE user_id=?");$ruleStmt->execute([$user['id']]);$rule=$ruleStmt->fetch();
     if($rule){
         $sessionHours=max(1,min(24,(int)$rule['session_hours']));
+        $idleTimeoutMinutes=max(0,min(240,(int)($rule['idle_timeout_minutes']??30)));
         if($rule['schedule_mode']==='custom'){
             $tz=new DateTimeZone('Asia/Makassar');$now=new DateTime('now',$tz);$schedule=json_decode($rule['schedule_json']??'[]',true)?:[];$day=(string)$now->format('N');$today=$schedule[$day]??null;
             if(!$today||empty($today['enabled'])){writeLoginAudit($pdo,$user['id'],$username,'login_blocked','Login di luar hari kerja');respondError('Login tidak diizinkan pada hari ini',403);}
@@ -77,5 +79,6 @@ $user['isOwner'] = (bool)($user['is_owner'] ?? false);
 $user['isProtected'] = (bool)($user['is_protected'] ?? false);
 $user['apiToken'] = $token;
 $user['sessionExpiresAt'] = $expiresAt->format('Y-m-d H:i:s');
+$user['idleTimeoutMinutes'] = empty($user['is_owner']) ? $idleTimeoutMinutes : 0;
 
 respondSuccess($user, 'Login berhasil');

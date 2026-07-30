@@ -46,9 +46,12 @@ function ensureApiSupportTables(PDO $pdo): void {
             schedule_json TEXT NULL,
             single_device TINYINT(1) NOT NULL DEFAULT 0,
             auto_logout TINYINT(1) NOT NULL DEFAULT 1,
+            idle_timeout_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 30,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    $ruleColumns = array_column($pdo->query("SHOW COLUMNS FROM user_login_rules")->fetchAll(), 'Field');
+    if (!in_array('idle_timeout_minutes', $ruleColumns, true)) $pdo->exec("ALTER TABLE user_login_rules ADD idle_timeout_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 30 AFTER auto_logout");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS login_audit_logs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -167,6 +170,20 @@ function requireAuthenticatedUser(PDO $pdo): array {
     $stmt->execute([hash('sha256', $token)]);
     $user = $stmt->fetch();
     if (!$user) respondError('Sesi login tidak valid atau kedaluwarsa', 401);
+    if (empty($user['is_owner'])) {
+        $idleStmt=$pdo->prepare("
+            SELECT r.idle_timeout_minutes,s.last_activity
+            FROM api_sessions s LEFT JOIN user_login_rules r ON r.user_id=s.user_id COLLATE utf8mb4_unicode_ci
+            WHERE s.token_hash=?
+        ");
+        $idleStmt->execute([hash('sha256',$token)]);$idle=$idleStmt->fetch();
+        $minutes=(int)($idle['idle_timeout_minutes']??30);
+        if($minutes>0&&!empty($idle['last_activity'])&&strtotime($idle['last_activity'])<time()-($minutes*60)){
+            $pdo->prepare("UPDATE api_sessions SET revoked_at=NOW() WHERE token_hash=?")->execute([hash('sha256',$token)]);
+            writeLoginAudit($pdo,$user['id'],$user['username'],'session_revoked','Otomatis logout karena tidak aktif');
+            respondError('Sesi berakhir karena tidak ada aktivitas',401);
+        }
+    }
     $pdo->prepare("UPDATE api_sessions SET last_activity=NOW() WHERE token_hash=?")->execute([hash('sha256', $token)]);
     return $user;
 }
