@@ -16,16 +16,27 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
+        $plate = normalizeVehiclePlate((string)($d['plateNumber'] ?? ''));
+        if ($plate === '') respondError('Nomor plat wajib diisi.', 422);
+        if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
+            respondError('Merek, model, dan warna wajib diisi.', 422);
+        }
+        $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
+        $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
+        $customer = $customerStmt->fetch();
+        if (!$customer) respondError('Pelanggan kendaraan tidak ditemukan.', 422);
+        $duplicate = findVehicleByNormalizedPlate($pdo, $plate);
+        if ($duplicate) respondError('Plat sudah terdaftar atas nama ' . $duplicate['customer_name'] . '.', 409);
         $branchId          = $d['branchId'] ?? 'BR-001';
         $firstSeenBranchId = $d['firstSeenBranchId'] ?? $branchId;
 
         $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $d['id'] ?? generateId(),
-            preg_replace('/[^A-Za-z0-9]/', '', strtoupper($d['plateNumber'])), $d['brand'] ?? '', $d['model'] ?? '',
+            $plate, $d['brand'] ?? '', $d['model'] ?? '',
             $d['year'] ?? 0, $d['color'] ?? '',
-            $d['customerRefId'] ?? null, $d['customerName'] ?? '',
-            $d['customerId'] ?? '', $d['phone'] ?? '', $d['address'] ?? '',
+            $customer['id'], $customer['name'],
+            $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
             $d['registrationDate'] ?? nowDate(),
             $d['notes'] ?? '',
             $branchId, $firstSeenBranchId
@@ -36,12 +47,23 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        $plate = normalizeVehiclePlate((string)($d['plateNumber'] ?? ''));
+        if ($plate === '') respondError('Nomor plat wajib diisi.', 422);
+        if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
+            respondError('Merek, model, dan warna wajib diisi.', 422);
+        }
+        $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
+        $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
+        $customer = $customerStmt->fetch();
+        if (!$customer) respondError('Pelanggan kendaraan tidak ditemukan.', 422);
+        $duplicate = findVehicleByNormalizedPlate($pdo, $plate, (string)$id);
+        if ($duplicate) respondError('Plat sudah terdaftar atas nama ' . $duplicate['customer_name'] . '.', 409);
         $stmt = $pdo->prepare("UPDATE vehicles SET plate_number=?, brand=?, model=?, year=?, color=?, customer_id=?, customer_name=?, customer_code=?, phone=?, address=?, notes=?, branch_id=? WHERE id=?");
         $stmt->execute([
-            preg_replace('/[^A-Za-z0-9]/', '', strtoupper($d['plateNumber'])), $d['brand'] ?? '', $d['model'] ?? '',
+            $plate, $d['brand'] ?? '', $d['model'] ?? '',
             $d['year'] ?? 0, $d['color'] ?? '',
-            $d['customerRefId'] ?? null, $d['customerName'] ?? '',
-            $d['customerId'] ?? '', $d['phone'] ?? '', $d['address'] ?? '',
+            $customer['id'], $customer['name'],
+            $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
             $d['notes'] ?? '', $d['branchId'] ?? 'BR-001', $id
         ]);
         respondSuccess(null, 'Kendaraan diupdate');

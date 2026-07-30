@@ -2,6 +2,54 @@
 // Helper API ditempatkan terpisah agar pembaruan fungsi tidak perlu
 // menimpa config.php yang berisi kredensial database hosting.
 
+function normalizeVehiclePlate(string $value): string {
+    return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $value));
+}
+
+function findVehicleByNormalizedPlate(PDO $pdo, string $plate, ?string $excludeId = null): ?array {
+    $rows = $pdo->query("SELECT id, plate_number, customer_name FROM vehicles")->fetchAll();
+    foreach ($rows as $row) {
+        if ($excludeId !== null && (string)$row['id'] === $excludeId) continue;
+        if (normalizeVehiclePlate((string)$row['plate_number']) === $plate) return $row;
+    }
+    return null;
+}
+
+function resolveCustomerVehicle(PDO $pdo, string $customerRefId, string $vehicleRefId, bool $forUpdate = false): array {
+    if ($customerRefId === '' || $vehicleRefId === '') {
+        throw new InvalidArgumentException('Pelanggan dan kendaraan wajib dipilih dari data master.');
+    }
+    $lock = $forUpdate ? ' FOR UPDATE' : '';
+    $customerStmt = $pdo->prepare("SELECT id, customer_code, name FROM customers WHERE id = ?" . $lock);
+    $customerStmt->execute([$customerRefId]);
+    $customer = $customerStmt->fetch();
+    if (!$customer) throw new InvalidArgumentException('Data pelanggan tidak ditemukan.');
+
+    $vehicleStmt = $pdo->prepare("SELECT id, plate_number, brand, model, year, color, customer_id FROM vehicles WHERE id = ?" . $lock);
+    $vehicleStmt->execute([$vehicleRefId]);
+    $vehicle = $vehicleStmt->fetch();
+    if (!$vehicle) throw new InvalidArgumentException('Data kendaraan tidak ditemukan.');
+    if ((string)$vehicle['customer_id'] !== (string)$customer['id']) {
+        throw new InvalidArgumentException('Kendaraan yang dipilih bukan milik pelanggan tersebut.');
+    }
+    return [$customer, $vehicle];
+}
+
+function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $excludeWoId = null): void {
+    $sql = "SELECT wo_number FROM work_orders
+            WHERE vehicle_ref_id = ? AND status IN ('Pengecekan', 'Proses', 'Selesai')";
+    $params = [$vehicleRefId];
+    if ($excludeWoId !== null) {
+        $sql .= " AND id <> ?";
+        $params[] = $excludeWoId;
+    }
+    $sql .= " LIMIT 1 FOR UPDATE";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $activeNumber = $stmt->fetchColumn();
+    if ($activeNumber) throw new DomainException("Kendaraan masih memiliki WO aktif: {$activeNumber}.");
+}
+
 function ensureApiSupportTables(PDO $pdo): void {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS document_sequences (
@@ -152,6 +200,12 @@ function ensureApiSupportTables(PDO $pdo): void {
         INSERT IGNORE INTO user_branch_access (user_id, branch_id)
         SELECT id, branch_id FROM users WHERE branch_id IS NOT NULL AND branch_id <> ''
     ");
+    if ($pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()) {
+        $invoiceColumns = array_column($pdo->query("SHOW COLUMNS FROM sales_invoices")->fetchAll(), 'Field');
+        if (!in_array('payment_method', $invoiceColumns, true)) {
+            $pdo->exec("ALTER TABLE sales_invoices ADD payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai' AFTER payment");
+        }
+    }
 }
 
 function getBearerToken(): string {

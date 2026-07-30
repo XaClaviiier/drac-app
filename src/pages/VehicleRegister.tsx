@@ -19,7 +19,7 @@ export default function VehicleRegister() {
     plateNumber: '',
     brand: '',
     model: '',
-    year: new Date().getFullYear(),
+    year: 0,
     color: '',
     customerRefId: '',
     customerName: '',
@@ -51,7 +51,7 @@ export default function VehicleRegister() {
       plateNumber: '',
       brand: '',
       model: '',
-      year: new Date().getFullYear(),
+      year: 0,
       color: '',
       customerRefId: '',
       customerName: '',
@@ -278,7 +278,7 @@ export default function VehicleRegister() {
                       <p className="text-sm font-medium text-gray-900">{vehicle.brand}</p>
                       <p className="text-xs text-gray-500">{vehicle.model}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{vehicle.year}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{vehicle.year || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{vehicle.color}</td>
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-gray-900">{vehicle.customerName}</p>
@@ -404,14 +404,14 @@ export default function VehicleRegister() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tahun <span className="text-red-500">*</span>
+                      Tahun <span className="text-xs font-normal text-gray-400">(opsional)</span>
                     </label>
                     <select
-                      required
                       value={formData.year}
-                      onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
+                      onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || 0 })}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     >
+                      <option value={0}>Tidak diketahui</option>
                       {vehicleYears.map(year => <option key={year} value={year}>{year}</option>)}
                     </select>
                   </div>
@@ -419,18 +419,17 @@ export default function VehicleRegister() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Warna <span className="text-red-500">*</span>
                     </label>
-                    <select
+                    <input
+                      list="vehicle-color-options"
                       required
                       value={formData.color}
                       onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      placeholder="Pilih atau ketik warna"
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                    >
-                      <option value="">Pilih Warna</option>
-                      {vehicleColors.map(color => <option key={color} value={color}>{color}</option>)}
-                      {formData.color && !vehicleColors.includes(formData.color) && (
-                        <option value={formData.color}>{formData.color}</option>
-                      )}
-                    </select>
+                    />
+                    <datalist id="vehicle-color-options">
+                      {vehicleColors.map(color => <option key={color} value={color} />)}
+                    </datalist>
                   </div>
                 </div>
               </div>

@@ -13,25 +13,32 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
-        $code = $d['customerCode'] ?? '';
-        if (!$code) {
-            $maxRow = $pdo->query("SELECT customer_code FROM customers ORDER BY id DESC LIMIT 1")->fetch();
-            $num = 1;
-            if ($maxRow && preg_match('/PLG-(\d+)/', $maxRow['customer_code'], $m)) {
-                $num = intval($m[1]) + 1;
+        $name = trim((string)($d['name'] ?? ''));
+        $phone = trim((string)($d['phone'] ?? ''));
+        if ($name === '' || $phone === '') respondError('Nama dan nomor HP wajib diisi.', 422);
+        $normalizedPhone = preg_replace('/\D/', '', $phone);
+        foreach ($pdo->query("SELECT customer_code, name, phone FROM customers")->fetchAll() as $existing) {
+            if ($normalizedPhone !== '' && preg_replace('/\D/', '', (string)$existing['phone']) === $normalizedPhone) {
+                respondError('Nomor HP sudah terdaftar atas nama ' . $existing['name'] . ' (' . $existing['customer_code'] . ').', 409);
             }
-            $code = 'PLG-' . str_pad($num, 3, '0', STR_PAD_LEFT);
         }
+        $pdo->query("SELECT GET_LOCK('customer_code_sequence', 10)");
+        $maxRow = $pdo->query("
+            SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED))
+            FROM customers WHERE customer_code REGEXP '^PLG-[0-9]+$'
+        ")->fetchColumn();
+        $code = 'PLG-' . str_pad((string)(((int)$maxRow) + 1), 3, '0', STR_PAD_LEFT);
         $branchId          = $d['branchId'] ?? 'BR-001';
         $firstSeenBranchId = $d['firstSeenBranchId'] ?? $branchId;
 
         $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $d['id'] ?? generateId(),
-            $code, $d['name'], $d['phone'] ?? '',
+            $code, strtoupper($name), $phone,
             $d['email'] ?? '', $d['address'] ?? '',
             $branchId, $firstSeenBranchId
         ]);
+        $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
         respondSuccess(['customerCode' => $code], 'Pelanggan ditambahkan');
         break;
 

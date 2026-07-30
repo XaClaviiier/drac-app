@@ -114,29 +114,35 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
       window.alert('Nama dan nomor HP wajib diisi.');
       return;
     }
+    const normalizedPhone = phone.replace(/\D/g, '');
+    const duplicatePhone = data.customers.find(
+      (customer) => customer.phone.replace(/\D/g, '') === normalizedPhone
+    );
+    if (duplicatePhone) {
+      window.alert(`Nomor HP tersebut sudah terdaftar atas nama ${duplicatePhone.name} (${duplicatePhone.customerCode}).`);
+      return;
+    }
     const newId = Date.now().toString();
     const today = new Date().toISOString().split('T')[0];
 
-    // Set nama di input dulu agar terlihat ada yang dipilih
-    setInputText(name);
-    setShowNewForm(false);
-    setOpen(false);
-    setNewCustomer({ name: '', phone: '', address: '' });
-
-    // Panggil addCustomer — setelah selesai, useWaitForCustomer
-    // akan mendeteksi customer baru di data dan otomatis memanggil onChange
-    await addCustomer({
-      id: newId,
-      name,
-      phone,
-      address: newCustomer.address.trim(),
-      email: '',
-      createdAt: today,
-      branchId: resolveBranchId(),
-    });
-
-    // Tandai id yang perlu di-select setelah data terupdate
-    setPendingSelectId(newId);
+    try {
+      await addCustomer({
+        id: newId,
+        name,
+        phone,
+        address: newCustomer.address.trim(),
+        email: '',
+        createdAt: today,
+        branchId: resolveBranchId(),
+      });
+      setPendingSelectId(newId);
+      setInputText(name);
+      setShowNewForm(false);
+      setOpen(false);
+      setNewCustomer({ name: '', phone: '', address: '' });
+    } catch (error: any) {
+      window.alert(`Gagal menyimpan pelanggan: ${error?.message || 'terjadi kesalahan'}`);
+    }
   };
 
   const showSaveNew =

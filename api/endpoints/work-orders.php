@@ -49,6 +49,16 @@ switch ($method) {
         try {
             $woId = $d['id'] ?? generateId();
             $branchId = $d['branchId'] ?? 'BR-001';
+            [$customer, $vehicle] = resolveCustomerVehicle(
+                $pdo,
+                (string)($d['customerRefId'] ?? ''),
+                (string)($d['vehicleRefId'] ?? ''),
+                true
+            );
+            assertNoActiveWorkOrder($pdo, (string)$vehicle['id']);
+            if (empty($d['services'])) {
+                throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
+            }
             $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $d['date'] ?? null);
             $stmt = $pdo->prepare("
                 INSERT INTO work_orders (
@@ -63,8 +73,9 @@ switch ($method) {
             ");
             $stmt->execute([
                 $woId, $woNumber, $d['date'],
-                $d['customerRefId'] ?? '', $d['customerId'] ?? '', $d['customerName'] ?? '',
-                $d['vehicleRefId'] ?? '', $d['plateNumber'] ?? '', $d['vehicleInfo'] ?? '',
+                $customer['id'], $customer['customer_code'], $customer['name'],
+                $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
+                trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['total'] ?? 0, $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
                 $d['status'] ?? 'Pengecekan',
@@ -85,6 +96,9 @@ switch ($method) {
             }
             $pdo->commit();
             respondSuccess(['id' => $woId, 'woNumber' => $woNumber], 'WO disimpan');
+        } catch (InvalidArgumentException | DomainException $e) {
+            $pdo->rollBack();
+            respondError($e->getMessage(), 422);
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal simpan WO', 500, $e->getMessage());
@@ -96,6 +110,16 @@ switch ($method) {
         $d = getInput();
         $pdo->beginTransaction();
         try {
+            [$customer, $vehicle] = resolveCustomerVehicle(
+                $pdo,
+                (string)($d['customerRefId'] ?? ''),
+                (string)($d['vehicleRefId'] ?? ''),
+                true
+            );
+            assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], (string)$id);
+            if (empty($d['services'])) {
+                throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
+            }
             $stmt = $pdo->prepare("
                 UPDATE work_orders SET
                     wo_number=?, date=?,
@@ -110,8 +134,9 @@ switch ($method) {
             ");
             $stmt->execute([
                 $d['woNumber'], $d['date'],
-                $d['customerRefId'] ?? '', $d['customerId'] ?? '', $d['customerName'] ?? '',
-                $d['vehicleRefId'] ?? '', $d['plateNumber'] ?? '', $d['vehicleInfo'] ?? '',
+                $customer['id'], $customer['customer_code'], $customer['name'],
+                $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
+                trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['total'] ?? 0, $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
                 $d['status'] ?? 'Pengecekan',
@@ -135,6 +160,9 @@ switch ($method) {
             }
             $pdo->commit();
             respondSuccess(null, 'WO diupdate');
+        } catch (InvalidArgumentException | DomainException $e) {
+            $pdo->rollBack();
+            respondError($e->getMessage(), 422);
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal update WO', 500, $e->getMessage());

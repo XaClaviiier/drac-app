@@ -5,6 +5,9 @@ import type { SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 
+const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
+const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
+
 export default function SalesInvoice() {
   const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber } = useApp();
   const [showModal, setShowModal] = useState(false);
@@ -15,6 +18,8 @@ export default function SalesInvoice() {
   const [showWOPicker, setShowWOPicker] = useState(false);
   const [selectedWOId, setSelectedWOId] = useState('');
   const [woPayment, setWoPayment] = useState(0);
+  const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
+  const [isCreatingFromWO, setIsCreatingFromWO] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
   const [formData, setFormData] = useState({
@@ -27,6 +32,7 @@ export default function SalesInvoice() {
     description: '',
     total: 0,
     payment: 0,
+    paymentMethod: 'Tunai' as 'Tunai' | 'QRIS/Transfer',
     status: 'Lunas' as 'Lunas' | 'Belum Lunas',
   });
 
@@ -100,6 +106,7 @@ export default function SalesInvoice() {
       description: '',
       total: 0,
       payment: 0,
+      paymentMethod: 'Tunai',
       status: 'Lunas',
     });
     setEditingInvoice(null);
@@ -121,6 +128,7 @@ export default function SalesInvoice() {
         description: invoice.description,
         total: invoice.total,
         payment: invoice.payment,
+        paymentMethod: invoice.paymentMethod || 'Tunai',
         status: invoice.status,
       });
     } else {
@@ -164,9 +172,9 @@ export default function SalesInvoice() {
     }
   };
 
-  // Hanya WO Selesai/Proses yang boleh difakturkan. Pengecekan gratis & WO yang sudah dilanjutkan dikecualikan.
+  // Hanya WO Selesai yang boleh difakturkan.
   const unbilledWOs = data.workOrders.filter(
-    (wo) => !wo.invoiceId && !wo.continuedToWoId && (wo.status === 'Selesai' || wo.status === 'Proses')
+    (wo) => !wo.invoiceId && !wo.continuedToWoId && wo.status === 'Selesai'
   );
   const selectedWO = data.workOrders.find((wo) => wo.id === selectedWOId);
 
@@ -174,6 +182,7 @@ export default function SalesInvoice() {
     setShowWOPicker(true);
     setSelectedWOId('');
     setWoPayment(0);
+    setWoPaymentMethod('Tunai');
   };
 
   const handleSelectWO = (woId: string) => {
@@ -183,15 +192,22 @@ export default function SalesInvoice() {
   };
 
   const handleCreateFromWO = async () => {
-    if (selectedWO) {
-      const invoice = await createInvoiceFromWO(selectedWO.id, woPayment);
-      if (invoice) {
-        setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
-        setTimeout(() => setSuccessMsg(''), 4000);
+    if (selectedWO && !isCreatingFromWO) {
+      setIsCreatingFromWO(true);
+      try {
+        const invoice = await createInvoiceFromWO(selectedWO.id, woPayment, woPaymentMethod);
+        if (invoice) {
+          setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
+          setTimeout(() => setSuccessMsg(''), 4000);
+        }
+        setShowWOPicker(false);
+        setSelectedWOId('');
+        setWoPayment(0);
+      } catch (error: any) {
+        window.alert(`Gagal membuat faktur: ${error?.message || 'terjadi kesalahan'}`);
+      } finally {
+        setIsCreatingFromWO(false);
       }
-      setShowWOPicker(false);
-      setSelectedWOId('');
-      setWoPayment(0);
     }
   };
 
@@ -364,7 +380,8 @@ export default function SalesInvoice() {
                       {invoice.total.toLocaleString('id-ID')}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-right whitespace-nowrap">
-                      {invoice.payment.toLocaleString('id-ID')}
+                      <div>{invoice.payment.toLocaleString('id-ID')}</div>
+                      <div className="text-[10px] font-medium text-gray-500">{invoice.paymentMethod || 'Tunai'}</div>
                     </td>
                     {currentBranchId === 'ALL' && (
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
@@ -499,20 +516,34 @@ export default function SalesInvoice() {
                     Pembayaran (Rp) <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
-                    min="0"
-                    value={formData.payment}
+                    value={formatPaymentInput(formData.payment)}
                     onChange={(e) => {
-                      const payment = parseInt(e.target.value) || 0;
+                      const payment = parsePaymentInput(e.target.value);
                       setFormData({
                         ...formData,
                         payment,
                         status: payment >= formData.total ? 'Lunas' : 'Belum Lunas',
                       });
                     }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Metode Pembayaran</label>
+                  <select
+                    value={formData.paymentMethod}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      paymentMethod: e.target.value as 'Tunai' | 'QRIS/Transfer',
+                    })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="Tunai">Tunai</option>
+                    <option value="QRIS/Transfer">QRIS/Transfer</option>
+                  </select>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -640,13 +671,30 @@ export default function SalesInvoice() {
                         ))}
                       </div>
                       <div className="pt-3 border-t border-gray-200">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Metode Pembayaran</label>
+                        <div className="mb-3 grid grid-cols-2 gap-2">
+                          {(['Tunai', 'QRIS/Transfer'] as const).map((method) => (
+                            <button
+                              key={method}
+                              type="button"
+                              onClick={() => setWoPaymentMethod(method)}
+                              className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
+                                woPaymentMethod === method
+                                  ? 'border-green-500 bg-green-50 text-green-700'
+                                  : 'border-gray-300 bg-white text-gray-600'
+                              }`}
+                            >
+                              {method}
+                            </button>
+                          ))}
+                        </div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Jumlah Pembayaran (Rp)</label>
                         <input
-                          type="number"
-                          min="0"
-                          value={woPayment}
-                          onChange={(e) => setWoPayment(parseInt(e.target.value) || 0)}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                          type="text"
+                          inputMode="numeric"
+                          value={formatPaymentInput(woPayment)}
+                          onChange={(e) => setWoPayment(parsePaymentInput(e.target.value))}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         />
                         <p className={`mt-2 text-sm font-medium ${woPayment >= selectedWO.total ? 'text-green-600' : 'text-yellow-600'}`}>
                           Status: {woPayment >= selectedWO.total ? 'Lunas' : `Belum Lunas (sisa Rp ${(selectedWO.total - woPayment).toLocaleString('id-ID')})`}
@@ -668,12 +716,12 @@ export default function SalesInvoice() {
               </button>
               <button
                 type="button"
-                disabled={!selectedWO}
+                disabled={!selectedWO || isCreatingFromWO}
                 onClick={handleCreateFromWO}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors shadow-lg shadow-green-600/20"
               >
                 <Receipt className="w-4 h-4" />
-                Buat Faktur
+                {isCreatingFromWO ? 'Menyimpan...' : 'Buat Faktur'}
               </button>
             </div>
           </div>

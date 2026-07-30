@@ -284,6 +284,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoices` (
   `description` TEXT,
   `total` DECIMAL(15,2) DEFAULT 0,
   `payment` DECIMAL(15,2) DEFAULT 0,
+  `payment_method` VARCHAR(30) NOT NULL DEFAULT 'Tunai',
   `status` ENUM('Lunas', 'Belum Lunas') DEFAULT 'Belum Lunas',
   `age` INT DEFAULT 0,
   `wo_id` VARCHAR(20),

@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Plus, Car, Check, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Vehicle, Customer } from '../types';
+import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
 
 /** Tunggu vehicle dengan id tertentu muncul di data, lalu callback. */
 function useWaitForVehicle(targetId: string | null, onFound: (v: Vehicle) => void) {
@@ -20,11 +21,7 @@ interface VehiclePickerProps {
   onNewVehicleCreated?: (vehicle: Vehicle) => void;
 }
 
-const CAR_BRANDS = [
-  'Toyota', 'Honda', 'Suzuki', 'Daihatsu', 'Mitsubishi',
-  'Nissan', 'Hyundai', 'Kia', 'Wuling', 'DFSK',
-  'Isuzu', 'Mazda', 'Lexus', 'BMW', 'Mercedes-Benz', 'Lainnya',
-];
+const normalizePlate = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
 export default function VehiclePicker({ customer, value, onChange, onNewVehicleCreated }: VehiclePickerProps) {
   const { data, addVehicle, resolveBranchId } = useApp();
@@ -35,7 +32,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     plateNumber: '',
     brand: '',
     model: '',
-    year: new Date().getFullYear(),
+    year: 0,
     color: '',
   });
   const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
@@ -92,10 +89,10 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   }, [selectedVehicle]);
 
   const filtered = useMemo(() => {
-    const q = inputText.trim().toLowerCase().replace(/\s+/g, '');
+    const q = normalizePlate(inputText).toLowerCase();
     if (!q) return customerVehicles;
     return customerVehicles.filter((v) =>
-      v.plateNumber.toLowerCase().replace(/\s+/g, '').includes(q) ||
+      normalizePlate(v.plateNumber).toLowerCase().includes(q) ||
       v.brand.toLowerCase().includes(q) ||
       v.model.toLowerCase().includes(q) ||
       v.color.toLowerCase().includes(q)
@@ -136,13 +133,13 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
 
   const handleCreateNew = async () => {
     if (!customer) return;
-    const plate = newVehicle.plateNumber.trim().toUpperCase();
+    const plate = normalizePlate(newVehicle.plateNumber);
     if (!plate || !newVehicle.brand || !newVehicle.model || !newVehicle.color) {
       window.alert('Nomor plat, merek, model, dan warna wajib diisi.');
       return;
     }
     // Validasi plat belum terdaftar
-    const dup = data.vehicles.find(v => v.plateNumber.replace(/\s+/g,'').toUpperCase() === plate.replace(/\s+/g,''));
+    const dup = data.vehicles.find(v => normalizePlate(v.plateNumber) === plate);
     if (dup) {
       window.alert(`Plat "${plate}" sudah terdaftar atas nama ${dup.customerName}.`);
       return;
@@ -155,7 +152,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       plateNumber: plate,
       brand: newVehicle.brand,
       model: newVehicle.model,
-      year: newVehicle.year || new Date().getFullYear(),
+      year: newVehicle.year || 0,
       color: newVehicle.color,
       customerRefId: customer.id,
       customerName: customer.name,
@@ -168,15 +165,16 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       firstSeenBranchId: resolveBranchId(),
     };
 
-    // Tampilkan plat di input dulu, tutup dropdown
-    setInputText(plate);
-    setShowNewForm(false);
-    setOpen(false);
-    setNewVehicle({ plateNumber: '', brand: '', model: '', year: new Date().getFullYear(), color: '' });
-
-    // Simpan dan tunggu state update, baru panggil onChange
-    await addVehicle(vehicle);
-    setPendingSelectId(newId);
+    try {
+      await addVehicle(vehicle);
+      setPendingSelectId(newId);
+      setInputText(plate);
+      setShowNewForm(false);
+      setOpen(false);
+      setNewVehicle({ plateNumber: '', brand: '', model: '', year: 0, color: '' });
+    } catch (error: any) {
+      window.alert(`Gagal menyimpan kendaraan: ${error?.message || 'terjadi kesalahan'}`);
+    }
   };
 
   const disabled = !customer;
@@ -185,7 +183,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   const plateTyped = inputText.trim().toUpperCase();
   const plateNotFound =
     plateTyped.length >= 3 &&
-    !customerVehicles.some(v => v.plateNumber.replace(/\s+/g,'').toUpperCase() === plateTyped.replace(/\s+/g,''));
+    !customerVehicles.some(v => normalizePlate(v.plateNumber) === normalizePlate(plateTyped));
 
   return (
     <div className="relative" ref={wrapperRef}>
@@ -278,7 +276,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
                             {vehicle.brand} {vehicle.model}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500">{vehicle.year} • {vehicle.color}</p>
+                        <p className="text-xs text-gray-500">{vehicle.year ? `${vehicle.year} • ` : ''}{vehicle.color}</p>
                       </div>
                       {value === vehicle.id && <Check className="w-4 h-4 text-orange-600 flex-shrink-0" />}
                     </button>
@@ -338,41 +336,50 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
 
               {/* Merek + Model */}
               <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={newVehicle.brand}
-                  onChange={(e) => setNewVehicle({ ...newVehicle, brand: e.target.value })}
-                  className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
-                >
-                  <option value="">Merek *</option>
-                  {CAR_BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
                 <input
+                  list="quick-vehicle-brand-options"
+                  value={newVehicle.brand}
+                  onChange={(e) => setNewVehicle({ ...newVehicle, brand: e.target.value, model: '' })}
+                  placeholder="Merek *"
+                  className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
+                />
+                <datalist id="quick-vehicle-brand-options">
+                  {vehicleBrands.map((brand) => <option key={brand} value={brand} />)}
+                </datalist>
+                <input
+                  list="quick-vehicle-model-options"
                   type="text"
-                  placeholder="Model * (Avanza, Jazz...)"
+                  placeholder={newVehicle.brand ? 'Model *' : 'Pilih merek dahulu'}
                   value={newVehicle.model}
                   onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })}
+                  disabled={!newVehicle.brand}
                   className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
                 />
+                <datalist id="quick-vehicle-model-options">
+                  {(vehicleModels[newVehicle.brand] || []).map((model) => <option key={model} value={model} />)}
+                </datalist>
               </div>
 
               {/* Warna + Tahun */}
               <div className="grid grid-cols-2 gap-2">
                 <input
-                  type="text"
-                  placeholder="Warna * (Hitam, Putih...)"
+                  list="quick-vehicle-color-options"
                   value={newVehicle.color}
                   onChange={(e) => setNewVehicle({ ...newVehicle, color: e.target.value })}
+                  placeholder="Warna *"
                   className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
                 />
-                <input
-                  type="number"
-                  placeholder="Tahun (opsional)"
-                  min="1990"
-                  max={new Date().getFullYear() + 1}
-                  value={newVehicle.year || ''}
+                <datalist id="quick-vehicle-color-options">
+                  {vehicleColors.map((color) => <option key={color} value={color} />)}
+                </datalist>
+                <select
+                  value={newVehicle.year}
                   onChange={(e) => setNewVehicle({ ...newVehicle, year: parseInt(e.target.value) || 0 })}
                   className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                />
+                >
+                  <option value={0}>Tahun (opsional)</option>
+                  {vehicleYears.map((year) => <option key={year} value={year}>{year}</option>)}
+                </select>
               </div>
 
               <div className="flex gap-2 pt-1">

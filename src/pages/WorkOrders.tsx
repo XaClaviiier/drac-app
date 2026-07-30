@@ -21,6 +21,8 @@ const DEFAULT_COMPLAINT_TEMPLATES = [
 ];
 
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
+const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
+const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
 export default function WorkOrders() {
   const {
@@ -44,6 +46,8 @@ export default function WorkOrders() {
   const [dateTo, setDateTo] = useState('');
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
   const [invoicePayment, setInvoicePayment] = useState(0);
+  const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [showComplaintEditor, setShowComplaintEditor] = useState(false);
   const [newComplaintTemplate, setNewComplaintTemplate] = useState('');
@@ -221,7 +225,7 @@ export default function WorkOrders() {
       ...prev,
       vehicleRefId: vehicle.id,
       plateNumber: vehicle.plateNumber,
-      vehicleInfo: `${vehicle.brand} ${vehicle.model} ${vehicle.year} - ${vehicle.color}`,
+      vehicleInfo: `${vehicle.brand} ${vehicle.model}${vehicle.year ? ` ${vehicle.year}` : ''} - ${vehicle.color}`,
     }));
   };
 
@@ -458,13 +462,13 @@ export default function WorkOrders() {
     e.preventDefault();
 
     // Validasi wajib
-    if (!formData.customerName?.trim()) {
+    if (!formData.customerRefId) {
       setSuccessMsg('');
-      window.alert('Pelanggan wajib dipilih atau diisi terlebih dahulu.');
+      window.alert('Pelanggan wajib dipilih dari data pelanggan.');
       return;
     }
-    if (!formData.plateNumber?.trim()) {
-      window.alert('Nomor plat kendaraan wajib diisi.');
+    if (!formData.vehicleRefId) {
+      window.alert('Kendaraan wajib dipilih dari data kendaraan.');
       return;
     }
     if (formData.services.length === 0) {
@@ -538,8 +542,13 @@ export default function WorkOrders() {
   };
 
   const handleOpenInvoiceModal = (wo: WorkOrder) => {
+    if (wo.status !== 'Selesai') {
+      window.alert(`WO ${wo.woNumber} masih berstatus ${wo.status}. Ubah status menjadi Selesai sebelum membuat faktur.`);
+      return;
+    }
     setInvoiceWO(wo);
     setInvoicePayment(wo.total);
+    setInvoicePaymentMethod('Tunai');
   };
 
   // Cabang aktif user saat ini (untuk melanjutkan pekerjaan)
@@ -559,14 +568,21 @@ export default function WorkOrders() {
   };
 
   const handleCreateInvoice = async () => {
-    if (invoiceWO) {
-      const invoice = await createInvoiceFromWO(invoiceWO.id, invoicePayment);
+    if (invoiceWO && !isCreatingInvoice) {
+      setIsCreatingInvoice(true);
+      try {
+        const invoice = await createInvoiceFromWO(invoiceWO.id, invoicePayment, invoicePaymentMethod);
       if (invoice) {
         setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${invoiceWO.woNumber}!`);
         setTimeout(() => setSuccessMsg(''), 4000);
       }
-      setInvoiceWO(null);
-      setInvoicePayment(0);
+        setInvoiceWO(null);
+        setInvoicePayment(0);
+      } catch (error: any) {
+        window.alert(`Gagal membuat faktur: ${error?.message || 'terjadi kesalahan'}`);
+      } finally {
+        setIsCreatingInvoice(false);
+      }
     }
   };
 
@@ -1889,15 +1905,37 @@ export default function WorkOrders() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Metode Pembayaran
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Tunai', 'QRIS/Transfer'] as const).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setInvoicePaymentMethod(method)}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${
+                        invoicePaymentMethod === method
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Jumlah Pembayaran (Rp)
                 </label>
                 <input
-                  type="number"
-                  min="0"
-                  value={invoicePayment}
-                  onChange={(e) => setInvoicePayment(parseInt(e.target.value) || 0)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  type="text"
+                  inputMode="numeric"
+                  value={formatPaymentInput(invoicePayment)}
+                  onChange={(e) => setInvoicePayment(parsePaymentInput(e.target.value))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                 />
                 <div className="flex gap-2 mt-2">
                   <button
@@ -1932,10 +1970,11 @@ export default function WorkOrders() {
               <button
                 type="button"
                 onClick={handleCreateInvoice}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-green-600/20"
+                disabled={isCreatingInvoice}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors shadow-lg shadow-green-600/20"
               >
                 <Receipt className="w-4 h-4" />
-                Buat Faktur
+                {isCreatingInvoice ? 'Menyimpan...' : 'Buat Faktur'}
               </button>
             </div>
           </div>

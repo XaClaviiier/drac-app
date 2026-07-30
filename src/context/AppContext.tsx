@@ -36,7 +36,7 @@ interface AppContextType {
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
-  createInvoiceFromWO: (woId: string, payment: number) => Promise<SalesInvoice | null>;
+  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer') => Promise<SalesInvoice | null>;
   addItem: (item: Item) => Promise<void>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -542,7 +542,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newWo;
   };
 
-  const createInvoiceFromWO = async (woId: string, payment: number): Promise<SalesInvoice | null> => {
+  const createInvoiceFromWO = async (
+    woId: string,
+    payment: number,
+    paymentMethod: 'Tunai' | 'QRIS/Transfer'
+  ): Promise<SalesInvoice | null> => {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
 
@@ -553,7 +557,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let invoiceId = Date.now().toString();
 
     if (!isDemoMode) {
-      const result = await api.createInvoiceFromWorkOrder(woId, payment);
+      const result = await api.createInvoiceFromWorkOrder(woId, payment, paymentMethod);
       if (!result.success || !result.data) {
         throw new Error(result.message || 'Gagal membuat faktur dari WO');
       }
@@ -569,7 +573,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customerName: wo.customerName,
       vehicleInfo: `${wo.vehicleInfo} ${wo.plateNumber}`,
       description: wo.services.map((s) => s.name).join(', '),
-      total: wo.total, payment, status, age: 0,
+      total: wo.total, payment, paymentMethod, status, age: 0,
       woId: wo.id, woNumber: wo.woNumber, items: wo.services,
       branchId: wo.branchId,
     };

@@ -10,6 +10,7 @@ switch ($method) {
             $r['vehicleInfo'] = $r['vehicle_info'];
             $r['total'] = (float)$r['total'];
             $r['payment'] = (float)$r['payment'];
+            $r['paymentMethod'] = $r['payment_method'] ?? 'Tunai';
             $r['age'] = (int)$r['age'];
             $r['woId'] = $r['wo_id'];
             $r['woNumber'] = $r['wo_number'];
@@ -39,6 +40,10 @@ switch ($method) {
 
                 $date = $d['date'] ?? date('Y-m-d');
                 $payment = max(0, (float)($d['payment'] ?? 0));
+                $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
+                if (!in_array($paymentMethod, ['Tunai', 'QRIS/Transfer'], true)) {
+                    throw new Exception('Metode pembayaran tidak valid');
+                }
                 $total = (float)$wo['total'];
                 $status = $payment >= $total ? 'Lunas' : 'Belum Lunas';
                 $invoiceId = generateId();
@@ -54,15 +59,15 @@ switch ($method) {
                 $insertInvoice = $pdo->prepare("
                     INSERT INTO sales_invoices (
                         id, invoice_number, date, customer_ref_id, customer_id, customer_name,
-                        vehicle_info, description, total, payment, status, age,
+                        vehicle_info, description, total, payment, payment_method, status, age,
                         wo_id, wo_number, branch_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
                 ");
                 $insertInvoice->execute([
                     $invoiceId, $invoiceNumber, $date,
                     $wo['customer_ref_id'], $wo['customer_id'], $wo['customer_name'],
                     trim($wo['vehicle_info'] . ' ' . $wo['plate_number']),
-                    $description, $total, $payment, $status,
+                    $description, $total, $payment, $paymentMethod, $status,
                     $woId, $wo['wo_number'], $wo['branch_id'],
                 ]);
 
@@ -93,19 +98,24 @@ switch ($method) {
                     'id' => $invoiceId,
                     'invoiceNumber' => $invoiceNumber,
                     'status' => $status,
+                    'paymentMethod' => $paymentMethod,
                 ], 'Faktur berhasil dibuat dari WO');
             }
 
             $invoiceId = $d['id'] ?? generateId();
             $branchId = $d['branchId'] ?? 'BR-001';
             $invoiceNumber = nextDocumentNumber($pdo, 'sales_invoice', $branchId, $d['date'] ?? null);
-            $stmt = $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
+            if (!in_array($paymentMethod, ['Tunai', 'QRIS/Transfer'], true)) {
+                throw new Exception('Metode pembayaran tidak valid');
+            }
+            $stmt = $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, payment_method, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $invoiceId,
                 $invoiceNumber, $d['date'],
                 $d['customerRefId'] ?? '', $d['customerId'] ?? '', $d['customerName'] ?? '',
                 $d['vehicleInfo'] ?? '', $d['description'] ?? '',
-                $d['total'] ?? 0, $d['payment'] ?? 0,
+                $d['total'] ?? 0, $d['payment'] ?? 0, $paymentMethod,
                 $d['status'] ?? 'Belum Lunas', $d['age'] ?? 0,
                 $d['woId'] ?? null, $d['woNumber'] ?? null,
                 $branchId
@@ -133,19 +143,21 @@ switch ($method) {
             respondSuccess(['id' => $invoiceId, 'invoiceNumber' => $invoiceNumber], 'Faktur disimpan dan stok diperbarui');
         } catch (Exception $e) {
             $pdo->rollBack();
-            respondError('Gagal menyimpan faktur', 500, $e->getMessage());
+            respondError($e->getMessage(), 422);
         }
         break;
 
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
-        $stmt = $pdo->prepare("UPDATE sales_invoices SET invoice_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_info=?, description=?, total=?, payment=?, status=?, age=?, branch_id=? WHERE id=?");
+        $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
+        if (!in_array($paymentMethod, ['Tunai', 'QRIS/Transfer'], true)) respondError('Metode pembayaran tidak valid', 422);
+        $stmt = $pdo->prepare("UPDATE sales_invoices SET invoice_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_info=?, description=?, total=?, payment=?, payment_method=?, status=?, age=?, branch_id=? WHERE id=?");
         $stmt->execute([
             $d['invoiceNumber'], $d['date'],
             $d['customerRefId'] ?? '', $d['customerId'] ?? '', $d['customerName'] ?? '',
             $d['vehicleInfo'] ?? '', $d['description'] ?? '',
-            $d['total'] ?? 0, $d['payment'] ?? 0,
+            $d['total'] ?? 0, $d['payment'] ?? 0, $paymentMethod,
             $d['status'] ?? 'Belum Lunas', $d['age'] ?? 0,
             $d['branchId'] ?? 'BR-001', $id
         ]);

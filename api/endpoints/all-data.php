@@ -180,6 +180,7 @@ try {
         $r['vehicleInfo'] = $r['vehicle_info'];
         $r['total'] = (float)$r['total'];
         $r['payment'] = (float)$r['payment'];
+        $r['paymentMethod'] = $r['payment_method'] ?? 'Tunai';
         $r['age'] = (int)$r['age'];
         $r['woId'] = $r['wo_id'];
         $r['woNumber'] = $r['wo_number'];
