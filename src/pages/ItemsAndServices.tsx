@@ -857,15 +857,19 @@ export default function ItemsAndServices() {
           <table className="w-full">
             <thead className="bg-gradient-to-r from-blue-800 to-blue-900 text-white">
               <tr>
-                <th className="w-8 px-2 py-3"></th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Kode Barang</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Nama Barang</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Kts</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Satuan</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Jenis Barang</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Kategori</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Harga Jual</th>
-                <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Aksi</th>
+                <th colSpan={9} className="p-0">
+                  <div className="flex items-center text-xs font-medium uppercase tracking-wider">
+                    <div className="w-10 flex-shrink-0 px-2 py-3"></div>
+                    <div className="min-w-[130px] px-4 py-3 text-left">Kode Barang</div>
+                    <div className="flex-1 px-4 py-3 text-left">Nama Barang</div>
+                    <div className="w-16 px-4 py-3 text-right">KTS</div>
+                    <div className="w-20 px-4 py-3 text-left">Satuan</div>
+                    <div className="w-28 px-4 py-3 text-left">Jenis Barang</div>
+                    <div className="w-28 px-4 py-3 text-left">Kategori</div>
+                    <div className="w-32 px-4 py-3 text-right">Harga Jual</div>
+                    <div className="w-24 px-4 py-3 text-center">Aksi</div>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -902,7 +906,7 @@ export default function ItemsAndServices() {
                           </div>
                           <p className="text-xs text-gray-500">{item.brand && item.brand !== '-' ? item.brand : ''} {item.description ? (item.brand && item.brand !== '-' ? '- ' : '') + item.description : ''}</p>
                         </div>
-                        <div className="w-16 px-4 py-3 text-right text-sm font-semibold text-gray-900">{displayStock(item)}</div>
+                        <div className="w-16 px-4 py-3 text-right text-sm font-semibold text-gray-900">{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>
                         <div className="w-20 px-4 py-3 text-sm text-gray-700">{item.unit}</div>
                         <div className="w-28 px-4 py-3">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>
