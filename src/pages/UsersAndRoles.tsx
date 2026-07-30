@@ -5,19 +5,31 @@ import { api } from '../lib/apiClient';
 import UserSessionsTab from '../components/UserSessionsTab';
 import type { User, Role, Permission, Branch } from '../types';
 
-const allPermissions: Permission[] = [
-  'dashboard:view',
-  'invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete',
-  'wo:view', 'wo:create', 'wo:edit', 'wo:delete',
-  'customer:view', 'customer:create', 'customer:edit', 'customer:delete',
-  'vehicle:view', 'vehicle:create', 'vehicle:edit', 'vehicle:delete',
-  'item:view', 'item:create', 'item:edit', 'item:delete',
-  'user:view', 'user:create', 'user:edit', 'user:delete',
-  'role:view', 'role:create', 'role:edit', 'role:delete',
-  'branch:view', 'branch:create', 'branch:edit', 'branch:delete',
-  'report:view',
-  'all_branches',
+type PermissionModule = {
+  id: string;
+  name: string;
+  description: string;
+  permissions: Permission[];
+};
+
+const permissionModules: PermissionModule[] = [
+  { id: 'dashboard', name: 'Dashboard', description: 'Ringkasan operasional', permissions: ['dashboard:view'] },
+  { id: 'wo', name: 'Order Kerja', description: 'Pengecekan dan pengerjaan', permissions: ['wo:view', 'wo:create', 'wo:edit', 'wo:delete'] },
+  { id: 'invoice', name: 'Faktur Penjualan', description: 'Penjualan dan pembayaran', permissions: ['invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete'] },
+  { id: 'customer', name: 'Pelanggan', description: 'Master pelanggan', permissions: ['customer:view', 'customer:create', 'customer:edit', 'customer:delete'] },
+  { id: 'vehicle', name: 'Kendaraan', description: 'Register kendaraan', permissions: ['vehicle:view', 'vehicle:create', 'vehicle:edit', 'vehicle:delete'] },
+  { id: 'item', name: 'Barang & Jasa', description: 'Master barang, jasa, dan stok', permissions: ['item:view', 'item:create', 'item:edit', 'item:delete'] },
+  { id: 'supplier', name: 'Supplier', description: 'Master pemasok', permissions: ['supplier:view', 'supplier:create', 'supplier:edit', 'supplier:delete'] },
+  { id: 'receipt', name: 'Penerimaan Barang', description: 'Barang masuk gudang', permissions: ['receipt:view', 'receipt:create', 'receipt:edit', 'receipt:delete'] },
+  { id: 'purchase', name: 'Faktur Pembelian', description: 'Pembelian dan pembayaran', permissions: ['purchase:view', 'purchase:create', 'purchase:edit', 'purchase:delete', 'purchase:pay'] },
+  { id: 'user', name: 'Pengguna', description: 'Akun pengguna', permissions: ['user:view', 'user:create', 'user:edit', 'user:delete'] },
+  { id: 'role', name: 'Role & Hak Akses', description: 'Grup akses pengguna', permissions: ['role:view', 'role:create', 'role:edit', 'role:delete'] },
+  { id: 'branch', name: 'Cabang', description: 'Master cabang', permissions: ['branch:view', 'branch:create', 'branch:edit', 'branch:delete', 'all_branches'] },
+  { id: 'report', name: 'Laporan', description: 'Laporan operasional', permissions: ['report:view'] },
+  { id: 'settings', name: 'Pengaturan', description: 'Konfigurasi sistem', permissions: ['settings:view', 'settings:edit'] },
 ];
+
+const allPermissions: Permission[] = permissionModules.flatMap((module) => module.permissions);
 
 const permLabels: Record<string, string> = {
   'dashboard:view': 'Lihat Dashboard',
@@ -29,6 +41,10 @@ const permLabels: Record<string, string> = {
   'user:view': 'Lihat User', 'user:create': 'Buat User', 'user:edit': 'Edit User', 'user:delete': 'Hapus User',
   'role:view': 'Lihat Role', 'role:create': 'Buat Role', 'role:edit': 'Edit Role', 'role:delete': 'Hapus Role',
   'branch:view': 'Lihat Cabang', 'branch:create': 'Buat Cabang', 'branch:edit': 'Edit Cabang', 'branch:delete': 'Hapus Cabang',
+  'supplier:view': 'Lihat Supplier', 'supplier:create': 'Buat Supplier', 'supplier:edit': 'Edit Supplier', 'supplier:delete': 'Hapus Supplier',
+  'receipt:view': 'Lihat Penerimaan', 'receipt:create': 'Buat Penerimaan', 'receipt:edit': 'Edit Penerimaan', 'receipt:delete': 'Hapus Penerimaan',
+  'purchase:view': 'Lihat Pembelian', 'purchase:create': 'Buat Pembelian', 'purchase:edit': 'Edit Pembelian', 'purchase:delete': 'Hapus Pembelian', 'purchase:pay': 'Bayar Pembelian',
+  'settings:view': 'Lihat Pengaturan', 'settings:edit': 'Edit Pengaturan',
   'report:view': 'Lihat Laporan',
   'all_branches': 'Akses Semua Cabang',
 };
@@ -51,6 +67,8 @@ export default function UsersAndRoles() {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [roleForm, setRoleForm] = useState({ code: '', name: '', description: '', permissions: [] as Permission[], isActive: true });
+  const [selectedPermissionModule, setSelectedPermissionModule] = useState('dashboard');
+  const [permissionSearch, setPermissionSearch] = useState('');
 
   // Branch modal
   const [showBranchModal, setShowBranchModal] = useState(false);
@@ -74,6 +92,8 @@ export default function UsersAndRoles() {
   };
 
   const openRoleModal = (role?: Role) => {
+    setSelectedPermissionModule('dashboard');
+    setPermissionSearch('');
     if (role) {
       setEditingRole(role);
       setRoleForm({ code: role.code, name: role.name, description: role.description, permissions: [...role.permissions], isActive: role.isActive });
@@ -138,12 +158,44 @@ export default function UsersAndRoles() {
   const togglePerm = (perm: Permission) => {
     setRoleForm((prev) => ({
       ...prev,
-      permissions: prev.permissions.includes(perm) ? prev.permissions.filter((p) => p !== perm) : [...prev.permissions, perm],
+      permissions: (() => {
+        const exists = prev.permissions.includes(perm);
+        const module = permissionModules.find((item) => item.permissions.includes(perm));
+        const viewPermission = module?.permissions.find((item) => item.endsWith(':view'));
+        if (exists) {
+          if (perm === viewPermission && module) {
+            return prev.permissions.filter((item) => !module.permissions.includes(item));
+          }
+          return prev.permissions.filter((item) => item !== perm);
+        }
+        const next = [...prev.permissions, perm];
+        if (viewPermission && perm !== viewPermission && !next.includes(viewPermission)) next.push(viewPermission);
+        return next;
+      })(),
+    }));
+  };
+
+  const setModulePermissions = (module: PermissionModule, enabled: boolean) => {
+    setRoleForm((prev) => ({
+      ...prev,
+      permissions: enabled
+        ? Array.from(new Set([...prev.permissions, ...module.permissions]))
+        : prev.permissions.filter((permission) => !module.permissions.includes(permission)),
     }));
   };
 
   const canEdit = hasPermission('user:edit');
   const canDelete = hasPermission('user:delete');
+  const displayedPermissionModules = permissionModules.filter((module) => {
+    const query = permissionSearch.trim().toLowerCase();
+    if (!query) return true;
+    return module.name.toLowerCase().includes(query)
+      || module.description.toLowerCase().includes(query)
+      || module.permissions.some((permission) => (permLabels[permission] || permission).toLowerCase().includes(query));
+  });
+  const activePermissionModule = displayedPermissionModules.find((module) => module.id === selectedPermissionModule)
+    || displayedPermissionModules[0]
+    || permissionModules[0];
 
   return (
     <div className="space-y-5">
@@ -369,44 +421,134 @@ export default function UsersAndRoles() {
       {/* ========== ROLE MODAL ========== */}
       {showRoleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
-            <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">{editingRole ? 'Edit Role' : 'Role Baru'}</h3>
+          <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{editingRole ? 'Edit Role' : 'Role Baru'}</h3>
+                <p className="text-xs text-gray-500">{roleForm.permissions.length} dari {allPermissions.length} hak akses dipilih</p>
+              </div>
               <button onClick={() => setShowRoleModal(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
             </div>
-            <form onSubmit={saveRole} className="space-y-4 p-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Kode Role *</label>
-                  <input required value={roleForm.code} onChange={(e) => setRoleForm({ ...roleForm, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+            <form onSubmit={saveRole} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto p-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Kode Role *</label>
+                    <input required value={roleForm.code} onChange={(e) => setRoleForm({ ...roleForm, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Nama Role *</label>
+                    <input required value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Nama Role *</label>
-                  <input required value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                <div className="mt-4">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Keterangan</label>
+                  <input value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+
+                <div className="mt-5 overflow-hidden rounded-xl border border-gray-200">
+                  <div className="flex flex-col gap-3 border-b border-gray-200 bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative flex-1 sm:max-w-md">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        value={permissionSearch}
+                        onChange={(event) => setPermissionSearch(event.target.value)}
+                        placeholder="Cari modul atau hak akses..."
+                        className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setRoleForm((prev) => ({ ...prev, permissions: [...allPermissions] }))} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Aktifkan Semua</button>
+                      <button type="button" onClick={() => setRoleForm((prev) => ({ ...prev, permissions: [] }))} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100">Kosongkan</button>
+                    </div>
+                  </div>
+
+                  <div className="grid min-h-[360px] grid-cols-1 md:grid-cols-[270px_1fr]">
+                    <div className="border-b border-gray-200 bg-gray-50/70 p-2 md:border-b-0 md:border-r">
+                      <div className="flex gap-2 overflow-x-auto md:block md:max-h-[420px] md:space-y-1 md:overflow-y-auto">
+                        {displayedPermissionModules.map((module) => {
+                          const activeCount = module.permissions.filter((permission) => roleForm.permissions.includes(permission)).length;
+                          const isSelected = activePermissionModule.id === module.id;
+                          return (
+                            <button
+                              key={module.id}
+                              type="button"
+                              onClick={() => setSelectedPermissionModule(module.id)}
+                              className={`min-w-[190px] rounded-lg px-3 py-2.5 text-left transition-colors md:min-w-0 md:w-full ${
+                                isSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700 hover:bg-white'
+                              }`}
+                            >
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-semibold">{module.name}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                  {activeCount}/{module.permissions.length}
+                                </span>
+                              </span>
+                              <span className={`mt-0.5 block truncate text-[10px] ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>{module.description}</span>
+                            </button>
+                          );
+                        })}
+                        {displayedPermissionModules.length === 0 && <p className="p-4 text-center text-sm text-gray-500">Modul tidak ditemukan</p>}
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 p-4 md:p-5">
+                      {displayedPermissionModules.length > 0 && (
+                        <>
+                          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <h4 className="font-semibold text-gray-900">{activePermissionModule.name}</h4>
+                              <p className="text-xs text-gray-500">{activePermissionModule.description}</p>
+                            </div>
+                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                              <input
+                                type="checkbox"
+                                checked={activePermissionModule.permissions.every((permission) => roleForm.permissions.includes(permission))}
+                                onChange={(event) => setModulePermissions(activePermissionModule, event.target.checked)}
+                                className="h-4 w-4 rounded text-blue-600"
+                              />
+                              Pilih Semua Modul
+                            </label>
+                          </div>
+
+                          <div className="overflow-hidden rounded-lg border border-gray-200">
+                            <div className="grid grid-cols-[1fr_74px] bg-slate-700 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-white">
+                              <span>Hak Akses</span>
+                              <span className="text-center">Aktif</span>
+                            </div>
+                            <div className="divide-y divide-gray-100">
+                              {activePermissionModule.permissions.map((permission) => {
+                                const destructive = permission.endsWith(':delete') || permission === 'all_branches';
+                                return (
+                                  <label key={permission} className={`grid cursor-pointer grid-cols-[1fr_74px] items-center px-4 py-3 transition-colors hover:bg-gray-50 ${destructive ? 'bg-red-50/40' : ''}`}>
+                                    <span>
+                                      <span className={`block text-sm font-medium ${destructive ? 'text-red-700' : 'text-gray-800'}`}>{permLabels[permission] || permission}</span>
+                                      <span className="block font-mono text-[10px] text-gray-400">{permission}</span>
+                                    </span>
+                                    <span className="flex justify-center">
+                                      <input type="checkbox" checked={roleForm.permissions.includes(permission)} onChange={() => togglePerm(permission)} className="h-5 w-5 rounded border-gray-300 text-blue-600" />
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <p className="mt-3 text-xs text-gray-500">Mengaktifkan Buat, Ubah, atau Hapus akan otomatis mengaktifkan hak Lihat pada modul yang sama.</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Keterangan</label>
-                <input value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Hak Akses</label>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
-                  {allPermissions.map((perm) => (
-                    <label key={perm} className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2.5 transition-colors hover:bg-gray-50">
-                      <input type="checkbox" checked={roleForm.permissions.includes(perm)} onChange={() => togglePerm(perm)} className="h-4 w-4 rounded text-blue-600" />
-                      <span className="text-sm text-gray-700">{permLabels[perm] || perm}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={roleForm.isActive} onChange={(e) => setRoleForm({ ...roleForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
-                Aktif
-              </label>
-              <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+              <div className="flex flex-col gap-3 border-t border-gray-200 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input type="checkbox" checked={roleForm.isActive} onChange={(e) => setRoleForm({ ...roleForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
+                  Role Aktif
+                </label>
+                <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setShowRoleModal(false)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
                 <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"><Save className="h-4 w-4" /> Simpan</button>
+                </div>
               </div>
             </form>
           </div>
