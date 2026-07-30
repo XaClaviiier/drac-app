@@ -154,7 +154,7 @@ export default function ItemsAndServices() {
       setCategoryForm({
         code: category.code,
         name: category.name,
-        type: category.type,
+        type: 'Semua',
         description: category.description,
         isActive: category.isActive,
       });
@@ -297,6 +297,7 @@ export default function ItemsAndServices() {
     const payload: ItemCategory = {
       id: editingCategory?.id || Date.now().toString(),
       ...categoryForm,
+      type: 'Semua',
       code,
       name,
     };
@@ -702,7 +703,7 @@ export default function ItemsAndServices() {
         ) {
           await addItemCategory({
             id: row._category.id, code: row._category.code, name: row._category.name,
-            type: row._category.type, description: row._category.description, isActive: row._category.isActive
+            type: 'Semua', description: row._category.description, isActive: row._category.isActive
           });
           createdCategoryIds.add(row._category.id);
           createdCategoryNames.add(catName);
@@ -998,7 +999,6 @@ export default function ItemsAndServices() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-gray-500">{category.description || '-'}</p>
-              <span className="mt-2 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{category.type}</span>
             </div>
           ))}
         </div>
@@ -1017,7 +1017,7 @@ export default function ItemsAndServices() {
             </div>
             <form onSubmit={saveItem} className="space-y-5 p-6">
               {/* Basic info */}
-              <div className="grid gap-4 md:grid-cols-2">
+              <div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Kode Barang/Jasa *</label>
                   <input required value={itemForm.code} onChange={(e) => setItemForm({ ...itemForm, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
@@ -1226,13 +1226,6 @@ export default function ItemsAndServices() {
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Kode *</label>
                   <input required value={categoryForm.code} onChange={(e) => setCategoryForm({ ...categoryForm, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Untuk Jenis</label>
-                  <select value={categoryForm.type} onChange={(e) => setCategoryForm({ ...categoryForm, type: e.target.value as ItemCategory['type'] })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
-                    <option value="Semua">Semua</option>
-                    {allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-                  </select>
                 </div>
               </div>
               <div>
