@@ -363,7 +363,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .filter(detail => detail.itemId === item.id)
             .reduce((sum, detail) => sum + detail.qty, 0);
           return soldQty > 0
-            ? { ...item, stock: Math.max(0, item.stock - soldQty), sellableStock: Math.max(0, item.sellableStock - soldQty) }
+            ? { ...item, stock: item.stock - soldQty, sellableStock: item.sellableStock - soldQty }
             : item;
         });
         return { ...prev, items: nextItems, invoices: [...prev.invoices, inv] };

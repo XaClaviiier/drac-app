@@ -76,7 +76,7 @@ try {
     $rows = $pdo->query("SELECT * FROM items ORDER BY code")->fetchAll();
     $stockRows = $pdo->query("
         SELECT w.branch_id, ws.item_id, SUM(ws.quantity) stock,
-               SUM(GREATEST(0, ws.quantity-ws.reserved_quantity)) sellable_stock
+               SUM(ws.quantity-ws.reserved_quantity) sellable_stock
         FROM warehouse_stocks ws JOIN warehouses w ON w.id=ws.warehouse_id
         WHERE w.is_active=1 GROUP BY w.branch_id,ws.item_id
     ")->fetchAll();

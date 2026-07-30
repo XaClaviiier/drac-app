@@ -53,7 +53,7 @@ switch ($method) {
             // Auto-increment stock jika status Diterima
             if (($d['status'] ?? '') === 'Diterima' && !empty($d['items'])) {
                 foreach ($d['items'] as $i) {
-                    adjustBranchStock($pdo, $branchId, $i['itemId'], (int)$i['qty']);
+                    adjustBranchStockAllowNegative($pdo, $branchId, $i['itemId'], (int)$i['qty']);
                 }
             }
 
@@ -107,12 +107,12 @@ switch ($method) {
             // Ini juga menangani perubahan qty, item, atau cabang.
             if ($wasReceived) {
                 foreach ($oldItemsList as $i) {
-                    adjustBranchStock($pdo, $oldBranchId, $i['item_id'], -(int)$i['qty']);
+                    adjustBranchStockAllowNegative($pdo, $oldBranchId, $i['item_id'], -(int)$i['qty']);
                 }
             }
             if ($isReceived) {
                 foreach ($d['items'] as $i) {
-                    adjustBranchStock($pdo, $newBranchId, $i['itemId'], (int)$i['qty']);
+                    adjustBranchStockAllowNegative($pdo, $newBranchId, $i['itemId'], (int)$i['qty']);
                 }
             }
 
@@ -136,7 +136,7 @@ switch ($method) {
                 $items->execute([$id]);
                 foreach ($items->fetchAll() as $i) {
                     if (!empty($i['item_id'])) {
-                        adjustBranchStock($pdo, $row['branch_id'], $i['item_id'], -(int)$i['qty']);
+                        adjustBranchStockAllowNegative($pdo, $row['branch_id'], $i['item_id'], -(int)$i['qty']);
                     }
                 }
             }

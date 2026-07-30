@@ -82,7 +82,7 @@ switch ($method) {
                         $service['description'], $service['price'], $service['qty'], $service['subtotal'],
                     ]);
                     if (!empty($service['item_id'])) {
-                        adjustBranchStock($pdo, $wo['branch_id'], $service['item_id'], -(int)$service['qty']);
+                        adjustBranchStockAllowNegative($pdo, $wo['branch_id'], $service['item_id'], -(int)$service['qty']);
                     }
                 }
 
@@ -134,7 +134,7 @@ switch ($method) {
                         $price, $qty, $price * $qty
                     ]);
                     if (!empty($item['itemId'])) {
-                        adjustBranchStock($pdo, $branchId, $item['itemId'], -$qty);
+                        adjustBranchStockAllowNegative($pdo, $branchId, $item['itemId'], -$qty);
                     }
                 }
             }
@@ -178,7 +178,7 @@ switch ($method) {
             $details->execute([$id]);
             foreach ($details->fetchAll() as $detail) {
                 if (!empty($detail['item_id'])) {
-                    adjustBranchStock($pdo, $detail['branch_id'], $detail['item_id'], (int)$detail['qty']);
+                    adjustBranchStockAllowNegative($pdo, $detail['branch_id'], $detail['item_id'], (int)$detail['qty']);
                 }
             }
             $pdo->prepare("DELETE FROM sales_invoices WHERE id=?")->execute([$id]);

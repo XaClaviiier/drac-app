@@ -400,3 +400,39 @@ if (!function_exists('adjustBranchStock')) {
         $sync->execute([$itemId, $branchId]);
     }
 }
+
+/**
+ * Terapkan mutasi stok penjualan tanpa memblokir transaksi.
+ * Saldo boleh negatif dan akan dipulihkan oleh penerimaan atau penyesuaian stok.
+ */
+function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $itemId, int $delta): void {
+    $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id = ?");
+    $itemStmt->execute([$itemId]);
+    $item = $itemStmt->fetch();
+    if (!$item || $item['type'] !== 'Persediaan') return;
+
+    $warehouseId = defaultWarehouseId($pdo, $branchId);
+    $warehouseUpsert = $pdo->prepare("
+        INSERT INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
+        VALUES (?, ?, ?, 0)
+        ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
+    ");
+    $warehouseUpsert->execute([$warehouseId, $itemId, $delta]);
+
+    $branchUpsert = $pdo->prepare("
+        INSERT INTO branch_item_stocks (branch_id, item_id, stock, sellable_stock)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            stock = stock + VALUES(stock),
+            sellable_stock = sellable_stock + VALUES(sellable_stock)
+    ");
+    $branchUpsert->execute([$branchId, $itemId, $delta, $delta]);
+
+    $sync = $pdo->prepare("
+        UPDATE items i
+        JOIN branch_item_stocks s ON s.item_id = i.id AND s.branch_id = i.branch_id
+        SET i.stock = s.stock, i.sellable_stock = s.sellable_stock
+        WHERE i.id = ? AND i.branch_id = ?
+    ");
+    $sync->execute([$itemId, $branchId]);
+}

@@ -39,7 +39,7 @@ export default function Warehouses() {
     </form>}
     <div className="grid gap-4 lg:grid-cols-3">{warehouses.map(w=><div key={w.id} className="rounded-xl border bg-white p-4 shadow-sm">
       <div className="flex items-center gap-3"><div className="rounded-lg bg-cyan-100 p-2 text-cyan-700"><WarehouseIcon className="h-5 w-5"/></div><div><p className="font-semibold">{w.name}</p><p className="text-xs text-gray-500">{w.code} · {w.branchName}{w.isDefault?' · Utama':''}</p></div></div>
-      <div className="mt-4 max-h-48 space-y-2 overflow-auto">{inventoryItems.map(i=>{const q=stock(w.id,i.id);return q>0?<div key={i.id} className="flex justify-between border-b pb-1 text-sm"><span>{i.name}</span><strong>{q} {i.unit}</strong></div>:null})}<p className="text-xs text-gray-400"><Boxes className="mr-1 inline h-3 w-3"/>Saldo barang tersimpan per gudang</p></div>
+      <div className="mt-4 max-h-48 space-y-2 overflow-auto">{inventoryItems.map(i=>{const q=stock(w.id,i.id);return q!==0?<div key={i.id} className="flex justify-between border-b pb-1 text-sm"><span>{i.name}</span><strong className={q<0?'text-red-600':''}>{q} {i.unit}</strong></div>:null})}<p className="text-xs text-gray-400"><Boxes className="mr-1 inline h-3 w-3"/>Saldo barang tersimpan per gudang</p></div>
     </div>)}</div>
     <form onSubmit={transfer} className="rounded-xl border bg-white p-5 shadow-sm">
       <h3 className="mb-4 flex items-center gap-2 font-semibold"><ArrowRightLeft className="h-5 w-5 text-blue-600"/> Mutasi Antar-Gudang</h3>
