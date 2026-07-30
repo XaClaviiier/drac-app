@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -48,6 +48,7 @@ export default function WorkOrders() {
   const [invoicePayment, setInvoicePayment] = useState(0);
   const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+  const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [showComplaintEditor, setShowComplaintEditor] = useState(false);
   const [newComplaintTemplate, setNewComplaintTemplate] = useState('');
@@ -789,8 +790,114 @@ export default function WorkOrders() {
         </div>
       </div>
 
-      {/* Work Order Cards */}
-      <div className="space-y-4">
+      {/* Desktop Work Order List */}
+      {filteredWOs.length > 0 && (
+        <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-left">
+              <thead className="bg-blue-800 text-xs uppercase tracking-wide text-white">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">No. WO / Tanggal</th>
+                  <th className="px-4 py-3 font-semibold">Pelanggan</th>
+                  <th className="px-4 py-3 font-semibold">Kendaraan</th>
+                  <th className="px-4 py-3 font-semibold">Layanan</th>
+                  <th className="px-4 py-3 text-right font-semibold">Total</th>
+                  <th className="px-4 py-3 text-center font-semibold">Status</th>
+                  <th className="px-4 py-3 text-right font-semibold">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredWOs.map((wo) => (
+                  <tr key={wo.id} className="transition-colors hover:bg-blue-50/50">
+                    <td className="px-4 py-3">
+                      <button type="button" onClick={() => setDetailWO(wo)} className="text-left">
+                        <span className="block font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span>
+                        <span className="mt-0.5 block text-xs text-gray-500">
+                          {wo.date}
+                          {canViewAllBranches && (isAllBranchDropdown || !activeBranchOnly) && (
+                            <> · {data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '')}</>
+                          )}
+                        </span>
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="block max-w-[180px] truncate text-sm font-semibold text-gray-900">{wo.customerName}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="block max-w-[210px] truncate text-sm text-gray-900">{wo.vehicleInfo}</span>
+                      <span className="block text-xs font-semibold text-gray-500">{wo.plateNumber}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="block max-w-[230px] truncate text-sm text-gray-800">
+                        {wo.services.map(service => service.name).join(', ') || 'Belum ada layanan'}
+                      </span>
+                      <span className="block text-xs text-gray-500">{wo.services.length} item layanan</span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-bold text-gray-900">
+                      Rp {wo.total.toLocaleString('id-ID')}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>
+                        {wo.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
+                          <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+                            Proses
+                          </button>
+                        )}
+                        {hasPermission('wo:edit') && wo.status === 'Proses' && (
+                          <button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
+                            Selesai
+                          </button>
+                        )}
+                        {hasPermission('invoice:create') && wo.status === 'Selesai' && !wo.invoiceId && (
+                          <button onClick={() => handleOpenInvoiceModal(wo)} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
+                            Faktur
+                          </button>
+                        )}
+                        <button onClick={() => setDetailWO(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {hasPermission('wo:edit') && (
+                          <button onClick={() => handleOpenModal(wo)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit">
+                            <Edit className="h-4 w-4" />
+                          </button>
+                        )}
+                        {hasPermission('wo:delete') && (
+                          <button onClick={() => handleDelete(wo.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
+            <span>Klik nomor WO atau ikon mata untuk melihat rincian lengkap.</span>
+            <span className="font-semibold">{filteredWOs.length} order kerja</span>
+          </div>
+        </div>
+      )}
+      {filteredWOs.length === 0 && (
+        <div className="hidden rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm lg:block">
+          <Wrench className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+          <p className="text-lg font-medium text-gray-900">Tidak ada order kerja</p>
+          <p className="text-sm text-gray-500">
+            {todayOnly
+              ? `Tidak ada WO hari ini di ${branchScopeLabel}. Matikan filter Hari Ini untuk melihat riwayat.`
+              : 'Ubah filter atau buat Order Kerja baru.'}
+          </p>
+        </div>
+      )}
+
+      {/* Mobile Work Order Cards */}
+      <div className="space-y-4 lg:hidden">
         {filteredWOs.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Wrench className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -1056,6 +1163,69 @@ export default function WorkOrders() {
           ))
         )}
       </div>
+
+      {/* Desktop Detail Drawer */}
+      {detailWO && (
+        <div className="fixed inset-0 z-50 hidden lg:block" role="dialog" aria-modal="true">
+          <button type="button" aria-label="Tutup detail" onClick={() => setDetailWO(null)} className="absolute inset-0 bg-gray-950/35" />
+          <aside className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Detail Order Kerja</p>
+                <h3 className="mt-1 font-mono text-xl font-bold text-gray-900">{detailWO.woNumber}</h3>
+                <p className="mt-1 text-sm text-gray-500">{detailWO.date} · {data.branches.find(b => b.id === detailWO.branchId)?.name}</p>
+              </div>
+              <button onClick={() => setDetailWO(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="flex-1 space-y-5 overflow-y-auto p-6">
+              <div className="flex items-center justify-between">
+                <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{detailWO.status}</span>
+                <span className="text-xl font-bold text-blue-700">Rp {detailWO.total.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 rounded-xl border border-gray-200 p-4">
+                <div>
+                  <p className="text-xs text-gray-500">Pelanggan</p>
+                  <p className="mt-1 font-semibold text-gray-900">{detailWO.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Nomor Plat</p>
+                  <p className="mt-1 font-semibold text-gray-900">{detailWO.plateNumber}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-500">Kendaraan</p>
+                  <p className="mt-1 text-sm text-gray-900">{detailWO.vehicleInfo}</p>
+                </div>
+              </div>
+              <div>
+                <h4 className="mb-2 font-semibold text-gray-900">Layanan ({detailWO.services.length})</h4>
+                <div className="divide-y divide-gray-100 rounded-xl border border-gray-200">
+                  {detailWO.services.map(service => (
+                    <div key={service.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                      <span><strong>{service.name}</strong> <span className="text-gray-500">×{service.qty}</span></span>
+                      <span className="font-medium">Rp {(service.price * service.qty).toLocaleString('id-ID')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {detailWO.description && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><strong>Keluhan/Keterangan:</strong><br />{detailWO.description}</div>}
+              {detailWO.notes && <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700"><strong>Catatan:</strong><br />{detailWO.notes}</div>}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
+              {hasPermission('wo:edit') && detailWO.status === 'Pengecekan' && !detailWO.continuedToWoId && (
+                <button onClick={() => { requestStatusChange(detailWO, 'Proses'); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Setujui &amp; Proses</button>
+              )}
+              {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
+                <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
+              )}
+              {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
+                <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
+              )}
+              {hasPermission('wo:edit') && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
+              <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Modal */}
       {showModal && (
