@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Car, FileText, Users, Wrench, Boxes, PackageCheck, Truck, ReceiptText,
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
-  Warehouse,
+  Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
@@ -111,13 +111,13 @@ export default function Layout() {
         {/* Header */}
         <header className={`${location.pathname === '/' ? 'hidden lg:flex' : 'flex'} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3`}>
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            {/* Hamburger (mobile) */}
+            {/* Kembali ke dashboard mobile; menu lama tidak digunakan lagi. */}
             <button
-              onClick={() => setMobileMenuOpen(true)}
+              onClick={() => navigate('/')}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-md active:scale-95 lg:hidden"
-              aria-label="Buka menu"
+              aria-label="Kembali ke Beranda"
             >
-              <Menu className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-gray-800 sm:text-xl">{getPageTitle()}</h2>
@@ -217,9 +217,21 @@ export default function Layout() {
           </div>
         )}
 
-        <main className={`flex-1 overflow-y-auto ${location.pathname === '/' ? 'p-0 lg:p-6' : 'p-3 pb-6 sm:p-6'}`}>
+        <main className={`flex-1 overflow-y-auto ${location.pathname === '/' ? 'p-0 lg:p-6' : 'p-3 pb-24 sm:p-6 lg:pb-6'}`}>
           <Outlet />
         </main>
+        {location.pathname !== '/' && (
+          <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md items-end justify-around rounded-t-3xl border border-white/10 bg-[#092542]/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 text-white shadow-2xl backdrop-blur-xl lg:hidden">
+            <MobileBottom icon={Home} label="Beranda" active={false} onClick={() => navigate('/')} />
+            <MobileBottom icon={Sparkles} label="Aktivitas" active={location.pathname === '/workorders'} onClick={() => navigate('/workorders')} />
+            <button onClick={() => navigate(currentBranchId === 'ALL' ? '/' : '/workorders')} className="-mt-7 flex flex-col items-center">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#031a35] bg-gradient-to-br from-cyan-400 to-blue-600 shadow-xl"><CirclePlus className="h-8 w-8" /></span>
+              <span className="text-[10px] text-slate-300">Tambah</span>
+            </button>
+            <MobileBottom icon={Bot} label="Asisten AI" active={location.pathname === '/ai'} onClick={() => navigate('/ai')} />
+            <MobileBottom icon={Settings} label="Akun" active={location.pathname === '/settings'} onClick={() => navigate('/settings')} />
+          </nav>
+        )}
       </div>
 
       {/* ========== MOBILE FULLSCREEN MENU (Doughnut Grid) ========== */}
@@ -321,4 +333,8 @@ export default function Layout() {
       )}
     </div>
   );
+}
+
+function MobileBottom({ icon: Icon, label, active, onClick }: { icon: any; label: string; active: boolean; onClick: () => void }) {
+  return <button onClick={onClick} className={`flex w-16 flex-col items-center gap-1 py-1 text-[10px] ${active ? 'text-sky-400' : 'text-slate-400'}`}><Icon className="h-5 w-5" />{label}</button>;
 }
