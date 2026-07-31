@@ -71,6 +71,7 @@ export default function AIAssistant() {
   const [showCommandHistory, setShowCommandHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const historyLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -1242,9 +1243,11 @@ ${buildSmartContext(userMsgText)}`;
           <div className="border-t border-slate-700/60 bg-slate-800/60 p-3">
             <div className="flex items-end gap-2">
               <div className="relative">
-                <button type="button" onClick={() => setShowCommandHistory((value) => !value)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-600 bg-slate-900/80 text-slate-400 hover:border-cyan-500 hover:text-cyan-300" title="Riwayat perintah"><History className="h-5 w-5" /></button>
+                <button type="button" onClick={() => setShowCommandHistory((value) => !value)} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-600 bg-slate-900/80 px-3 text-slate-300 hover:border-cyan-500 hover:text-cyan-300" title="Riwayat perintah">
+                  <History className="h-5 w-5" /><span className="text-xs font-semibold sm:hidden">Riwayat</span>
+                </button>
                 {showCommandHistory && (
-                  <div className="absolute bottom-14 left-0 z-30 w-80 overflow-hidden rounded-xl border border-slate-600 bg-slate-900 shadow-2xl">
+                  <div className="fixed inset-x-4 bottom-20 z-30 overflow-hidden rounded-xl border border-slate-600 bg-slate-900 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-14 sm:left-0 sm:w-80">
                     <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2"><span className="text-xs font-bold text-slate-200">Perintah Terakhir</span><button type="button" onClick={() => setShowCommandHistory(false)} className="rounded p-1 text-slate-400 hover:bg-slate-800"><X className="h-3.5 w-3.5" /></button></div>
                     <div className="max-h-64 overflow-y-auto p-1.5">
                       {commandHistory.slice(0, 10).map((command, index) => <button key={`${command}-${index}`} type="button" onClick={() => { setInput(command); setHistoryIndex(index); setShowCommandHistory(false); inputRef.current?.focus(); }} className="block w-full truncate rounded-lg px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-slate-800 hover:text-cyan-300" title={command}>{command}</button>)}
@@ -1257,6 +1260,18 @@ ${buildSmartContext(userMsgText)}`;
                 ref={inputRef}
                 value={input}
                 onChange={e => { setInput(e.target.value); setHistoryIndex(-1); }}
+                onContextMenu={e => { e.preventDefault(); setShowCommandHistory(true); }}
+                onTouchStart={() => {
+                  historyLongPressRef.current = setTimeout(() => setShowCommandHistory(true), 550);
+                }}
+                onTouchEnd={() => {
+                  if (historyLongPressRef.current) clearTimeout(historyLongPressRef.current);
+                  historyLongPressRef.current = null;
+                }}
+                onTouchMove={() => {
+                  if (historyLongPressRef.current) clearTimeout(historyLongPressRef.current);
+                  historyLongPressRef.current = null;
+                }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return; }
                   if (e.key === 'Escape') { e.preventDefault(); setInput(''); setHistoryIndex(-1); return; }
@@ -1279,7 +1294,7 @@ ${buildSmartContext(userMsgText)}`;
                 }}
                 rows={1}
                 placeholder="Ketik cek, list, atau reg wo…"
-                className="min-h-11 max-h-[92px] flex-1 resize-none rounded-xl border border-slate-600 bg-slate-900/80 px-4 py-3 text-sm leading-5 text-slate-100 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30"
+                className="min-h-11 min-w-0 max-h-[92px] flex-1 resize-none rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-3 text-sm leading-5 text-slate-100 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30"
               />
               <button onClick={() => send()} disabled={busy || !input.trim()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg transition-all hover:scale-105 disabled:opacity-40">
                 {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
