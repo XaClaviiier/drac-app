@@ -315,7 +315,7 @@ export default function Customers() {
 
       {/* Form: subtab penuh di desktop, modal sederhana di mobile */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:grid lg:grid-cols-[minmax(0,1fr)_88px] lg:items-start lg:gap-3 lg:bg-transparent lg:p-0">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl lg:max-h-none lg:max-w-none lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
             <div className="sticky top-0 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
@@ -333,7 +333,7 @@ export default function Customers() {
             </div>
 
             <div className="hidden border-b border-gray-300 bg-gray-100 px-3 lg:flex"><span className="-mb-px rounded-t-md border border-b-white border-gray-300 border-t-blue-600 bg-white px-5 py-2.5 text-sm font-semibold text-gray-800">Umum</span></div>
-            <form onSubmit={handleSubmit} className="space-y-5 p-6 lg:grid lg:grid-cols-[minmax(0,1fr)_88px] lg:gap-4 lg:space-y-0 lg:p-4">
+            <form id="customer-data-form" onSubmit={handleSubmit} className="space-y-5 p-6 lg:p-4">
               <div className="grid gap-8 lg:grid-cols-2">
                 <section>
                   <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Umum</h4>
@@ -367,26 +367,28 @@ export default function Customers() {
                 </section>
               </div>
 
-              <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4 lg:sticky lg:top-4 lg:self-start lg:border-t-0 lg:pt-0">
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4 lg:hidden">
                 <button
                   type="button"
                   onClick={() => handleCloseModal()}
-                  className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50 lg:hidden"
+                  className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={!formData.name.trim() || !formData.phone.trim()}
-                  title="Simpan Pelanggan"
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:h-20 lg:w-20 lg:justify-center lg:px-0"
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
                 >
-                  <Save className="h-4 w-4 lg:h-9 lg:w-9" />
-                  <span className="lg:hidden">{editingCustomer ? 'Simpan Perubahan' : 'Simpan Pelanggan'}</span>
+                  <Save className="h-4 w-4" />
+                  <span>{editingCustomer ? 'Simpan Perubahan' : 'Simpan Pelanggan'}</span>
                 </button>
               </div>
             </form>
           </div>
+          <button type="submit" form="customer-data-form" disabled={!formData.name.trim() || !formData.phone.trim()} title="Simpan Pelanggan" className="sticky top-4 hidden h-20 w-20 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+            <Save className="h-9 w-9" />
+          </button>
         </div>
       )}
     </div>
