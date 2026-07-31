@@ -315,7 +315,7 @@ export default function Customers() {
 
       {/* Form: subtab penuh di desktop, modal sederhana di mobile */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:grid lg:grid-cols-[minmax(0,1fr)_88px] lg:items-start lg:gap-3 lg:bg-transparent lg:p-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:grid lg:grid-cols-[minmax(0,1fr)_120px] lg:items-start lg:gap-3 lg:bg-transparent lg:p-0">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl lg:max-h-none lg:max-w-none lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
             <div className="sticky top-0 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
@@ -386,8 +386,8 @@ export default function Customers() {
               </div>
             </form>
           </div>
-          <button type="submit" form="customer-data-form" disabled={!formData.name.trim() || !formData.phone.trim()} title="Simpan Pelanggan" className="sticky top-4 hidden h-20 w-20 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
-            <Save className="h-9 w-9" />
+          <button type="submit" form="customer-data-form" disabled={!formData.name.trim() || !formData.phone.trim()} title="Simpan Pelanggan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+            <Save className="h-12 w-12" />
           </button>
         </div>
       )}
