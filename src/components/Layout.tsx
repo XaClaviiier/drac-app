@@ -198,20 +198,20 @@ export default function Layout() {
         return (
           <>
             <button type="button" aria-label="Tutup menu" onClick={() => setDesktopMenuOpen(null)} className="fixed inset-0 z-30 hidden bg-transparent lg:block" />
-            <section className={`fixed top-14 z-[60] hidden max-h-[calc(100vh-4rem)] w-[min(620px,calc(100vw-18rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.28)] lg:block ${sidebarOpen ? 'left-[16.5rem]' : 'left-[4.5rem]'}`}>
+            <section className={`fixed top-14 z-[60] hidden max-h-[calc(100vh-4rem)] w-[min(520px,calc(100vw-18rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.28)] lg:block ${sidebarOpen ? 'left-[16.5rem]' : 'left-[4.5rem]'}`}>
               <span className="absolute -left-2 top-24 h-4 w-4 rotate-45 border-b border-l border-gray-200 bg-white" aria-hidden="true" />
-              <div className="px-5 pb-0 pt-6">
+              <div className="px-4 pb-0 pt-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-3xl font-normal text-gray-600">{group.label}</h2>
+                  <h2 className="text-2xl font-normal text-gray-600">{group.label}</h2>
                   <button type="button" onClick={() => setDesktopMenuOpen(null)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Tutup"><X className="h-5 w-5" /></button>
                 </div>
-                <div className="mt-5 h-[3px] w-full bg-blue-600" />
+                <div className="mt-3 h-0.5 w-full bg-blue-600" />
               </div>
-              <div className="p-5">
-                <div className="grid max-h-[calc(100vh-10rem)] grid-cols-3 gap-3 overflow-y-auto pr-1">
+              <div className="p-4">
+                <div className="grid max-h-[calc(100vh-8rem)] grid-cols-3 gap-2.5 overflow-y-auto pr-1">
                   {items.map((item, index) => { const Icon = item.icon; const available = !!item.path; return (
-                    <button key={`${item.label}-${index}`} type="button" disabled={!available} onClick={() => { if (!item.path) return; navigate(item.path); setDesktopMenuOpen(null); }} className={`relative flex min-h-40 flex-col items-center justify-center gap-4 rounded-lg border p-4 text-center transition-all ${tones[item.tone]} ${available ? 'hover:-translate-y-0.5 hover:shadow-lg' : 'cursor-not-allowed opacity-40'}`}>
-                      <Icon className="h-12 w-12 stroke-[1.7]" /><span className="text-lg font-medium leading-snug text-gray-700">{item.label}</span>
+                    <button key={`${item.label}-${index}`} type="button" disabled={!available} onClick={() => { if (!item.path) return; navigate(item.path); setDesktopMenuOpen(null); }} className={`relative flex min-h-28 flex-col items-center justify-center gap-2.5 rounded-lg border p-3 text-center transition-all ${tones[item.tone]} ${available ? 'hover:-translate-y-0.5 hover:shadow-lg' : 'cursor-not-allowed opacity-40'}`}>
+                      <Icon className="h-9 w-9 stroke-[1.7]" /><span className="text-sm font-medium leading-snug text-gray-700">{item.label}</span>
                     </button>
                   ); })}
                 </div>
