@@ -203,6 +203,7 @@ export interface AppSettings {
   documents: DocumentNumberSettings;
   security: SecuritySettings;
   ai: AISettings;
+  pendingReasonTemplates?: Array<{ id: string; label: string; isActive: boolean }>;
 }
 
 export type Permission =

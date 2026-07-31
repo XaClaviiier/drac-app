@@ -21,6 +21,12 @@ const DEFAULT_COMPLAINT_TEMPLATES = [
 ];
 
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
+const DEFAULT_PENDING_REASONS = [
+  { id: 'think', label: 'Pikir-pikir', isActive: true },
+  { id: 'fund', label: 'Menyiapkan dana', isActive: true },
+  { id: 'schedule', label: 'Menunggu jadwal', isActive: true },
+  { id: 'other', label: 'Lainnya', isActive: true },
+];
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
@@ -30,7 +36,7 @@ export default function WorkOrders() {
     addWorkOrder, updateWorkOrder, deleteWorkOrder,
     continueWorkOrder, findActiveWoByPlate, changeWorkOrderStatus,
     createInvoiceFromWO, addItem,
-    currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber,
+    currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
@@ -38,6 +44,12 @@ export default function WorkOrders() {
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
   const [statusDialog, setStatusDialog] = useState<{ wo: WorkOrder; next: WorkOrder['status'] } | null>(null);
   const [statusReason, setStatusReason] = useState('');
+  const [showPendingTemplateEditor, setShowPendingTemplateEditor] = useState(false);
+  const [pendingTemplateDraft, setPendingTemplateDraft] = useState(
+    data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS
+  );
+  const [newPendingTemplate, setNewPendingTemplate] = useState('');
+  const [savingPendingTemplates, setSavingPendingTemplates] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [todayOnly, setTodayOnly] = useState(true);
@@ -85,6 +97,39 @@ export default function WorkOrders() {
     notes: '',
     status: 'Pengecekan' as WorkOrder['status'],
   });
+
+  useEffect(() => {
+    setPendingTemplateDraft(data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS);
+  }, [data.settings.pendingReasonTemplates]);
+
+  const savePendingTemplates = async () => {
+    const cleaned = pendingTemplateDraft
+      .map(template => ({ ...template, label: template.label.trim() }))
+      .filter(template => template.label);
+    if (cleaned.length === 0) {
+      window.alert('Minimal satu template alasan harus tersedia.');
+      return;
+    }
+    setSavingPendingTemplates(true);
+    try {
+      await updateSettings({ ...data.settings, pendingReasonTemplates: cleaned });
+      setShowPendingTemplateEditor(false);
+    } catch (error: any) {
+      window.alert(error?.message || 'Gagal menyimpan template alasan.');
+    } finally {
+      setSavingPendingTemplates(false);
+    }
+  };
+
+  const movePendingTemplate = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= pendingTemplateDraft.length) return;
+    setPendingTemplateDraft(current => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
 
   const saveComplaintTemplates = (next: string[]) => {
     const cleaned = [...new Set(next.map(t => t.trim()).filter(Boolean))];
@@ -1904,13 +1949,18 @@ export default function WorkOrders() {
                 </div>
                 {needsReason && (
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Alasan <span className="text-red-500">*</span>
-                    </label>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-gray-700">Alasan <span className="text-red-500">*</span></label>
+                      {next === 'Pending' && hasPermission('settings:edit') && (
+                        <button type="button" onClick={() => { setPendingTemplateDraft(data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS); setShowPendingTemplateEditor(true); }} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800">
+                          <Edit className="h-3 w-3" /> Kelola Template
+                        </button>
+                      )}
+                    </div>
                     {next === 'Pending' && (
                       <div className="mb-2 grid grid-cols-2 gap-2">
-                        {['Pikir-pikir', 'Menyiapkan dana', 'Menunggu jadwal', 'Lainnya'].map(reason => (
-                          <button key={reason} type="button" onClick={() => setStatusReason(reason === 'Lainnya' ? '' : reason)} className={`rounded-lg border px-2 py-2 text-xs font-semibold ${statusReason === reason ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-300 text-gray-600'}`}>{reason}</button>
+                        {(data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS).filter(template => template.isActive).map(template => (
+                          <button key={template.id} type="button" onClick={() => setStatusReason(template.label.toLowerCase() === 'lainnya' ? '' : template.label)} className={`rounded-lg border px-2 py-2 text-xs font-semibold ${statusReason === template.label ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-300 text-gray-600'}`}>{template.label}</button>
                         ))}
                       </div>
                     )}
@@ -1938,6 +1988,55 @@ export default function WorkOrders() {
           </div>
         );
       })()}
+
+      {showPendingTemplateEditor && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-slate-800 px-5 py-4 text-white">
+              <div>
+                <h3 className="font-bold">Template Alasan Pending</h3>
+                <p className="text-xs text-slate-300">Perubahan berlaku untuk transaksi berikutnya.</p>
+              </div>
+              <button type="button" onClick={() => setShowPendingTemplateEditor(false)} className="rounded-lg p-2 hover:bg-white/10"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto p-5">
+              {pendingTemplateDraft.map((template, index) => (
+                <div key={template.id} className={`flex items-center gap-2 rounded-lg border p-2 ${template.isActive ? 'bg-white' : 'bg-gray-100 opacity-70'}`}>
+                  <div className="flex flex-col">
+                    <button type="button" disabled={index === 0} onClick={() => movePendingTemplate(index, -1)} className="h-5 px-1 text-xs text-gray-500 disabled:opacity-20">▲</button>
+                    <button type="button" disabled={index === pendingTemplateDraft.length - 1} onClick={() => movePendingTemplate(index, 1)} className="h-5 px-1 text-xs text-gray-500 disabled:opacity-20">▼</button>
+                  </div>
+                  <input value={template.label} onChange={(e) => setPendingTemplateDraft(current => current.map(item => item.id === template.id ? { ...item, label: e.target.value } : item))} className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                  <button type="button" onClick={() => setPendingTemplateDraft(current => current.map(item => item.id === template.id ? { ...item, isActive: !item.isActive } : item))} className={`rounded-lg px-2.5 py-2 text-xs font-semibold ${template.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{template.isActive ? 'Aktif' : 'Nonaktif'}</button>
+                  <button type="button" onClick={() => setPendingTemplateDraft(current => current.filter(item => item.id !== template.id))} className="rounded-lg p-2 text-red-600 hover:bg-red-50" title="Hapus"><Trash2 className="h-4 w-4" /></button>
+                </div>
+              ))}
+              <div className="flex gap-2 border-t pt-3">
+                <input value={newPendingTemplate} onChange={(e) => setNewPendingTemplate(e.target.value)} onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const label = newPendingTemplate.trim();
+                    if (label) {
+                      setPendingTemplateDraft(current => [...current, { id: `reason-${Date.now()}`, label, isActive: true }]);
+                      setNewPendingTemplate('');
+                    }
+                  }
+                }} placeholder="Alasan baru..." className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                <button type="button" onClick={() => {
+                  const label = newPendingTemplate.trim();
+                  if (!label) return;
+                  setPendingTemplateDraft(current => [...current, { id: `reason-${Date.now()}`, label, isActive: true }]);
+                  setNewPendingTemplate('');
+                }} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white"><Plus className="h-4 w-4" /></button>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-5 py-4">
+              <button type="button" onClick={() => setShowPendingTemplateEditor(false)} className="rounded-lg border px-4 py-2 text-sm">Batal</button>
+              <button type="button" disabled={savingPendingTemplates} onClick={savePendingTemplates} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Save className="h-4 w-4" />{savingPendingTemplates ? 'Menyimpan...' : 'Simpan Template'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== Lanjutkan Pengecekan di Cabang Ini ===== */}
       {continueWO && (

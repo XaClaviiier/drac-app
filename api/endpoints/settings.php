@@ -16,6 +16,12 @@ $defaultSettings = [
         'allowCustomerData' => true, 'allowInventoryData' => true,
         'allowFinancialData' => false, 'allowCreateWorkOrder' => true,
     ],
+    'pendingReasonTemplates' => [
+        ['id' => 'think', 'label' => 'Pikir-pikir', 'isActive' => true],
+        ['id' => 'fund', 'label' => 'Menyiapkan dana', 'isActive' => true],
+        ['id' => 'schedule', 'label' => 'Menunggu jadwal', 'isActive' => true],
+        ['id' => 'other', 'label' => 'Lainnya', 'isActive' => true],
+    ],
 ];
 
 if ($method === 'GET') {

@@ -45,6 +45,12 @@ export const demoData: AppData = {
       allowFinancialData: false,
       allowCreateWorkOrder: true,
     },
+    pendingReasonTemplates: [
+      { id: 'think', label: 'Pikir-pikir', isActive: true },
+      { id: 'fund', label: 'Menyiapkan dana', isActive: true },
+      { id: 'schedule', label: 'Menunggu jadwal', isActive: true },
+      { id: 'other', label: 'Lainnya', isActive: true },
+    ],
   },
   branches: [
     { id: 'BR-001', code: 'CBG-001', name: 'CABANG PERINTIS', address: 'Jl. Perintis Kemerdekaan No. 45, Makassar', phone: '0411-123456', isActive: true },
