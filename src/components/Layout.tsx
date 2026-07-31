@@ -3,6 +3,8 @@ import {
   LayoutDashboard, Car, FileText, Users, Wrench, Boxes, PackageCheck, Truck, ReceiptText,
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
+  ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, Search, CreditCard,
+  ClipboardList, ArrowLeftRight, History, Banknote,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
@@ -24,11 +26,77 @@ const navItems = [
   { path: '/settings', label: 'Pengaturan', short: 'Atur', icon: Settings, perm: 'settings:view' as const, color: 'from-indigo-500 to-violet-700' },
 ];
 
+type DesktopMenuItem = {
+  label: string;
+  path?: string;
+  icon: any;
+  perm?: Parameters<ReturnType<typeof useApp>['hasPermission']>[0];
+  tone: 'green' | 'blue' | 'purple' | 'orange';
+};
+
+const desktopGroups = [
+  { id: 'settings', label: 'Pengaturan', icon: Settings, items: [
+    { label: 'Profil & Preferensi', path: '/settings', icon: Settings, perm: 'settings:view', tone: 'orange' },
+    { label: 'Pengguna', path: '/users', icon: Users, perm: 'user:view', tone: 'blue' },
+    { label: 'Grup Akses', path: '/users', icon: Shield, perm: 'role:view', tone: 'blue' },
+    { label: 'Cabang & Gudang', path: '/settings', icon: Building2, perm: 'branch:view', tone: 'blue' },
+    { label: 'Nomor Dokumen', path: '/settings', icon: FileText, perm: 'settings:view', tone: 'purple' },
+    { label: 'Sesi & Keamanan', path: '/users', icon: Shield, perm: 'user:view', tone: 'purple' },
+  ]},
+  { id: 'ledger', label: 'Buku Besar', icon: BookOpen, items: [
+    { label: 'Daftar Akun', icon: BookOpen, tone: 'blue' }, { label: 'Jurnal Umum', icon: ClipboardList, tone: 'green' },
+    { label: 'Buku Besar', icon: BookOpen, tone: 'purple' }, { label: 'Saldo Awal', icon: Banknote, tone: 'orange' },
+    { label: 'Laba Rugi', icon: BarChart3, tone: 'purple' }, { label: 'Neraca', icon: BarChart3, tone: 'purple' },
+  ]},
+  { id: 'cash', label: 'Kas & Bank', icon: Landmark, items: [
+    { label: 'Kas Cabang', icon: Banknote, tone: 'green' }, { label: 'Rekening Bank', icon: Landmark, tone: 'blue' },
+    { label: 'Penerimaan Lain', icon: CreditCard, tone: 'green' }, { label: 'Pengeluaran', icon: CreditCard, tone: 'orange' },
+    { label: 'Setoran Cabang', icon: ArrowLeftRight, tone: 'blue' }, { label: 'Verifikasi Setoran', icon: Shield, tone: 'purple' },
+  ]},
+  { id: 'sales', label: 'Penjualan', icon: CreditCard, items: [
+    { label: 'Order Kerja', path: '/workorders', icon: Wrench, perm: 'wo:view', tone: 'green' },
+    { label: 'Faktur Penjualan', path: '/invoices', icon: FileText, perm: 'invoice:view', tone: 'green' },
+    { label: 'Pembayaran Pelanggan', icon: Banknote, tone: 'green' }, { label: 'Piutang Pelanggan', icon: CreditCard, tone: 'green' },
+    { label: 'Pelanggan', path: '/customers', icon: Users, perm: 'customer:view', tone: 'blue' },
+    { label: 'Kendaraan', path: '/vehicles', icon: Car, perm: 'vehicle:view', tone: 'blue' },
+    { label: 'Retur / Koreksi', icon: ArrowLeftRight, tone: 'blue' }, { label: 'Riwayat Pembayaran', icon: History, tone: 'purple' },
+  ]},
+  { id: 'purchase', label: 'Pembelian', icon: ShoppingCart, items: [
+    { label: 'Supplier', path: '/suppliers', icon: Truck, perm: 'supplier:view', tone: 'blue' },
+    { label: 'Penerimaan Barang', path: '/receipts', icon: PackageCheck, perm: 'receipt:view', tone: 'green' },
+    { label: 'Faktur Pembelian', path: '/purchase-invoices', icon: ReceiptText, perm: 'purchase:view', tone: 'green' },
+    { label: 'Pembayaran Supplier', path: '/purchase-invoices', icon: Banknote, perm: 'purchase:pay', tone: 'green' },
+    { label: 'Utang Supplier', icon: CreditCard, tone: 'orange' }, { label: 'Retur Pembelian', icon: ArrowLeftRight, tone: 'purple' },
+  ]},
+  { id: 'inventory', label: 'Persediaan', icon: Boxes, items: [
+    { label: 'Penerimaan Barang', path: '/receipts', icon: PackageCheck, perm: 'receipt:view', tone: 'green' },
+    { label: 'Mutasi Antar Gudang', path: '/warehouses', icon: ArrowLeftRight, perm: 'item:view', tone: 'green' },
+    { label: 'Penyesuaian Stok', path: '/warehouses', icon: ClipboardList, perm: 'item:edit', tone: 'green' },
+    { label: 'Stok Opname', icon: ClipboardList, tone: 'green' }, { label: 'Permintaan Barang', icon: FileText, tone: 'blue' },
+    { label: 'Barang & Jasa', path: '/items', icon: Boxes, perm: 'item:view', tone: 'blue' },
+    { label: 'Gudang', path: '/warehouses', icon: Warehouse, perm: 'item:view', tone: 'blue' },
+    { label: 'Stok per Gudang', path: '/warehouses', icon: Warehouse, perm: 'item:view', tone: 'blue' },
+    { label: 'Kartu Stok', path: '/warehouses', icon: History, perm: 'item:view', tone: 'purple' },
+    { label: 'Stok Minimum', path: '/items', icon: BarChart3, perm: 'item:view', tone: 'purple' },
+    { label: 'Kategori Barang', path: '/categories', icon: FolderTree, perm: 'item:view', tone: 'purple' },
+    { label: 'Merek & Satuan', path: '/items', icon: Boxes, perm: 'item:view', tone: 'purple' },
+  ]},
+  { id: 'reports', label: 'Daftar Laporan', icon: BarChart3, items: [
+    { label: 'Laporan WO', path: '/workorders', icon: Wrench, perm: 'report:view', tone: 'green' },
+    { label: 'Laporan Penjualan', path: '/invoices', icon: BarChart3, perm: 'report:view', tone: 'green' },
+    { label: 'Laporan Pembelian', path: '/purchase-invoices', icon: BarChart3, perm: 'report:view', tone: 'blue' },
+    { label: 'Laporan Persediaan', path: '/warehouses', icon: Boxes, perm: 'report:view', tone: 'blue' },
+    { label: 'Laporan Kas & Bank', icon: Landmark, tone: 'purple' }, { label: 'Audit Log', path: '/users', icon: History, perm: 'user:view', tone: 'purple' },
+  ]},
+] satisfies Array<{ id: string; label: string; icon: any; items: DesktopMenuItem[] }>;
+
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
+  const [desktopMenuSearch, setDesktopMenuSearch] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
   const { data, currentUser, currentBranchId, setCurrentBranchId, logout, hasPermission, isDemoMode } = useApp();
@@ -48,7 +116,7 @@ export default function Layout() {
   };
 
   // Tutup menu mobile saat pindah halaman
-  useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
+  useEffect(() => { setMobileMenuOpen(false); setDesktopMenuOpen(null); setDesktopMenuSearch(''); }, [location.pathname]);
   // Kunci scroll saat menu mobile terbuka
   useEffect(() => {
     document.body.style.overflow = mobileMenuOpen ? 'hidden' : '';
@@ -62,7 +130,7 @@ export default function Layout() {
     <div className="flex h-screen overflow-hidden bg-gray-100">
       {/* ========== SIDEBAR (desktop) ========== */}
       <aside
-        className={`${sidebarOpen ? 'w-64' : 'w-16'} hidden flex-shrink-0 flex-col bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 text-white transition-all duration-300 lg:flex`}
+        className={`${sidebarOpen ? 'w-64' : 'w-16'} relative z-50 hidden flex-shrink-0 flex-col bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 text-white transition-all duration-300 lg:flex`}
       >
         <div className="border-b border-blue-700/50 p-4">
           <div className="flex items-center gap-3">
@@ -79,23 +147,29 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4">
-          {visibleNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+          {hasPermission('dashboard:view') && (
+            <NavLink to="/" title={!sidebarOpen ? 'Dashboard' : undefined} className={`mx-2 flex items-center gap-3 rounded-lg px-4 py-3 transition-all ${location.pathname === '/' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
+              <LayoutDashboard className="h-5 w-5 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Dashboard</span>}
+            </NavLink>
+          )}
+          {desktopGroups.map(group => {
+            const Icon = group.icon;
+            const accessibleItems = group.items.filter(item => !item.perm || hasPermission(item.perm));
+            if (accessibleItems.length === 0) return null;
+            const groupPaths = accessibleItems.flatMap(item => item.path ? [item.path] : []);
+            const isActive = desktopMenuOpen === group.id || groupPaths.includes(location.pathname);
             return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                title={!sidebarOpen ? item.label : undefined}
-                className={`mx-2 flex items-center gap-3 rounded-lg px-4 py-3 transition-all duration-200 ${
-                  isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'
-                }`}
-              >
+              <button key={group.id} type="button" title={!sidebarOpen ? group.label : undefined} onClick={() => { setDesktopMenuSearch(''); setDesktopMenuOpen(current => current === group.id ? null : group.id); }} className={`mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg px-4 py-3 text-left transition-all ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
                 <Icon className="h-5 w-5 flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
-              </NavLink>
+                {sidebarOpen && <><span className="flex-1 text-sm font-medium">{group.label}</span><ChevronRight className={`h-4 w-4 transition-transform ${desktopMenuOpen === group.id ? 'rotate-90' : ''}`} /></>}
+              </button>
             );
           })}
+          {hasPermission('dashboard:view') && (
+            <NavLink to="/ai" title={!sidebarOpen ? 'Asisten AI' : undefined} className={`mx-2 mt-4 flex items-center gap-3 rounded-lg border-t border-blue-700/60 px-4 py-3 pt-4 transition-all ${location.pathname === '/ai' ? 'bg-cyan-500 text-white shadow-lg' : 'text-cyan-200 hover:bg-blue-700/50 hover:text-white'}`}>
+              <Bot className="h-5 w-5 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Asisten AI</span>}
+            </NavLink>
+          )}
         </nav>
 
         <div className="border-t border-blue-700/50 p-4">
@@ -105,6 +179,42 @@ export default function Layout() {
           </button>
         </div>
       </aside>
+
+      {desktopMenuOpen && (() => {
+        const group = desktopGroups.find(item => item.id === desktopMenuOpen);
+        if (!group) return null;
+        const GroupIcon = group.icon;
+        const items = group.items
+          .filter(item => !item.perm || hasPermission(item.perm))
+          .filter(item => item.label.toLowerCase().includes(desktopMenuSearch.toLowerCase()));
+        const tones: Record<DesktopMenuItem['tone'], string> = {
+          green: 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100',
+          blue: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100',
+          purple: 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100',
+          orange: 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100',
+        };
+        return (
+          <>
+            <button type="button" aria-label="Tutup menu" onClick={() => setDesktopMenuOpen(null)} className="fixed inset-0 z-30 hidden bg-slate-900/35 backdrop-blur-[1px] lg:block" />
+            <section className={`fixed top-20 z-[60] hidden max-h-[calc(100vh-6rem)] w-[min(760px,calc(100vw-19rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl lg:block ${sidebarOpen ? 'left-[17rem]' : 'left-20'}`}>
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div className="flex items-center gap-3"><GroupIcon className="h-6 w-6 text-blue-600" /><h2 className="text-xl font-bold text-gray-900">{group.label}</h2></div>
+                <button type="button" onClick={() => setDesktopMenuOpen(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-5">
+                <div className="relative mb-4"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input autoFocus value={desktopMenuSearch} onChange={event => setDesktopMenuSearch(event.target.value)} placeholder={`Cari menu ${group.label.toLowerCase()}...`} className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" /></div>
+                <div className="grid max-h-[calc(100vh-14rem)] grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
+                  {items.map((item, index) => { const Icon = item.icon; const available = !!item.path; return (
+                    <button key={`${item.label}-${index}`} type="button" disabled={!available} onClick={() => { if (!item.path) return; navigate(item.path); setDesktopMenuOpen(null); }} className={`relative flex min-h-32 flex-col items-center justify-center gap-3 rounded-xl border p-4 text-center transition-all ${tones[item.tone]} ${available ? 'hover:-translate-y-0.5 hover:shadow-md' : 'cursor-not-allowed grayscale opacity-55'}`}>
+                      <Icon className="h-8 w-8" /><span className="text-sm font-semibold leading-tight">{item.label}</span>{!available && <span className="absolute right-2 top-2 rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-bold text-gray-500">SEGERA</span>}
+                    </button>
+                  ); })}
+                </div>
+              </div>
+            </section>
+          </>
+        );
+      })()}
 
       {/* ========== MAIN ========== */}
       <div className="flex flex-1 flex-col overflow-hidden">
