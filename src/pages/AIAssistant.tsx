@@ -434,7 +434,7 @@ export default function AIAssistant() {
         .filter((item) => !lower.includes('menipis') || (item.type === 'Persediaan' && item.stock > 0 && item.stock <= 3))
         .filter((item) => !lower.includes('habis') || (item.type === 'Persediaan' && item.stock <= 0))
         .filter((item) => queryTerms.length === 0 || queryTerms.every((term) =>
-          `${item.code} ${item.name} ${item.categoryName} ${item.brand}`.toLowerCase().includes(term)
+          `${item.code} ${item.barcode || ''} ${item.name} ${item.receiptDescription || ''} ${item.categoryName} ${item.brand}`.toLowerCase().includes(term)
         ))
         .sort((a, b) => a.name.localeCompare(b.name));
       const rows = filtered.slice(start, start + pageSize).map((item, index) =>
@@ -604,7 +604,7 @@ export default function AIAssistant() {
     // BARANG & JASA
     if (wantsItemList) {
       const matched = data.items.filter(i =>
-        words.some(w => i.name.toLowerCase().includes(w) || i.code.toLowerCase().includes(w))
+        words.some(w => i.name.toLowerCase().includes(w) || i.code.toLowerCase().includes(w) || (i.barcode || '').toLowerCase().includes(w) || (i.receiptDescription || '').toLowerCase().includes(w))
       ).slice(0, 20);
       const list = matched.length > 0 ? matched : data.items.slice(0, 20);
       parts.push(`\nBARANG & JASA (${list.length} dari ${data.items.length}):`);

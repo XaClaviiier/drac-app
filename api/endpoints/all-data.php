@@ -8,6 +8,11 @@ if ($method !== 'GET') respondError('Method not allowed', 405);
 try {
     $data = [];
 
+    // Migrasi ringan agar field master barang baru langsung tersedia setelah deploy.
+    $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS receipt_description VARCHAR(255) NULL AFTER description");
+    $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) NULL AFTER receipt_description");
+    try { $pdo->exec("ALTER TABLE items ADD UNIQUE INDEX IF NOT EXISTS uq_items_barcode (barcode)"); } catch (Throwable $e) {}
+
     // Branches
     $rows = $pdo->query("SELECT * FROM branches ORDER BY code")->fetchAll();
     foreach ($rows as &$r) $r['isActive'] = (bool)$r['is_active'];
@@ -107,6 +112,7 @@ try {
         $r['sellingPrice'] = (float)$r['selling_price'];
         $r['isActive'] = (bool)$r['is_active'];
         $r['isQuickService'] = (bool)$r['is_quick_service'];
+        $r['receiptDescription'] = $r['receipt_description'] ?? '';
         $r['branchId'] = $r['branch_id'];
         $r['branchStocks'] = $stocksByItem[$r['id']] ?? [];
         $r['stock'] = array_sum(array_column($r['branchStocks'], 'stock'));

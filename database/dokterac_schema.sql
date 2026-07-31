@@ -188,11 +188,14 @@ CREATE TABLE IF NOT EXISTS `items` (
   `is_active` TINYINT(1) DEFAULT 1,
   `is_quick_service` TINYINT(1) DEFAULT 0,
   `description` TEXT,
+  `receipt_description` VARCHAR(255),
+  `barcode` VARCHAR(100) NULL,
   `branch_id` VARCHAR(20),
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),
+  UNIQUE KEY `uq_items_barcode` (`barcode`),
   KEY `idx_type` (`type`),
   KEY `idx_branch` (`branch_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

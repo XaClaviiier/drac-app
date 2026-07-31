@@ -21,6 +21,7 @@ switch ($method) {
             $r['sellingPrice'] = (float)$r['selling_price'];
             $r['isActive'] = (bool)$r['is_active'];
             $r['isQuickService'] = (bool)$r['is_quick_service'];
+            $r['receiptDescription'] = $r['receipt_description'] ?? '';
             $r['branchId'] = $r['branch_id'];
             $r['branchStocks'] = $stocksByItem[$r['id']] ?? [];
             // Load group members
@@ -45,10 +46,16 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
+        $barcode = trim((string)($d['barcode'] ?? ''));
+        if ($barcode !== '') {
+            $check = $pdo->prepare("SELECT id, name FROM items WHERE barcode = ? LIMIT 1");
+            $check->execute([$barcode]);
+            if ($duplicate = $check->fetch()) respondError("Barcode sudah dipakai oleh {$duplicate['name']}", 409);
+        }
         $pdo->beginTransaction();
         try {
             $itemId = $d['id'] ?? generateId();
-            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, unit, stock, sellable_stock, purchase_price, selling_price, is_active, is_quick_service, description, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, unit, stock, sellable_stock, purchase_price, selling_price, is_active, is_quick_service, description, receipt_description, barcode, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $itemId, $d['code'], $d['name'],
                 $d['categoryId'] ?? '', $d['categoryName'] ?? '',
@@ -56,7 +63,9 @@ switch ($method) {
                 $d['stock'] ?? 0, $d['sellableStock'] ?? 0,
                 $d['purchasePrice'] ?? 0, $d['sellingPrice'] ?? 0,
                 $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
-                $d['description'] ?? '', $d['branchId'] ?? 'BR-001'
+                $d['description'] ?? '', $d['receiptDescription'] ?? '',
+                !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
+                $d['branchId'] ?? 'BR-001'
             ]);
 
             $stockStmt = $pdo->prepare("
@@ -94,9 +103,15 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        $barcode = trim((string)($d['barcode'] ?? ''));
+        if ($barcode !== '') {
+            $check = $pdo->prepare("SELECT id, name FROM items WHERE barcode = ? AND id <> ? LIMIT 1");
+            $check->execute([$barcode, $id]);
+            if ($duplicate = $check->fetch()) respondError("Barcode sudah dipakai oleh {$duplicate['name']}", 409);
+        }
         $pdo->beginTransaction();
         try {
-            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, stock=?, sellable_stock=?, purchase_price=?, selling_price=?, is_active=?, is_quick_service=?, description=?, branch_id=? WHERE id=?");
+            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, stock=?, sellable_stock=?, purchase_price=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=?, branch_id=? WHERE id=?");
             $stmt->execute([
                 $d['code'], $d['name'],
                 $d['categoryId'] ?? '', $d['categoryName'] ?? '',
@@ -104,7 +119,9 @@ switch ($method) {
                 $d['stock'] ?? 0, $d['sellableStock'] ?? 0,
                 $d['purchasePrice'] ?? 0, $d['sellingPrice'] ?? 0,
                 $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
-                $d['description'] ?? '', $d['branchId'] ?? 'BR-001', $id
+                $d['description'] ?? '', $d['receiptDescription'] ?? '',
+                !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
+                $d['branchId'] ?? 'BR-001', $id
             ]);
 
             $stockStmt = $pdo->prepare("

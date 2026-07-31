@@ -72,6 +72,13 @@ ALTER TABLE `work_orders`
 ALTER TABLE `items`
   ADD COLUMN IF NOT EXISTS `is_quick_service` TINYINT(1) DEFAULT 0 AFTER `is_active`;
 
+ALTER TABLE `items`
+  ADD COLUMN IF NOT EXISTS `receipt_description` VARCHAR(255) NULL AFTER `description`,
+  ADD COLUMN IF NOT EXISTS `barcode` VARCHAR(100) NULL AFTER `receipt_description`;
+
+ALTER TABLE `items`
+  ADD UNIQUE INDEX IF NOT EXISTS `uq_items_barcode` (`barcode`);
+
 -- ----------------------------------------------------------
 -- 5. sales_invoices: tambah wo_id, wo_number jika belum ada
 -- ----------------------------------------------------------

@@ -53,7 +53,7 @@ switch ($method) {
                 $servicesStmt->execute([$woId]);
                 $services = $servicesStmt->fetchAll();
                 $description = implode(', ', array_map(function($service) {
-                    return $service['name'];
+                    return !empty($service['description']) ? $service['description'] : $service['name'];
                 }, $services));
 
                 $insertInvoice = $pdo->prepare("

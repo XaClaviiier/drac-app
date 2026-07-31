@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText } from 'lucide-react';
+import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
 
@@ -19,7 +19,27 @@ const emptyItem = {
   isActive: true,
   isQuickService: false,
   description: '',
+  receiptDescription: '',
+  barcode: '',
   groupMembers: [] as GroupMember[],
+};
+
+type ItemColumn = 'code' | 'name' | 'receiptDescription' | 'type' | 'category' | 'barcode' | 'price' | 'stock' | 'unit' | 'brand' | 'purchasePrice' | 'status' | 'actions';
+const defaultItemColumns: ItemColumn[] = ['code', 'name', 'receiptDescription', 'type', 'category', 'barcode', 'price', 'actions'];
+const itemColumnLabels: Record<ItemColumn, string> = {
+  code: 'Kode',
+  name: 'Nama Barang/Jasa',
+  receiptDescription: 'Deskripsi Nota',
+  type: 'Jenis',
+  category: 'Kategori',
+  barcode: 'Barcode',
+  price: 'Harga Jual',
+  stock: 'KTS/Stok',
+  unit: 'Satuan',
+  brand: 'Merek',
+  purchasePrice: 'Harga Beli',
+  status: 'Status Aktif',
+  actions: 'Aksi',
 };
 
 const emptyCategory = {
@@ -49,6 +69,7 @@ export default function ItemsAndServices() {
     currentBranchId,
     resolveBranchId,
     hasPermission,
+    currentUser,
   } = useApp();
 
   const [search, setSearch] = useState('');
@@ -68,6 +89,29 @@ export default function ItemsAndServices() {
   const [itemForm, setItemForm] = useState(emptyItem);
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const columnStorageKey = `dokterac_item_columns_${currentUser?.id || currentUser?.username || 'default'}`;
+  const [visibleColumns, setVisibleColumns] = useState<ItemColumn[]>(() => {
+    try {
+      const saved = localStorage.getItem(`dokterac_item_columns_${currentUser?.id || currentUser?.username || 'default'}`);
+      if (saved) return JSON.parse(saved) as ItemColumn[];
+    } catch { /* gunakan default */ }
+    return defaultItemColumns;
+  });
+
+  const setColumnVisible = (column: ItemColumn, visible: boolean) => {
+    if (column === 'name' || column === 'actions') return;
+    setVisibleColumns((current) => {
+      const next = visible ? [...new Set([...current, column])] : current.filter((item) => item !== column);
+      localStorage.setItem(columnStorageKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const resetColumns = () => {
+    setVisibleColumns(defaultItemColumns);
+    localStorage.setItem(columnStorageKey, JSON.stringify(defaultItemColumns));
+  };
 
   // Group member picker state
   const [memberSearch, setMemberSearch] = useState('');
@@ -88,7 +132,9 @@ export default function ItemsAndServices() {
         item.code.toLowerCase().includes(q) ||
         item.name.toLowerCase().includes(q) ||
         item.categoryName.toLowerCase().includes(q) ||
-        item.brand.toLowerCase().includes(q);
+        item.brand.toLowerCase().includes(q) ||
+        (item.receiptDescription || '').toLowerCase().includes(q) ||
+        (item.barcode || '').toLowerCase().includes(q);
       return activeMatch && categoryMatch && typeMatch && brandMatch && searchMatch;
     });
   }, [data.items, search, filterActive, filterCategory, filterType, filterBrand]);
@@ -108,7 +154,7 @@ export default function ItemsAndServices() {
       if (item.id === editId) return false;
       if (!item.isActive) return false;
       if (!q) return true;
-      return item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q);
+      return item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || (item.barcode || '').toLowerCase().includes(q);
     });
   }, [data.items, editingItem, memberSearch]);
 
@@ -138,6 +184,8 @@ export default function ItemsAndServices() {
         isActive: item.isActive,
         isQuickService: item.isQuickService,
         description: item.description,
+        receiptDescription: item.receiptDescription || '',
+        barcode: item.barcode || '',
         groupMembers: item.groupMembers ? [...item.groupMembers] : [],
       });
     } else {
@@ -237,6 +285,15 @@ export default function ItemsAndServices() {
       return;
     }
 
+    const barcode = itemForm.barcode.trim();
+    const dupBarcode = barcode && data.items.find(
+      i => (i.barcode || '').trim() === barcode && i.id !== editingItem?.id
+    );
+    if (dupBarcode) {
+      window.alert(`Barcode "${barcode}" sudah dipakai oleh "${dupBarcode.name}".`);
+      return;
+    }
+
     const category = data.itemCategories.find((cat) => cat.id === itemForm.categoryId);
     const isGroup = itemForm.type === 'Group';
     const payload: Item = {
@@ -255,6 +312,8 @@ export default function ItemsAndServices() {
       isActive: itemForm.isActive,
       isQuickService: itemForm.isQuickService,
       description: itemForm.description,
+      receiptDescription: itemForm.receiptDescription.trim() || name,
+      barcode,
       groupMembers: isGroup ? itemForm.groupMembers : undefined,
       branchId: editingItem?.branchId || resolveBranchId(),
     };
@@ -319,11 +378,11 @@ export default function ItemsAndServices() {
   // ==================== IMPORT / EXPORT CSV ====================
   // ==================== EXPORT / TEMPLATE ====================
   const downloadTemplate = () => {
-    const headers = ['kode', 'nama', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
+    const headers = ['kode', 'nama', 'deskripsi_nota', 'barcode', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
     const sampleRows = [
-      ['BRG-0001', 'CONTOH SPAREPART AC', 'Persediaan', 'Sparepart AC', 'Denso', 'PCS', '10', '150000', '250000', 'tidak', 'Contoh keterangan'],
-      ['JSA-0001', 'CONTOH JASA SERVICE', 'Jasa', 'Jasa Service AC', '-', 'JASA', '0', '0', '200000', 'ya', 'Jasa teknisi'],
-      ['NP-0001', 'CONTOH TOOLS', 'Non Persediaan', 'Tools Bengkel', 'Krisbow', 'PCS', '1', '350000', '500000', 'tidak', 'Alat bengkel'],
+      ['BRG-0001', 'CONTOH SPAREPART AC', 'Sparepart AC', '8991234567890', 'Persediaan', 'Sparepart AC', 'Denso', 'PCS', '10', '150000', '250000', 'tidak', 'Contoh keterangan'],
+      ['JSA-0001', 'CONTOH JASA SERVICE', 'Jasa Service AC', '', 'Jasa', 'Jasa Service AC', '-', 'JASA', '0', '0', '200000', 'ya', 'Jasa teknisi'],
+      ['NP-0001', 'CONTOH TOOLS', 'Tools Bengkel', '', 'Non Persediaan', 'Tools Bengkel', 'Krisbow', 'PCS', '1', '350000', '500000', 'tidak', 'Alat bengkel'],
     ];
     const csv = [headers.join(','), ...sampleRows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -336,11 +395,11 @@ export default function ItemsAndServices() {
   };
 
   const exportCurrentData = () => {
-    const headers = ['kode', 'nama', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
+    const headers = ['kode', 'nama', 'deskripsi_nota', 'barcode', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
     const rows = data.items
       .filter(i => i.type !== 'Group')
       .map(item => [
-        item.code, item.name, item.type, item.categoryName || '',
+        item.code, item.name, item.receiptDescription || item.name, item.barcode || '', item.type, item.categoryName || '',
         item.brand || '', item.unit || '', item.stock, item.purchasePrice,
         item.sellingPrice, item.isQuickService ? 'ya' : 'tidak', item.description || ''
       ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
@@ -382,6 +441,8 @@ export default function ItemsAndServices() {
   const fieldAliases: Record<string, string[]> = {
     kode: ['kode', 'kode barang', 'kode_barang', 'item code', 'code', 'kode item', 'sku', 'kode#'],
     nama: ['nama', 'nama barang', 'nama_barang', 'item name', 'name', 'deskripsi barang', 'nama jasa', 'nama barang/jasa'],
+    deskripsi_nota: ['deskripsi nota', 'deskripsi_nota', 'nama nota', 'receipt description', 'invoice description'],
+    barcode: ['barcode', 'barcode asli', 'ean', 'upc', 'kode barcode'],
     jenis: ['jenis', 'jenis barang', 'jenis_barang', 'tipe', 'type', 'item type', 'tipe barang'],
     kategori: ['kategori', 'kategori barang', 'kategori_barang', 'category', 'kelompok', 'group kategori', 'grup'],
     merek: ['merek', 'merek barang', 'merek_barang', 'brand', 'merk', 'merek barang/jasa'],
@@ -463,6 +524,8 @@ export default function ItemsAndServices() {
     const headersLower = headersRaw.map(h => h.toLowerCase().trim());
     const idxKode = findHeaderIndex(headersLower, 'kode');
     const idxNama = findHeaderIndex(headersLower, 'nama');
+    const idxDeskripsiNota = findHeaderIndex(headersLower, 'deskripsi_nota');
+    const idxBarcode = findHeaderIndex(headersLower, 'barcode');
     const idxJenis = findHeaderIndex(headersLower, 'jenis');
     const idxKategori = findHeaderIndex(headersLower, 'kategori');
     const idxMerek = findHeaderIndex(headersLower, 'merek');
@@ -498,6 +561,8 @@ export default function ItemsAndServices() {
 
       const codeRaw = getByIdx(idxKode);
       const nameRaw = getByIdx(idxNama);
+      const deskripsiNotaRaw = idxDeskripsiNota >= 0 ? getByIdx(idxDeskripsiNota) : '';
+      const barcodeRaw = idxBarcode >= 0 ? getByIdx(idxBarcode) : '';
       const jenisRaw = idxJenis >= 0 ? getByIdx(idxJenis) : 'Persediaan';
       const kategoriRaw = idxKategori >= 0 ? getByIdx(idxKategori) : '';
       const merekRaw = idxMerek >= 0 ? getByIdx(idxMerek) : '';
@@ -552,6 +617,12 @@ export default function ItemsAndServices() {
       }
       if (name && preview.some(x => x.name === name)) {
         rowErrs.push(`Baris ${rowIdx + 2}: nama "${name}" duplikat dalam file`);
+      }
+      if (barcodeRaw && data.items.some(x => (x.barcode || '') === barcodeRaw)) {
+        rowErrs.push(`Baris ${rowIdx + 2}: barcode "${barcodeRaw}" sudah ada di sistem`);
+      }
+      if (barcodeRaw && preview.some(x => x.barcode === barcodeRaw)) {
+        rowErrs.push(`Baris ${rowIdx + 2}: barcode "${barcodeRaw}" duplikat dalam file`);
       }
 
       // Untuk Accurate: Varian tetap bisa diimport sebagai Persediaan (hanya info)
@@ -617,6 +688,8 @@ export default function ItemsAndServices() {
         isActive: true,
         isQuickService: ['ya', 'yes', 'y', '1', 'true', 'cepat'].includes(layananCepat) || (jenis === 'Jasa' && isAccurateMode), // auto quick service for Jasa from Accurate
         description: ketRaw,
+        receiptDescription: deskripsiNotaRaw || name,
+        barcode: barcodeRaw,
       });
     });
 
@@ -716,6 +789,8 @@ export default function ItemsAndServices() {
           purchasePrice: row.purchasePrice, sellingPrice: row.sellingPrice,
           isActive: row.isActive, isQuickService: row.isQuickService,
           description: row.description,
+          receiptDescription: row.receiptDescription,
+          barcode: row.barcode,
           branchId: resolveBranchId(),
         });
         success++;
@@ -852,7 +927,27 @@ export default function ItemsAndServices() {
             <Filter className="h-4 w-4" />
             Menampilkan {filteredItems.length} dari {data.items.length} item
           </div>
-          <span className="text-sm font-medium text-gray-600">{data.items.length}</span>
+          <div className="relative flex items-center gap-2">
+            <button type="button" onClick={() => setShowColumnSettings((value) => !value)} className="hidden items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 lg:inline-flex">
+              <Settings2 className="h-4 w-4" /> Atur Kolom
+            </button>
+            <span className="text-sm font-medium text-gray-600">{data.items.length}</span>
+            {showColumnSettings && (
+              <div className="absolute right-0 top-11 z-30 hidden w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-xl lg:block">
+                <div className="mb-3 flex items-center justify-between">
+                  <div><p className="text-sm font-bold text-gray-900">Kolom Ditampilkan</p><p className="text-[10px] text-gray-500">Tersimpan untuk pengguna ini</p></div>
+                  <button type="button" onClick={() => setShowColumnSettings(false)} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+                </div>
+                <div className="max-h-72 space-y-1 overflow-y-auto">
+                  {(Object.keys(itemColumnLabels) as ItemColumn[]).map((column) => {
+                    const required = column === 'name' || column === 'actions';
+                    return <label key={column} className={`flex items-center justify-between rounded-lg px-2 py-2 text-sm ${required ? 'bg-gray-50 text-gray-500' : 'cursor-pointer hover:bg-blue-50'}`}><span>{itemColumnLabels[column]}</span><input type="checkbox" disabled={required} checked={required || visibleColumns.includes(column)} onChange={(event) => setColumnVisible(column, event.target.checked)} className="h-4 w-4 rounded text-blue-600" /></label>;
+                  })}
+                </div>
+                <button type="button" onClick={resetColumns} className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Kembalikan Default</button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -861,13 +956,18 @@ export default function ItemsAndServices() {
                 <th colSpan={9} className="p-0">
                   <div className="flex items-center text-xs font-medium uppercase tracking-wider">
                     <div className="w-10 flex-shrink-0 px-2 py-3"></div>
-                    <div className="min-w-[130px] px-4 py-3 text-left">Kode Barang</div>
-                    <div className="flex-1 px-4 py-3 text-left">Nama Barang</div>
-                    <div className="w-16 px-4 py-3 text-right">KTS</div>
-                    <div className="w-20 px-4 py-3 text-left">Satuan</div>
-                    <div className="w-28 px-4 py-3 text-left">Jenis Barang</div>
-                    <div className="w-28 px-4 py-3 text-left">Kategori</div>
-                    <div className="w-32 px-4 py-3 text-right">Harga Jual</div>
+                    {visibleColumns.includes('code') && <div className="min-w-[120px] px-4 py-3 text-left">Kode</div>}
+                    <div className="min-w-[220px] flex-1 px-4 py-3 text-left">Nama Barang/Jasa</div>
+                    {visibleColumns.includes('receiptDescription') && <div className="w-56 px-4 py-3 text-left">Deskripsi Nota</div>}
+                    {visibleColumns.includes('type') && <div className="w-32 px-4 py-3 text-left">Jenis</div>}
+                    {visibleColumns.includes('category') && <div className="w-32 px-4 py-3 text-left">Kategori</div>}
+                    {visibleColumns.includes('barcode') && <div className="w-40 px-4 py-3 text-left">Barcode</div>}
+                    {visibleColumns.includes('stock') && <div className="w-20 px-4 py-3 text-right">KTS</div>}
+                    {visibleColumns.includes('unit') && <div className="w-20 px-4 py-3 text-left">Satuan</div>}
+                    {visibleColumns.includes('brand') && <div className="w-28 px-4 py-3 text-left">Merek</div>}
+                    {visibleColumns.includes('purchasePrice') && <div className="w-32 px-4 py-3 text-right">Harga Beli</div>}
+                    {visibleColumns.includes('status') && <div className="w-24 px-4 py-3 text-center">Status</div>}
+                    {visibleColumns.includes('price') && <div className="w-32 px-4 py-3 text-right">Harga</div>}
                     <div className="w-24 px-4 py-3 text-center">Aksi</div>
                   </div>
                 </th>
@@ -894,8 +994,8 @@ export default function ItemsAndServices() {
                             expanded ? <ChevronUp className="mx-auto h-4 w-4 text-purple-500" /> : <ChevronDown className="mx-auto h-4 w-4 text-purple-500" />
                           ) : null}
                         </div>
-                        <div className="min-w-[130px] px-4 py-3 font-mono text-sm text-gray-900">{item.code}</div>
-                        <div className="flex-1 px-4 py-3">
+                        {visibleColumns.includes('code') && <div className="min-w-[120px] px-4 py-3 font-mono text-sm text-gray-900">{item.code}</div>}
+                        <div className="min-w-[220px] flex-1 px-4 py-3">
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900">{item.name}</p>
                             {!item.isActive && <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">NONAKTIF</span>}
@@ -905,17 +1005,22 @@ export default function ItemsAndServices() {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-500">{item.brand && item.brand !== '-' ? item.brand : ''} {item.description ? (item.brand && item.brand !== '-' ? '- ' : '') + item.description : ''}</p>
+                          <p className="text-xs text-gray-500">{item.description || ''}</p>
                         </div>
-                        <div className="w-16 px-4 py-3 text-right text-sm font-semibold text-gray-900">{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>
-                        <div className="w-20 px-4 py-3 text-sm text-gray-700">{item.unit}</div>
-                        <div className="w-28 px-4 py-3">
+                        {visibleColumns.includes('receiptDescription') && <div className="w-56 truncate px-4 py-3 text-sm text-gray-700" title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</div>}
+                        {visibleColumns.includes('type') && <div className="w-32 px-4 py-3">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>
                             {item.type}
                           </span>
-                        </div>
-                        <div className="w-28 px-4 py-3 text-sm text-gray-700">{item.categoryName}</div>
-                        <div className="w-32 px-4 py-3 text-right text-sm font-medium text-gray-900">{formatCurrency(item.sellingPrice)}</div>
+                        </div>}
+                        {visibleColumns.includes('category') && <div className="w-32 truncate px-4 py-3 text-sm text-gray-700">{item.categoryName}</div>}
+                        {visibleColumns.includes('barcode') && <div className="w-40 truncate px-4 py-3 font-mono text-xs text-gray-700" title={item.barcode}>{item.barcode || '—'}</div>}
+                        {visibleColumns.includes('stock') && <div className="w-20 px-4 py-3 text-right text-sm font-semibold text-gray-900">{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>}
+                        {visibleColumns.includes('unit') && <div className="w-20 px-4 py-3 text-sm text-gray-700">{item.unit}</div>}
+                        {visibleColumns.includes('brand') && <div className="w-28 truncate px-4 py-3 text-sm text-gray-700">{item.brand || '—'}</div>}
+                        {visibleColumns.includes('purchasePrice') && <div className="w-32 px-4 py-3 text-right text-sm text-gray-700">{formatCurrency(item.purchasePrice)}</div>}
+                        {visibleColumns.includes('status') && <div className="w-24 px-4 py-3 text-center text-xs font-semibold">{item.isActive ? <span className="text-green-700">Aktif</span> : <span className="text-red-700">Nonaktif</span>}</div>}
+                        {visibleColumns.includes('price') && <div className="w-32 px-4 py-3 text-right text-sm font-medium text-gray-900">{formatCurrency(item.sellingPrice)}</div>}
                         <div className="w-24 px-4 py-3">
                           <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
                             {hasPermission('item:edit') && (
@@ -1031,6 +1136,16 @@ export default function ItemsAndServices() {
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-gray-700">Nama Barang/Jasa *</label>
                   <input required value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Deskripsi Nota</label>
+                  <input value={itemForm.receiptDescription} onChange={(e) => setItemForm({ ...itemForm, receiptDescription: e.target.value })} placeholder="Nama/keterangan yang dicetak pada WO dan faktur" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <p className="mt-1 text-xs text-gray-500">Jika kosong, sistem menggunakan Nama Barang/Jasa.</p>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Barcode Asli</label>
+                  <input value={itemForm.barcode} onChange={(e) => setItemForm({ ...itemForm, barcode: e.target.value.trim() })} placeholder="Scan atau ketik barcode pabrik/supplier" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <p className="mt-1 text-xs text-gray-500">Harus unik jika diisi; boleh kosong untuk jasa dan paket.</p>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Kategori *</label>

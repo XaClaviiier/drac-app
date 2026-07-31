@@ -572,7 +572,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customerId: wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
       customerName: wo.customerName,
       vehicleInfo: `${wo.vehicleInfo} ${wo.plateNumber}`,
-      description: wo.services.map((s) => s.name).join(', '),
+      description: wo.services.map((s) => s.description || s.name).join(', '),
       total: wo.total, payment, paymentMethod, status, age: 0,
       woId: wo.id, woNumber: wo.woNumber, items: wo.services,
       branchId: wo.branchId,

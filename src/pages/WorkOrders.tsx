@@ -463,7 +463,7 @@ export default function WorkOrders() {
         itemId: item.id,
         code: item.code,
         name: `[PAKET] ${item.name}`,
-        description: 'Harga Paket / Group',
+        description: item.receiptDescription || item.name,
         price: item.sellingPrice,
         qty: 1,
       };
@@ -490,7 +490,7 @@ export default function WorkOrders() {
       itemId: item.id,
       code: item.code,
       name: item.name,
-      description: item.description,
+      description: item.receiptDescription || item.name,
       price: item.sellingPrice,
       qty: 1,
     };
@@ -1504,7 +1504,7 @@ export default function WorkOrders() {
                           type="text"
                           value={serviceSearch}
                           onChange={(e) => setServiceSearch(e.target.value)}
-                          placeholder="Cari kode, nama, kategori, atau jenis…"
+                          placeholder="Cari kode, barcode, nama, kategori, atau jenis…"
                           className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
@@ -1527,7 +1527,7 @@ export default function WorkOrders() {
                           {availableServiceItems
                             .filter(item => {
                               const q = serviceSearch.toLowerCase().trim();
-                              return !q || item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q) || item.categoryName.toLowerCase().includes(q);
+                              return !q || item.code.toLowerCase().includes(q) || (item.barcode || '').toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || (item.receiptDescription || '').toLowerCase().includes(q) || item.type.toLowerCase().includes(q) || item.categoryName.toLowerCase().includes(q);
                             })
                             .map(item => {
                               const added = isItemAdded(item.id);

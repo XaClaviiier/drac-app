@@ -142,6 +142,8 @@ export interface Item {
   isActive: boolean;
   isQuickService: boolean;
   description: string;
+  receiptDescription?: string;
+  barcode?: string;
   groupMembers?: GroupMember[];
   branchId: string;
   branchStocks?: Record<string, { stock: number; sellableStock: number }>;
