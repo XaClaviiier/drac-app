@@ -77,6 +77,28 @@ export default function AIAssistant() {
     data.branches.find(b => b.id === branchId)?.name || branchId || '-';
 
   const normalizePlate = (value: string) => value.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const editDistance = (left: string, right: string) => {
+    const a = left.toLowerCase();
+    const b = right.toLowerCase();
+    const matrix = Array.from({ length: a.length + 1 }, () => Array<number>(b.length + 1).fill(0));
+    for (let row = 0; row <= a.length; row += 1) matrix[row][0] = row;
+    for (let col = 0; col <= b.length; col += 1) matrix[0][col] = col;
+    for (let row = 1; row <= a.length; row += 1) {
+      for (let col = 1; col <= b.length; col += 1) {
+        matrix[row][col] = Math.min(
+          matrix[row - 1][col] + 1,
+          matrix[row][col - 1] + 1,
+          matrix[row - 1][col - 1] + (a[row - 1] === b[col - 1] ? 0 : 1),
+        );
+      }
+    }
+    return matrix[a.length][b.length];
+  };
+
+  const lookupTerms = (value: string) => {
+    const ignored = new Set(['cek', 'cari', 'data', 'customer', 'pelanggan', 'pemilik', 'milik', 'kendaraan', 'mobil', 'plat', 'nomor', 'riwayat', 'servis', 'service', 'siapa', 'punya']);
+    return value.toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length >= 2 && !ignored.has(term));
+  };
 
   const buildVehicleHistoryReply = (userText: string): string | null => {
     const lower = userText.toLowerCase();
@@ -88,6 +110,43 @@ export default function AIAssistant() {
     const vehicle = data.vehicles.find((item) => compactText.includes(normalizePlate(item.plateNumber)));
     if (!vehicle) {
       const possiblePlate = userText.toUpperCase().match(/\b[A-Z]{1,2}[\s-]*\d{2,4}[\s-]*[A-Z]{1,3}\b/)?.[0];
+      const terms = lookupTerms(userText).map((term) => normalizePlate(term)).filter((term) => term.length >= 2);
+      const plateQuery = possiblePlate ? normalizePlate(possiblePlate) : (terms[0] || '');
+      if (!plateQuery) return null;
+
+      const candidates = data.vehicles
+        .map((item) => {
+          const normalized = normalizePlate(item.plateNumber);
+          let score = 99;
+          if (normalized.startsWith(plateQuery)) score = 0;
+          else if (normalized.includes(plateQuery)) score = 1;
+          else {
+            const distance = editDistance(plateQuery, normalized);
+            if (plateQuery.length >= 5 && distance <= Math.max(2, Math.floor(plateQuery.length * 0.3))) score = 2 + distance;
+          }
+          return { item, score };
+        })
+        .filter((candidate) => candidate.score < 99)
+        .sort((a, b) => a.score - b.score || a.item.plateNumber.localeCompare(b.item.plateNumber))
+        .slice(0, 10);
+
+      if (candidates.length > 0) {
+        return [
+          `Ditemukan **${candidates.length} kendaraan** yang cocok atau mirip dengan **${plateQuery}**:`,
+          '',
+          ...candidates.map(({ item }, index) => {
+            const customer = data.customers.find((entry) => entry.id === item.customerRefId || entry.customerCode === item.customerId);
+            const woCount = data.workOrders.filter((wo) =>
+              (wo.vehicleRefId && wo.vehicleRefId === item.id)
+              || normalizePlate(wo.plateNumber) === normalizePlate(item.plateNumber)
+            ).length;
+            return `${index + 1}. **${item.plateNumber}** — ${[item.brand, item.model].filter(Boolean).join(' ') || '-'}\n   Pemilik: ${customer?.name || item.customerName || '-'} · ${woCount} WO`;
+          }),
+          '',
+          `Ketik nomor plat lengkap, misalnya **cek ${candidates[0].item.plateNumber}**.`,
+        ].join('\n');
+      }
+
       return possiblePlate
         ? `Kendaraan dengan plat **${normalizePlate(possiblePlate)}** tidak ditemukan dalam Register Kendaraan.\n\nPeriksa kembali nomor plat atau daftarkan kendaraan terlebih dahulu.`
         : null;
@@ -159,11 +218,8 @@ export default function AIAssistant() {
     if (!isLookupIntent || isCreateIntent) return null;
 
     const compactInput = userText.replace(/[^a-z0-9]/gi, '').toLowerCase();
-    const ignoredWords = new Set(['cek', 'cari', 'data', 'customer', 'pelanggan', 'pemilik', 'milik', 'kendaraan', 'mobil', 'riwayat', 'servis', 'service', 'siapa']);
-    const queryWords = lower
-      .split(/[^a-z0-9]+/)
-      .filter((word) => word.length > 1 && !ignoredWords.has(word));
-    const candidates = data.customers.filter((customer) => {
+    const queryWords = lookupTerms(userText);
+    let candidates = data.customers.filter((customer) => {
       const compactCode = customer.customerCode.replace(/[^a-z0-9]/gi, '').toLowerCase();
       const compactPhone = customer.phone.replace(/\D/g, '');
       const nameWords = customer.name.toLowerCase().split(/\s+/).filter(Boolean);
@@ -177,8 +233,27 @@ export default function AIAssistant() {
         ));
     });
 
+    let fuzzySearch = false;
+    if (candidates.length === 0 && queryWords.length > 0) {
+      const nameQuery = queryWords.join(' ');
+      candidates = data.customers
+        .map((customer) => {
+          const normalizedName = customer.name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+          const fullDistance = editDistance(nameQuery, normalizedName);
+          const wordDistance = Math.min(...normalizedName.split(' ').map((word) => editDistance(nameQuery, word)));
+          const distance = Math.min(fullDistance, wordDistance);
+          const allowedDistance = Math.max(1, Math.floor(nameQuery.length * 0.3));
+          return { customer, distance, allowedDistance };
+        })
+        .filter(({ distance, allowedDistance }) => distance <= allowedDistance)
+        .sort((a, b) => a.distance - b.distance || a.customer.name.localeCompare(b.customer.name))
+        .slice(0, 10)
+        .map(({ customer }) => customer);
+      fuzzySearch = candidates.length > 0;
+    }
+
     if (candidates.length === 0) return null;
-    if (candidates.length > 1) {
+    if (candidates.length > 1 || fuzzySearch) {
       const choices = candidates.slice(0, 8).map((customer, index) => {
         const vehicleCount = data.vehicles.filter((vehicle) =>
           vehicle.customerRefId === customer.id
@@ -187,7 +262,9 @@ export default function AIAssistant() {
         return `${index + 1}. **${customer.name}** — ${customer.customerCode} · ${customer.phone || 'tanpa telepon'} · ${vehicleCount} kendaraan`;
       });
       return [
-        `Ditemukan **${candidates.length} pelanggan** yang mirip. Pilih dengan mengetik kode pelanggan atau nomor telepon:`,
+        fuzzySearch
+          ? `Tidak ditemukan nama persis. Apakah yang dimaksud salah satu dari **${candidates.length} pelanggan** berikut?`
+          : `Ditemukan **${candidates.length} pelanggan** yang mirip. Pilih dengan mengetik kode pelanggan atau nomor telepon:`,
         '',
         ...choices,
       ].join('\n');
