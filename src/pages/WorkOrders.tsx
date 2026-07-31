@@ -750,10 +750,10 @@ export default function WorkOrders() {
               role="switch"
               aria-checked={todayOnly}
               onClick={() => setTodayOnly(value => !value)}
-              className={`flex h-12 flex-shrink-0 items-center justify-between gap-3 rounded-lg border-2 px-3 transition-all lg:w-[180px] ${
+              className={`flex h-12 flex-shrink-0 items-center justify-between gap-3 px-2 transition-colors lg:w-[180px] ${
                 todayOnly
-                  ? 'border-blue-500 bg-blue-50 text-blue-800 shadow-sm'
-                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                  ? 'text-blue-800'
+                  : 'text-gray-600'
               }`}
             >
               <span className="flex items-center gap-2 text-left">
@@ -777,10 +777,10 @@ export default function WorkOrders() {
                 disabled={!canViewAllBranches}
                 onClick={() => canViewAllBranches && setActiveBranchOnly(value => !value)}
                 title={!canViewAllBranches ? 'Akun ini hanya boleh melihat cabangnya sendiri' : activeBranchOnly ? `Matikan untuk melihat semua cabang aktif` : `Aktifkan untuk hanya melihat ${selectedBranchLabel}`}
-                className={`flex h-12 flex-shrink-0 items-center justify-between gap-3 rounded-lg border-2 px-3 transition-all lg:w-[205px] ${
+                className={`flex h-12 flex-shrink-0 items-center justify-between gap-3 px-2 transition-colors lg:w-[205px] ${
                   activeBranchOnly || !canViewAllBranches
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
-                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                    ? 'text-emerald-800'
+                    : 'text-gray-500'
                 } ${!canViewAllBranches ? 'cursor-not-allowed opacity-80' : ''}`}
               >
                 <span className="flex min-w-0 items-center gap-2 text-left">
