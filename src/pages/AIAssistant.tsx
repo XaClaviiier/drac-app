@@ -35,6 +35,7 @@ export default function AIAssistant() {
   const {
     data, currentUser, currentBranchId, resolveBranchId,
     addWorkOrder, addCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
+    hasPermission,
   } = useApp();
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -74,6 +75,82 @@ export default function AIAssistant() {
   // Ringkasan selalu dikirim; detail hanya kalau relevan dengan pertanyaan.
   const cabangName = (branchId?: string) =>
     data.branches.find(b => b.id === branchId)?.name || branchId || '-';
+
+  const normalizePlate = (value: string) => value.replace(/[^a-z0-9]/gi, '').toUpperCase();
+
+  const buildVehicleHistoryReply = (userText: string): string | null => {
+    const lower = userText.toLowerCase();
+    const isHistoryIntent = /(cek|riwayat|history|pemilik|milik siapa|siapa punya|pernah|servis|service|wo terakhir|keluhan sebelumnya)/i.test(lower);
+    const isCreateIntent = /(buat|tambah|bikin|create)\s+(wo|order)/i.test(lower);
+    if (!isHistoryIntent || isCreateIntent) return null;
+
+    const compactText = userText.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const vehicle = data.vehicles.find((item) => compactText.includes(normalizePlate(item.plateNumber)));
+    if (!vehicle) {
+      const possiblePlate = userText.toUpperCase().match(/\b[A-Z]{1,2}[\s-]*\d{2,4}[\s-]*[A-Z]{1,3}\b/)?.[0];
+      return possiblePlate
+        ? `Kendaraan dengan plat **${normalizePlate(possiblePlate)}** tidak ditemukan dalam Register Kendaraan.\n\nPeriksa kembali nomor plat atau daftarkan kendaraan terlebih dahulu.`
+        : null;
+    }
+
+    const customer = data.customers.find((item) =>
+      item.id === vehicle.customerRefId
+      || item.customerCode === vehicle.customerId
+    );
+    const canSeeAllBranches = hasPermission('all_branches');
+    const allowedBranchIds = new Set(
+      canSeeAllBranches
+        ? data.branches.filter((branch) => branch.isActive).map((branch) => branch.id)
+        : (currentUser?.branchIds?.length ? currentUser.branchIds : [currentUser?.branchId].filter(Boolean) as string[])
+    );
+    const allVehicleWOs = data.workOrders
+      .filter((wo) =>
+        (wo.vehicleRefId && wo.vehicleRefId === vehicle.id)
+        || normalizePlate(wo.plateNumber) === normalizePlate(vehicle.plateNumber)
+      )
+      .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
+    const visibleWOs = allVehicleWOs.filter((wo) => allowedBranchIds.has(wo.branchId));
+    const showAll = /(semua|seluruh|lengkap)/i.test(lower);
+    const listedWOs = showAll ? visibleWOs : visibleWOs.slice(0, 5);
+
+    const lines = [
+      `**Kendaraan ditemukan**`,
+      ``,
+      `- Plat: **${vehicle.plateNumber}**`,
+      `- Pemilik: **${customer?.name || vehicle.customerName || '-'}**`,
+      `- Telepon: ${customer?.phone || vehicle.phone || '-'}`,
+      `- Kendaraan: ${[vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ') || '-'}`,
+      `- Warna: ${vehicle.color || '-'}`,
+      ``,
+      `**Riwayat servis: ${visibleWOs.length} WO yang dapat Anda akses**`,
+    ];
+
+    if (listedWOs.length === 0) {
+      lines.push('', 'Belum ada riwayat WO pada cabang yang dapat Anda akses.');
+      if (allVehicleWOs.length > 0 && !canSeeAllBranches) {
+        lines.push('Kendaraan memiliki riwayat di cabang lain, tetapi detailnya dibatasi oleh hak akses Anda.');
+      }
+      return lines.join('\n');
+    }
+
+    listedWOs.forEach((wo, index) => {
+      const services = wo.services.map((service) => `${service.name} ×${service.qty}`).join(', ') || 'Belum ada layanan';
+      lines.push(
+        '',
+        `${index + 1}. **${wo.woNumber}** — ${wo.date}`,
+        `   Cabang: ${cabangName(wo.branchId)}`,
+        `   Keluhan: ${wo.description || '-'}`,
+        `   Layanan: ${services}`,
+        `   Status: **${wo.status}**`,
+        `   Total: ${fmt(wo.total)}${wo.invoiceNumber ? ` · Faktur ${wo.invoiceNumber}` : ''}`,
+      );
+    });
+
+    if (!showAll && visibleWOs.length > listedWOs.length) {
+      lines.push('', `Menampilkan 5 WO terbaru. Ketik **riwayat lengkap ${vehicle.plateNumber}** untuk melihat semuanya.`);
+    }
+    return lines.join('\n');
+  };
 
   const buildSmartContext = (userMsgText: string): string => {
     const parts: string[] = [];
@@ -351,6 +428,16 @@ ${buildSmartContext(userMsgText)}`;
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || busy) return;
+    const vehicleHistoryReply = buildVehicleHistoryReply(content);
+    if (vehicleHistoryReply) {
+      setInput('');
+      setMessages(history => [
+        ...history,
+        { role: 'user', content, time: now() },
+        { role: 'assistant', content: vehicleHistoryReply, time: now() },
+      ]);
+      return;
+    }
     if (!hasKey) {
       setMessages(history => [...history, { role: 'assistant', content: 'Integrasi AI belum diatur oleh Owner.', error: true, time: now() }]);
       return;
