@@ -123,9 +123,9 @@ export default function Customers() {
         )}
       </div>
 
-      <div className={`${showModal ? 'lg:hidden' : ''} space-y-6`}>
+      <div className={`${showModal ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5`}>
       {/* Search */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="relative w-full max-w-xl">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -134,16 +134,16 @@ export default function Customers() {
               placeholder="Cari nama, nomor telepon, atau email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className="h-9 w-full rounded-lg border border-gray-300 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
             />
           </div>
           {hasPermission('customer:create') && (
-            <button onClick={() => handleOpenModal()} title="Tambah Pelanggan" className="inline-flex h-11 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
+            <button onClick={() => handleOpenModal()} title="Tambah Pelanggan" className="inline-flex h-9 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
               <Plus className="h-5 w-5" /><span className="hidden sm:inline">Tambah</span>
             </button>
           )}
           <div className="relative hidden lg:block">
-            <button type="button" onClick={() => setShowColumnPicker(current => !current)} title="Pilih kolom tabel" className={`flex h-11 w-11 items-center justify-center rounded-lg border transition-colors ${showColumnPicker ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}><Settings2 className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setShowColumnPicker(current => !current)} title="Pilih kolom tabel" className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${showColumnPicker ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}><Settings2 className="h-4 w-4" /></button>
             {showColumnPicker && (
               <>
                 <button type="button" aria-label="Tutup pilihan kolom" onClick={() => setShowColumnPicker(false)} className="fixed inset-0 z-20" />
