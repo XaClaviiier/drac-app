@@ -40,9 +40,6 @@ const desktopGroups = [
     { label: 'Profil & Preferensi', path: '/settings', icon: Settings, perm: 'settings:view', tone: 'orange' },
     { label: 'Pengguna', path: '/users', icon: Users, perm: 'user:view', tone: 'blue' },
     { label: 'Grup Akses', path: '/users', icon: Shield, perm: 'role:view', tone: 'blue' },
-    { label: 'Cabang & Gudang', path: '/settings', icon: Building2, perm: 'branch:view', tone: 'blue' },
-    { label: 'Nomor Dokumen', path: '/settings', icon: FileText, perm: 'settings:view', tone: 'purple' },
-    { label: 'Sesi & Keamanan', path: '/users', icon: Shield, perm: 'user:view', tone: 'purple' },
   ]},
   { id: 'ledger', label: 'Buku Besar', icon: BookOpen, items: [
     { label: 'Daftar Akun', icon: BookOpen, tone: 'blue' }, { label: 'Jurnal Umum', icon: ClipboardList, tone: 'green' },
