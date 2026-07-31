@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer } from '../types';
 
@@ -88,7 +88,7 @@ export default function Customers() {
     <div className="space-y-6">
       {/* Subtab modul Pelanggan (desktop) */}
       <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
-        <button type="button" onClick={() => showModal && handleCloseModal()} className={`h-11 min-w-44 rounded-t-md border border-b-0 px-4 text-left text-sm font-semibold ${!showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-50'}`}>Daftar Pelanggan</button>
+        <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}><List className="h-6 w-6" /></button>
         {showModal && (
           <div className="ml-1 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
             <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.name}` : 'Data Baru'}</span>
@@ -98,34 +98,24 @@ export default function Customers() {
       </div>
 
       <div className={`${showModal ? 'lg:hidden' : ''} contents`}>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Data Pelanggan</h2>
-          <p className="text-gray-500 mt-1">Kelola data pelanggan bengkel AC mobil</p>
-        </div>
-        {hasPermission('customer:create') && (
-          <button
-            onClick={() => handleOpenModal()}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
-          >
-            <Plus className="w-5 h-5" />
-            Tambah Pelanggan
-          </button>
-        )}
-      </div>
-
       {/* Search */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Cari nama, nomor telepon, atau email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-          />
+        <div className="flex items-center justify-between gap-3">
+          <div className="relative w-full max-w-xl">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Cari nama, nomor telepon, atau email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+          </div>
+          {hasPermission('customer:create') && (
+            <button onClick={() => handleOpenModal()} title="Tambah Pelanggan" className="inline-flex h-11 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
+              <Plus className="h-5 w-5" /><span className="hidden sm:inline">Tambah</span>
+            </button>
+          )}
         </div>
       </div>
 
