@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
+import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -395,6 +396,7 @@ export default function ItemsAndServices() {
   };
 
   const exportCurrentData = () => {
+    const processId = startSystemProcess('Export Barang & Jasa', `Menyiapkan ${data.items.length} item`);
     const headers = ['kode', 'nama', 'deskripsi_nota', 'barcode', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
     const rows = data.items
       .filter(i => i.type !== 'Group')
@@ -411,6 +413,7 @@ export default function ItemsAndServices() {
     link.download = `barang_jasa_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+    finishSystemProcess(processId, `${rows.length} item berhasil diekspor`);
   };
 
   // ==================== CSV PARSER ====================
@@ -757,6 +760,7 @@ export default function ItemsAndServices() {
 
   const confirmImport = async () => {
     if (importPreview.length === 0) return;
+    const processId = startSystemProcess('Import Barang & Jasa', `0 dari ${importPreview.length} baris`);
     let success = 0, failed = 0;
     const createdCategoryIds = new Set<string>();
 
@@ -764,7 +768,8 @@ export default function ItemsAndServices() {
       data.itemCategories.map(c => c.name.trim().toLowerCase())
     );
 
-    for (const row of importPreview) {
+    for (let rowIndex = 0; rowIndex < importPreview.length; rowIndex++) {
+      const row = importPreview[rowIndex];
       try {
         // Kategori hanya dibuat sekali: cek berdasarkan ID dan nama.
         const catName = String(row._category?.name || '').trim().toLowerCase();
@@ -797,7 +802,10 @@ export default function ItemsAndServices() {
       } catch (err) {
         failed++;
       }
+      updateSystemProcess(processId, ((rowIndex + 1) / importPreview.length) * 100, `${rowIndex + 1} dari ${importPreview.length} baris`);
     }
+    if (success === 0 && failed > 0) failSystemProcess(processId, `${failed} baris gagal diimport`);
+    else finishSystemProcess(processId, `${success} berhasil${failed > 0 ? `, ${failed} gagal` : ''}`);
     setImportSuccess(`✅ ${success} barang berhasil diimport${failed > 0 ? `, ${failed} gagal` : ''}!`);
     setImportPreview([]);
     setTimeout(() => {

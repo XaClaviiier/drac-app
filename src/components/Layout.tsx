@@ -4,10 +4,11 @@ import {
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
   ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
-  ClipboardList, ArrowLeftRight, History, Banknote,
+  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { PROCESS_QUEUE_EVENT, SystemProcess, clearFinishedSystemProcesses, readProcessQueue } from '../lib/processQueue';
 
 const navItems = [
   { path: '/', label: 'Dashboard', short: 'Home', icon: LayoutDashboard, perm: 'dashboard:view' as const, color: 'from-blue-500 to-indigo-600' },
@@ -96,6 +97,8 @@ export default function Layout() {
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
+  const [processMenuOpen, setProcessMenuOpen] = useState(false);
+  const [systemProcesses, setSystemProcesses] = useState<SystemProcess[]>(() => readProcessQueue());
   const [workspaceTabs, setWorkspaceTabs] = useState<Array<{ path: string; label: string }>>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('drac-workspace-tabs') || '[]');
@@ -141,6 +144,11 @@ export default function Layout() {
       : [...current, { path: location.pathname, label }]);
   }, [location.pathname]);
   useEffect(() => { localStorage.setItem('drac-workspace-tabs', JSON.stringify(workspaceTabs)); }, [workspaceTabs]);
+  useEffect(() => {
+    const syncProcesses = (event: Event) => setSystemProcesses((event as CustomEvent<SystemProcess[]>).detail || readProcessQueue());
+    window.addEventListener(PROCESS_QUEUE_EVENT, syncProcesses);
+    return () => window.removeEventListener(PROCESS_QUEUE_EVENT, syncProcesses);
+  }, []);
   useEffect(() => {
     if (!desktopMenuOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDesktopMenuOpen(null); };
@@ -298,6 +306,46 @@ export default function Layout() {
                 )}
               </div>
             )}
+
+            <div className="relative hidden sm:block">
+              <button type="button" onClick={() => setProcessMenuOpen(current => !current)} title="Antrian proses sistem" className="relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-gray-100">
+                {systemProcesses.some(task => task.status === 'running') ? (
+                  <LoaderCircle className="h-5 w-5 animate-spin text-blue-600" />
+                ) : systemProcesses.some(task => task.status === 'error') ? (
+                  <span className="h-3.5 w-3.5 rounded-full bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.14)]" />
+                ) : systemProcesses.some(task => task.status === 'success') ? (
+                  <span className="h-3.5 w-3.5 rounded-full bg-green-500 shadow-[0_0_0_4px_rgba(34,197,94,0.14)]" />
+                ) : (
+                  <span className="h-3.5 w-3.5 rounded-full bg-gray-300" />
+                )}
+                {systemProcesses.filter(task => task.status === 'running').length > 0 && <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-bold text-white">{systemProcesses.filter(task => task.status === 'running').length}</span>}
+              </button>
+              {processMenuOpen && (
+                <>
+                  <button type="button" aria-label="Tutup antrian proses" onClick={() => setProcessMenuOpen(false)} className="fixed inset-0 z-40" />
+                  <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                      <div className="flex items-center gap-2"><Activity className="h-4 w-4 text-blue-600" /><h3 className="text-sm font-semibold text-gray-900">Aktivitas Proses</h3></div>
+                      {systemProcesses.some(task => task.status !== 'running') && <button type="button" onClick={() => { clearFinishedSystemProcesses(); setSystemProcesses(readProcessQueue()); }} className="text-xs font-medium text-blue-600 hover:text-blue-800">Bersihkan</button>}
+                    </div>
+                    <div className="max-h-80 overflow-y-auto p-2">
+                      {systemProcesses.length === 0 ? (
+                        <div className="px-4 py-8 text-center"><span className="mx-auto mb-3 block h-4 w-4 rounded-full bg-gray-300" /><p className="text-sm text-gray-600">Tidak ada proses yang sedang berjalan</p></div>
+                      ) : systemProcesses.map(task => (
+                        <div key={task.id} className="mb-1 rounded-lg border border-gray-100 p-3 last:mb-0">
+                          <div className="flex items-start gap-2">
+                            {task.status === 'running' ? <LoaderCircle className="mt-0.5 h-4 w-4 flex-shrink-0 animate-spin text-blue-600" /> : task.status === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" /> : <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600" />}
+                            <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-gray-800">{task.label}</p>{task.message && <p className="mt-0.5 text-xs text-gray-500">{task.message}</p>}</div>
+                            <span className={`text-[10px] font-semibold ${task.status === 'running' ? 'text-blue-600' : task.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>{task.status === 'running' ? `${task.progress || 0}%` : task.status === 'success' ? 'Selesai' : 'Gagal'}</span>
+                          </div>
+                          {task.status === 'running' && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${task.progress || 0}%` }} /></div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             <button className="relative hidden rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 sm:block">
               <Bell className="h-5 w-5" />
