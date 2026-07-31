@@ -132,15 +132,15 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
-            $currentStmt = $pdo->prepare("SELECT vehicle_ref_id FROM work_orders WHERE id = ?");
+            $currentStmt = $pdo->prepare("SELECT vehicle_ref_id, date, backdate_reason FROM work_orders WHERE id = ?");
             $currentStmt->execute([$id]);
-            $currentVehicleId = $currentStmt->fetchColumn();
-            if (!$currentVehicleId) {
+            $currentWorkOrder = $currentStmt->fetch();
+            if (!$currentWorkOrder) {
                 throw new InvalidArgumentException('WO tidak ditemukan.');
             }
             // Validasi WO aktif hanya diperlukan bila kendaraan benar-benar diganti.
             // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
-            if ((string)$currentVehicleId !== (string)$vehicle['id']) {
+            if ((string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id']) {
                 assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], (string)$id);
             }
             if (empty($d['services'])) {
@@ -151,11 +151,15 @@ switch ($method) {
             }
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
+            $dateChanged = $transactionDate !== (string)$currentWorkOrder['date'];
             if ($transactionDate > date('Y-m-d')) {
                 throw new InvalidArgumentException('Tanggal WO tidak boleh melewati hari ini.');
             }
-            if ($transactionDate < date('Y-m-d') && $backdateReason === '') {
+            if ($dateChanged && $transactionDate < date('Y-m-d') && $backdateReason === '') {
                 throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
+            }
+            if (!$dateChanged && $backdateReason === '') {
+                $backdateReason = (string)($currentWorkOrder['backdate_reason'] ?? '');
             }
             $stmt = $pdo->prepare("
                 UPDATE work_orders SET
