@@ -19,6 +19,11 @@ export default function SalesInvoice() {
   const [selectedWOId, setSelectedWOId] = useState('');
   const [woPayment, setWoPayment] = useState(0);
   const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
+  const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
+  const [paymentDateUnlocked, setPaymentDateUnlocked] = useState(false);
+  const [woInvoiceDate, setWoInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [woPaymentDate, setWoPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingFromWO, setIsCreatingFromWO] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -32,6 +37,8 @@ export default function SalesInvoice() {
     description: '',
     total: 0,
     payment: 0,
+    paymentDate: new Date().toISOString().split('T')[0],
+    backdateReason: '',
     paymentMethod: 'Tunai' as 'Tunai' | 'QRIS/Transfer',
     status: 'Lunas' as 'Lunas' | 'Belum Lunas',
   });
@@ -106,10 +113,14 @@ export default function SalesInvoice() {
       description: '',
       total: 0,
       payment: 0,
+      paymentDate: new Date().toISOString().split('T')[0],
+      backdateReason: '',
       paymentMethod: 'Tunai',
       status: 'Lunas',
     });
     setEditingInvoice(null);
+    setInvoiceDateUnlocked(false);
+    setPaymentDateUnlocked(false);
   };
 
   const handleOpenModal = (invoice?: SalesInvoice) => {
@@ -128,6 +139,8 @@ export default function SalesInvoice() {
         description: invoice.description,
         total: invoice.total,
         payment: invoice.payment,
+        paymentDate: invoice.paymentDate || invoice.date,
+        backdateReason: invoice.backdateReason || '',
         paymentMethod: invoice.paymentMethod || 'Tunai',
         status: invoice.status,
       });
@@ -144,6 +157,19 @@ export default function SalesInvoice() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const today = new Date().toISOString().split('T')[0];
+    if (formData.date > today || (formData.payment > 0 && formData.paymentDate > today)) {
+      window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
+      return;
+    }
+    if (formData.payment > 0 && formData.paymentDate < formData.date) {
+      window.alert('Tanggal pembayaran tidak boleh sebelum tanggal faktur.');
+      return;
+    }
+    if ((formData.date < today || (formData.payment > 0 && formData.paymentDate < today)) && !formData.backdateReason.trim()) {
+      window.alert('Alasan transaksi tanggal mundur wajib diisi.');
+      return;
+    }
 
     const targetBranchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
     const invoiceNumber = generateDocumentNumber('invoice', targetBranchId, new Date(`${formData.date}T12:00:00`));
@@ -183,6 +209,10 @@ export default function SalesInvoice() {
     setSelectedWOId('');
     setWoPayment(0);
     setWoPaymentMethod('Tunai');
+    const today = new Date().toISOString().split('T')[0];
+    setWoInvoiceDate(today);
+    setWoPaymentDate(today);
+    setWoBackdateReason('');
   };
 
   const handleSelectWO = (woId: string) => {
@@ -193,9 +223,22 @@ export default function SalesInvoice() {
 
   const handleCreateFromWO = async () => {
     if (selectedWO && !isCreatingFromWO) {
+      const today = new Date().toISOString().split('T')[0];
+      if (woInvoiceDate > today || (woPayment > 0 && woPaymentDate > today)) {
+        window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
+        return;
+      }
+      if (woPayment > 0 && woPaymentDate < woInvoiceDate) {
+        window.alert('Tanggal pembayaran tidak boleh sebelum tanggal faktur.');
+        return;
+      }
+      if ((woInvoiceDate < today || (woPayment > 0 && woPaymentDate < today)) && !woBackdateReason.trim()) {
+        window.alert('Alasan transaksi tanggal mundur wajib diisi.');
+        return;
+      }
       setIsCreatingFromWO(true);
       try {
-        const invoice = await createInvoiceFromWO(selectedWO.id, woPayment, woPaymentMethod);
+        const invoice = await createInvoiceFromWO(selectedWO.id, woPayment, woPaymentMethod, woInvoiceDate, woPayment > 0 ? woPaymentDate : undefined, woBackdateReason);
         if (invoice) {
           setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
           setTimeout(() => setSuccessMsg(''), 4000);
@@ -452,11 +495,19 @@ export default function SalesInvoice() {
                 <input
                   type="date"
                   required
+                  max={new Date().toISOString().split('T')[0]}
+                  disabled={!invoiceDateUnlocked}
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
                 />
+                <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} className="mt-1 text-xs font-semibold text-blue-600">
+                  {invoiceDateUnlocked ? 'Kunci tanggal' : 'Buka tanggal mundur'}
+                </button>
               </div>
+              {(formData.date < new Date().toISOString().split('T')[0] || (formData.payment > 0 && formData.paymentDate < new Date().toISOString().split('T')[0])) && (
+                <input required value={formData.backdateReason} onChange={(e) => setFormData({ ...formData, backdateReason: e.target.value })} placeholder="Alasan transaksi tanggal mundur" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" />
+              )}
 
               {/* Pelanggan & Kendaraan Picker */}
               <div className="space-y-4">
@@ -545,6 +596,11 @@ export default function SalesInvoice() {
                     <option value="QRIS/Transfer">QRIS/Transfer</option>
                   </select>
                 </div>
+                {formData.payment > 0 && <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Pembayaran</label>
+                  <input type="date" min={formData.date} max={new Date().toISOString().split('T')[0]} disabled={!paymentDateUnlocked} value={formData.paymentDate} onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })} className="w-full px-4 py-2.5 border rounded-lg disabled:bg-gray-100" />
+                  <button type="button" onClick={() => hasPermission('payment:backdate') ? setPaymentDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal pembayaran.')} className="mt-1 text-xs font-semibold text-blue-600">Buka tanggal pembayaran</button>
+                </div>}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <div className="flex gap-4">
@@ -661,6 +717,19 @@ export default function SalesInvoice() {
 
                   {selectedWO && (
                     <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold mb-1">Tanggal Faktur</label>
+                          <input type="date" max={new Date().toISOString().split('T')[0]} value={woInvoiceDate} onChange={(e) => setWoInvoiceDate(e.target.value)} disabled={!hasPermission('invoice:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                        </div>
+                        {woPayment > 0 && <div>
+                          <label className="block text-xs font-semibold mb-1">Tanggal Pembayaran</label>
+                          <input type="date" min={woInvoiceDate} max={new Date().toISOString().split('T')[0]} value={woPaymentDate} onChange={(e) => setWoPaymentDate(e.target.value)} disabled={!hasPermission('payment:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                        </div>}
+                      </div>
+                      {(woInvoiceDate < new Date().toISOString().split('T')[0] || (woPayment > 0 && woPaymentDate < new Date().toISOString().split('T')[0])) && (
+                        <input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan transaksi tanggal mundur" className="w-full px-3 py-2 border border-amber-400 bg-amber-50 rounded-lg" />
+                      )}
                       <p className="text-sm font-semibold text-gray-700">Detail Layanan {selectedWO.woNumber}</p>
                       <div className="space-y-1">
                         {selectedWO.services.map((s) => (

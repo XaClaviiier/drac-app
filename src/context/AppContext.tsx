@@ -36,7 +36,7 @@ interface AppContextType {
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
-  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer') => Promise<SalesInvoice | null>;
+  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer', invoiceDate?: string, paymentDate?: string, backdateReason?: string) => Promise<SalesInvoice | null>;
   addItem: (item: Item) => Promise<void>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -545,19 +545,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createInvoiceFromWO = async (
     woId: string,
     payment: number,
-    paymentMethod: 'Tunai' | 'QRIS/Transfer'
+    paymentMethod: 'Tunai' | 'QRIS/Transfer',
+    invoiceDate?: string,
+    paymentDate?: string,
+    backdateReason?: string
   ): Promise<SalesInvoice | null> => {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = invoiceDate || new Date().toISOString().split('T')[0];
     const status: SalesInvoice['status'] = payment >= wo.total ? 'Lunas' : 'Belum Lunas';
     const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
     let invoiceNumber = generateDocumentNumber('invoice', wo.branchId);
     let invoiceId = Date.now().toString();
 
     if (!isDemoMode) {
-      const result = await api.createInvoiceFromWorkOrder(woId, payment, paymentMethod);
+      const result = await api.createInvoiceFromWorkOrder(woId, payment, paymentMethod, today, paymentDate, backdateReason);
       if (!result.success || !result.data) {
         throw new Error(result.message || 'Gagal membuat faktur dari WO');
       }
@@ -573,7 +576,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customerName: wo.customerName,
       vehicleInfo: `${wo.vehicleInfo} ${wo.plateNumber}`,
       description: wo.services.map((s) => s.description || s.name).join(', '),
-      total: wo.total, payment, paymentMethod, status, age: 0,
+      total: wo.total, payment, paymentMethod, paymentDate: payment > 0 ? (paymentDate || today) : undefined, backdateReason, status, age: 0,
       woId: wo.id, woNumber: wo.woNumber, items: wo.services,
       branchId: wo.branchId,
     };

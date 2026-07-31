@@ -12,6 +12,9 @@ try {
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS receipt_description VARCHAR(255) NULL AFTER description");
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) NULL AFTER receipt_description");
     try { $pdo->exec("ALTER TABLE items ADD UNIQUE INDEX IF NOT EXISTS uq_items_barcode (barcode)"); } catch (Throwable $e) {}
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER date");
+    $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_date DATE NULL AFTER payment");
+    $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER payment_date");
 
     // Branches
     $rows = $pdo->query("SELECT * FROM branches ORDER BY code")->fetchAll();
@@ -158,6 +161,7 @@ try {
         $r['plateNumber'] = $r['plate_number'];
         $r['vehicleInfo'] = $r['vehicle_info'];
         $r['branchId'] = $r['branch_id'];
+        $r['backdateReason'] = $r['backdate_reason'] ?? null;
         $r['invoiceId'] = $r['invoice_id'];
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['total'] = (float)$r['total'];
@@ -187,6 +191,8 @@ try {
         $r['total'] = (float)$r['total'];
         $r['payment'] = (float)$r['payment'];
         $r['paymentMethod'] = $r['payment_method'] ?? 'Tunai';
+        $r['paymentDate'] = $r['payment_date'] ?? null;
+        $r['backdateReason'] = $r['backdate_reason'] ?? null;
         $r['age'] = (int)$r['age'];
         $r['woId'] = $r['wo_id'];
         $r['woNumber'] = $r['wo_number'];

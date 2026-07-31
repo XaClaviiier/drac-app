@@ -14,8 +14,8 @@ type PermissionModule = {
 
 const permissionModules: PermissionModule[] = [
   { id: 'dashboard', name: 'Dashboard', description: 'Ringkasan operasional', permissions: ['dashboard:view'] },
-  { id: 'wo', name: 'Order Kerja', description: 'Pengecekan dan pengerjaan', permissions: ['wo:view', 'wo:create', 'wo:edit', 'wo:delete'] },
-  { id: 'invoice', name: 'Faktur Penjualan', description: 'Penjualan dan pembayaran', permissions: ['invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete'] },
+  { id: 'wo', name: 'Order Kerja', description: 'Pengecekan dan pengerjaan', permissions: ['wo:view', 'wo:create', 'wo:edit', 'wo:delete', 'wo:backdate'] },
+  { id: 'invoice', name: 'Faktur Penjualan', description: 'Penjualan dan pembayaran', permissions: ['invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete', 'invoice:backdate', 'payment:backdate'] },
   { id: 'customer', name: 'Pelanggan', description: 'Master pelanggan', permissions: ['customer:view', 'customer:create', 'customer:edit', 'customer:delete'] },
   { id: 'vehicle', name: 'Kendaraan', description: 'Register kendaraan', permissions: ['vehicle:view', 'vehicle:create', 'vehicle:edit', 'vehicle:delete'] },
   { id: 'item', name: 'Barang & Jasa', description: 'Master barang, jasa, dan stok', permissions: ['item:view', 'item:create', 'item:edit', 'item:delete'] },
@@ -34,7 +34,9 @@ const allPermissions: Permission[] = permissionModules.flatMap((module) => modul
 const permLabels: Record<string, string> = {
   'dashboard:view': 'Lihat Dashboard',
   'invoice:view': 'Lihat Faktur', 'invoice:create': 'Buat Faktur', 'invoice:edit': 'Edit Faktur', 'invoice:delete': 'Hapus Faktur',
+  'invoice:backdate': 'Ubah Tanggal Faktur', 'payment:backdate': 'Ubah Tanggal Pembayaran',
   'wo:view': 'Lihat WO', 'wo:create': 'Buat WO', 'wo:edit': 'Edit WO', 'wo:delete': 'Hapus WO',
+  'wo:backdate': 'Ubah Tanggal WO',
   'customer:view': 'Lihat Pelanggan', 'customer:create': 'Buat Pelanggan', 'customer:edit': 'Edit Pelanggan', 'customer:delete': 'Hapus Pelanggan',
   'vehicle:view': 'Lihat Kendaraan', 'vehicle:create': 'Buat Kendaraan', 'vehicle:edit': 'Edit Kendaraan', 'vehicle:delete': 'Hapus Kendaraan',
   'item:view': 'Lihat Barang/Jasa', 'item:create': 'Buat Barang/Jasa', 'item:edit': 'Edit Barang/Jasa', 'item:delete': 'Hapus Barang/Jasa',

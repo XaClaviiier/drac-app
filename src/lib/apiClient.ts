@@ -98,10 +98,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payment),
     }),
-  createInvoiceFromWorkOrder: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer') =>
+  createInvoiceFromWorkOrder: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer', date?: string, paymentDate?: string, backdateReason?: string) =>
     request('/sales-invoices/from-work-order', {
       method: 'POST',
-      body: JSON.stringify({ woId, payment, paymentMethod }),
+      body: JSON.stringify({ woId, payment, paymentMethod, date, paymentDate, backdateReason }),
     }),
 };
 

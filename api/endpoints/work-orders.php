@@ -11,6 +11,7 @@ switch ($method) {
             $r['plateNumber']             = $r['plate_number'];
             $r['vehicleInfo']             = $r['vehicle_info'];
             $r['branchId']                = $r['branch_id'];
+            $r['backdateReason']          = $r['backdate_reason'] ?? null;
             $r['invoiceId']               = $r['invoice_id'];
             $r['invoiceNumber']           = $r['invoice_number'];
             $r['total']                   = (float)$r['total'];
@@ -59,20 +60,28 @@ switch ($method) {
             if (empty($d['services'])) {
                 throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
             }
+            $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
+            $backdateReason = trim((string)($d['backdateReason'] ?? ''));
+            if ($transactionDate > date('Y-m-d')) {
+                throw new InvalidArgumentException('Tanggal WO tidak boleh melewati hari ini.');
+            }
+            if ($transactionDate < date('Y-m-d') && $backdateReason === '') {
+                throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
+            }
             $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $d['date'] ?? null);
             $stmt = $pdo->prepare("
                 INSERT INTO work_orders (
-                    id, wo_number, date,
+                    id, wo_number, date, backdate_reason,
                     customer_ref_id, customer_id, customer_name,
                     vehicle_ref_id, plate_number, vehicle_info,
                     description, findings, total, estimate_total, approved_at,
                     status, cancel_reason, status_log, notes, branch_id,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
-                $woId, $woNumber, $d['date'],
+                $woId, $woNumber, $transactionDate, $backdateReason ?: null,
                 $customer['id'], $customer['customer_code'], $customer['name'],
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
@@ -120,9 +129,17 @@ switch ($method) {
             if (empty($d['services'])) {
                 throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
             }
+            $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
+            $backdateReason = trim((string)($d['backdateReason'] ?? ''));
+            if ($transactionDate > date('Y-m-d')) {
+                throw new InvalidArgumentException('Tanggal WO tidak boleh melewati hari ini.');
+            }
+            if ($transactionDate < date('Y-m-d') && $backdateReason === '') {
+                throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
+            }
             $stmt = $pdo->prepare("
                 UPDATE work_orders SET
-                    wo_number=?, date=?,
+                    wo_number=?, date=?, backdate_reason=?,
                     customer_ref_id=?, customer_id=?, customer_name=?,
                     vehicle_ref_id=?, plate_number=?, vehicle_info=?,
                     description=?, findings=?, total=?, estimate_total=?, approved_at=?,
@@ -133,7 +150,7 @@ switch ($method) {
                 WHERE id=?
             ");
             $stmt->execute([
-                $d['woNumber'], $d['date'],
+                $d['woNumber'], $transactionDate, $backdateReason ?: null,
                 $customer['id'], $customer['customer_code'], $customer['name'],
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),

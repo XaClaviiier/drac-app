@@ -97,3 +97,10 @@ ALTER TABLE `sales_invoices`
 -- SHOW COLUMNS FROM sales_invoices;
 
 SELECT 'Migration selesai!' AS status;
+
+ALTER TABLE `work_orders`
+  ADD COLUMN IF NOT EXISTS `backdate_reason` VARCHAR(255) NULL AFTER `date`;
+
+ALTER TABLE `sales_invoices`
+  ADD COLUMN IF NOT EXISTS `payment_date` DATE NULL AFTER `payment`,
+  ADD COLUMN IF NOT EXISTS `backdate_reason` VARCHAR(255) NULL AFTER `payment_date`;

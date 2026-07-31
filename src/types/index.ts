@@ -44,6 +44,8 @@ export interface SalesInvoice {
   total: number;
   payment: number;
   paymentMethod?: 'Tunai' | 'QRIS/Transfer';
+  paymentDate?: string;
+  backdateReason?: string;
   status: 'Lunas' | 'Belum Lunas';
   age: number;
   woId?: string;
@@ -67,6 +69,7 @@ export interface WorkOrder {
   id: string;
   woNumber: string;
   date: string;
+  backdateReason?: string;
   customerRefId?: string;
   customerId: string;
   customerName: string;
@@ -202,7 +205,9 @@ export interface AppSettings {
 export type Permission =
   | 'dashboard:view'
   | 'invoice:view' | 'invoice:create' | 'invoice:edit' | 'invoice:delete'
-  | 'wo:view' | 'wo:create' | 'wo:edit' | 'wo:delete'
+  | 'invoice:backdate'
+  | 'wo:view' | 'wo:create' | 'wo:edit' | 'wo:delete' | 'wo:backdate'
+  | 'payment:backdate'
   | 'customer:view' | 'customer:create' | 'customer:edit' | 'customer:delete'
   | 'vehicle:view' | 'vehicle:create' | 'vehicle:edit' | 'vehicle:delete'
   | 'item:view' | 'item:create' | 'item:edit' | 'item:delete'
