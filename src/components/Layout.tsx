@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Car, FileText, Users, Wrench, Boxes, PackageCheck, Truck, ReceiptText,
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
-  ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, Search, CreditCard,
+  ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
   ClipboardList, ArrowLeftRight, History, Banknote,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -96,7 +96,6 @@ export default function Layout() {
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
-  const [desktopMenuSearch, setDesktopMenuSearch] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
   const { data, currentUser, currentBranchId, setCurrentBranchId, logout, hasPermission, isDemoMode } = useApp();
@@ -116,7 +115,13 @@ export default function Layout() {
   };
 
   // Tutup menu mobile saat pindah halaman
-  useEffect(() => { setMobileMenuOpen(false); setDesktopMenuOpen(null); setDesktopMenuSearch(''); }, [location.pathname]);
+  useEffect(() => { setMobileMenuOpen(false); setDesktopMenuOpen(null); }, [location.pathname]);
+  useEffect(() => {
+    if (!desktopMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDesktopMenuOpen(null); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [desktopMenuOpen]);
   // Kunci scroll saat menu mobile terbuka
   useEffect(() => {
     document.body.style.overflow = mobileMenuOpen ? 'hidden' : '';
@@ -159,7 +164,7 @@ export default function Layout() {
             const groupPaths = accessibleItems.flatMap(item => item.path ? [item.path] : []);
             const isActive = desktopMenuOpen === group.id || groupPaths.includes(location.pathname);
             return (
-              <button key={group.id} type="button" title={!sidebarOpen ? group.label : undefined} onClick={() => { setDesktopMenuSearch(''); setDesktopMenuOpen(current => current === group.id ? null : group.id); }} className={`mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg px-4 py-3 text-left transition-all ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
+              <button key={group.id} type="button" title={!sidebarOpen ? group.label : undefined} onClick={() => setDesktopMenuOpen(current => current === group.id ? null : group.id)} className={`mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg px-4 py-3 text-left transition-all ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 {sidebarOpen && <><span className="flex-1 text-sm font-medium">{group.label}</span><ChevronRight className={`h-4 w-4 transition-transform ${desktopMenuOpen === group.id ? 'rotate-90' : ''}`} /></>}
               </button>
@@ -183,10 +188,7 @@ export default function Layout() {
       {desktopMenuOpen && (() => {
         const group = desktopGroups.find(item => item.id === desktopMenuOpen);
         if (!group) return null;
-        const GroupIcon = group.icon;
-        const items = group.items
-          .filter(item => !item.perm || hasPermission(item.perm))
-          .filter(item => item.label.toLowerCase().includes(desktopMenuSearch.toLowerCase()));
+        const items = group.items.filter(item => !item.perm || hasPermission(item.perm));
         const tones: Record<DesktopMenuItem['tone'], string> = {
           green: 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100',
           blue: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100',
@@ -195,18 +197,21 @@ export default function Layout() {
         };
         return (
           <>
-            <button type="button" aria-label="Tutup menu" onClick={() => setDesktopMenuOpen(null)} className="fixed inset-0 z-30 hidden bg-slate-900/35 backdrop-blur-[1px] lg:block" />
-            <section className={`fixed top-20 z-[60] hidden max-h-[calc(100vh-6rem)] w-[min(760px,calc(100vw-19rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl lg:block ${sidebarOpen ? 'left-[17rem]' : 'left-20'}`}>
-              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-                <div className="flex items-center gap-3"><GroupIcon className="h-6 w-6 text-blue-600" /><h2 className="text-xl font-bold text-gray-900">{group.label}</h2></div>
-                <button type="button" onClick={() => setDesktopMenuOpen(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+            <button type="button" aria-label="Tutup menu" onClick={() => setDesktopMenuOpen(null)} className="fixed inset-0 z-30 hidden bg-transparent lg:block" />
+            <section className={`fixed top-14 z-[60] hidden max-h-[calc(100vh-4rem)] w-[min(620px,calc(100vw-18rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.28)] lg:block ${sidebarOpen ? 'left-[16.5rem]' : 'left-[4.5rem]'}`}>
+              <span className="absolute -left-2 top-24 h-4 w-4 rotate-45 border-b border-l border-gray-200 bg-white" aria-hidden="true" />
+              <div className="px-5 pb-0 pt-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-3xl font-normal text-gray-600">{group.label}</h2>
+                  <button type="button" onClick={() => setDesktopMenuOpen(null)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Tutup"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="mt-5 h-[3px] w-full bg-blue-600" />
               </div>
               <div className="p-5">
-                <div className="relative mb-4"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input autoFocus value={desktopMenuSearch} onChange={event => setDesktopMenuSearch(event.target.value)} placeholder={`Cari menu ${group.label.toLowerCase()}...`} className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" /></div>
-                <div className="grid max-h-[calc(100vh-14rem)] grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
+                <div className="grid max-h-[calc(100vh-10rem)] grid-cols-3 gap-3 overflow-y-auto pr-1">
                   {items.map((item, index) => { const Icon = item.icon; const available = !!item.path; return (
-                    <button key={`${item.label}-${index}`} type="button" disabled={!available} onClick={() => { if (!item.path) return; navigate(item.path); setDesktopMenuOpen(null); }} className={`relative flex min-h-32 flex-col items-center justify-center gap-3 rounded-xl border p-4 text-center transition-all ${tones[item.tone]} ${available ? 'hover:-translate-y-0.5 hover:shadow-md' : 'cursor-not-allowed grayscale opacity-55'}`}>
-                      <Icon className="h-8 w-8" /><span className="text-sm font-semibold leading-tight">{item.label}</span>{!available && <span className="absolute right-2 top-2 rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-bold text-gray-500">SEGERA</span>}
+                    <button key={`${item.label}-${index}`} type="button" disabled={!available} onClick={() => { if (!item.path) return; navigate(item.path); setDesktopMenuOpen(null); }} className={`relative flex min-h-40 flex-col items-center justify-center gap-4 rounded-lg border p-4 text-center transition-all ${tones[item.tone]} ${available ? 'hover:-translate-y-0.5 hover:shadow-lg' : 'cursor-not-allowed opacity-40'}`}>
+                      <Icon className="h-12 w-12 stroke-[1.7]" /><span className="text-lg font-medium leading-snug text-gray-700">{item.label}</span>
                     </button>
                   ); })}
                 </div>
