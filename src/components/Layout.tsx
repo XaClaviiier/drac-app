@@ -169,12 +169,13 @@ export default function Layout() {
     <div className="flex h-screen overflow-hidden bg-gray-100">
       {/* ========== SIDEBAR (desktop) ========== */}
       <aside
-        className={`${sidebarOpen ? 'w-64' : 'w-16'} relative z-50 hidden flex-shrink-0 flex-col bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 text-white transition-all duration-300 lg:flex`}
+        className={`${sidebarOpen ? 'w-64' : 'w-16'} relative z-50 hidden flex-shrink-0 flex-col bg-[#061a3a] text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
       >
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex-1 overflow-visible py-4">
           {hasPermission('dashboard:view') && (
-            <NavLink to="/" title={!sidebarOpen ? 'Dashboard' : undefined} className={`mx-2 flex items-center gap-3 rounded-lg px-4 py-3 transition-all ${location.pathname === '/' && !desktopMenuOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
-              <LayoutDashboard className="h-5 w-5 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Dashboard</span>}
+            <NavLink to="/" className={`group relative mx-2 flex items-center gap-3 rounded-lg py-3 transition-all ${sidebarOpen ? 'px-4' : 'justify-center px-0'} ${location.pathname === '/' && !desktopMenuOpen ? 'bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]' : 'text-white/80 hover:bg-blue-600 hover:text-white'}`}>
+              <LayoutDashboard className="h-6 w-6 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Dashboard</span>}
+              {!sidebarOpen && <span className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-[80] -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-gray-800 opacity-0 shadow-lg transition-all group-hover:translate-x-0 group-hover:opacity-100 before:absolute before:-left-1.5 before:top-1/2 before:h-3 before:w-3 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:border-amber-300 before:bg-amber-50">Dashboard</span>}
             </NavLink>
           )}
           {desktopGroups.map(group => {
@@ -184,22 +185,24 @@ export default function Layout() {
             const groupPaths = accessibleItems.flatMap(item => item.path ? [item.path] : []);
             const isActive = desktopMenuOpen ? desktopMenuOpen === group.id : groupPaths.includes(location.pathname);
             return (
-              <button key={group.id} type="button" title={!sidebarOpen ? group.label : undefined} onClick={() => setDesktopMenuOpen(current => current === group.id ? null : group.id)} className={`mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg px-4 py-3 text-left transition-all ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
-                <Icon className="h-5 w-5 flex-shrink-0" />
+              <button key={group.id} type="button" onClick={() => setDesktopMenuOpen(current => current === group.id ? null : group.id)} className={`group relative mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg py-3 text-left transition-all ${sidebarOpen ? 'px-4' : 'justify-center px-0'} ${isActive ? 'bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]' : 'text-white/80 hover:bg-blue-600 hover:text-white'}`}>
+                <Icon className="h-6 w-6 flex-shrink-0" />
                 {sidebarOpen && <><span className="flex-1 text-sm font-medium">{group.label}</span><ChevronRight className={`h-4 w-4 transition-transform ${desktopMenuOpen === group.id ? 'rotate-90' : ''}`} /></>}
+                {!sidebarOpen && <span className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-[80] -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-gray-800 opacity-0 shadow-lg transition-all group-hover:translate-x-0 group-hover:opacity-100 before:absolute before:-left-1.5 before:top-1/2 before:h-3 before:w-3 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:border-amber-300 before:bg-amber-50">{group.label}</span>}
               </button>
             );
           })}
           {hasPermission('dashboard:view') && (
-            <NavLink to="/ai" title={!sidebarOpen ? 'Asisten AI' : undefined} className={`mx-2 mt-4 flex items-center gap-3 rounded-lg border-t border-blue-700/60 px-4 py-3 pt-4 transition-all ${location.pathname === '/ai' ? 'bg-cyan-500 text-white shadow-lg' : 'text-cyan-200 hover:bg-blue-700/50 hover:text-white'}`}>
-              <Bot className="h-5 w-5 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Asisten AI</span>}
+            <NavLink to="/ai" className={`group relative mx-2 mt-4 flex items-center gap-3 rounded-lg border-t border-white/10 py-3 pt-4 transition-all ${sidebarOpen ? 'px-4' : 'justify-center px-0'} ${location.pathname === '/ai' && !desktopMenuOpen ? 'bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]' : 'text-white/80 hover:bg-blue-600 hover:text-white'}`}>
+              <Bot className="h-6 w-6 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Asisten AI</span>}
+              {!sidebarOpen && <span className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-[80] -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-gray-800 opacity-0 shadow-lg transition-all group-hover:translate-x-0 group-hover:opacity-100 before:absolute before:-left-1.5 before:top-1/2 before:h-3 before:w-3 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:border-amber-300 before:bg-amber-50">Asisten AI</span>}
             </NavLink>
           )}
         </nav>
 
-        <div className="border-t border-blue-700/50 p-4">
+        <div className="border-t border-white/10 p-4">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="flex w-full items-center gap-3 text-blue-300 transition-colors hover:text-white">
-            <Menu className="h-5 w-5 flex-shrink-0" />
+            <Menu className="h-6 w-6 flex-shrink-0" />
             {sidebarOpen && <span className="text-sm">Sembunyikan Menu</span>}
           </button>
         </div>
