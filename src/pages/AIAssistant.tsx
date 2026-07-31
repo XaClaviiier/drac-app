@@ -1243,8 +1243,8 @@ ${buildSmartContext(userMsgText)}`;
           <div className="border-t border-slate-700/60 bg-slate-800/60 p-3">
             <div className="flex items-end gap-2">
               <div className="relative">
-                <button type="button" onClick={() => setShowCommandHistory((value) => !value)} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-600 bg-slate-900/80 px-3 text-slate-300 hover:border-cyan-500 hover:text-cyan-300" title="Riwayat perintah">
-                  <History className="h-5 w-5" /><span className="text-xs font-semibold sm:hidden">Riwayat</span>
+                <button type="button" onClick={() => setShowCommandHistory((value) => !value)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-600 bg-slate-900/80 text-slate-300 hover:border-cyan-500 hover:text-cyan-300" title="Riwayat perintah" aria-label="Riwayat perintah">
+                  <History className="h-5 w-5" />
                 </button>
                 {showCommandHistory && (
                   <div className="fixed inset-x-4 bottom-20 z-30 overflow-hidden rounded-xl border border-slate-600 bg-slate-900 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-14 sm:left-0 sm:w-80">
