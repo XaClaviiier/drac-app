@@ -13,6 +13,13 @@ try {
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) NULL AFTER receipt_description");
     try { $pdo->exec("ALTER TABLE items ADD UNIQUE INDEX IF NOT EXISTS uq_items_barcode (barcode)"); } catch (Throwable $e) {}
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER date");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_at DATETIME NULL AFTER approved_at");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_until DATETIME NULL AFTER pending_at");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_reason VARCHAR(255) NULL AFTER pending_until");
+    $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
+    if ($statusColumn && stripos((string)$statusColumn['Type'], "'Pending'") === false) {
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Pengecekan','Pending','Proses','Selesai','Dibayar','Batal') DEFAULT 'Pengecekan'");
+    }
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_date DATE NULL AFTER payment");
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER payment_date");
 
@@ -168,6 +175,9 @@ try {
         $r['findings']                = $r['findings'] ?? null;
         $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
         $r['approvedAt']              = $r['approved_at'] ?? null;
+        $r['pendingAt']               = $r['pending_at'] ?? null;
+        $r['pendingUntil']            = $r['pending_until'] ?? null;
+        $r['pendingReason']           = $r['pending_reason'] ?? null;
         $r['cancelReason']            = $r['cancel_reason'] ?? null;
         $r['statusLog']               = isset($r['status_log']) && $r['status_log'] ? json_decode($r['status_log'], true) : [];
         $r['continuedFromWoId']       = $r['continued_from_wo_id'] ?? null;

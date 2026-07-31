@@ -104,3 +104,9 @@ ALTER TABLE `work_orders`
 ALTER TABLE `sales_invoices`
   ADD COLUMN IF NOT EXISTS `payment_date` DATE NULL AFTER `payment`,
   ADD COLUMN IF NOT EXISTS `backdate_reason` VARCHAR(255) NULL AFTER `payment_date`;
+
+ALTER TABLE `work_orders`
+  ADD COLUMN IF NOT EXISTS `pending_at` DATETIME NULL AFTER `approved_at`,
+  ADD COLUMN IF NOT EXISTS `pending_until` DATETIME NULL AFTER `pending_at`,
+  ADD COLUMN IF NOT EXISTS `pending_reason` VARCHAR(255) NULL AFTER `pending_until`,
+  MODIFY COLUMN `status` ENUM('Pengecekan','Pending','Proses','Selesai','Dibayar','Batal') DEFAULT 'Pengecekan';

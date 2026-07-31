@@ -432,7 +432,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isStatusTransitionAllowed = (from: WOStatus, to: WOStatus): boolean => {
     if (from === to) return false;
     const forward: Record<WOStatus, WOStatus[]> = {
-      Pengecekan: ['Proses', 'Batal'],
+      Pengecekan: ['Proses', 'Pending'],
+      Pending: ['Proses'],
       Proses: ['Selesai', 'Pengecekan', 'Batal'],
       Selesai: ['Dibayar', 'Proses'],
       Dibayar: [],
@@ -454,12 +455,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     // Selesai → Dibayar harus lewat pembuatan faktur, bukan ubah manual.
+    if (wo.status === 'Pending' && nextStatus === 'Proses' && wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now()) {
+      return { ok: false, message: 'Masa Pending sudah lewat 30 hari. Buat WO baru dari data WO lama.' };
+    }
+
     if (wo.status === 'Selesai' && nextStatus === 'Dibayar' && !wo.invoiceId) {
       return { ok: false, message: 'Untuk menandai Dibayar, buat faktur terlebih dahulu dari tombol Buat Faktur.' };
     }
 
     // Perubahan mundur atau Batal wajib punya alasan.
-    const needsReason = nextStatus === 'Batal'
+    const needsReason = nextStatus === 'Pending'
+      || nextStatus === 'Batal'
       || (wo.status === 'Proses' && nextStatus === 'Pengecekan')
       || (wo.status === 'Selesai' && nextStatus === 'Proses');
     if (needsReason && !reason?.trim()) {
@@ -467,6 +473,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const now = new Date().toISOString();
+    const databaseNow = now.slice(0, 19).replace('T', ' ');
+    const pendingDeadline = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 19).replace('T', ' ');
     const log = [
       ...(wo.statusLog || []),
       {
@@ -484,7 +492,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: nextStatus,
       statusLog: log,
       cancelReason: nextStatus === 'Batal' ? reason?.trim() : wo.cancelReason,
-      approvedAt: wo.status === 'Pengecekan' && nextStatus === 'Proses'
+      pendingAt: nextStatus === 'Pending' ? databaseNow : wo.pendingAt,
+      pendingUntil: nextStatus === 'Pending'
+        ? pendingDeadline
+        : wo.pendingUntil,
+      pendingReason: nextStatus === 'Pending' ? reason?.trim() : wo.pendingReason,
+      approvedAt: (wo.status === 'Pengecekan' || wo.status === 'Pending') && nextStatus === 'Proses'
         ? new Date().toISOString().split('T')[0]
         : wo.approvedAt,
       estimateTotal: wo.status === 'Pengecekan' && nextStatus === 'Proses' && !wo.estimateTotal
@@ -519,10 +532,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vehicleInfo: src.vehicleInfo,
       description: src.description,
       findings: src.findings,
-      services: src.services.map((s, i) => ({ ...s, id: `${newId}-${i}` })),
-      total: src.total,
-      estimateTotal: src.total,
-      status: 'Proses',
+      services: src.services.map((s, i) => {
+        const currentItem = data.items.find(item => item.id === s.itemId);
+        return { ...s, id: `${newId}-${i}`, price: currentItem?.sellingPrice ?? s.price };
+      }),
+      total: src.services.reduce((sum, service) => {
+        const currentItem = data.items.find(item => item.id === service.itemId);
+        return sum + (currentItem?.sellingPrice ?? service.price) * service.qty;
+      }, 0),
+      estimateTotal: undefined,
+      status: src.status === 'Pending' ? 'Pengecekan' : 'Proses',
       notes: `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,
       branchId: targetBranchId,
       continuedFromWoId: src.id,

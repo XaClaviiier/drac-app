@@ -18,6 +18,9 @@ switch ($method) {
             $r['findings']                = $r['findings'] ?? null;
             $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
             $r['approvedAt']              = $r['approved_at'] ?? null;
+            $r['pendingAt']               = $r['pending_at'] ?? null;
+            $r['pendingUntil']            = $r['pending_until'] ?? null;
+            $r['pendingReason']           = $r['pending_reason'] ?? null;
             $r['cancelReason']            = $r['cancel_reason'] ?? null;
             $r['statusLog']               = isset($r['status_log']) && $r['status_log'] ? json_decode($r['status_log'], true) : [];
             $r['continuedFromWoId']       = $r['continued_from_wo_id'] ?? null;
@@ -60,6 +63,9 @@ switch ($method) {
             if (empty($d['services'])) {
                 throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
             }
+            if (($d['status'] ?? 'Pengecekan') === 'Pending' && trim((string)($d['pendingReason'] ?? '')) === '') {
+                throw new InvalidArgumentException('Alasan Pending wajib diisi.');
+            }
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
             if ($transactionDate > date('Y-m-d')) {
@@ -74,11 +80,11 @@ switch ($method) {
                     id, wo_number, date, backdate_reason,
                     customer_ref_id, customer_id, customer_name,
                     vehicle_ref_id, plate_number, vehicle_info,
-                    description, findings, total, estimate_total, approved_at,
+                    description, findings, total, estimate_total, approved_at, pending_at, pending_until, pending_reason,
                     status, cancel_reason, status_log, notes, branch_id,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $woId, $woNumber, $transactionDate, $backdateReason ?: null,
@@ -87,6 +93,7 @@ switch ($method) {
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['total'] ?? 0, $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
+                $d['pendingAt'] ?? null, $d['pendingUntil'] ?? null, $d['pendingReason'] ?? null,
                 $d['status'] ?? 'Pengecekan',
                 $d['cancelReason'] ?? null,
                 isset($d['statusLog']) ? json_encode($d['statusLog']) : null,
@@ -129,6 +136,9 @@ switch ($method) {
             if (empty($d['services'])) {
                 throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
             }
+            if (($d['status'] ?? 'Pengecekan') === 'Pending' && trim((string)($d['pendingReason'] ?? '')) === '') {
+                throw new InvalidArgumentException('Alasan Pending wajib diisi.');
+            }
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
             if ($transactionDate > date('Y-m-d')) {
@@ -143,6 +153,7 @@ switch ($method) {
                     customer_ref_id=?, customer_id=?, customer_name=?,
                     vehicle_ref_id=?, plate_number=?, vehicle_info=?,
                     description=?, findings=?, total=?, estimate_total=?, approved_at=?,
+                    pending_at=?, pending_until=?, pending_reason=?,
                     status=?, cancel_reason=?, status_log=?, notes=?, branch_id=?,
                     invoice_id=?, invoice_number=?,
                     continued_from_wo_id=?, continued_from_wo_number=?, continued_from_branch_name=?,
@@ -156,6 +167,7 @@ switch ($method) {
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['total'] ?? 0, $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
+                $d['pendingAt'] ?? null, $d['pendingUntil'] ?? null, $d['pendingReason'] ?? null,
                 $d['status'] ?? 'Pengecekan',
                 $d['cancelReason'] ?? null,
                 isset($d['statusLog']) ? json_encode($d['statusLog']) : null,

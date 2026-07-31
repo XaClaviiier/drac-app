@@ -325,6 +325,7 @@ export default function WorkOrders() {
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       Pengecekan: 0,
+      Pending: 0,
       Proses: 0,
       Selesai: 0,
       Dibayar: 0,
@@ -669,9 +670,24 @@ export default function WorkOrders() {
 
   const statusColors: Record<string, string> = {
     Pengecekan: 'bg-amber-100 text-amber-800',
+    Pending: 'bg-orange-100 text-orange-800',
     Proses: 'bg-blue-100 text-blue-800',
     Selesai: 'bg-green-100 text-green-800',
     Dibayar: 'bg-purple-100 text-purple-800',
+  };
+
+  const isPendingExpired = (wo: WorkOrder) =>
+    wo.status === 'Pending' && !!wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now();
+
+  const pendingDaysLeft = (wo: WorkOrder) =>
+    Math.max(0, Math.ceil((new Date(wo.pendingUntil || Date.now()).getTime() - Date.now()) / 86400000));
+
+  const createNewFromPending = async (wo: WorkOrder) => {
+    const created = await continueWorkOrder(wo.id, wo.branchId);
+    if (created) {
+      setSuccessMsg(`${created.woNumber} dibuat dari ${wo.woNumber}; pelanggan dan kendaraan sudah terisi.`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+    }
   };
 
   return (
@@ -709,12 +725,13 @@ export default function WorkOrders() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {([
           { s: 'Pengecekan', label: '1. Pengecekan', color: 'text-amber-600' },
-          { s: 'Proses', label: '2. Proses', color: 'text-blue-600' },
-          { s: 'Selesai', label: '3. Selesai', color: 'text-green-600' },
-          { s: 'Dibayar', label: '4. Dibayar', color: 'text-purple-600' },
+          { s: 'Pending', label: '2. Pending', color: 'text-orange-600' },
+          { s: 'Proses', label: '3. Proses', color: 'text-blue-600' },
+          { s: 'Selesai', label: '4. Selesai', color: 'text-green-600' },
+          { s: 'Dibayar', label: '5. Dibayar', color: 'text-purple-600' },
         ] as const).map(({ s, label, color }) => {
           const count = statusCounts[s];
           const isActive = filterStatus === s;
@@ -868,9 +885,10 @@ export default function WorkOrders() {
           >
             <option value="">Semua Status</option>
             <option value="Pengecekan">1. Pengecekan (Gratis)</option>
-            <option value="Proses">2. Proses</option>
-            <option value="Selesai">3. Selesai</option>
-            <option value="Dibayar">4. Dibayar</option>
+            <option value="Pending">2. Pending</option>
+            <option value="Proses">3. Proses</option>
+            <option value="Selesai">4. Selesai</option>
+            <option value="Dibayar">5. Dibayar</option>
           </select>
           </div>
 
@@ -938,13 +956,20 @@ export default function WorkOrders() {
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>
                         {wo.status}
                       </span>
+                      {wo.status === 'Pending' && <span className="mt-1 block max-w-[150px] truncate text-[10px] text-orange-700" title={wo.pendingReason}>{wo.pendingReason || '-'}</span>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
-                          <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
-                            Proses
-                          </button>
+                          <>
+                            <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">Lanjut Proses</button>
+                            <button onClick={() => requestStatusChange(wo, 'Pending')} className="rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-orange-600">Pending</button>
+                          </>
+                        )}
+                        {hasPermission('wo:edit') && wo.status === 'Pending' && !wo.continuedToWoId && (
+                          isPendingExpired(wo)
+                            ? <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-semibold text-white">Buat WO Baru</button>
+                            : <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">Lanjut Proses ({pendingDaysLeft(wo)} hari)</button>
                         )}
                         {hasPermission('wo:edit') && wo.status === 'Proses' && (
                           <button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
@@ -1051,9 +1076,10 @@ export default function WorkOrders() {
                       title={`Status saat ini: ${wo.status}`}
                     >
                       {wo.status === 'Pengecekan' && '1.'}
-                      {wo.status === 'Proses' && '2.'}
-                      {wo.status === 'Selesai' && '3.'}
-                      {wo.status === 'Dibayar' && '4.'}
+                      {wo.status === 'Pending' && '2.'}
+                      {wo.status === 'Proses' && '3.'}
+                      {wo.status === 'Selesai' && '4.'}
+                      {wo.status === 'Dibayar' && '5.'}
                       {wo.status === 'Batal' && '✕'}
                       <span>{wo.status}</span>
                     </span>
@@ -1066,16 +1092,26 @@ export default function WorkOrders() {
                           className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                           title="Pelanggan setuju → mulai pengerjaan"
                         >
-                          Setujui &amp; Proses
+                          Lanjut Proses
                         </button>
                         <button
-                          onClick={() => requestStatusChange(wo, 'Batal')}
-                          className="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                          title="Pelanggan menolak / batal"
+                          onClick={() => requestStatusChange(wo, 'Pending')}
+                          className="inline-flex items-center rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-orange-600"
+                          title="Pelanggan pulang dan mempertimbangkan"
                         >
-                          Batal
+                          Pending
                         </button>
                       </>
+                    )}
+                    {hasPermission('wo:edit') && wo.status === 'Pending' && !wo.continuedToWoId && (
+                      isPendingExpired(wo) ? (
+                        <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white">Buat WO Baru dari Data Ini</button>
+                      ) : (
+                        <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">Lanjut Proses · {pendingDaysLeft(wo)} hari tersisa</button>
+                      )
+                    )}
+                    {wo.status === 'Pending' && (
+                      <span className="text-[11px] text-orange-700">Alasan: {wo.pendingReason || '-'}{isPendingExpired(wo) ? ' · Kedaluwarsa' : ''}</span>
                     )}
                     {hasPermission('wo:edit') && wo.status === 'Proses' && (
                       <>
@@ -1835,7 +1871,8 @@ export default function WorkOrders() {
       {/* ===== Konfirmasi ubah status WO ===== */}
       {statusDialog && (() => {
         const { wo, next } = statusDialog;
-        const needsReason = next === 'Batal'
+        const needsReason = next === 'Pending'
+          || next === 'Batal'
           || (wo.status === 'Proses' && next === 'Pengecekan')
           || (wo.status === 'Selesai' && next === 'Proses');
         return (
@@ -1865,11 +1902,18 @@ export default function WorkOrders() {
                     <label className="mb-1 block text-xs font-semibold text-gray-700">
                       Alasan <span className="text-red-500">*</span>
                     </label>
+                    {next === 'Pending' && (
+                      <div className="mb-2 grid grid-cols-2 gap-2">
+                        {['Pikir-pikir', 'Menyiapkan dana', 'Menunggu jadwal', 'Lainnya'].map(reason => (
+                          <button key={reason} type="button" onClick={() => setStatusReason(reason === 'Lainnya' ? '' : reason)} className={`rounded-lg border px-2 py-2 text-xs font-semibold ${statusReason === reason ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-300 text-gray-600'}`}>{reason}</button>
+                        ))}
+                      </div>
+                    )}
                     <textarea
                       value={statusReason}
                       onChange={(e) => setStatusReason(e.target.value)}
                       rows={3}
-                      placeholder={next === 'Batal' ? 'Contoh: pelanggan menolak estimasi' : 'Contoh: perlu tambah sparepart'}
+                      placeholder={next === 'Pending' ? 'Pilih alasan di atas atau tulis alasan lainnya' : next === 'Batal' ? 'Contoh: pelanggan menolak estimasi' : 'Contoh: perlu tambah sparepart'}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                     />
                   </div>

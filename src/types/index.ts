@@ -54,7 +54,7 @@ export interface SalesInvoice {
   branchId: string;
 }
 
-export type WOStatus = 'Pengecekan' | 'Proses' | 'Selesai' | 'Dibayar' | 'Batal';
+export type WOStatus = 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Dibayar' | 'Batal';
 
 export interface WOStatusLog {
   from: WOStatus;
@@ -82,6 +82,9 @@ export interface WorkOrder {
   total: number;
   estimateTotal?: number;     // estimasi saat pengecekan (dikunci saat masuk Proses)
   approvedAt?: string;        // tanggal pelanggan menyetujui estimasi
+  pendingAt?: string;
+  pendingUntil?: string;
+  pendingReason?: string;
   status: WOStatus;
   statusLog?: WOStatusLog[];  // jejak audit perubahan status
   cancelReason?: string;      // alasan pembatalan bila status Batal
