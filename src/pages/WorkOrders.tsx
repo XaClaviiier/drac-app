@@ -324,6 +324,7 @@ export default function WorkOrders() {
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
+      Total: 0,
       Pengecekan: 0,
       Pending: 0,
       Proses: 0,
@@ -346,7 +347,10 @@ export default function WorkOrders() {
         wo.woNumber.toLowerCase().includes(normalizedSearch) ||
         wo.customerName.toLowerCase().includes(normalizedSearch) ||
         wo.plateNumber.toLowerCase().includes(normalizedSearch);
-      if (matchesSearch && counts[wo.status] !== undefined) counts[wo.status] += 1;
+      if (matchesSearch) {
+        counts.Total += 1;
+        if (counts[wo.status] !== undefined) counts[wo.status] += 1;
+      }
     });
     return counts;
   }, [
@@ -725,28 +729,29 @@ export default function WorkOrders() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         {([
-          { s: 'Pengecekan', label: '1. Pengecekan', color: 'text-amber-600' },
-          { s: 'Pending', label: '2. Pending', color: 'text-orange-600' },
-          { s: 'Proses', label: '3. Proses', color: 'text-blue-600' },
-          { s: 'Selesai', label: '4. Selesai', color: 'text-green-600' },
-          { s: 'Dibayar', label: '5. Dibayar', color: 'text-purple-600' },
-        ] as const).map(({ s, label, color }) => {
+          { s: 'Total', filter: '', label: 'Total WO', color: 'text-slate-800' },
+          { s: 'Pengecekan', filter: 'Pengecekan', label: '1. Pengecekan', color: 'text-amber-600' },
+          { s: 'Pending', filter: 'Pending', label: '2. Pending', color: 'text-orange-600' },
+          { s: 'Proses', filter: 'Proses', label: '3. Proses', color: 'text-blue-600' },
+          { s: 'Selesai', filter: 'Selesai', label: '4. Selesai', color: 'text-green-600' },
+          { s: 'Dibayar', filter: 'Dibayar', label: '5. Dibayar', color: 'text-purple-600' },
+        ] as const).map(({ s, filter, label, color }) => {
           const count = statusCounts[s];
-          const isActive = filterStatus === s;
+          const isActive = filterStatus === filter;
           return (
             <button
               key={s}
               type="button"
               aria-pressed={isActive}
-              onClick={() => setFilterStatus(isActive ? '' : s)}
+              onClick={() => setFilterStatus(isActive ? '' : filter)}
               className={`rounded-xl border p-4 text-left shadow-sm transition-all ${
                 isActive
                   ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/20'
                   : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md'
               }`}
-              title={isActive ? 'Klik untuk menampilkan semua status' : `Filter status ${s}`}
+              title={s === 'Total' ? 'Tampilkan semua status' : isActive ? 'Klik untuk menampilkan semua status' : `Filter status ${s}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <p className={`text-sm ${isActive ? 'font-semibold text-blue-800' : 'text-gray-500'}`}>{label}</p>
