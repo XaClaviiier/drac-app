@@ -748,31 +748,32 @@ export default function WorkOrders() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Order Kerja</h2>
-          <p className="text-gray-500 mt-1">Kelola order kerja service AC mobil</p>
-        </div>
+    <div className="space-y-3 lg:-mx-5 lg:-mt-5">
+      <div className="flex min-h-[62px] items-end gap-1 border-b border-blue-600 bg-gray-100 px-2 pt-2">
+        <button type="button" onClick={handleCloseModal} className={`flex h-12 items-center rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`} title="Daftar Order Kerja">
+          <ListPlus className="h-5 w-5" />
+        </button>
+        <button type="button" onClick={handleCloseModal} className={`flex h-12 items-center rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${!showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}>
+          Daftar Order Kerja
+        </button>
         {hasPermission('wo:create') && (
           <button
+            type="button"
             onClick={() => {
-              // Jika mode Semua Cabang, minta pilih cabang dulu sebelum buat WO
               if (currentBranchId === 'ALL') {
                 window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
                 return;
               }
               handleOpenModal();
             }}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
+            className={`flex h-12 items-center gap-2 rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}
           >
-            <Plus className="w-5 h-5" />
-            Buat Order Kerja
+            <Plus className="h-4 w-4" /> {editingWO ? 'Edit Order Kerja' : 'Data Baru'}
           </button>
         )}
       </div>
 
+      {!showModal && <>
       {/* Success Message */}
       {successMsg && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 animate-pulse">
@@ -780,44 +781,6 @@ export default function WorkOrders() {
           <p className="text-sm font-medium text-green-800">{successMsg}</p>
         </div>
       )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        {([
-          { s: 'Total', filter: '', label: 'Total WO', color: 'text-slate-800' },
-          { s: 'Pengecekan', filter: 'Pengecekan', label: '1. Pengecekan', color: 'text-amber-600' },
-          { s: 'Pending', filter: 'Pending', label: '2. Pending', color: 'text-orange-600' },
-          { s: 'Proses', filter: 'Proses', label: '3. Proses', color: 'text-blue-600' },
-          { s: 'Selesai', filter: 'Selesai', label: '4. Selesai', color: 'text-green-600' },
-          { s: 'Dibayar', filter: 'Dibayar', label: '5. Dibayar', color: 'text-purple-600' },
-        ] as const).map(({ s, filter, label, color }) => {
-          const count = statusCounts[s];
-          const isActive = filterStatus === filter;
-          return (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => setFilterStatus(isActive ? '' : filter)}
-              className={`rounded-xl border p-4 text-left shadow-sm transition-all ${
-                isActive
-                  ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/20'
-                  : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md'
-              }`}
-              title={s === 'Total' ? 'Tampilkan semua status' : isActive ? 'Klik untuk menampilkan semua status' : `Filter status ${s}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p className={`text-sm ${isActive ? 'font-semibold text-blue-800' : 'text-gray-500'}`}>{label}</p>
-                {isActive && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">AKTIF</span>}
-              </div>
-              <p className={`text-2xl font-bold ${color}`}>{count}</p>
-              <p className={`mt-1 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
-                {isActive ? 'Klik lagi untuk reset' : 'Klik untuk memfilter'}
-              </p>
-            </button>
-          );
-        })}
-      </div>
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
@@ -1418,12 +1381,13 @@ export default function WorkOrders() {
           </aside>
         </div>
       )}
+      </>}
 
-      {/* Modal */}
+      {/* Data Baru / Edit: subtab penuh pada desktop, modal pada mobile */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl z-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-3 lg:pb-3 lg:pt-0">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-2xl lg:max-h-none lg:max-w-none lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
+            <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
                   {editingWO ? 'Edit Order Kerja' : 'Buat Order Kerja Baru'}
