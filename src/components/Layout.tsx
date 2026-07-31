@@ -250,7 +250,7 @@ export default function Layout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className={`${location.pathname === '/' ? 'hidden lg:flex' : 'flex'} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3`}>
-          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4 lg:hidden">
             {/* Kembali ke dashboard mobile; menu lama tidak digunakan lagi. */}
             <button
               onClick={() => navigate('/')}
@@ -269,7 +269,7 @@ export default function Layout() {
             </div>
           </div>
 
-          <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-3">
+          <div className="ml-auto flex flex-shrink-0 items-center gap-1.5 sm:gap-3">
             {/* Branch switcher */}
             {hasPermission('all_branches') && (
               <div className="relative">
