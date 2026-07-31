@@ -17,6 +17,7 @@ import Categories from './pages/Categories';
 import SettingsPage from './pages/SettingsPage';
 import Warehouses from './pages/Warehouses';
 import WorkOrderReport from './pages/WorkOrderReport';
+import ReportsIndex from './pages/ReportsIndex';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useApp();
@@ -47,6 +48,7 @@ function AppRoutes() {
         <Route path="customers" element={<Customers />} />
         <Route path="workorders" element={<WorkOrders />} />
         <Route path="reports/workorders" element={<WorkOrderReport />} />
+        <Route path="reports" element={<ReportsIndex />} />
         <Route path="items" element={<ItemsAndServices />} />
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="receipts" element={<GoodsReceiptPage />} />

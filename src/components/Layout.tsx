@@ -83,11 +83,7 @@ const desktopGroups = [
     { label: 'Merek & Satuan', path: '/items', icon: Boxes, perm: 'item:view', tone: 'purple' },
   ]},
   { id: 'reports', label: 'Daftar Laporan', icon: BarChart3, items: [
-    { label: 'Laporan WO', path: '/reports/workorders', icon: Wrench, perm: 'report:view', tone: 'green' },
-    { label: 'Laporan Penjualan', path: '/invoices', icon: BarChart3, perm: 'report:view', tone: 'green' },
-    { label: 'Laporan Pembelian', path: '/purchase-invoices', icon: BarChart3, perm: 'report:view', tone: 'blue' },
-    { label: 'Laporan Persediaan', path: '/warehouses', icon: Boxes, perm: 'report:view', tone: 'blue' },
-    { label: 'Laporan Kas & Bank', icon: Landmark, tone: 'purple' }, { label: 'Audit Log', path: '/users', icon: History, perm: 'user:view', tone: 'purple' },
+    { label: 'Daftar Laporan', path: '/reports', icon: BarChart3, perm: 'report:view', tone: 'blue' },
   ]},
 ] satisfies Array<{ id: string; label: string; icon: any; items: DesktopMenuItem[] }>;
 
@@ -119,6 +115,7 @@ export default function Layout() {
   const visibleNavItems = navItems.filter((item) => hasPermission(item.perm));
 
   const getPageTitle = () => {
+    if (location.pathname === '/reports') return 'Daftar Laporan';
     if (location.pathname === '/reports/workorders') return 'Laporan WO';
     const item = visibleNavItems.find((n) => n.path === location.pathname);
     return item ? item.label : 'Dashboard';
