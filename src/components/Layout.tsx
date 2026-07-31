@@ -166,7 +166,7 @@ export default function Layout() {
     <div className="flex h-screen overflow-hidden bg-gray-100">
       {/* ========== SIDEBAR (desktop) ========== */}
       <aside
-        className={`${sidebarOpen ? 'w-64' : 'w-16'} relative z-50 hidden flex-shrink-0 flex-col bg-[#061a3a] text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
+        className={`${sidebarOpen ? 'w-64' : 'w-16'} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
       >
         <nav className="flex-1 overflow-visible py-4">
           {hasPermission('dashboard:view') && (
