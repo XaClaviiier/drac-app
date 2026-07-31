@@ -642,15 +642,19 @@ export default function WorkOrders() {
   const confirmStatusChange = async () => {
     if (!statusDialog) return;
     const { wo, next } = statusDialog;
-    const result = await changeWorkOrderStatus(wo.id, next, statusReason);
-    if (!result.ok) {
-      window.alert(result.message || 'Perubahan status ditolak.');
-      return;
+    try {
+      const result = await changeWorkOrderStatus(wo.id, next, statusReason);
+      if (!result.ok) {
+        window.alert(result.message || 'Perubahan status ditolak.');
+        return;
+      }
+      setSuccessMsg(`${wo.woNumber}: status berubah menjadi ${next}.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+      setStatusDialog(null);
+      setStatusReason('');
+    } catch (error: any) {
+      window.alert(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
     }
-    setSuccessMsg(`${wo.woNumber}: status berubah menjadi ${next}.`);
-    setTimeout(() => setSuccessMsg(''), 4000);
-    setStatusDialog(null);
-    setStatusReason('');
   };
 
   const handleOpenInvoiceModal = (wo: WorkOrder) => {

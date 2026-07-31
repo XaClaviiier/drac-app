@@ -132,7 +132,17 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
-            assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], (string)$id);
+            $currentStmt = $pdo->prepare("SELECT vehicle_ref_id FROM work_orders WHERE id = ?");
+            $currentStmt->execute([$id]);
+            $currentVehicleId = $currentStmt->fetchColumn();
+            if (!$currentVehicleId) {
+                throw new InvalidArgumentException('WO tidak ditemukan.');
+            }
+            // Validasi WO aktif hanya diperlukan bila kendaraan benar-benar diganti.
+            // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
+            if ((string)$currentVehicleId !== (string)$vehicle['id']) {
+                assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], (string)$id);
+            }
             if (empty($d['services'])) {
                 throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
             }
