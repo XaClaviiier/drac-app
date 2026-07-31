@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2, MapPin, Hash, ShieldCheck, Bot, Save, KeyRound,
   CheckCircle2, AlertTriangle,
@@ -121,21 +121,39 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        <section className="rounded-xl border border-gray-200 bg-white px-4 pb-4 pt-0.5 shadow-sm sm:px-6 sm:pb-6 sm:pt-0.5">
+        <section className={`pt-0.5 ${tab === 'company' ? 'grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_120px]' : 'rounded-xl border border-gray-200 bg-white px-4 pb-4 shadow-sm sm:px-6 sm:pb-6'}`}>
           {tab === 'company' && (
-            <div>
+            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Profil Perusahaan" description="Informasi yang tampil pada dokumen dan laporan." />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className={labelClass}>Nama perusahaan<input className={inputClass} value={draft.company.name} onChange={e => setCompany('name', e.target.value)} /></label>
-                <label className={labelClass}>Nama legal<input className={inputClass} value={draft.company.legalName} onChange={e => setCompany('legalName', e.target.value)} placeholder="PT/CV (opsional)" /></label>
-                <label className={labelClass}>Telepon<input className={inputClass} value={draft.company.phone} onChange={e => setCompany('phone', e.target.value)} /></label>
-                <label className={labelClass}>Email<input className={inputClass} type="email" value={draft.company.email} onChange={e => setCompany('email', e.target.value)} /></label>
-                <label className={labelClass}>NPWP<input className={inputClass} value={draft.company.taxNumber} onChange={e => setCompany('taxNumber', e.target.value)} /></label>
-                <label className={labelClass}>Zona waktu<select className={inputClass} value={draft.company.timezone} onChange={e => setCompany('timezone', e.target.value)}><option value="Asia/Makassar">Asia/Makassar (WITA)</option><option value="Asia/Jakarta">Asia/Jakarta (WIB)</option></select></label>
-                <label className={`${labelClass} sm:col-span-2`}>Alamat<textarea className={inputClass} rows={2} value={draft.company.address} onChange={e => setCompany('address', e.target.value)} /></label>
-                <label className={`${labelClass} sm:col-span-2`}>Footer faktur<textarea className={inputClass} rows={2} value={draft.company.invoiceFooter} onChange={e => setCompany('invoiceFooter', e.target.value)} /></label>
+              <div className="grid gap-8 lg:grid-cols-2">
+                <section>
+                  <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Umum</h4>
+                  <div className="space-y-4">
+                    <CompanyField label="Nama perusahaan"><input className={inputClass} value={draft.company.name} onChange={e => setCompany('name', e.target.value)} /></CompanyField>
+                    <CompanyField label="Telepon"><input className={inputClass} value={draft.company.phone} onChange={e => setCompany('phone', e.target.value)} /></CompanyField>
+                    <CompanyField label="Alamat" multiline><textarea className={`${inputClass} resize-y`} rows={4} value={draft.company.address} onChange={e => setCompany('address', e.target.value)} /></CompanyField>
+                    <CompanyField label="NPWP"><input className={inputClass} value={draft.company.taxNumber} onChange={e => setCompany('taxNumber', e.target.value)} /></CompanyField>
+                  </div>
+                </section>
+                <section>
+                  <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Lainnya</h4>
+                  <div className="space-y-4">
+                    <CompanyField label="Nama legal"><input className={inputClass} value={draft.company.legalName} onChange={e => setCompany('legalName', e.target.value)} placeholder="PT/CV (opsional)" /></CompanyField>
+                    <CompanyField label="Email"><input className={inputClass} type="email" value={draft.company.email} onChange={e => setCompany('email', e.target.value)} /></CompanyField>
+                    <CompanyField label="Zona waktu"><select className={inputClass} value={draft.company.timezone} onChange={e => setCompany('timezone', e.target.value)}><option value="Asia/Makassar">Asia/Makassar (WITA)</option><option value="Asia/Jakarta">Asia/Jakarta (WIB)</option></select></CompanyField>
+                  </div>
+                </section>
+                <div className="lg:col-span-2">
+                  <CompanyField label="Footer faktur" multiline><textarea className={`${inputClass} resize-y`} rows={3} value={draft.company.invoiceFooter} onChange={e => setCompany('invoiceFooter', e.target.value)} /></CompanyField>
+                </div>
               </div>
             </div>
+          )}
+
+          {tab === 'company' && (
+            <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+              <Save className="h-12 w-12" />
+            </button>
           )}
 
           {tab === 'branches' && (
@@ -218,7 +236,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="mt-6 flex justify-end border-t border-gray-200 pt-4">
+          <div className={`mt-6 justify-end border-t border-gray-200 pt-4 ${tab === 'company' ? 'flex lg:hidden' : 'flex'}`}>
             <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <Save className="h-4 w-4" /> {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>
@@ -233,6 +251,15 @@ function TabHeader({ title, description }: { title: string; description: string 
   void title;
   void description;
   return null;
+}
+
+function CompanyField({ label, multiline = false, children }: { label: string; multiline?: boolean; children: ReactNode }) {
+  return (
+    <div className={`grid gap-2 sm:grid-cols-[150px_1fr] ${multiline ? 'items-start' : 'items-center'}`}>
+      <label className={`${multiline ? 'pt-2.5 ' : ''}text-sm font-medium text-gray-700`}>{label}</label>
+      {children}
+    </div>
+  );
 }
 
 function DocumentCard({ title, value, preview, onChange }: { title: string; value: string; preview: string; onChange: (value: string) => void }) {
