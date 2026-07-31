@@ -1354,8 +1354,15 @@ export default function WorkOrders() {
                   </div>
                 </div>
               )}
-              {/* Tanggal & Status */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Pelanggan dan tanggal */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <User className="h-4 w-4 text-blue-600" />
+                    Data Pelanggan <span className="text-red-500">*</span>
+                  </label>
+                  <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Tanggal <span className="text-red-500">*</span>
@@ -1373,37 +1380,13 @@ export default function WorkOrders() {
                     {woDateUnlocked ? 'Kunci ke hari ini' : 'Buka tanggal mundur'}
                   </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as WorkOrder['status'] })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                  >
-                    <option value="Pengecekan">1. Pengecekan (gratis, belum disetujui)</option>
-                    <option value="Proses">2. Proses (disetujui, sedang dikerjakan)</option>
-                    <option value="Selesai">3. Selesai (siap difakturkan)</option>
-                    <option value="Dibayar">4. Dibayar</option>
-                  </select>
-                </div>
               </div>
               {data.settings.security.requireBackdateReason !== false && formData.date < new Date().toISOString().split('T')[0] && (
-                <input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" />
+                <div className="grid grid-cols-1 md:grid-cols-2"><span /><input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" /></div>
               )}
 
-              {/* Pelanggan & Kendaraan dengan Searchable Picker */}
+              {/* Kendaraan mengikuti pelanggan yang dipilih */}
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                    <User className="w-4 h-4 text-blue-600" />
-                    Data Pelanggan <span className="text-red-500">*</span>
-                  </label>
-                  <CustomerPicker
-                    value={formData.customerRefId}
-                    onChange={handleCustomerSelect}
-                  />
-                </div>
-
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                     <Car className="w-4 h-4 text-orange-600" />
