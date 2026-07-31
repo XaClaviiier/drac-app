@@ -152,6 +152,102 @@ export default function AIAssistant() {
     return lines.join('\n');
   };
 
+  const buildCustomerLookupReply = (userText: string): string | null => {
+    const lower = userText.toLowerCase();
+    const isLookupIntent = /(cek|cari|data|pelanggan|customer|pemilik|kendaraan milik|riwayat|servis|service)/i.test(lower);
+    const isCreateIntent = /(buat|tambah|bikin|create)\s+(wo|order|pelanggan|customer)/i.test(lower);
+    if (!isLookupIntent || isCreateIntent) return null;
+
+    const compactInput = userText.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    const ignoredWords = new Set(['cek', 'cari', 'data', 'customer', 'pelanggan', 'pemilik', 'milik', 'kendaraan', 'mobil', 'riwayat', 'servis', 'service', 'siapa']);
+    const queryWords = lower
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word.length > 1 && !ignoredWords.has(word));
+    const candidates = data.customers.filter((customer) => {
+      const compactCode = customer.customerCode.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      const compactPhone = customer.phone.replace(/\D/g, '');
+      const nameWords = customer.name.toLowerCase().split(/\s+/).filter(Boolean);
+      return (compactCode && compactInput.includes(compactCode))
+        || (compactPhone.length >= 6 && compactInput.includes(compactPhone))
+        || (queryWords.length > 0 && queryWords.every((word) =>
+          customer.name.toLowerCase().includes(word)
+          || customer.customerCode.toLowerCase().includes(word)
+          || customer.phone.includes(word)
+          || nameWords.some((nameWord) => nameWord.startsWith(word))
+        ));
+    });
+
+    if (candidates.length === 0) return null;
+    if (candidates.length > 1) {
+      const choices = candidates.slice(0, 8).map((customer, index) => {
+        const vehicleCount = data.vehicles.filter((vehicle) =>
+          vehicle.customerRefId === customer.id
+          || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
+        ).length;
+        return `${index + 1}. **${customer.name}** — ${customer.customerCode} · ${customer.phone || 'tanpa telepon'} · ${vehicleCount} kendaraan`;
+      });
+      return [
+        `Ditemukan **${candidates.length} pelanggan** yang mirip. Pilih dengan mengetik kode pelanggan atau nomor telepon:`,
+        '',
+        ...choices,
+      ].join('\n');
+    }
+
+    const customer = candidates[0];
+    const vehicles = data.vehicles.filter((vehicle) =>
+      vehicle.customerRefId === customer.id
+      || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
+    );
+    const canSeeAllBranches = hasPermission('all_branches');
+    const allowedBranchIds = new Set(
+      canSeeAllBranches
+        ? data.branches.filter((branch) => branch.isActive).map((branch) => branch.id)
+        : (currentUser?.branchIds?.length ? currentUser.branchIds : [currentUser?.branchId].filter(Boolean) as string[])
+    );
+    const lines = [
+      `**Pelanggan ditemukan**`,
+      '',
+      `- Kode: **${customer.customerCode}**`,
+      `- Nama: **${customer.name}**`,
+      `- Telepon: ${customer.phone || '-'}`,
+      `- Email: ${customer.email || '-'}`,
+      `- Alamat: ${customer.address || '-'}`,
+      '',
+      `**Kendaraan terdaftar: ${vehicles.length}**`,
+    ];
+
+    if (vehicles.length === 0) {
+      lines.push('', 'Pelanggan ini belum memiliki kendaraan terdaftar.');
+      return lines.join('\n');
+    }
+
+    vehicles.forEach((vehicle, index) => {
+      const allWOs = data.workOrders
+        .filter((wo) =>
+          (wo.vehicleRefId && wo.vehicleRefId === vehicle.id)
+          || normalizePlate(wo.plateNumber) === normalizePlate(vehicle.plateNumber)
+        )
+        .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
+      const visibleWOs = allWOs.filter((wo) => allowedBranchIds.has(wo.branchId));
+      const latest = visibleWOs[0];
+      lines.push(
+        '',
+        `${index + 1}. **${vehicle.plateNumber}**`,
+        `   ${[vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ') || '-'} · ${vehicle.color || '-'}`,
+        `   Riwayat yang dapat diakses: ${visibleWOs.length} WO`,
+        latest
+          ? `   Terakhir: ${latest.date} · ${latest.woNumber} · ${cabangName(latest.branchId)} · ${latest.status}`
+          : '   Terakhir: belum ada riwayat pada cabang yang dapat diakses',
+      );
+      if (allWOs.length > visibleWOs.length && !canSeeAllBranches) {
+        lines.push('   Ada riwayat lain yang dibatasi oleh hak akses cabang.');
+      }
+    });
+
+    lines.push('', `Ketik **cek ${vehicles[0].plateNumber}** untuk melihat rincian riwayat salah satu kendaraan.`);
+    return lines.join('\n');
+  };
+
   const buildSmartContext = (userMsgText: string): string => {
     const parts: string[] = [];
     const today = new Date().toISOString().split('T')[0];
@@ -429,12 +525,14 @@ ${buildSmartContext(userMsgText)}`;
     const content = (text ?? input).trim();
     if (!content || busy) return;
     const vehicleHistoryReply = buildVehicleHistoryReply(content);
-    if (vehicleHistoryReply) {
+    const customerLookupReply = vehicleHistoryReply ? null : buildCustomerLookupReply(content);
+    const localLookupReply = vehicleHistoryReply || customerLookupReply;
+    if (localLookupReply) {
       setInput('');
       setMessages(history => [
         ...history,
         { role: 'user', content, time: now() },
-        { role: 'assistant', content: vehicleHistoryReply, time: now() },
+        { role: 'assistant', content: localLookupReply, time: now() },
       ]);
       return;
     }
