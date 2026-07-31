@@ -47,7 +47,13 @@ export default function Customers() {
     setShowModal(true);
   };
 
-  const handleCloseModal = () => {
+  const formIsDirty = () => {
+    if (editingCustomer) return formData.name !== editingCustomer.name || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
+    return Object.values(formData).some(value => value.trim() !== '');
+  };
+
+  const handleCloseModal = (force = false) => {
+    if (!force && formIsDirty() && !window.confirm('Data pelanggan belum disimpan. Tutup form ini?')) return;
     setShowModal(false);
     resetForm();
   };
@@ -69,7 +75,7 @@ export default function Customers() {
         branchId: resolveBranchId(),
       });
     }
-    handleCloseModal();
+    handleCloseModal(true);
   };
 
   const handleDelete = (id: string) => {
@@ -80,6 +86,18 @@ export default function Customers() {
 
   return (
     <div className="space-y-6">
+      {/* Subtab modul Pelanggan (desktop) */}
+      <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
+        <button type="button" onClick={() => showModal && handleCloseModal()} className={`h-11 min-w-44 rounded-t-md border border-b-0 px-4 text-left text-sm font-semibold ${!showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-50'}`}>Daftar Pelanggan</button>
+        {showModal && (
+          <div className="ml-1 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
+            <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.name}` : 'Data Baru'}</span>
+            <button type="button" onClick={() => handleCloseModal()} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+      </div>
+
+      <div className={`${showModal ? 'lg:hidden' : ''} contents`}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -303,11 +321,12 @@ export default function Customers() {
           })
         )}
       </div>
+      </div>
 
-      {/* Modal */}
+      {/* Form: subtab penuh di desktop, modal sederhana di mobile */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl lg:mx-auto lg:max-h-none lg:max-w-3xl lg:border lg:border-gray-200 lg:shadow-sm">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -316,7 +335,7 @@ export default function Customers() {
                 <p className="text-sm text-gray-500">Isi data pelanggan</p>
               </div>
               <button
-                onClick={handleCloseModal}
+                onClick={() => handleCloseModal()}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5 text-gray-500" />
@@ -380,7 +399,7 @@ export default function Customers() {
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={handleCloseModal}
+                  onClick={() => handleCloseModal()}
                   className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
                 >
                   Batal
