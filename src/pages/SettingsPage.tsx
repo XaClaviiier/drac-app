@@ -103,7 +103,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="space-y-0.5">
+      <div className="space-y-0">
         <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm">
           {tabs.map(item => {
             const Icon = item.icon;
@@ -121,7 +121,7 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <section className="rounded-xl border border-gray-200 bg-white px-4 pb-4 pt-0.5 shadow-sm sm:px-6 sm:pb-6 sm:pt-0.5">
           {tab === 'company' && (
             <div>
               <TabHeader title="Profil Perusahaan" description="Informasi yang tampil pada dokumen dan laporan." />
@@ -230,7 +230,9 @@ export default function SettingsPage() {
 }
 
 function TabHeader({ title, description }: { title: string; description: string }) {
-  return <div className="mb-4"><p className="text-sm text-gray-500" aria-label={title}>{description}</p></div>;
+  void title;
+  void description;
+  return null;
 }
 
 function DocumentCard({ title, value, preview, onChange }: { title: string; value: string; preview: string; onChange: (value: string) => void }) {
