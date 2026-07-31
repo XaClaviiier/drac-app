@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer } from '../types';
 
@@ -52,6 +52,41 @@ export default function Customers() {
     localStorage.setItem('drac-customer-columns', JSON.stringify(next));
   };
   const toggleColumn = (column: CustomerColumn) => setColumns(visibleColumns.includes(column) ? visibleColumns.filter(item => item !== column) : [...visibleColumns, column]);
+
+  const customerFieldValue = (customer: Customer, column: CustomerColumn) => {
+    const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === customer.id || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode));
+    if (column === 'name') return `${customer.customerCode} - ${customer.name}`;
+    if (column === 'phone') return customer.phone || '';
+    if (column === 'plates') return vehicles.map(vehicle => vehicle.plateNumber).join(', ');
+    if (column === 'email') return customer.email || '';
+    if (column === 'address') return customer.address || '';
+    if (column === 'vehicles') return String(vehicles.length);
+    if (column === 'workOrders') return String(data.workOrders.filter(wo => wo.customerRefId === customer.id || wo.customerName === customer.name).length);
+    if (column === 'invoices') return String(data.invoices.filter(invoice => invoice.customerRefId === customer.id || invoice.customerName.includes(customer.name)).length);
+    if (column === 'firstBranch') return data.branches.find(branch => branch.id === customer.firstSeenBranchId)?.name || '';
+    return '';
+  };
+
+  const printableColumns = customerColumns.filter(column => column.id !== 'actions' && visibleColumns.includes(column.id));
+  const exportCustomers = () => {
+    const csv = [printableColumns.map(column => `"${column.label}"`).join(','), ...filteredCustomers.map(customer => printableColumns.map(column => `"${customerFieldValue(customer, column.id).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `daftar_pelanggan_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const printCustomers = () => {
+    const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const popup = window.open('', '_blank', 'width=1100,height=750');
+    if (!popup) return window.alert('Popup diblokir browser. Izinkan popup untuk mencetak.');
+    const headers = printableColumns.map(column => `<th>${escape(column.label)}</th>`).join('');
+    const rows = filteredCustomers.map(customer => `<tr>${printableColumns.map(column => `<td>${escape(customerFieldValue(customer, column.id))}</td>`).join('')}</tr>`).join('');
+    popup.document.write(`<!doctype html><html><head><title>Daftar Pelanggan</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#172033}h1{margin:0 0 4px;font-size:22px}.meta{color:#667085;font-size:12px;margin-bottom:18px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e40af;color:white;text-align:left;padding:8px;border:1px solid #1e3a8a}td{padding:7px;border:1px solid #d0d5dd}tr:nth-child(even){background:#f8fafc}@media print{body{margin:8mm}}</style></head><body><h1>DOKTER AC MOBIL — Daftar Pelanggan</h1><div class="meta">Dicetak ${new Date().toLocaleString('id-ID')} · ${filteredCustomers.length} pelanggan</div><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);
+    popup.document.close();
+  };
 
   const resetForm = () => {
     setFormData({ name: '', phone: '', address: '', email: '' });
@@ -125,7 +160,7 @@ export default function Customers() {
 
       <div className={`${showModal ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5`}>
       {/* Search */}
-      <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
+      <div>
         <div className="flex items-center justify-between gap-3">
           <div className="relative w-full max-w-xl">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -137,6 +172,8 @@ export default function Customers() {
               className="h-9 w-full rounded-lg border border-gray-300 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print daftar pelanggan" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Printer className="h-4 w-4" /><span className="hidden xl:inline">Print</span></button>
+          <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Export CSV" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Download className="h-4 w-4" /><span className="hidden xl:inline">Export</span></button>
           {hasPermission('customer:create') && (
             <button onClick={() => handleOpenModal()} title="Tambah Pelanggan" className="inline-flex h-9 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
               <Plus className="h-5 w-5" /><span className="hidden sm:inline">Tambah</span>
