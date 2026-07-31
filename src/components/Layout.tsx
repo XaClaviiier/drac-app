@@ -96,6 +96,12 @@ export default function Layout() {
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
+  const [workspaceTabs, setWorkspaceTabs] = useState<Array<{ path: string; label: string }>>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('drac-workspace-tabs') || '[]');
+      return Array.isArray(saved) ? saved.filter(tab => tab?.path && tab.path !== '/' && tab?.label) : [];
+    } catch { return []; }
+  });
   const location = useLocation();
   const navigate = useNavigate();
   const { data, currentUser, currentBranchId, setCurrentBranchId, logout, hasPermission, isDemoMode } = useApp();
@@ -114,8 +120,27 @@ export default function Layout() {
     return item ? item.label : 'Dashboard';
   };
 
+  const closeWorkspaceTab = (path: string) => {
+    const index = workspaceTabs.findIndex(tab => tab.path === path);
+    const remaining = workspaceTabs.filter(tab => tab.path !== path);
+    setWorkspaceTabs(remaining);
+    if (location.pathname === path) {
+      const fallback = remaining[Math.min(index, remaining.length - 1)]?.path || '/';
+      navigate(fallback);
+    }
+  };
+
   // Tutup menu mobile saat pindah halaman
   useEffect(() => { setMobileMenuOpen(false); setDesktopMenuOpen(null); }, [location.pathname]);
+  useEffect(() => {
+    if (location.pathname === '/') return;
+    const item = navItems.find(nav => nav.path === location.pathname);
+    const label = item?.label || getPageTitle();
+    setWorkspaceTabs(current => current.some(tab => tab.path === location.pathname)
+      ? current
+      : [...current, { path: location.pathname, label }]);
+  }, [location.pathname]);
+  useEffect(() => { localStorage.setItem('drac-workspace-tabs', JSON.stringify(workspaceTabs)); }, [workspaceTabs]);
   useEffect(() => {
     if (!desktopMenuOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDesktopMenuOpen(null); };
@@ -325,6 +350,29 @@ export default function Layout() {
             </div>
           </div>
         </header>
+
+        <div className="hidden h-11 flex-shrink-0 items-end border-b border-blue-600 bg-gray-100 px-2 lg:flex">
+          <button type="button" onClick={() => navigate('/')} className={`flex h-10 min-w-32 items-center justify-between gap-3 rounded-t-md border border-b-0 px-4 text-sm transition-colors ${location.pathname === '/' ? 'border-blue-600 bg-blue-600 font-semibold text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+            <span className="truncate">Dashboard</span>
+          </button>
+          <div className="flex min-w-0 flex-1 items-end overflow-x-auto">
+            {workspaceTabs.map(tab => {
+              const active = location.pathname === tab.path;
+              return (
+                <div key={tab.path} className={`ml-1 flex h-10 min-w-40 max-w-56 flex-shrink-0 items-center rounded-t-md border border-b-0 transition-colors ${active ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  <button type="button" onClick={() => navigate(tab.path)} title={tab.label} className={`min-w-0 flex-1 truncate px-3 text-left text-sm ${active ? 'font-semibold' : ''}`}>{tab.label}</button>
+                  <button type="button" onClick={() => closeWorkspaceTab(tab.path)} title={`Tutup ${tab.label}`} className={`mr-1 rounded p-1 ${active ? 'hover:bg-blue-700' : 'hover:bg-gray-300'}`}><X className="h-4 w-4" /></button>
+                </div>
+              );
+            })}
+          </div>
+          {workspaceTabs.length > 0 && (
+            <select aria-label="Pilih modul yang terbuka" value={location.pathname === '/' ? '/' : location.pathname} onChange={event => navigate(event.target.value)} className="mb-1 ml-2 h-8 max-w-36 rounded border border-gray-300 bg-white px-2 text-xs text-gray-600 outline-none">
+              <option value="/">{workspaceTabs.length + 1} tab terbuka</option>
+              {workspaceTabs.map(tab => <option key={tab.path} value={tab.path}>{tab.label}</option>)}
+            </select>
+          )}
+        </div>
 
         {isDemoMode && (
           <div className="flex-shrink-0 border-b border-yellow-300 bg-yellow-100 px-4 py-2 text-center text-xs text-yellow-800 sm:text-sm">
