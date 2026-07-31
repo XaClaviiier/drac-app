@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Send, KeyRound, Sparkles, Car, Users, Package,
-  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2,
+  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
@@ -59,11 +59,56 @@ export default function AIAssistant() {
   const [pendingAction, setPendingAction] = useState<any>(null);
   const [pendingBranchId, setPendingBranchId] = useState('');
   const [registrationDraft, setRegistrationDraft] = useState<RegistrationDraft | null>(null);
+  const commandHistoryKey = `dokterac_ai_history_${currentUser?.id || currentUser?.username || 'default'}`;
+  const [commandHistory, setCommandHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`dokterac_ai_history_${currentUser?.id || currentUser?.username || 'default'}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [historyDraft, setHistoryDraft] = useState('');
+  const [showCommandHistory, setShowCommandHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, busy]);
+
+  useEffect(() => {
+    const field = inputRef.current;
+    if (!field) return;
+    field.style.height = '44px';
+    field.style.height = `${Math.min(field.scrollHeight, 92)}px`;
+    field.style.overflowY = field.scrollHeight > 92 ? 'auto' : 'hidden';
+  }, [input]);
+
+  const rememberCommand = (command: string) => {
+    const clean = command.trim();
+    if (!clean || /gsk_|password|api\s*key/i.test(clean)) return;
+    setCommandHistory((current) => {
+      const next = [clean, ...current.filter((item) => item !== clean)].slice(0, 50);
+      localStorage.setItem(commandHistoryKey, JSON.stringify(next));
+      return next;
+    });
+    setHistoryIndex(-1);
+    setHistoryDraft('');
+  };
+
+  const navigateHistory = (direction: 'up' | 'down') => {
+    if (commandHistory.length === 0) return;
+    if (direction === 'up') {
+      if (historyIndex === -1) setHistoryDraft(input);
+      const nextIndex = Math.min(historyIndex + 1, commandHistory.length - 1);
+      setHistoryIndex(nextIndex);
+      setInput(commandHistory[nextIndex]);
+      return;
+    }
+    const nextIndex = historyIndex - 1;
+    setHistoryIndex(nextIndex);
+    setInput(nextIndex >= 0 ? commandHistory[nextIndex] : historyDraft);
+  };
 
   useEffect(() => {
     // Hapus key lama yang pernah disimpan di browser; key perusahaan kini hanya di server.
@@ -817,6 +862,25 @@ ${buildSmartContext(userMsgText)}`;
     if (!content || busy) return;
     const lowerContent = content.toLowerCase();
 
+    if (lowerContent === 'clear') {
+      setMessages([]);
+      setInput('');
+      setHistoryIndex(-1);
+      return;
+    }
+    if (lowerContent === 'history') {
+      setInput('');
+      const rows = commandHistory.slice(0, 20).map((command, index) => `${index + 1}. \`${command}\``);
+      setMessages(history => [
+        ...history,
+        { role: 'user', content, time: now() },
+        { role: 'assistant', content: rows.length ? `**Riwayat Perintah Terakhir**\n\n${rows.join('\n')}` : 'Belum ada riwayat perintah.', time: now() },
+      ]);
+      return;
+    }
+
+    rememberCommand(content);
+
     if (registrationDraft || lowerContent === 'reg wo' || lowerContent === 'ulang') {
       const reply = registrationDraft ? continueRegistrationWizard(content) : startRegistrationWizard();
       setInput('');
@@ -1177,18 +1241,51 @@ ${buildSmartContext(userMsgText)}`;
 
           <div className="border-t border-slate-700/60 bg-slate-800/60 p-3">
             <div className="flex items-end gap-2">
+              <div className="relative">
+                <button type="button" onClick={() => setShowCommandHistory((value) => !value)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-600 bg-slate-900/80 text-slate-400 hover:border-cyan-500 hover:text-cyan-300" title="Riwayat perintah"><History className="h-5 w-5" /></button>
+                {showCommandHistory && (
+                  <div className="absolute bottom-14 left-0 z-30 w-80 overflow-hidden rounded-xl border border-slate-600 bg-slate-900 shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2"><span className="text-xs font-bold text-slate-200">Perintah Terakhir</span><button type="button" onClick={() => setShowCommandHistory(false)} className="rounded p-1 text-slate-400 hover:bg-slate-800"><X className="h-3.5 w-3.5" /></button></div>
+                    <div className="max-h-64 overflow-y-auto p-1.5">
+                      {commandHistory.slice(0, 10).map((command, index) => <button key={`${command}-${index}`} type="button" onClick={() => { setInput(command); setHistoryIndex(index); setShowCommandHistory(false); inputRef.current?.focus(); }} className="block w-full truncate rounded-lg px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-slate-800 hover:text-cyan-300" title={command}>{command}</button>)}
+                      {commandHistory.length === 0 && <p className="px-3 py-5 text-center text-xs text-slate-500">Belum ada riwayat</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
               <textarea
+                ref={inputRef}
                 value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+                onChange={e => { setInput(e.target.value); setHistoryIndex(-1); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return; }
+                  if (e.key === 'Escape') { e.preventDefault(); setInput(''); setHistoryIndex(-1); return; }
+                  if (e.key.toLowerCase() === 'l' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setMessages([]); return; }
+                  if (e.key === 'Tab') {
+                    const typed = input.trim().toLowerCase();
+                    const completion = ['cek', 'list', 'reg wo'].find((command) => typed && command.startsWith(typed));
+                    if (completion) { e.preventDefault(); setInput(`${completion} `); }
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    const beforeCursor = e.currentTarget.value.slice(0, e.currentTarget.selectionStart);
+                    if (!beforeCursor.includes('\n')) { e.preventDefault(); navigateHistory('up'); }
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    const afterCursor = e.currentTarget.value.slice(e.currentTarget.selectionEnd);
+                    if (!afterCursor.includes('\n') && historyIndex >= 0) { e.preventDefault(); navigateHistory('down'); }
+                  }
+                }}
                 rows={1}
-                placeholder={hasKey ? 'Tanya atau minta buatkan WO…' : 'Atur API Key dulu…'}
-                className="flex-1 resize-none rounded-xl border border-slate-600 bg-slate-900/80 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30"
+                placeholder="Ketik cek, list, atau reg wo…"
+                className="min-h-11 max-h-[92px] flex-1 resize-none rounded-xl border border-slate-600 bg-slate-900/80 px-4 py-3 text-sm leading-5 text-slate-100 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30"
               />
               <button onClick={() => send()} disabled={busy || !input.trim()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg transition-all hover:scale-105 disabled:opacity-40">
                 {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
               </button>
             </div>
+            <p className="mt-1.5 hidden px-14 text-[10px] text-slate-500 sm:block">Enter kirim · Shift+Enter baris baru · ↑↓ riwayat · Esc kosongkan · Ctrl+L bersihkan chat · Tab lengkapi perintah</p>
           </div>
         </section>
       </div>
