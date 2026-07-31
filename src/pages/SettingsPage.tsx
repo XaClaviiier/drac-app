@@ -121,7 +121,7 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        <section className={`pt-0.5 ${tab === 'company' ? 'grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_120px]' : 'rounded-xl border border-gray-200 bg-white px-4 pb-4 shadow-sm sm:px-6 sm:pb-6'}`}>
+        <section className="grid items-start gap-3 pt-0.5 lg:grid-cols-[minmax(0,1fr)_120px]">
           {tab === 'company' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Profil Perusahaan" description="Informasi yang tampil pada dokumen dan laporan." />
@@ -150,20 +150,14 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {tab === 'company' && (
-            <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
-              <Save className="h-12 w-12" />
-            </button>
-          )}
-
           {tab === 'branches' && (
-            <div>
+            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Cabang" description="Kode satu huruf digunakan pada nomor dokumen." />
               <div className="space-y-3">
                 {data.branches.map(branch => (
-                  <div key={branch.id} className="grid items-center gap-3 rounded-lg border border-gray-200 p-3 sm:grid-cols-[1fr_110px_120px]">
+                  <div key={branch.id} className="grid items-center gap-3 rounded-lg border border-gray-200 p-3 sm:grid-cols-[minmax(220px,1fr)_220px_100px]">
                     <div><p className="font-semibold text-gray-900">{branch.name}</p><p className="text-xs text-gray-500">{branch.id} · {branch.address}</p></div>
-                    <label className={labelClass}>Kode<input className={`${inputClass} uppercase`} maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></label>
+                    <CompanyField label="Kode"><input className={`${inputClass} uppercase`} maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></CompanyField>
                     <span className={`rounded-full px-3 py-1 text-center text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
                   </div>
                 ))}
@@ -172,18 +166,18 @@ export default function SettingsPage() {
           )}
 
           {tab === 'documents' && (
-            <div>
+            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Nomor Dokumen" description="Urutan direset setiap hari dan dipisahkan per cabang." />
-              <div className="space-y-5">
+              <div className="grid gap-5 lg:grid-cols-2">
                 <DocumentCard title="Work Order" value={draft.documents.workOrderPrefix} preview={previews.workOrder} onChange={value => setDraft(prev => ({ ...prev, documents: { ...prev.documents, workOrderPrefix: value.toUpperCase() } }))} />
                 <DocumentCard title="Invoice Penjualan" value={draft.documents.invoicePrefix} preview={previews.invoice} onChange={value => setDraft(prev => ({ ...prev, documents: { ...prev.documents, invoicePrefix: value.toUpperCase() } }))} />
-                <label className={labelClass}>Digit urutan<select className={inputClass} value={draft.documents.sequenceDigits} onChange={e => setDraft(prev => ({ ...prev, documents: { ...prev.documents, sequenceDigits: Number(e.target.value) } }))}><option value={3}>3 digit</option><option value={4}>4 digit</option></select></label>
+                <CompanyField label="Digit urutan"><select className={inputClass} value={draft.documents.sequenceDigits} onChange={e => setDraft(prev => ({ ...prev, documents: { ...prev.documents, sequenceDigits: Number(e.target.value) } }))}><option value={3}>3 digit</option><option value={4}>4 digit</option></select></CompanyField>
               </div>
             </div>
           )}
 
           {tab === 'security' && (
-            <div>
+            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Keamanan" description="Aturan akun Owner dan sesi pengguna." />
               <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -192,8 +186,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className={labelClass}>Durasi sesi<select className={inputClass} value={draft.security.sessionHours} onChange={e => setDraft(prev => ({ ...prev, security: { ...prev.security, sessionHours: Number(e.target.value) } }))}><option value={1}>1 jam</option><option value={4}>4 jam</option><option value={8}>8 jam</option></select></label>
-                <label className={labelClass}>Batas gagal login<select className={inputClass} value={draft.security.maxLoginAttempts} onChange={e => setDraft(prev => ({ ...prev, security: { ...prev.security, maxLoginAttempts: Number(e.target.value) } }))}><option value={3}>3 kali</option><option value={5}>5 kali</option></select></label>
+                <CompanyField label="Durasi sesi"><select className={inputClass} value={draft.security.sessionHours} onChange={e => setDraft(prev => ({ ...prev, security: { ...prev.security, sessionHours: Number(e.target.value) } }))}><option value={1}>1 jam</option><option value={4}>4 jam</option><option value={8}>8 jam</option></select></CompanyField>
+                <CompanyField label="Batas gagal login"><select className={inputClass} value={draft.security.maxLoginAttempts} onChange={e => setDraft(prev => ({ ...prev, security: { ...prev.security, maxLoginAttempts: Number(e.target.value) } }))}><option value={3}>3 kali</option><option value={5}>5 kali</option></select></CompanyField>
                 <Toggle label="Aktifkan audit log" checked={draft.security.auditLogEnabled} onChange={checked => setDraft(prev => ({ ...prev, security: { ...prev.security, auditLogEnabled: checked } }))} />
                 <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <Toggle label="Wajibkan alasan saat input tanggal mundur" checked={draft.security.requireBackdateReason !== false} onChange={checked => setDraft(prev => ({ ...prev, security: { ...prev.security, requireBackdateReason: checked } }))} />
@@ -204,12 +198,11 @@ export default function SettingsPage() {
           )}
 
           {tab === 'ai' && (
-            <div>
+            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Integrasi AI" description="Atur model dan jenis data yang boleh digunakan Asisten AI." />
               {currentUser?.isOwner ? (
                 <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                  <label className={labelClass}>
-                    API Key Groq perusahaan
+                  <CompanyField label="API Key Groq">
                     <input
                       className={inputClass}
                       type="password"
@@ -217,7 +210,7 @@ export default function SettingsPage() {
                       onChange={event => setAiKey(event.target.value)}
                       placeholder={aiConfigured ? 'Sudah tersimpan — isi hanya untuk mengganti key' : 'Masukkan key yang diawali gsk_'}
                     />
-                  </label>
+                  </CompanyField>
                   <p className="mt-2 text-xs text-blue-700">
                     {aiConfigured ? 'Key perusahaan sudah aktif dan tidak ditampilkan kembali.' : 'Belum ada key perusahaan.'}
                   </p>
@@ -225,7 +218,7 @@ export default function SettingsPage() {
               ) : (
                 <p className="mb-4 rounded-lg bg-gray-100 p-3 text-sm text-gray-600">API Key hanya dapat dikelola oleh Owner.</p>
               )}
-              <label className={labelClass}>Model Groq<select className={inputClass} value={draft.ai.model} onChange={e => setDraft(prev => ({ ...prev, ai: { ...prev.ai, model: e.target.value } }))}><option value="llama-3.3-70b-versatile">Llama 3.3 70B</option><option value="llama-3.1-8b-instant">Llama 3.1 8B</option><option value="openai/gpt-oss-120b">GPT-OSS 120B</option></select></label>
+              <CompanyField label="Model Groq"><select className={inputClass} value={draft.ai.model} onChange={e => setDraft(prev => ({ ...prev, ai: { ...prev.ai, model: e.target.value } }))}><option value="llama-3.3-70b-versatile">Llama 3.3 70B</option><option value="llama-3.1-8b-instant">Llama 3.1 8B</option><option value="openai/gpt-oss-120b">GPT-OSS 120B</option></select></CompanyField>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <Toggle label="Data pelanggan & kendaraan" checked={draft.ai.allowCustomerData} onChange={checked => setDraft(prev => ({ ...prev, ai: { ...prev.ai, allowCustomerData: checked } }))} />
                 <Toggle label="Data barang & stok" checked={draft.ai.allowInventoryData} onChange={checked => setDraft(prev => ({ ...prev, ai: { ...prev.ai, allowInventoryData: checked } }))} />
@@ -236,7 +229,11 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className={`mt-6 justify-end border-t border-gray-200 pt-4 ${tab === 'company' ? 'flex lg:hidden' : 'flex'}`}>
+          <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+            <Save className="h-12 w-12" />
+          </button>
+
+          <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
             <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <Save className="h-4 w-4" /> {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>
@@ -266,7 +263,7 @@ function DocumentCard({ title, value, preview, onChange }: { title: string; valu
   return (
     <div className="rounded-xl border border-gray-200 p-4">
       <h4 className="mb-3 font-bold text-gray-900">{title}</h4>
-      <label className={labelClass}>Awalan<input className={inputClass} value={value} maxLength={8} onChange={e => onChange(e.target.value)} /></label>
+      <CompanyField label="Awalan"><input className={inputClass} value={value} maxLength={8} onChange={e => onChange(e.target.value)} /></CompanyField>
       <div className="mt-3 border-t border-gray-100 pt-3"><p className="text-xs text-gray-500">Preview nomor berikutnya</p><code className="text-lg font-bold text-blue-700">{preview}</code></div>
     </div>
   );
