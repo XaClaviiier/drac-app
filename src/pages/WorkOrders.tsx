@@ -306,12 +306,6 @@ export default function WorkOrders() {
     ? 'Semua Cabang'
     : selectedBranchLabel;
 
-  const branchWoCount = data.workOrders.filter(wo => {
-    if (wo.branchId !== selectedBranchId) return false;
-    if (todayOnly) return wo.date === todayDate;
-    return (!dateFrom || wo.date >= dateFrom) && (!dateTo || wo.date <= dateTo);
-  }).length;
-
   const setLastSevenDays = () => {
     const start = new Date();
     start.setDate(start.getDate() - 6);
@@ -357,50 +351,6 @@ export default function WorkOrders() {
     data.workOrders,
     searchTerm,
     filterStatus,
-    isAllBranchDropdown,
-    activeBranchOnly,
-    activeBranchIds,
-    selectedBranchId,
-    todayOnly,
-    todayDate,
-    dateFrom,
-    dateTo,
-  ]);
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      Total: 0,
-      Pengecekan: 0,
-      Pending: 0,
-      Proses: 0,
-      Selesai: 0,
-      Dibayar: 0,
-    };
-    data.workOrders.forEach((wo) => {
-      const branchMatch = isAllBranchDropdown || !activeBranchOnly
-        ? activeBranchIds.includes(wo.branchId)
-        : wo.branchId === selectedBranchId;
-      if (!branchMatch) return;
-
-      const dateMatch = todayOnly
-        ? wo.date === todayDate
-        : (!dateFrom || wo.date >= dateFrom) && (!dateTo || wo.date <= dateTo);
-      if (!dateMatch) return;
-
-      const normalizedSearch = searchTerm.toLowerCase();
-      const matchesSearch =
-        wo.woNumber.toLowerCase().includes(normalizedSearch) ||
-        wo.customerName.toLowerCase().includes(normalizedSearch) ||
-        wo.plateNumber.toLowerCase().includes(normalizedSearch);
-      if (matchesSearch) {
-        counts.Total += 1;
-        if (counts[wo.status] !== undefined) counts[wo.status] += 1;
-      }
-    });
-    return counts;
-  }, [
-    data.workOrders,
-    searchTerm,
     isAllBranchDropdown,
     activeBranchOnly,
     activeBranchIds,
@@ -753,9 +703,6 @@ export default function WorkOrders() {
         <button type="button" onClick={handleCloseModal} className={`flex h-12 items-center rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
-        <button type="button" onClick={handleCloseModal} className={`flex h-12 items-center rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${!showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}>
-          Daftar Order Kerja
-        </button>
         {hasPermission('wo:create') && (
           <button
             type="button"
@@ -771,6 +718,13 @@ export default function WorkOrders() {
             <Plus className="h-4 w-4" /> {editingWO ? 'Edit Order Kerja' : 'Data Baru'}
           </button>
         )}
+        <div className="ml-auto flex h-12 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
+          <span>{todayOnly ? 'Hari ini' : 'Semua tanggal'}</span>
+          <span className="text-gray-300">•</span>
+          <span className="font-semibold text-gray-700">{branchScopeLabel}</span>
+          <span className="text-gray-300">•</span>
+          <span className="font-semibold text-blue-700">{filteredWOs.length} WO</span>
+        </div>
       </div>
 
       {!showModal && <>
@@ -806,7 +760,6 @@ export default function WorkOrders() {
                 <CalendarDays className={`h-4 w-4 ${todayOnly ? 'text-blue-600' : 'text-gray-400'}`} />
                 <span>
                   <span className="block text-xs font-semibold">Hari Ini</span>
-                  <span className="block text-[10px] opacity-70">{todayOnly ? todayDate : 'Semua tanggal'}</span>
                 </span>
               </span>
               <span className={`relative flex h-7 w-16 flex-shrink-0 items-center rounded-full px-1 transition-colors ${todayOnly ? 'bg-blue-600' : 'bg-gray-300'}`}>
@@ -834,9 +787,6 @@ export default function WorkOrders() {
                   <Building2 className={`h-4 w-4 flex-shrink-0 ${activeBranchOnly || !canViewAllBranches ? 'text-emerald-600' : 'text-gray-400'}`} />
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-bold">{selectedBranchLabel}</span>
-                    <span className="block text-[10px] opacity-70">
-                      {activeBranchOnly || !canViewAllBranches ? `${branchWoCount} WO cabang ini` : 'Tampilkan semua cabang aktif'}
-                    </span>
                   </span>
                 </span>
                 <span className={`relative flex h-7 w-16 flex-shrink-0 items-center rounded-full px-1 transition-colors ${activeBranchOnly || !canViewAllBranches ? 'bg-emerald-600' : 'bg-gray-300'}`}>
@@ -859,10 +809,6 @@ export default function WorkOrders() {
               <option value="Dibayar">5. Dibayar</option>
             </select>
 
-            <div className="flex h-12 flex-shrink-0 items-center justify-between rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-500 lg:w-[155px] lg:block lg:py-2 lg:text-right">
-              <p className="font-semibold text-gray-700">{filteredWOs.length} WO ditampilkan</p>
-              <p>{todayOnly ? 'Hari ini' : (dateFrom || dateTo ? 'Range tanggal' : 'Semua tanggal')} · {branchScopeLabel}</p>
-            </div>
           </div>
 
           {/* Hari Ini OFF: range tanggal opsional. Kosong = semua tanggal. */}
