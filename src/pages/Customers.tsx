@@ -350,18 +350,18 @@ export default function Customers() {
                       <label className="text-sm font-medium text-gray-700">No. Telepon <span className="text-red-500">*</span></label>
                       <input type="tel" required value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="08xxxxxxxxxx" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
+                    <div className="grid items-start gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="pt-2.5 text-sm font-medium text-gray-700">Alamat</label>
+                      <textarea value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="Alamat lengkap pelanggan" rows={4} className="w-full resize-y rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    </div>
                   </div>
                 </section>
                 <section>
                   <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Lainnya</h4>
                   <div className="space-y-4">
                     <div className="grid items-center gap-2 sm:grid-cols-[110px_1fr]">
-                      <label className="text-sm font-medium text-gray-700">Email</label>
+                      <label className="text-sm font-medium text-gray-700">Email <span className="block text-xs font-normal text-gray-400">Opsional</span></label>
                       <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="email@example.com" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div className="grid items-start gap-2 sm:grid-cols-[110px_1fr]">
-                      <label className="pt-2.5 text-sm font-medium text-gray-700">Alamat</label>
-                      <textarea value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="Alamat lengkap pelanggan" rows={5} className="w-full resize-none rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                 </section>
