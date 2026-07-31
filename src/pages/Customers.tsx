@@ -85,19 +85,19 @@ export default function Customers() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 lg:-mt-5 lg:space-y-1">
       {/* Subtab modul Pelanggan (desktop) */}
       <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}><List className="h-6 w-6" /></button>
         {showModal && (
-          <div className="ml-1 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
+          <div className="ml-0.5 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
             <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.name}` : 'Data Baru'}</span>
             <button type="button" onClick={() => handleCloseModal()} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
         )}
       </div>
 
-      <div className={`${showModal ? 'lg:hidden' : ''} contents`}>
+      <div className={`${showModal ? 'lg:hidden' : ''} space-y-6`}>
       {/* Search */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex items-center justify-between gap-3">
