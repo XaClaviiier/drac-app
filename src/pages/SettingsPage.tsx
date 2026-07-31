@@ -22,7 +22,10 @@ const labelClass = 'space-y-1.5 text-sm font-medium text-gray-700';
 
 export default function SettingsPage() {
   const { data, currentUser, updateSettings } = useApp();
-  const [tab, setTab] = useState<Tab>('company');
+  const [tab, setTab] = useState<Tab>(() => {
+    const saved = localStorage.getItem('drac-settings-tab') as Tab | null;
+    return tabs.some(item => item.id === saved) ? saved! : 'company';
+  });
   const [draft, setDraft] = useState<AppSettings>(() => structuredClone(data.settings));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -77,6 +80,10 @@ export default function SettingsPage() {
 
   const setCompany = (key: keyof AppSettings['company'], value: string) =>
     setDraft(prev => ({ ...prev, company: { ...prev.company, [key]: value } }));
+  const selectTab = (nextTab: Tab) => {
+    setTab(nextTab);
+    localStorage.setItem('drac-settings-tab', nextTab);
+  };
 
   if (!canEdit) {
     return (
@@ -89,7 +96,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="lg:-mx-5 lg:-mt-5">
       <div className="mb-5">
         <h2 className="text-2xl font-bold text-gray-900">Pengaturan</h2>
         <p className="text-sm text-gray-500">Kelola identitas perusahaan, cabang, penomoran, keamanan, dan integrasi.</p>
@@ -101,16 +108,16 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[230px_1fr]">
-        <nav className="flex gap-2 overflow-x-auto rounded-xl border border-gray-200 bg-white p-2 shadow-sm lg:flex-col lg:overflow-visible">
+      <div className="space-y-2">
+        <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm">
           {tabs.map(item => {
             const Icon = item.icon;
             return (
               <button
                 key={item.id}
-                onClick={() => setTab(item.id)}
-                className={`flex flex-shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
-                  tab === item.id ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+                onClick={() => selectTab(item.id)}
+                className={`flex h-11 flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-4 text-left text-sm font-medium transition ${
+                  tab === item.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'
                 }`}
               >
                 <Icon className="h-4 w-4" /> {item.label}
