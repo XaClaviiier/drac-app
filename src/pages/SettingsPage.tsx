@@ -97,18 +97,13 @@ export default function SettingsPage() {
 
   return (
     <div className="lg:-mx-5 lg:-mt-5">
-      <div className="mb-5">
-        <h2 className="text-2xl font-bold text-gray-900">Pengaturan</h2>
-        <p className="text-sm text-gray-500">Kelola identitas perusahaan, cabang, penomoran, keamanan, dan integrasi.</p>
-      </div>
-
       {saved && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+        <div className="fixed right-6 top-20 z-[100] flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 shadow-lg">
           <CheckCircle2 className="h-5 w-5" /> Pengaturan berhasil disimpan.
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-0.5">
         <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm">
           {tabs.map(item => {
             const Icon = item.icon;
@@ -235,7 +230,7 @@ export default function SettingsPage() {
 }
 
 function TabHeader({ title, description }: { title: string; description: string }) {
-  return <div className="mb-5"><h3 className="text-xl font-bold text-gray-900">{title}</h3><p className="text-sm text-gray-500">{description}</p></div>;
+  return <div className="mb-4"><p className="text-sm text-gray-500" aria-label={title}>{description}</p></div>;
 }
 
 function DocumentCard({ title, value, preview, onChange }: { title: string; value: string; preview: string; onChange: (value: string) => void }) {
