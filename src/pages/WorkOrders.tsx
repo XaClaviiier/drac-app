@@ -698,9 +698,9 @@ export default function WorkOrders() {
   };
 
   return (
-    <div className="space-y-0 lg:-mx-5 lg:-mt-5">
-      <div className="flex min-h-[62px] items-end gap-1 border-b border-blue-600 bg-gray-100 px-2 pt-2">
-        <button type="button" onClick={handleCloseModal} className={`flex h-12 items-center rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`} title="Daftar Order Kerja">
+    <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
+      <div className="flex items-end gap-0.5 border-b border-blue-600 bg-gray-100 px-1">
+        <button type="button" onClick={handleCloseModal} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
         {hasPermission('wo:create') && (
@@ -713,12 +713,12 @@ export default function WorkOrders() {
               }
               handleOpenModal();
             }}
-            className={`flex h-12 items-center gap-2 rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}
+            className={`flex h-11 items-center gap-2 rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}
           >
             <Plus className="h-4 w-4" /> {editingWO ? 'Edit Order Kerja' : 'Data Baru'}
           </button>
         )}
-        <div className="ml-auto flex h-12 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
+        <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
           <span>{todayOnly ? 'Hari ini' : 'Semua tanggal'}</span>
           <span className="text-gray-300">•</span>
           <span className="font-semibold text-gray-700">{branchScopeLabel}</span>
