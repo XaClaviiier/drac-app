@@ -333,7 +333,7 @@ export default function Customers() {
             </div>
 
             <div className="hidden border-b border-gray-300 bg-gray-100 px-3 lg:flex"><span className="-mb-px rounded-t-md border border-b-white border-gray-300 border-t-blue-600 bg-white px-5 py-2.5 text-sm font-semibold text-gray-800">Umum</span></div>
-            <form onSubmit={handleSubmit} className="space-y-5 p-6 lg:p-4">
+            <form onSubmit={handleSubmit} className="space-y-5 p-6 lg:grid lg:grid-cols-[minmax(0,1fr)_88px] lg:gap-4 lg:space-y-0 lg:p-4">
               <div className="grid gap-8 lg:grid-cols-2">
                 <section>
                   <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Umum</h4>
@@ -367,20 +367,22 @@ export default function Customers() {
                 </section>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4 lg:sticky lg:top-4 lg:self-start lg:border-t-0 lg:pt-0">
                 <button
                   type="button"
                   onClick={() => handleCloseModal()}
-                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                  className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50 lg:hidden"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
+                  disabled={!formData.name.trim() || !formData.phone.trim()}
+                  title="Simpan Pelanggan"
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:h-20 lg:w-20 lg:justify-center lg:px-0"
                 >
-                  <Save className="w-4 h-4" />
-                  {editingCustomer ? 'Simpan Perubahan' : 'Simpan Pelanggan'}
+                  <Save className="h-4 w-4 lg:h-9 lg:w-9" />
+                  <span className="lg:hidden">{editingCustomer ? 'Simpan Perubahan' : 'Simpan Pelanggan'}</span>
                 </button>
               </div>
             </form>
