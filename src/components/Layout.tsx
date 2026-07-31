@@ -83,7 +83,7 @@ const desktopGroups = [
     { label: 'Merek & Satuan', path: '/items', icon: Boxes, perm: 'item:view', tone: 'purple' },
   ]},
   { id: 'reports', label: 'Daftar Laporan', icon: BarChart3, items: [
-    { label: 'Laporan WO', path: '/workorders', icon: Wrench, perm: 'report:view', tone: 'green' },
+    { label: 'Laporan WO', path: '/reports/workorders', icon: Wrench, perm: 'report:view', tone: 'green' },
     { label: 'Laporan Penjualan', path: '/invoices', icon: BarChart3, perm: 'report:view', tone: 'green' },
     { label: 'Laporan Pembelian', path: '/purchase-invoices', icon: BarChart3, perm: 'report:view', tone: 'blue' },
     { label: 'Laporan Persediaan', path: '/warehouses', icon: Boxes, perm: 'report:view', tone: 'blue' },
@@ -119,6 +119,7 @@ export default function Layout() {
   const visibleNavItems = navItems.filter((item) => hasPermission(item.perm));
 
   const getPageTitle = () => {
+    if (location.pathname === '/reports/workorders') return 'Laporan WO';
     const item = visibleNavItems.find((n) => n.path === location.pathname);
     return item ? item.label : 'Dashboard';
   };
@@ -172,7 +173,7 @@ export default function Layout() {
       >
         <nav className="flex-1 overflow-y-auto py-4">
           {hasPermission('dashboard:view') && (
-            <NavLink to="/" title={!sidebarOpen ? 'Dashboard' : undefined} className={`mx-2 flex items-center gap-3 rounded-lg px-4 py-3 transition-all ${location.pathname === '/' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
+            <NavLink to="/" title={!sidebarOpen ? 'Dashboard' : undefined} className={`mx-2 flex items-center gap-3 rounded-lg px-4 py-3 transition-all ${location.pathname === '/' && !desktopMenuOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
               <LayoutDashboard className="h-5 w-5 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Dashboard</span>}
             </NavLink>
           )}
@@ -181,7 +182,7 @@ export default function Layout() {
             const accessibleItems = group.items.filter(item => !item.perm || hasPermission(item.perm));
             if (accessibleItems.length === 0) return null;
             const groupPaths = accessibleItems.flatMap(item => item.path ? [item.path] : []);
-            const isActive = desktopMenuOpen === group.id || groupPaths.includes(location.pathname);
+            const isActive = desktopMenuOpen ? desktopMenuOpen === group.id : groupPaths.includes(location.pathname);
             return (
               <button key={group.id} type="button" title={!sidebarOpen ? group.label : undefined} onClick={() => setDesktopMenuOpen(current => current === group.id ? null : group.id)} className={`mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg px-4 py-3 text-left transition-all ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
                 <Icon className="h-5 w-5 flex-shrink-0" />
