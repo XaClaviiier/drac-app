@@ -71,7 +71,7 @@ switch ($method) {
             if ($transactionDate > date('Y-m-d')) {
                 throw new InvalidArgumentException('Tanggal WO tidak boleh melewati hari ini.');
             }
-            if ($transactionDate < date('Y-m-d') && $backdateReason === '') {
+            if (isBackdateReasonRequired($pdo) && $transactionDate < date('Y-m-d') && $backdateReason === '') {
                 throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
             }
             $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $d['date'] ?? null);
@@ -155,7 +155,7 @@ switch ($method) {
             if ($transactionDate > date('Y-m-d')) {
                 throw new InvalidArgumentException('Tanggal WO tidak boleh melewati hari ini.');
             }
-            if ($dateChanged && $transactionDate < date('Y-m-d') && $backdateReason === '') {
+            if (isBackdateReasonRequired($pdo) && $dateChanged && $transactionDate < date('Y-m-d') && $backdateReason === '') {
                 throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
             }
             if (!$dateChanged && $backdateReason === '') {

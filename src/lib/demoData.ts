@@ -36,7 +36,7 @@ export const demoData: AppData = {
     },
     branchDocumentCodes: { 'BR-001': 'D', 'BR-002': 'C', 'BR-003': 'M' },
     documents: { workOrderPrefix: 'WO-', invoicePrefix: 'INV-', sequenceDigits: 3, resetPeriod: 'daily' },
-    security: { sessionHours: 8, maxLoginAttempts: 5, auditLogEnabled: true },
+    security: { sessionHours: 8, maxLoginAttempts: 5, auditLogEnabled: true, requireBackdateReason: true },
     ai: {
       provider: 'groq',
       model: 'llama-3.3-70b-versatile',

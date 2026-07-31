@@ -186,6 +186,7 @@ export interface SecuritySettings {
   sessionHours: number;
   maxLoginAttempts: number;
   auditLogEnabled: boolean;
+  requireBackdateReason?: boolean;
 }
 
 export interface AISettings {

@@ -407,6 +407,17 @@ if (!function_exists('adjustBranchStock')) {
  * Terapkan mutasi stok penjualan tanpa memblokir transaksi.
  * Saldo boleh negatif dan akan dipulihkan oleh penerimaan atau penyesuaian stok.
  */
+function isBackdateReasonRequired(PDO $pdo): bool {
+    try {
+        $row = $pdo->query("SELECT settings_json FROM app_settings WHERE id = 1")->fetch();
+        if (!$row) return true;
+        $settings = json_decode($row['settings_json'], true);
+        return ($settings['security']['requireBackdateReason'] ?? true) !== false;
+    } catch (Throwable $e) {
+        return true;
+    }
+}
+
 function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $itemId, int $delta): void {
     $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id = ?");
     $itemStmt->execute([$itemId]);

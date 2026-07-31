@@ -166,7 +166,7 @@ export default function SalesInvoice() {
       window.alert('Tanggal pembayaran tidak boleh sebelum tanggal faktur.');
       return;
     }
-    if ((formData.date < today || (formData.payment > 0 && formData.paymentDate < today)) && !formData.backdateReason.trim()) {
+    if (data.settings.security.requireBackdateReason !== false && (formData.date < today || (formData.payment > 0 && formData.paymentDate < today)) && !formData.backdateReason.trim()) {
       window.alert('Alasan transaksi tanggal mundur wajib diisi.');
       return;
     }
@@ -232,7 +232,7 @@ export default function SalesInvoice() {
         window.alert('Tanggal pembayaran tidak boleh sebelum tanggal faktur.');
         return;
       }
-      if ((woInvoiceDate < today || (woPayment > 0 && woPaymentDate < today)) && !woBackdateReason.trim()) {
+      if (data.settings.security.requireBackdateReason !== false && (woInvoiceDate < today || (woPayment > 0 && woPaymentDate < today)) && !woBackdateReason.trim()) {
         window.alert('Alasan transaksi tanggal mundur wajib diisi.');
         return;
       }
@@ -505,7 +505,7 @@ export default function SalesInvoice() {
                   {invoiceDateUnlocked ? 'Kunci tanggal' : 'Buka tanggal mundur'}
                 </button>
               </div>
-              {(formData.date < new Date().toISOString().split('T')[0] || (formData.payment > 0 && formData.paymentDate < new Date().toISOString().split('T')[0])) && (
+              {data.settings.security.requireBackdateReason !== false && (formData.date < new Date().toISOString().split('T')[0] || (formData.payment > 0 && formData.paymentDate < new Date().toISOString().split('T')[0])) && (
                 <input required value={formData.backdateReason} onChange={(e) => setFormData({ ...formData, backdateReason: e.target.value })} placeholder="Alasan transaksi tanggal mundur" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" />
               )}
 
@@ -727,7 +727,7 @@ export default function SalesInvoice() {
                           <input type="date" min={woInvoiceDate} max={new Date().toISOString().split('T')[0]} value={woPaymentDate} onChange={(e) => setWoPaymentDate(e.target.value)} disabled={!hasPermission('payment:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
                         </div>}
                       </div>
-                      {(woInvoiceDate < new Date().toISOString().split('T')[0] || (woPayment > 0 && woPaymentDate < new Date().toISOString().split('T')[0])) && (
+                      {data.settings.security.requireBackdateReason !== false && (woInvoiceDate < new Date().toISOString().split('T')[0] || (woPayment > 0 && woPaymentDate < new Date().toISOString().split('T')[0])) && (
                         <input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan transaksi tanggal mundur" className="w-full px-3 py-2 border border-amber-400 bg-amber-50 rounded-lg" />
                       )}
                       <p className="text-sm font-semibold text-gray-700">Detail Layanan {selectedWO.woNumber}</p>

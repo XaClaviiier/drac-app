@@ -50,7 +50,7 @@ switch ($method) {
                 if ($paymentDate && $paymentDate < $date) {
                     throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
                 }
-                if (($date < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') {
+                if (isBackdateReasonRequired($pdo) && ($date < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') {
                     throw new Exception('Alasan tanggal mundur wajib diisi');
                 }
                 $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
@@ -127,7 +127,7 @@ switch ($method) {
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
             if ($invoiceDate > date('Y-m-d') || ($paymentDate && $paymentDate > date('Y-m-d'))) throw new Exception('Tanggal transaksi tidak boleh melewati hari ini');
             if ($paymentDate && $paymentDate < $invoiceDate) throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
-            if (($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') throw new Exception('Alasan tanggal mundur wajib diisi');
+            if (isBackdateReasonRequired($pdo) && ($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') throw new Exception('Alasan tanggal mundur wajib diisi');
             $stmt = $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, payment_date, backdate_reason, payment_method, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $invoiceId,
@@ -176,7 +176,7 @@ switch ($method) {
         $backdateReason = trim((string)($d['backdateReason'] ?? ''));
         if ($invoiceDate > date('Y-m-d') || ($paymentDate && $paymentDate > date('Y-m-d'))) respondError('Tanggal transaksi tidak boleh melewati hari ini', 422);
         if ($paymentDate && $paymentDate < $invoiceDate) respondError('Tanggal pembayaran tidak boleh sebelum tanggal faktur', 422);
-        if (($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') respondError('Alasan tanggal mundur wajib diisi', 422);
+        if (isBackdateReasonRequired($pdo) && ($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') respondError('Alasan tanggal mundur wajib diisi', 422);
         $stmt = $pdo->prepare("UPDATE sales_invoices SET invoice_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_info=?, description=?, total=?, payment=?, payment_date=?, backdate_reason=?, payment_method=?, status=?, age=?, branch_id=? WHERE id=?");
         $stmt->execute([
             $d['invoiceNumber'], $invoiceDate,

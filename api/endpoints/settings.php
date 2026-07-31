@@ -10,7 +10,7 @@ $defaultSettings = [
         'workOrderPrefix' => 'WO-', 'invoicePrefix' => 'INV-',
         'sequenceDigits' => 3, 'resetPeriod' => 'daily',
     ],
-    'security' => ['sessionHours' => 8, 'maxLoginAttempts' => 5, 'auditLogEnabled' => true],
+    'security' => ['sessionHours' => 8, 'maxLoginAttempts' => 5, 'auditLogEnabled' => true, 'requireBackdateReason' => true],
     'ai' => [
         'provider' => 'groq', 'model' => 'llama-3.3-70b-versatile',
         'allowCustomerData' => true, 'allowInventoryData' => true,

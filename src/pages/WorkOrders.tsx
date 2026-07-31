@@ -591,8 +591,12 @@ export default function WorkOrders() {
       window.alert('Tanggal WO tidak boleh melewati hari ini.');
       return;
     }
-    if (formData.date < today && (!hasPermission('wo:backdate') || !woBackdateReason.trim())) {
-      window.alert('Tanggal mundur memerlukan hak akses dan alasan.');
+    if (formData.date < today && !hasPermission('wo:backdate')) {
+      window.alert('Anda tidak memiliki hak akses tanggal mundur.');
+      return;
+    }
+    if (data.settings.security.requireBackdateReason !== false && formData.date < today && !woBackdateReason.trim()) {
+      window.alert('Alasan tanggal mundur wajib diisi.');
       return;
     }
     const targetBranch = resolveBranchId();
@@ -700,7 +704,7 @@ export default function WorkOrders() {
         window.alert('Tanggal pembayaran tidak boleh sebelum tanggal faktur.');
         return;
       }
-      if ((invoiceDate < today || (invoicePayment > 0 && invoicePaymentDate < today)) && !invoiceBackdateReason.trim()) {
+      if (data.settings.security.requireBackdateReason !== false && (invoiceDate < today || (invoicePayment > 0 && invoicePaymentDate < today)) && !invoiceBackdateReason.trim()) {
         window.alert('Alasan tanggal mundur wajib diisi.');
         return;
       }
@@ -1481,7 +1485,7 @@ export default function WorkOrders() {
                   </select>
                 </div>
               </div>
-              {formData.date < new Date().toISOString().split('T')[0] && (
+              {data.settings.security.requireBackdateReason !== false && formData.date < new Date().toISOString().split('T')[0] && (
                 <input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" />
               )}
 
@@ -2353,7 +2357,7 @@ export default function WorkOrders() {
                     <button type="button" onClick={() => hasPermission('payment:backdate') ? setInvoicePaymentDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal pembayaran.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
                   </div>}
                 </div>
-                {(invoiceDate < new Date().toISOString().split('T')[0] || (invoicePayment > 0 && invoicePaymentDate < new Date().toISOString().split('T')[0])) && (
+                {data.settings.security.requireBackdateReason !== false && (invoiceDate < new Date().toISOString().split('T')[0] || (invoicePayment > 0 && invoicePaymentDate < new Date().toISOString().split('T')[0])) && (
                   <input required value={invoiceBackdateReason} onChange={(e) => setInvoiceBackdateReason(e.target.value)} placeholder="Alasan transaksi tanggal mundur" className="w-full mb-4 px-3 py-2 border border-amber-400 bg-amber-50 rounded-lg" />
                 )}
                 <label className="block text-sm font-medium text-gray-700 mb-2">

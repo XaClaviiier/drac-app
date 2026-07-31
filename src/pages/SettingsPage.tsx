@@ -175,6 +175,10 @@ export default function SettingsPage() {
                 <label className={labelClass}>Durasi sesi<select className={inputClass} value={draft.security.sessionHours} onChange={e => setDraft(prev => ({ ...prev, security: { ...prev.security, sessionHours: Number(e.target.value) } }))}><option value={1}>1 jam</option><option value={4}>4 jam</option><option value={8}>8 jam</option></select></label>
                 <label className={labelClass}>Batas gagal login<select className={inputClass} value={draft.security.maxLoginAttempts} onChange={e => setDraft(prev => ({ ...prev, security: { ...prev.security, maxLoginAttempts: Number(e.target.value) } }))}><option value={3}>3 kali</option><option value={5}>5 kali</option></select></label>
                 <Toggle label="Aktifkan audit log" checked={draft.security.auditLogEnabled} onChange={checked => setDraft(prev => ({ ...prev, security: { ...prev.security, auditLogEnabled: checked } }))} />
+                <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <Toggle label="Wajibkan alasan saat input tanggal mundur" checked={draft.security.requireBackdateReason !== false} onChange={checked => setDraft(prev => ({ ...prev, security: { ...prev.security, requireBackdateReason: checked } }))} />
+                  <p className="mt-2 text-xs text-amber-700">Matikan sementara saat input data awal. Tanggal masa depan tetap tidak diizinkan.</p>
+                </div>
               </div>
             </div>
           )}
