@@ -299,13 +299,6 @@ export default function Layout() {
               </div>
             )}
 
-            {/* Stats (desktop) */}
-            <div className="hidden items-center gap-3 text-sm xl:flex">
-              <div className="rounded-lg bg-green-50 px-3 py-1.5">
-                <span className="font-medium text-green-600">Hari Ini: Rp {todayRevenue.toLocaleString('id-ID')}</span>
-              </div>
-            </div>
-
             <button className="relative hidden rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 sm:block">
               <Bell className="h-5 w-5" />
               <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
