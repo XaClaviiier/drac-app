@@ -334,6 +334,130 @@ export default function AIAssistant() {
     return lines.join('\n');
   };
 
+  const buildListReply = (userText: string): string | null => {
+    const lower = userText.toLowerCase().trim();
+    if (!lower.startsWith('list')) return null;
+
+    const page = Math.max(1, Number(lower.match(/halaman\s+(\d+)/)?.[1] || 1));
+    const pageSize = 10;
+    const start = (page - 1) * pageSize;
+    const canSeeAllBranches = hasPermission('all_branches');
+    const allowedBranchIds = new Set(
+      canSeeAllBranches
+        ? data.branches.filter((branch) => branch.isActive).map((branch) => branch.id)
+        : (currentUser?.branchIds?.length ? currentUser.branchIds : [currentUser?.branchId].filter(Boolean) as string[])
+    );
+    const finish = (title: string, rows: string[], total: number, example: string) => {
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      if (rows.length === 0) return `**${title}**\n\nTidak ada data yang cocok.`;
+      const lines = [
+        `**${title} — ${total} ditemukan**`,
+        '',
+        ...rows,
+        '',
+        `Halaman **${page}/${totalPages}** · menampilkan ${start + 1}–${Math.min(start + rows.length, total)} dari ${total}.`,
+      ];
+      if (page < totalPages) lines.push(`Ketik **${example} halaman ${page + 1}** untuk data berikutnya.`);
+      return lines.join('\n');
+    };
+    const queryTerms = lookupTerms(
+      lower
+        .replace(/^list\s*/, '')
+        .replace(/\b(customer|pelanggan|kendaraan|mobil|wo|order kerja|faktur|invoice|barang|item|stok|supplier|pemasok|halaman\s+\d+|hari ini|pengecekan|proses|selesai|dibayar|batal|menipis|habis|belum lunas|lunas)\b/g, ' ')
+    );
+
+    if (/\b(customer|pelanggan)\b/.test(lower)) {
+      const filtered = data.customers
+        .filter((customer) => queryTerms.length === 0 || queryTerms.every((term) =>
+          `${customer.customerCode} ${customer.name} ${customer.phone}`.toLowerCase().includes(term)
+        ))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const rows = filtered.slice(start, start + pageSize).map((customer, index) => {
+        const vehicleCount = data.vehicles.filter((vehicle) =>
+          vehicle.customerRefId === customer.id || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
+        ).length;
+        return `${start + index + 1}. **${customer.name}** — ${customer.customerCode}\n   ${customer.phone || 'tanpa telepon'} · ${vehicleCount} kendaraan`;
+      });
+      return finish('Daftar Pelanggan', rows, filtered.length, 'list customer');
+    }
+
+    if (/\b(kendaraan|mobil|plat)\b/.test(lower)) {
+      const filtered = data.vehicles
+        .filter((vehicle) => queryTerms.length === 0 || queryTerms.every((term) =>
+          `${vehicle.plateNumber} ${vehicle.brand} ${vehicle.model} ${vehicle.customerName}`.toLowerCase().replace(/[^a-z0-9 ]/g, '').includes(term)
+        ))
+        .sort((a, b) => a.plateNumber.localeCompare(b.plateNumber));
+      const rows = filtered.slice(start, start + pageSize).map((vehicle, index) => {
+        const customer = data.customers.find((item) => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
+        const woCount = data.workOrders.filter((wo) =>
+          (wo.vehicleRefId && wo.vehicleRefId === vehicle.id) || normalizePlate(wo.plateNumber) === normalizePlate(vehicle.plateNumber)
+        ).length;
+        return `${start + index + 1}. **${vehicle.plateNumber}** — ${[vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ')}\n   Pemilik: ${customer?.name || vehicle.customerName || '-'} · ${woCount} WO`;
+      });
+      return finish('Daftar Kendaraan', rows, filtered.length, 'list kendaraan');
+    }
+
+    if (/\b(wo|order kerja)\b/.test(lower)) {
+      const status = ['pengecekan', 'proses', 'selesai', 'dibayar', 'batal'].find((item) => lower.includes(item));
+      const today = new Date().toISOString().split('T')[0];
+      const filtered = data.workOrders
+        .filter((wo) => allowedBranchIds.has(wo.branchId))
+        .filter((wo) => !status || wo.status.toLowerCase() === status)
+        .filter((wo) => !lower.includes('hari ini') || wo.date === today)
+        .filter((wo) => queryTerms.length === 0 || queryTerms.every((term) =>
+          `${wo.woNumber} ${wo.customerName} ${wo.plateNumber}`.toLowerCase().includes(term)
+        ))
+        .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
+      const rows = filtered.slice(start, start + pageSize).map((wo, index) =>
+        `${start + index + 1}. **${wo.woNumber}** — ${wo.date}\n   ${wo.customerName} · ${wo.plateNumber} · ${wo.status} · ${fmt(wo.total)} · ${cabangName(wo.branchId)}`
+      );
+      return finish('Daftar Order Kerja', rows, filtered.length, 'list wo');
+    }
+
+    if (/\b(faktur|invoice)\b/.test(lower)) {
+      const filtered = data.invoices
+        .filter((invoice) => allowedBranchIds.has(invoice.branchId))
+        .filter((invoice) => !lower.includes('belum lunas') || invoice.status === 'Belum Lunas')
+        .filter((invoice) => !(/\blunas\b/.test(lower) && !lower.includes('belum lunas')) || invoice.status === 'Lunas')
+        .filter((invoice) => queryTerms.length === 0 || queryTerms.every((term) =>
+          `${invoice.invoiceNumber} ${invoice.customerName}`.toLowerCase().includes(term)
+        ))
+        .sort((a, b) => b.date.localeCompare(a.date) || b.invoiceNumber.localeCompare(a.invoiceNumber));
+      const rows = filtered.slice(start, start + pageSize).map((invoice, index) =>
+        `${start + index + 1}. **${invoice.invoiceNumber}** — ${invoice.date}\n   ${invoice.customerName} · ${invoice.status} · ${fmt(invoice.total)} · ${cabangName(invoice.branchId)}`
+      );
+      return finish('Daftar Faktur Penjualan', rows, filtered.length, 'list faktur');
+    }
+
+    if (/\b(barang|item|stok)\b/.test(lower)) {
+      const filtered = data.items
+        .filter((item) => !lower.includes('menipis') || (item.type === 'Persediaan' && item.stock > 0 && item.stock <= 3))
+        .filter((item) => !lower.includes('habis') || (item.type === 'Persediaan' && item.stock <= 0))
+        .filter((item) => queryTerms.length === 0 || queryTerms.every((term) =>
+          `${item.code} ${item.name} ${item.categoryName} ${item.brand}`.toLowerCase().includes(term)
+        ))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const rows = filtered.slice(start, start + pageSize).map((item, index) =>
+        `${start + index + 1}. **${item.code} — ${item.name}**\n   ${item.type} · stok ${item.stock} ${item.unit} · ${fmt(item.sellingPrice)}`
+      );
+      return finish('Daftar Barang & Stok', rows, filtered.length, 'list barang');
+    }
+
+    if (/\b(supplier|pemasok)\b/.test(lower)) {
+      const filtered = data.suppliers
+        .filter((supplier) => queryTerms.length === 0 || queryTerms.every((term) =>
+          `${supplier.code} ${supplier.name} ${supplier.phone}`.toLowerCase().includes(term)
+        ))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const rows = filtered.slice(start, start + pageSize).map((supplier, index) =>
+        `${start + index + 1}. **${supplier.name}** — ${supplier.code}\n   ${supplier.phone || 'tanpa telepon'}`
+      );
+      return finish('Daftar Supplier', rows, filtered.length, 'list supplier');
+    }
+
+    return `Gunakan salah satu format berikut:\n\n- **list customer**\n- **list kendaraan DD**\n- **list wo hari ini**\n- **list wo proses**\n- **list faktur belum lunas**\n- **list stok menipis**\n- **list supplier**`;
+  };
+
   const startRegistrationWizard = () => {
     setPendingAction(null);
     setPendingBranchId('');
@@ -537,6 +661,7 @@ ATURAN:
 - Gunakan DATA di bawah sebagai kebenaran. Jangan mengarang data.
 - Kalau data tidak muncul di bawah, minta user memperjelas (sebut nama/plat/kode barang).
 - Kata pemicu "cek" hanya untuk membaca data dan riwayat. Jangan pernah membuat transaksi dari perintah "cek".
+- Kata pemicu "list" hanya untuk menampilkan daftar. Jangan pernah membuat atau mengubah data dari perintah "list".
 - Hanya boleh menyiapkan pembuatan WO jika pesan dimulai dengan "reg wo".
 - Kalau user meminta membuat WO tanpa awalan "reg wo", minta user mengetik ulang dengan format "reg wo ...".
 
@@ -715,9 +840,10 @@ ${buildSmartContext(userMsgText)}`;
       return;
     }
 
-    const vehicleHistoryReply = buildVehicleHistoryReply(content);
-    const customerLookupReply = vehicleHistoryReply ? null : buildCustomerLookupReply(content);
-    const localLookupReply = vehicleHistoryReply || customerLookupReply;
+    const listReply = buildListReply(content);
+    const vehicleHistoryReply = listReply ? null : buildVehicleHistoryReply(content);
+    const customerLookupReply = listReply || vehicleHistoryReply ? null : buildCustomerLookupReply(content);
+    const localLookupReply = listReply || vehicleHistoryReply || customerLookupReply;
     if (localLookupReply) {
       setInput('');
       setMessages(history => [
@@ -859,7 +985,8 @@ ${buildSmartContext(userMsgText)}`;
 
   const chips = [
     'cek DD',
-    'cek nama pelanggan',
+    'list customer',
+    'list wo hari ini',
     'reg wo',
     'Barang apa saja yang stoknya menipis?',
     'Berapa harga jasa flushing AC?',
