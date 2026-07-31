@@ -748,7 +748,7 @@ export default function WorkOrders() {
   };
 
   return (
-    <div className="space-y-3 lg:-mx-5 lg:-mt-5">
+    <div className="space-y-0 lg:-mx-5 lg:-mt-5">
       <div className="flex min-h-[62px] items-end gap-1 border-b border-blue-600 bg-gray-100 px-2 pt-2">
         <button type="button" onClick={handleCloseModal} className={`flex h-12 items-center rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
@@ -783,16 +783,20 @@ export default function WorkOrders() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col gap-4">
+      <div className="px-3 py-0.5">
+        <div className="flex flex-col gap-2">
           {/* Quick list toggles */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+              <input type="text" placeholder="Cari nomor WO, pelanggan, atau nomor plat..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+            </div>
             <button
               type="button"
               role="switch"
               aria-checked={todayOnly}
               onClick={() => setTodayOnly(value => !value)}
-              className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-3 py-2 transition-all sm:min-w-[180px] ${
+              className={`flex h-12 flex-shrink-0 items-center justify-between gap-3 rounded-lg border-2 px-3 transition-all lg:w-[180px] ${
                 todayOnly
                   ? 'border-blue-500 bg-blue-50 text-blue-800 shadow-sm'
                   : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
@@ -820,7 +824,7 @@ export default function WorkOrders() {
                 disabled={!canViewAllBranches}
                 onClick={() => canViewAllBranches && setActiveBranchOnly(value => !value)}
                 title={!canViewAllBranches ? 'Akun ini hanya boleh melihat cabangnya sendiri' : activeBranchOnly ? `Matikan untuk melihat semua cabang aktif` : `Aktifkan untuk hanya melihat ${selectedBranchLabel}`}
-                className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-3 py-2 transition-all sm:min-w-[205px] ${
+                className={`flex h-12 flex-shrink-0 items-center justify-between gap-3 rounded-lg border-2 px-3 transition-all lg:w-[205px] ${
                   activeBranchOnly || !canViewAllBranches
                     ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
                     : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
@@ -842,7 +846,20 @@ export default function WorkOrders() {
               </button>
             )}
 
-            <div className="ml-auto hidden text-right text-xs text-gray-500 sm:block">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="h-12 flex-shrink-0 rounded-lg border border-gray-300 bg-white px-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 lg:w-[190px]"
+            >
+              <option value="">Semua Status</option>
+              <option value="Pengecekan">1. Pengecekan (Gratis)</option>
+              <option value="Pending">2. Pending</option>
+              <option value="Proses">3. Proses</option>
+              <option value="Selesai">4. Selesai</option>
+              <option value="Dibayar">5. Dibayar</option>
+            </select>
+
+            <div className="flex h-12 flex-shrink-0 items-center justify-between rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-500 lg:w-[155px] lg:block lg:py-2 lg:text-right">
               <p className="font-semibold text-gray-700">{filteredWOs.length} WO ditampilkan</p>
               <p>{todayOnly ? 'Hari ini' : (dateFrom || dateTo ? 'Range tanggal' : 'Semua tanggal')} · {branchScopeLabel}</p>
             </div>
@@ -888,32 +905,7 @@ export default function WorkOrders() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari nomor WO, pelanggan, atau nomor plat..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-          </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-          >
-            <option value="">Semua Status</option>
-            <option value="Pengecekan">1. Pengecekan (Gratis)</option>
-            <option value="Pending">2. Pending</option>
-            <option value="Proses">3. Proses</option>
-            <option value="Selesai">4. Selesai</option>
-            <option value="Dibayar">5. Dibayar</option>
-          </select>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 sm:hidden">
+          <div className="hidden">
             <span>
               {todayOnly
                 ? `Hari ini: ${todayDate}`
@@ -929,7 +921,7 @@ export default function WorkOrders() {
 
       {/* Desktop Work Order List */}
       {filteredWOs.length > 0 && (
-        <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
+        <div className="mx-3 mt-0.5 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left">
               <thead className="bg-blue-800 text-xs uppercase tracking-wide text-white">
