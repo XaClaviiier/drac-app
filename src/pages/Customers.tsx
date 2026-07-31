@@ -85,7 +85,7 @@ export default function Customers() {
   };
 
   return (
-    <div className="space-y-6 lg:-mt-5 lg:space-y-1">
+    <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
       {/* Subtab modul Pelanggan (desktop) */}
       <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}><List className="h-6 w-6" /></button>
@@ -316,8 +316,8 @@ export default function Customers() {
       {/* Form: subtab penuh di desktop, modal sederhana di mobile */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl lg:mx-auto lg:max-h-none lg:max-w-3xl lg:border lg:border-gray-200 lg:shadow-sm">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl lg:max-h-none lg:max-w-none lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
+            <div className="sticky top-0 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
                   {editingCustomer ? 'Edit Pelanggan' : 'Tambah Pelanggan Baru'}
@@ -332,58 +332,39 @@ export default function Customers() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
-                <span className="text-sm text-blue-700 font-medium">ID Pelanggan (Auto)</span>
-                <span className="text-base font-bold text-blue-700 font-mono">
-                  {editingCustomer ? editingCustomer.customerCode : generateCustomerCode()}
-                </span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nama Pelanggan <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
-                  placeholder="Nama lengkap pelanggan"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none uppercase"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  No. Telepon <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="08xxxxxxxxxx"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="email@example.com"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Alamat</label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Alamat lengkap pelanggan"
-                  rows={3}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                />
+            <div className="hidden border-b border-gray-300 bg-gray-100 px-3 lg:flex"><span className="-mb-px rounded-t-md border border-b-white border-gray-300 border-t-blue-600 bg-white px-5 py-2.5 text-sm font-semibold text-gray-800">Umum</span></div>
+            <form onSubmit={handleSubmit} className="space-y-5 p-6 lg:p-4">
+              <div className="grid gap-8 lg:grid-cols-2">
+                <section>
+                  <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Umum</h4>
+                  <div className="space-y-4">
+                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">ID Pelanggan</label>
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-mono font-bold text-blue-700">{editingCustomer ? editingCustomer.customerCode : generateCustomerCode()}</div>
+                    </div>
+                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">Nama Pelanggan <span className="text-red-500">*</span></label>
+                      <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama lengkap pelanggan" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">No. Telepon <span className="text-red-500">*</span></label>
+                      <input type="tel" required value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="08xxxxxxxxxx" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                </section>
+                <section>
+                  <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Lainnya</h4>
+                  <div className="space-y-4">
+                    <div className="grid items-center gap-2 sm:grid-cols-[110px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">Email</label>
+                      <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="email@example.com" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="grid items-start gap-2 sm:grid-cols-[110px_1fr]">
+                      <label className="pt-2.5 text-sm font-medium text-gray-700">Alamat</label>
+                      <textarea value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="Alamat lengkap pelanggan" rows={5} className="w-full resize-none rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                </section>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
