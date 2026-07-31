@@ -22,6 +22,14 @@ interface ChatMsg {
   action?: { type: string; payload: any };
 }
 
+interface RegistrationDraft {
+  step: 'plate' | 'customerName' | 'phone' | 'vehicle' | 'complaint';
+  plateNumber: string;
+  customerName: string;
+  phone: string;
+  vehicleInfo: string;
+}
+
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const render = (t: string) =>
@@ -50,6 +58,7 @@ export default function AIAssistant() {
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<any>(null);
   const [pendingBranchId, setPendingBranchId] = useState('');
+  const [registrationDraft, setRegistrationDraft] = useState<RegistrationDraft | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -325,6 +334,83 @@ export default function AIAssistant() {
     return lines.join('\n');
   };
 
+  const startRegistrationWizard = () => {
+    setPendingAction(null);
+    setPendingBranchId('');
+    setRegistrationDraft({ step: 'plate', plateNumber: '', customerName: '', phone: '', vehicleInfo: '' });
+    return `**Registrasi WO Baru — Langkah 1/4**\n\nMasukkan nomor plat kendaraan.\n\nKetik **batal** untuk menghentikan proses.`;
+  };
+
+  const continueRegistrationWizard = (userText: string): string => {
+    if (!registrationDraft) return startRegistrationWizard();
+    const value = userText.trim();
+    const lower = value.toLowerCase();
+    if (lower === 'batal') {
+      setRegistrationDraft(null);
+      setPendingAction(null);
+      setPendingBranchId('');
+      return 'Registrasi WO dibatalkan. Tidak ada data yang disimpan.';
+    }
+    if (lower === 'ulang') return startRegistrationWizard();
+
+    if (registrationDraft.step === 'plate') {
+      const plateMatch = value.toUpperCase().match(/\b[A-Z]{1,2}[\s-]*\d{2,4}[\s-]*[A-Z]{1,3}\b/)?.[0];
+      if (!plateMatch) return 'Format nomor plat belum dikenali. Contoh: **DC1143OW** atau **DD 1486 QZ**.';
+      const normalized = normalizePlate(plateMatch);
+      const vehicle = data.vehicles.find((item) => normalizePlate(item.plateNumber) === normalized);
+      if (vehicle) {
+        const customer = data.customers.find((item) => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
+        setRegistrationDraft({
+          step: 'complaint',
+          plateNumber: vehicle.plateNumber,
+          customerName: customer?.name || vehicle.customerName || '',
+          phone: customer?.phone || vehicle.phone || '',
+          vehicleInfo: [vehicle.brand, vehicle.model, vehicle.year, vehicle.color].filter(Boolean).join(' '),
+        });
+        return `Kendaraan ditemukan:\n\n- Plat: **${vehicle.plateNumber}**\n- Pemilik: **${customer?.name || vehicle.customerName || '-'}**\n- Kendaraan: ${[vehicle.brand, vehicle.model, vehicle.year, vehicle.color].filter(Boolean).join(' ')}\n\n**Langkah 4/4:** Jelaskan keluhan atau layanan yang dibutuhkan.`;
+      }
+      setRegistrationDraft({ ...registrationDraft, step: 'customerName', plateNumber: normalized });
+      return `Plat **${normalized}** belum terdaftar.\n\n**Langkah 2/4:** Masukkan nama lengkap pelanggan.`;
+    }
+
+    if (registrationDraft.step === 'customerName') {
+      if (value.length < 3) return 'Nama pelanggan minimal 3 karakter.';
+      setRegistrationDraft({ ...registrationDraft, step: 'phone', customerName: value.toUpperCase() });
+      return `Nama pelanggan: **${value.toUpperCase()}**\n\nMasukkan nomor telepon pelanggan.`;
+    }
+
+    if (registrationDraft.step === 'phone') {
+      const phone = value.replace(/\D/g, '');
+      if (phone.length < 8) return 'Nomor telepon belum valid. Masukkan minimal 8 angka.';
+      setRegistrationDraft({ ...registrationDraft, step: 'vehicle', phone });
+      return `**Langkah 3/4:** Masukkan data kendaraan dalam satu baris.\n\nFormat: **Merek Model Tahun Warna**\nContoh: Toyota Avanza 2020 Putih`;
+    }
+
+    if (registrationDraft.step === 'vehicle') {
+      const year = value.match(/\b(19|20)\d{2}\b/)?.[0];
+      if (!year || value.replace(year, '').trim().split(/\s+/).length < 2) {
+        return 'Data kendaraan belum lengkap. Gunakan format: **Merek Model Tahun Warna**.';
+      }
+      setRegistrationDraft({ ...registrationDraft, step: 'complaint', vehicleInfo: value });
+      return `Data kendaraan diterima: **${value}**\n\n**Langkah 4/4:** Jelaskan keluhan atau layanan yang dibutuhkan.`;
+    }
+
+    if (value.length < 3) return 'Keluhan terlalu singkat. Jelaskan kondisi kendaraan atau layanan yang dibutuhkan.';
+    const action = {
+      action: 'create_wo',
+      customerName: registrationDraft.customerName,
+      phone: registrationDraft.phone,
+      plateNumber: registrationDraft.plateNumber,
+      vehicleInfo: registrationDraft.vehicleInfo,
+      description: value,
+      services: [{ name: 'CEK AC', price: 0, qty: 1 }],
+    };
+    setPendingAction(action);
+    setPendingBranchId(currentBranchId === 'ALL' ? '' : currentBranchId);
+    setRegistrationDraft(null);
+    return `Data registrasi sudah lengkap.\n\n- Pelanggan: **${action.customerName}**\n- Telepon: ${action.phone}\n- Plat: **${action.plateNumber}**\n- Kendaraan: ${action.vehicleInfo}\n- Keluhan: ${action.description}\n- Layanan awal: **CEK AC (gratis)**\n\nPilih cabang lalu tekan **Konfirmasi & Buat WO**.`;
+  };
+
   const buildSmartContext = (userMsgText: string): string => {
     const parts: string[] = [];
     const today = new Date().toISOString().split('T')[0];
@@ -450,12 +536,15 @@ ATURAN:
 - Bahasa Indonesia, ringkas, gunakan **tebal** untuk angka & poin penting.
 - Gunakan DATA di bawah sebagai kebenaran. Jangan mengarang data.
 - Kalau data tidak muncul di bawah, minta user memperjelas (sebut nama/plat/kode barang).
+- Kata pemicu "cek" hanya untuk membaca data dan riwayat. Jangan pernah membuat transaksi dari perintah "cek".
+- Hanya boleh menyiapkan pembuatan WO jika pesan dimulai dengan "reg wo".
+- Kalau user meminta membuat WO tanpa awalan "reg wo", minta user mengetik ulang dengan format "reg wo ...".
 
 NAMA PELANGGAN/KENDARAAN:
 - Selalu pakai nama/plat PERSIS seperti di DATA. Jangan diubah atau ditebak.
 - Kalau user sebut nama/plat yang mirip tapi tidak persis sama, tampilkan semua kemungkinan & minta konfirmasi.
 
-MEMBUAT WO:
+MEMBUAT WO (HANYA UNTUK PESAN YANG DIMULAI "reg wo"):
 Kalau user minta buat WO tanpa menyebut layanan, OTOMATIS tambahkan default:
   {"name":"CEK AC","price":0,"qty":1}
 Ini adalah pengecekan gratis. Jangan tanya layanan kalau sudah ada keluhan yang jelas.
@@ -601,6 +690,31 @@ ${buildSmartContext(userMsgText)}`;
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || busy) return;
+    const lowerContent = content.toLowerCase();
+
+    if (registrationDraft || lowerContent === 'reg wo' || lowerContent === 'ulang') {
+      const reply = registrationDraft ? continueRegistrationWizard(content) : startRegistrationWizard();
+      setInput('');
+      setMessages(history => [
+        ...history,
+        { role: 'user', content, time: now() },
+        { role: 'assistant', content: reply, time: now() },
+      ]);
+      return;
+    }
+
+    if (lowerContent === 'batal' && pendingAction) {
+      setPendingAction(null);
+      setPendingBranchId('');
+      setInput('');
+      setMessages(history => [
+        ...history,
+        { role: 'user', content, time: now() },
+        { role: 'assistant', content: 'Pembuatan WO dibatalkan. Tidak ada transaksi yang disimpan.', time: now() },
+      ]);
+      return;
+    }
+
     const vehicleHistoryReply = buildVehicleHistoryReply(content);
     const customerLookupReply = vehicleHistoryReply ? null : buildCustomerLookupReply(content);
     const localLookupReply = vehicleHistoryReply || customerLookupReply;
@@ -744,9 +858,10 @@ ${buildSmartContext(userMsgText)}`;
   };
 
   const chips = [
-    'Sebutkan semua pelanggan & kendaraannya',
+    'cek DD',
+    'cek nama pelanggan',
+    'reg wo',
     'Barang apa saja yang stoknya menipis?',
-    'Buatkan WO untuk DD1486QZ, AC tidak dingin, flushing + isi freon',
     'Berapa harga jasa flushing AC?',
     'Rekap pendapatan & piutang',
   ];
