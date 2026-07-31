@@ -162,20 +162,6 @@ export default function Layout() {
       <aside
         className={`${sidebarOpen ? 'w-64' : 'w-16'} relative z-50 hidden flex-shrink-0 flex-col bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900 text-white transition-all duration-300 lg:flex`}
       >
-        <div className="border-b border-blue-700/50 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500">
-              <Wrench className="h-5 w-5 text-white" />
-            </div>
-            {sidebarOpen && (
-              <div>
-                <h1 className="text-sm font-bold">DOKTER AC MOBIL</h1>
-                <p className="text-xs text-blue-300">Management System</p>
-              </div>
-            )}
-          </div>
-        </div>
-
         <nav className="flex-1 overflow-y-auto py-4">
           {hasPermission('dashboard:view') && (
             <NavLink to="/" title={!sidebarOpen ? 'Dashboard' : undefined} className={`mx-2 flex items-center gap-3 rounded-lg px-4 py-3 transition-all ${location.pathname === '/' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-blue-200 hover:bg-blue-700/50 hover:text-white'}`}>
@@ -250,6 +236,15 @@ export default function Layout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className={`${location.pathname === '/' ? 'hidden lg:flex' : 'flex'} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3`}>
+          <div className="hidden items-center gap-3 lg:flex">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
+              <Wrench className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-gray-900">DOKTER AC MOBIL</h1>
+              <p className="text-xs text-gray-500">Management System</p>
+            </div>
+          </div>
           <div className="flex min-w-0 items-center gap-2 sm:gap-4 lg:hidden">
             {/* Kembali ke dashboard mobile; menu lama tidak digunakan lagi. */}
             <button
