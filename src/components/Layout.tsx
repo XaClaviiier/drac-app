@@ -105,10 +105,6 @@ export default function Layout() {
   const isAll = currentBranchId === 'ALL';
   const currentBranch = isAll ? null : data.branches.find((b) => b.id === currentBranchId);
 
-  const todayInvoices = data.invoices.filter(
-    (inv) => inv.date === new Date().toISOString().split('T')[0] && (isAll ? true : inv.branchId === currentBranchId)
-  );
-  const todayRevenue = todayInvoices.reduce((sum, inv) => sum + inv.payment, 0);
   const visibleNavItems = navItems.filter((item) => hasPermission(item.perm));
 
   const getPageTitle = () => {
@@ -481,10 +477,6 @@ export default function Layout() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-white">{currentUser?.name}</p>
                 <p className="text-xs text-blue-200">{currentUser?.roleName}</p>
-              </div>
-              <div className="rounded-lg bg-green-500/20 px-2.5 py-1.5 text-right">
-                <p className="text-[10px] text-green-300">Hari Ini</p>
-                <p className="text-xs font-bold text-green-100">Rp {(todayRevenue / 1000).toFixed(0)}rb</p>
               </div>
             </div>
 

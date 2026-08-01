@@ -17,6 +17,9 @@ export default function Dashboard() {
   const { data, currentUser, currentBranchId, setCurrentBranchId, hasPermission } = useApp();
 
   const canSeeAllBranches = hasPermission('all_branches');
+  const canViewFinancialSummary = Boolean(
+    currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('report:view')
+  );
   const isAll = currentBranchId === 'ALL';
 
   // Build branch filter
@@ -42,7 +45,9 @@ export default function Dashboard() {
     .slice(0, 5);
 
   const statCards = [
-    { title: 'Total Pendapatan', value: `Rp ${totalRevenue.toLocaleString('id-ID')}`, icon: TrendingUp, color: 'from-green-500 to-emerald-600' },
+    canViewFinancialSummary
+      ? { title: 'Total Pendapatan', value: `Rp ${totalRevenue.toLocaleString('id-ID')}`, icon: TrendingUp, color: 'from-green-500 to-emerald-600' }
+      : { title: 'WO Selesai', value: branchWOs.filter((w) => w.status === 'Selesai').length.toString(), icon: CheckCircle2, color: 'from-green-500 to-emerald-600' },
     { title: 'Kendaraan Terdaftar', value: branchVehicles.length.toString(), icon: Car, color: 'from-blue-500 to-indigo-600' },
     { title: 'Total Pelanggan', value: branchCustomers.length.toString(), icon: Users, color: 'from-purple-500 to-violet-600' },
     { title: 'Order Kerja Aktif', value: branchWOs.filter((w) => w.status !== 'Selesai' && w.status !== 'Dibayar').length.toString(), icon: Wrench, color: 'from-orange-500 to-red-600' },
@@ -178,7 +183,7 @@ export default function Dashboard() {
       </div>
 
       {/* ===== TODAY SUMMARY ===== */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-4 ${canViewFinancialSummary ? 'md:grid-cols-3' : ''}`}>
         <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 p-5 text-white">
           <div className="mb-2 flex items-center gap-2 text-blue-100">
             <FileText className="h-4 w-4" /><span className="text-sm">Faktur Hari Ini</span>
@@ -186,24 +191,24 @@ export default function Dashboard() {
           <p className="text-3xl font-bold">{todayInvoices.length}</p>
           <p className="mt-1 text-sm text-blue-100">Transaksi</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 p-5 text-white">
+        {canViewFinancialSummary && <div className="rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 p-5 text-white">
           <div className="mb-2 flex items-center gap-2 text-green-100">
             <TrendingUp className="h-4 w-4" /><span className="text-sm">Pendapatan Hari Ini</span>
           </div>
           <p className="text-2xl font-bold">Rp {todayRevenue.toLocaleString('id-ID')}</p>
           <p className="mt-1 text-sm text-green-100">Total pembayaran</p>
-        </div>
-        <div className="rounded-xl bg-gradient-to-br from-red-500 to-orange-600 p-5 text-white">
+        </div>}
+        {canViewFinancialSummary && <div className="rounded-xl bg-gradient-to-br from-red-500 to-orange-600 p-5 text-white">
           <div className="mb-2 flex items-center gap-2 text-red-100">
             <AlertCircle className="h-4 w-4" /><span className="text-sm">Piutang Belum Lunas</span>
           </div>
           <p className="text-2xl font-bold">Rp {pendingTotal.toLocaleString('id-ID')}</p>
           <p className="mt-1 text-sm text-red-100">{pendingPayments.length} faktur</p>
-        </div>
+        </div>}
       </div>
 
       {/* ===== PER-BRANCH BREAKDOWN (Admin All mode) ===== */}
-      {canSeeAllBranches && isAll && (
+      {canViewFinancialSummary && canSeeAllBranches && isAll && (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
             <Building2 className="h-5 w-5 text-blue-600" /> Ringkasan per Cabang

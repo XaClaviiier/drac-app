@@ -9,8 +9,8 @@ export default function MobileDashboard(){
   const isAll=currentBranchId==='ALL'; const activeBranch=data.branches.find(b=>b.id===currentBranchId);
   const filter=<T extends {branchId:string}>(items:T[])=>items.filter(i=>isAll||i.branchId===currentBranchId);
   const today=new Date().toISOString().slice(0,10); const invoices=filter(data.invoices); const workOrders=filter(data.workOrders);
-  const todayInvoices=invoices.filter(i=>i.date===today); const revenue=todayInvoices.reduce((s,i)=>s+i.payment,0);
-  const orderNew=workOrders.filter(w=>w.status==='Pengecekan').length; const orderProcess=workOrders.filter(w=>w.status==='Proses').length;
+  const todayInvoices=invoices.filter(i=>i.date===today);
+  const orderNew=workOrders.filter(w=>w.status==='Pengecekan').length; const orderProcess=workOrders.filter(w=>w.status==='Proses').length; const orderDone=workOrders.filter(w=>w.status==='Selesai').length;
   const lowStock=data.items.filter(i=>i.type==='Persediaan'&&i.stock<=0).length;
   const goTransaction=(path:string)=>{if(isAll){setBranchesOpen(true);alert('Pilih cabang terlebih dahulu untuk membuat transaksi.');return}navigate(path)};
   const menus=[
@@ -41,10 +41,9 @@ export default function MobileDashboard(){
       <section className="mt-5 flex items-center gap-3 rounded-3xl border border-white/10 bg-white/[.07] p-4 shadow-xl">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-purple-700 text-xl font-bold">{currentUser?.name?.[0]}</div>
         <div className="min-w-0 flex-1"><p className="truncate font-bold">{currentUser?.name}</p><p className="text-sm text-slate-300">{currentUser?.roleName}</p></div>
-        <div className="rounded-2xl bg-emerald-500/20 px-3 py-2 text-right"><p className="text-xs text-emerald-300">Hari Ini</p><p className="font-bold text-emerald-100">Rp {shortMoney(revenue)}</p></div>
       </section>
       <section className="mt-4 grid grid-cols-4 divide-x divide-white/10 rounded-3xl border border-white/10 bg-white/[.07] p-3">
-        {[[orderNew,'Order Baru'],[orderProcess,'Dalam Proses'],[todayInvoices.length,'Faktur Hari Ini'],[shortMoney(revenue),'Pendapatan']].map(([v,l])=><div key={String(l)} className="px-1 text-center"><p className="text-lg font-bold">{v}</p><p className="mt-1 text-[10px] leading-tight text-slate-300">{l}</p></div>)}
+        {[[orderNew,'Order Baru'],[orderProcess,'Dalam Proses'],[orderDone,'Selesai'],[todayInvoices.length,'Faktur Hari Ini']].map(([v,l])=><div key={String(l)} className="px-1 text-center"><p className="text-lg font-bold">{v}</p><p className="mt-1 text-[10px] leading-tight text-slate-300">{l}</p></div>)}
       </section>
       <section className="mt-4 grid grid-cols-2 gap-3"><button onClick={()=>goTransaction('/workorders')} className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-400 to-orange-600 py-4 font-bold shadow-lg shadow-orange-900/20"><Wrench/>Buat WO</button><button onClick={()=>goTransaction('/invoices')} className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-400 to-green-600 py-4 font-bold shadow-lg shadow-green-900/20"><FileText/>Buat Faktur</button></section>
       <section className="mt-4 grid grid-cols-3 gap-3">{menus.filter(m=>hasPermission(m[5] as any)).map(([label,sub,Icon,path,color])=><button key={label} onClick={()=>path==='#more'?setMoreOpen(true):navigate(path)} className="relative flex min-h-36 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[.07] p-2 active:scale-95"><div className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${color} shadow-lg`}><Icon className="h-7 w-7"/></div>{label==='Order'&&orderNew>0&&<Badge value={orderNew}/>} {label==='Barang'&&lowStock>0&&<Badge value={lowStock}/>}<p className="mt-3 text-sm font-bold">{label}</p><p className="text-[10px] text-slate-400">{sub}</p></button>)}</section>
@@ -55,4 +54,3 @@ export default function MobileDashboard(){
 }
 function Badge({value}:{value:number}){return <span className="absolute right-3 top-3 min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold">{value>99?'99+':value}</span>}
 function Bottom({icon:Icon,label,active,onClick}:{icon:any;label:string;active?:boolean;onClick:()=>void}){return <button onClick={onClick} className={`flex w-14 flex-col items-center gap-1 py-1 text-[10px] ${active?'text-sky-400':'text-slate-400'}`}><Icon className="h-5 w-5"/>{label}</button>}
-function shortMoney(value:number){if(value>=1_000_000)return `${(value/1_000_000).toFixed(value%1_000_000?1:0)}jt`;if(value>=1_000)return `${Math.round(value/1_000)}rb`;return value.toLocaleString('id-ID')}
