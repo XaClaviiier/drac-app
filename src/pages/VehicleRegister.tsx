@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Car, X, Save, Filter, Database, Power } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Car, X, Save, Database, Power } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Vehicle } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -17,8 +17,6 @@ export default function VehicleRegister() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
   const [filterModel, setFilterModel] = useState('');
-  const [filterColor, setFilterColor] = useState('');
-  const [filterYear, setFilterYear] = useState('');
   const [masterOpen, setMasterOpen] = useState(false);
   const [masterTab, setMasterTab] = useState<'brand' | 'color'>('brand');
   const [catalog, setCatalog] = useState<{ brands: CatalogBrand[]; colors: CatalogColor[] }>({ brands: [], colors: [] });
@@ -91,11 +89,9 @@ export default function VehicleRegister() {
         v.model.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesBrand = !filterBrand || v.brand === filterBrand;
       const matchesModel = !filterModel || v.model === filterModel;
-      const matchesColor = !filterColor || v.color === filterColor;
-      const matchesYear = !filterYear || String(v.year) === filterYear;
-      return matchesSearch && matchesBrand && matchesModel && matchesColor && matchesYear;
+      return matchesSearch && matchesBrand && matchesModel;
     });
-  }, [data.vehicles, searchTerm, filterBrand, filterModel, filterColor, filterYear]);
+  }, [data.vehicles, searchTerm, filterBrand, filterModel]);
 
   const resetForm = () => {
     setFormData({
@@ -206,35 +202,11 @@ export default function VehicleRegister() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Register Kendaraan</h2>
-          <p className="text-gray-500 mt-1">Kelola data kendaraan pelanggan bengkel AC mobil</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-        {canManageCatalog && (
-          <button onClick={() => { setMasterOpen(true); void loadCatalog(); }} className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2.5 font-medium text-blue-700 hover:bg-blue-50">
-            <Database className="h-5 w-5" /> Master Kendaraan
-          </button>
-        )}
-        {hasPermission('vehicle:create') && (
-          <button
-            onClick={() => handleOpenModal()}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
-          >
-            <Plus className="w-5 h-5" />
-            Tambah Kendaraan
-          </button>
-        )}
-        </div>
-      </div>
-
-      {/* Filters */}
+    <div className="space-y-3">
+      {/* Toolbar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div className="flex-1 relative">
+        <div className="flex items-center gap-3 overflow-x-auto">
+          <div className="relative min-w-[280px] flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
@@ -244,57 +216,26 @@ export default function VehicleRegister() {
               className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-400 flex-shrink-0" />
-            <select
-              value={filterBrand}
-              onChange={(e) => setFilterBrand(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-            >
-              <option value="">Semua Merek</option>
-              {[...new Set(data.vehicles.map(vehicle => vehicle.brand))].sort().map((brand) => (
-                <option key={brand} value={brand}>{brand}</option>
-              ))}
-            </select>
-          </div>
-          <select value={filterModel} onChange={e => setFilterModel(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white">
+          <select value={filterBrand} onChange={(e) => { setFilterBrand(e.target.value); setFilterModel(''); }} className="min-w-[150px] px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
+            <option value="">Semua Merek</option>
+            {[...new Set(data.vehicles.map(vehicle => vehicle.brand))].sort().map((brand) => (
+              <option key={brand} value={brand}>{brand}</option>
+            ))}
+          </select>
+          <select value={filterModel} onChange={e => setFilterModel(e.target.value)} className="min-w-[170px] px-3 py-2.5 border border-gray-300 rounded-lg bg-white">
             <option value="">Semua Tipe</option>
             {[...new Set(data.vehicles.filter(v => !filterBrand || v.brand === filterBrand).map(v => v.model))].sort().map(model => <option key={model} value={model}>{model}</option>)}
           </select>
-          <select value={filterColor} onChange={e => setFilterColor(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white">
-            <option value="">Semua Warna</option>
-            {[...new Set(data.vehicles.map(v => v.color))].sort().map(color => <option key={color} value={color}>{color}</option>)}
-          </select>
-          <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white">
-            <option value="">Semua Tahun</option>
-            {[...new Set(data.vehicles.map(v => v.year))].sort((a, b) => b - a).map(year => <option key={year} value={year}>{year}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Total Kendaraan</p>
-          <p className="text-2xl font-bold text-gray-900">{data.vehicles.length}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Toyota</p>
-          <p className="text-2xl font-bold text-blue-600">
-            {data.vehicles.filter((v) => v.brand === 'Toyota').length}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Honda</p>
-          <p className="text-2xl font-bold text-red-600">
-            {data.vehicles.filter((v) => v.brand === 'Honda').length}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Suzuki</p>
-          <p className="text-2xl font-bold text-green-600">
-            {data.vehicles.filter((v) => v.brand === 'Suzuki').length}
-          </p>
+          {canManageCatalog && (
+            <button onClick={() => { setMasterOpen(true); void loadCatalog(); }} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2.5 font-medium text-blue-700 hover:bg-blue-50">
+              <Database className="h-5 w-5" /> Master Kendaraan
+            </button>
+          )}
+          {hasPermission('vehicle:create') && (
+            <button onClick={() => handleOpenModal()} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
+              <Plus className="h-5 w-5" /> Tambah Kendaraan
+            </button>
+          )}
         </div>
       </div>
 
