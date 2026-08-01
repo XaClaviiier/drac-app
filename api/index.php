@@ -61,6 +61,9 @@ try {
         case 'vehicles':
             require 'endpoints/vehicles.php';
             break;
+        case 'vehicle-catalog':
+            require 'endpoints/vehicle-catalog.php';
+            break;
 
         // ----- SUPPLIERS -----
         case 'suppliers':

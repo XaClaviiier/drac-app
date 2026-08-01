@@ -1,12 +1,17 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Car, X, Save, Filter } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Plus, Search, Edit, Trash2, Car, X, Save, Filter, Database, Power } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Vehicle } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
+import { api } from '../lib/apiClient';
+
+type CatalogModel = { id: string; name: string; isActive: boolean; brandId: string };
+type CatalogBrand = { id: string; name: string; isActive: boolean; models: CatalogModel[] };
+type CatalogColor = { id: string; name: string; isActive: boolean };
 
 export default function VehicleRegister() {
-  const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission } = useApp();
+  const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission, currentUser } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,6 +19,46 @@ export default function VehicleRegister() {
   const [filterModel, setFilterModel] = useState('');
   const [filterColor, setFilterColor] = useState('');
   const [filterYear, setFilterYear] = useState('');
+  const [masterOpen, setMasterOpen] = useState(false);
+  const [masterTab, setMasterTab] = useState<'brand' | 'color'>('brand');
+  const [catalog, setCatalog] = useState<{ brands: CatalogBrand[]; colors: CatalogColor[] }>({ brands: [], colors: [] });
+  const [selectedBrandId, setSelectedBrandId] = useState('');
+  const [newBrand, setNewBrand] = useState('');
+  const [newModel, setNewModel] = useState('');
+  const [newColor, setNewColor] = useState('');
+  const canManageCatalog = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator');
+
+  const loadCatalog = async () => {
+    const response = await api.get('vehicle-catalog');
+    if (response.success && response.data) {
+      const next = response.data as { brands: CatalogBrand[]; colors: CatalogColor[] };
+      setCatalog(next);
+      setSelectedBrandId(current => current && next.brands.some(brand => brand.id === current) ? current : (next.brands[0]?.id || ''));
+    }
+  };
+
+  useEffect(() => { void loadCatalog(); }, []);
+
+  const createCatalogItem = async (entity: 'brand' | 'model' | 'color', name: string, brandId?: string) => {
+    if (!name.trim()) return;
+    const response = await api.create('vehicle-catalog', { entity, name: name.trim(), brandId });
+    if (!response.success) { window.alert(response.message || 'Gagal menambahkan master kendaraan.'); return; }
+    setNewBrand(''); setNewModel(''); setNewColor(''); await loadCatalog();
+  };
+
+  const editCatalogItem = async (entity: 'brand' | 'model' | 'color', item: CatalogBrand | CatalogModel | CatalogColor) => {
+    const name = window.prompt('Ubah nama:', item.name)?.trim();
+    if (!name || name === item.name) return;
+    const response = await api.update('vehicle-catalog', item.id, { entity, name, isActive: item.isActive });
+    if (!response.success) { window.alert(response.message || 'Gagal mengubah master kendaraan.'); return; }
+    await loadCatalog();
+  };
+
+  const toggleCatalogItem = async (entity: 'brand' | 'model' | 'color', item: CatalogBrand | CatalogModel | CatalogColor) => {
+    const response = await api.update('vehicle-catalog', item.id, { entity, name: item.name, isActive: !item.isActive });
+    if (!response.success) { window.alert(response.message || 'Gagal mengubah status master kendaraan.'); return; }
+    await loadCatalog();
+  };
 
   const [formData, setFormData] = useState({
     plateNumber: '',
@@ -27,6 +72,12 @@ export default function VehicleRegister() {
     address: '',
     notes: '',
   });
+  const catalogBrandNames = catalog.brands.length ? catalog.brands.filter(brand => brand.isActive).map(brand => brand.name) : vehicleBrands;
+  const catalogModelNames = catalog.brands.length
+    ? (catalog.brands.find(brand => brand.name === formData.brand)?.models || []).filter(model => model.isActive).map(model => model.name)
+    : (vehicleModels[formData.brand] || []);
+  const catalogColorNames = catalog.colors.length ? catalog.colors.filter(color => color.isActive).map(color => color.name) : vehicleColors;
+  const selectedCatalogBrand = catalog.brands.find(brand => brand.id === selectedBrandId);
 
   const filteredVehicles = useMemo(() => {
     // Kendaraan bersifat GLOBAL — tampil di semua cabang
@@ -162,6 +213,12 @@ export default function VehicleRegister() {
           <h2 className="text-2xl font-bold text-gray-900">Register Kendaraan</h2>
           <p className="text-gray-500 mt-1">Kelola data kendaraan pelanggan bengkel AC mobil</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+        {canManageCatalog && (
+          <button onClick={() => { setMasterOpen(true); void loadCatalog(); }} className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2.5 font-medium text-blue-700 hover:bg-blue-50">
+            <Database className="h-5 w-5" /> Master Kendaraan
+          </button>
+        )}
         {hasPermission('vehicle:create') && (
           <button
             onClick={() => handleOpenModal()}
@@ -171,6 +228,7 @@ export default function VehicleRegister() {
             Tambah Kendaraan
           </button>
         )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -326,6 +384,48 @@ export default function VehicleRegister() {
         </div>
       </div>
 
+      {/* Master Merek, Tipe, dan Warna */}
+      {masterOpen && canManageCatalog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div><h3 className="text-lg font-bold text-gray-900">Master Kendaraan</h3><p className="text-sm text-gray-500">Kelola pilihan yang digunakan pada form kendaraan.</p></div>
+              <button onClick={() => setMasterOpen(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="flex border-b border-blue-600 bg-gray-100 px-2 pt-2">
+              <button onClick={() => setMasterTab('brand')} className={`rounded-t-md border border-b-0 px-5 py-2.5 text-sm font-semibold ${masterTab === 'brand' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600'}`}>Merek &amp; Tipe</button>
+              <button onClick={() => setMasterTab('color')} className={`ml-1 rounded-t-md border border-b-0 px-5 py-2.5 text-sm font-semibold ${masterTab === 'color' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600'}`}>Warna</button>
+            </div>
+            <div className="max-h-[65vh] overflow-y-auto p-5">
+              {masterTab === 'brand' ? (
+                <div className="grid gap-5 md:grid-cols-2">
+                  <section>
+                    <h4 className="mb-3 font-semibold text-gray-900">Daftar Merek</h4>
+                    <div className="mb-3 flex gap-2"><input value={newBrand} onChange={event => setNewBrand(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void createCatalogItem('brand', newBrand); }} placeholder="Merek baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2" /><button onClick={() => void createCatalogItem('brand', newBrand)} className="rounded-lg bg-blue-600 px-3 text-white"><Plus className="h-4 w-4" /></button></div>
+                    <div className="space-y-2">
+                      {catalog.brands.map(brand => <div key={brand.id} className={`flex items-center rounded-lg border p-2 ${selectedBrandId === brand.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}><button onClick={() => setSelectedBrandId(brand.id)} className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${brand.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{brand.name}</button><button onClick={() => void editCatalogItem('brand', brand)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button><button onClick={() => void toggleCatalogItem('brand', brand)} title={brand.isActive ? 'Nonaktifkan' : 'Aktifkan'} className={`p-2 ${brand.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button></div>)}
+                    </div>
+                  </section>
+                  <section>
+                    <h4 className="mb-3 font-semibold text-gray-900">Tipe {selectedCatalogBrand ? `— ${selectedCatalogBrand.name}` : ''}</h4>
+                    <div className="mb-3 flex gap-2"><input disabled={!selectedCatalogBrand} value={newModel} onChange={event => setNewModel(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && selectedCatalogBrand) void createCatalogItem('model', newModel, selectedCatalogBrand.id); }} placeholder="Tipe/model baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100" /><button disabled={!selectedCatalogBrand} onClick={() => selectedCatalogBrand && void createCatalogItem('model', newModel, selectedCatalogBrand.id)} className="rounded-lg bg-blue-600 px-3 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button></div>
+                    <div className="space-y-2">
+                      {(selectedCatalogBrand?.models || []).map(model => <div key={model.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${model.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{model.name}</span><button onClick={() => void editCatalogItem('model', model)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button><button onClick={() => void toggleCatalogItem('model', model)} className={`p-2 ${model.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button></div>)}
+                    </div>
+                  </section>
+                </div>
+              ) : (
+                <section className="mx-auto max-w-xl">
+                  <h4 className="mb-3 font-semibold text-gray-900">Daftar Warna</h4>
+                  <div className="mb-3 flex gap-2"><input value={newColor} onChange={event => setNewColor(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void createCatalogItem('color', newColor); }} placeholder="Warna baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2" /><button onClick={() => void createCatalogItem('color', newColor)} className="rounded-lg bg-blue-600 px-3 text-white"><Plus className="h-4 w-4" /></button></div>
+                  <div className="grid gap-2 sm:grid-cols-2">{catalog.colors.map(color => <div key={color.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${color.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{color.name}</span><button onClick={() => void editCatalogItem('color', color)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button><button onClick={() => void toggleCatalogItem('color', color)} className={`p-2 ${color.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button></div>)}</div>
+                </section>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -378,7 +478,7 @@ export default function VehicleRegister() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     />
                     <datalist id="vehicle-brand-options">
-                      {vehicleBrands.map((brand) => (
+                      {catalogBrandNames.map((brand) => (
                         <option key={brand} value={brand}>{brand}</option>
                       ))}
                     </datalist>
@@ -397,7 +497,7 @@ export default function VehicleRegister() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100"
                     />
                     <datalist id="vehicle-model-options">
-                      {(vehicleModels[formData.brand] || []).map(model => (
+                      {catalogModelNames.map(model => (
                         <option key={model} value={model}>{model}</option>
                       ))}
                     </datalist>
@@ -428,7 +528,7 @@ export default function VehicleRegister() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     />
                     <datalist id="vehicle-color-options">
-                      {vehicleColors.map(color => <option key={color} value={color} />)}
+                      {catalogColorNames.map(color => <option key={color} value={color} />)}
                     </datalist>
                   </div>
                 </div>
