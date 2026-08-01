@@ -200,14 +200,7 @@ export default function UsersAndRoles() {
     || permissionModules[0];
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Pengguna & Akses</h2>
-          <p className="mt-1 text-gray-500">Kelola user, grup akses (role), dan data cabang.</p>
-        </div>
-      </div>
-
+    <div className="space-y-3 lg:-mt-5">
       {/* Tabs */}
       <div className="flex gap-2 border-b border-gray-200">
         {[

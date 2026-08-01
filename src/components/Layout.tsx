@@ -4,11 +4,20 @@ import {
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
   ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
-  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle,
+  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Hammer,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_QUEUE_EVENT, SystemProcess, clearFinishedSystemProcesses, readProcessQueue } from '../lib/processQueue';
+
+function CrossedToolsIcon({ className = '' }: { className?: string }) {
+  return (
+    <span className={`relative inline-block ${className}`} aria-hidden="true">
+      <Wrench className="absolute left-0 top-0.5 h-[82%] w-[82%] rotate-45" />
+      <Hammer className="absolute right-0 top-0.5 h-[82%] w-[82%] -rotate-45" />
+    </span>
+  );
+}
 
 const navItems = [
   { path: '/', label: 'Dashboard', short: 'Home', icon: LayoutDashboard, perm: 'dashboard:view' as const, color: 'from-blue-500 to-indigo-600' },
@@ -51,7 +60,7 @@ const desktopGroups = [
     { label: 'Penerimaan Lain', icon: CreditCard, tone: 'green' }, { label: 'Pengeluaran', icon: CreditCard, tone: 'orange' },
     { label: 'Setoran Cabang', icon: ArrowLeftRight, tone: 'blue' }, { label: 'Verifikasi Setoran', icon: Shield, tone: 'purple' },
   ]},
-  { id: 'sales', label: 'WORK ORDER', icon: CreditCard, items: [
+  { id: 'sales', label: 'WORK ORDER', icon: CrossedToolsIcon, items: [
     { label: 'Order Kerja', path: '/workorders', icon: Wrench, perm: 'wo:view', tone: 'green' },
     { label: 'Faktur Penjualan', path: '/invoices', icon: FileText, perm: 'invoice:view', tone: 'green' },
     { label: 'Pembayaran Pelanggan', icon: Banknote, tone: 'green' }, { label: 'Piutang Pelanggan', icon: CreditCard, tone: 'green' },
