@@ -882,9 +882,9 @@ export default function WorkOrders() {
       {/* Desktop Work Order List */}
       {filteredWOs.length > 0 && (
         <div className="mx-3 mt-0.5 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
-          <div className="overflow-x-auto">
+          <div className="max-h-[calc(100vh-285px)] overflow-auto">
             <table className="w-full min-w-[1100px] text-left">
-              <thead className="bg-blue-800 text-xs uppercase tracking-wide text-white">
+              <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
                   <th className="px-4 py-3 font-semibold">No. WO / Tanggal</th>
                   <th className="px-4 py-3 font-semibold">Pelanggan</th>

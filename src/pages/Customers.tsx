@@ -204,9 +204,9 @@ export default function Customers() {
       {/* Desktop Customer Table */}
       {filteredCustomers.length > 0 && (
         <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
-          <div className="overflow-x-auto">
+          <div className="max-h-[calc(100vh-245px)] overflow-auto">
             <table className="w-full min-w-[1050px] text-left">
-              <thead className="bg-blue-800 text-xs uppercase tracking-wide text-white">
+              <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
                   {visibleColumns.includes('name') && <th className="px-4 py-3 font-semibold">Kode / Nama Pelanggan</th>}
                   {visibleColumns.includes('phone') && <th className="px-4 py-3 font-semibold">No. Telepon</th>}

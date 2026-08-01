@@ -957,9 +957,9 @@ export default function ItemsAndServices() {
             )}
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[calc(100vh-420px)] overflow-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-r from-blue-800 to-blue-900 text-white">
+            <thead className="sticky top-0 z-10 bg-gradient-to-r from-blue-800 to-blue-900 text-white">
               <tr>
                 <th colSpan={9} className="p-0">
                   <div className="flex items-center text-xs font-medium uppercase tracking-wider">

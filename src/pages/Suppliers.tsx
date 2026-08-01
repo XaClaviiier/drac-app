@@ -88,7 +88,7 @@ export default function Suppliers() {
       {showForm && <div className="ml-0.5 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white"><span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editing ? `Edit — ${editing.name}` : 'Data Baru'}</span><button type="button" onClick={() => close()} className="mr-1 rounded p-1.5 hover:bg-blue-700"><X className="h-4 w-4" /></button></div>}
     </div>
 
-    <div className={`${showForm ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5`}>
+    <div className={`${showForm ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5 lg:[&_.overflow-x-auto]:max-h-[calc(100vh-245px)] lg:[&_.overflow-x-auto]:overflow-auto lg:[&_thead]:sticky lg:[&_thead]:top-0 lg:[&_thead]:z-10`}>
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari kode, nama, kontak, telepon, email..." className="h-9 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" /></div>
         <select value={filterActive} onChange={event => setFilterActive(event.target.value)} className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none"><option value="active">Aktif</option><option value="inactive">Nonaktif</option><option value="all">Semua</option></select>

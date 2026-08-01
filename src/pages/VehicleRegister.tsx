@@ -241,9 +241,9 @@ export default function VehicleRegister() {
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="max-h-[calc(100vh-225px)] overflow-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-r from-blue-800 to-blue-900 text-white">
+            <thead className="sticky top-0 z-10 bg-gradient-to-r from-blue-800 to-blue-900 text-white">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">No. Plat</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Merek/Model</th>
