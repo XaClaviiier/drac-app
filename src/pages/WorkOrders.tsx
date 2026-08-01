@@ -9,18 +9,16 @@ import VehiclePicker from '../components/VehiclePicker';
 
 const DEFAULT_COMPLAINT_TEMPLATES = [
   'AC tidak dingin',
-  'AC kurang dingin',
-  'AC bunyi berisik',
-  'AC berbau tidak sedap',
-  'AC bocor / berembun',
-  'Pengecekan rutin AC',
-  'Service AC lengkap',
-  'Isi freon',
-  'Ganti kompresor AC',
-  'Ganti evaporator',
+  'Berisik',
+  'Berbau',
+  'Freon habis',
+  'Pengecekan rutin',
+  'Lainnya',
 ];
 
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
+const COMPLAINT_TEMPLATE_VERSION_KEY = 'dokterac_complaint_templates_version';
+const COMPLAINT_TEMPLATE_VERSION = '2';
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
   { id: 'fund', label: 'Menyiapkan dana', isActive: true },
@@ -73,6 +71,11 @@ export default function WorkOrders() {
   const [newComplaintTemplate, setNewComplaintTemplate] = useState('');
   const [complaintTemplates, setComplaintTemplates] = useState<string[]>(() => {
     try {
+      if (localStorage.getItem(COMPLAINT_TEMPLATE_VERSION_KEY) !== COMPLAINT_TEMPLATE_VERSION) {
+        localStorage.setItem(COMPLAINT_TEMPLATE_KEY, JSON.stringify(DEFAULT_COMPLAINT_TEMPLATES));
+        localStorage.setItem(COMPLAINT_TEMPLATE_VERSION_KEY, COMPLAINT_TEMPLATE_VERSION);
+        return DEFAULT_COMPLAINT_TEMPLATES;
+      }
       const saved = localStorage.getItem(COMPLAINT_TEMPLATE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -83,6 +86,7 @@ export default function WorkOrders() {
     }
     return DEFAULT_COMPLAINT_TEMPLATES;
   });
+  const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -135,35 +139,45 @@ export default function WorkOrders() {
     const cleaned = [...new Set(next.map(t => t.trim()).filter(Boolean))];
     setComplaintTemplates(cleaned);
     localStorage.setItem(COMPLAINT_TEMPLATE_KEY, JSON.stringify(cleaned));
+    localStorage.setItem(COMPLAINT_TEMPLATE_VERSION_KEY, COMPLAINT_TEMPLATE_VERSION);
   };
 
   const addComplaintTemplate = () => {
     const value = newComplaintTemplate.trim();
     if (!value) return;
-    const exists = complaintTemplates.some(t => t.toLowerCase() === value.toLowerCase());
+    const exists = complaintTemplateDraft.some(t => t.trim().toLowerCase() === value.toLowerCase());
     if (exists) {
       window.alert(`Template "${value}" sudah ada.`);
       return;
     }
-    saveComplaintTemplates([...complaintTemplates, value]);
+    setComplaintTemplateDraft(current => [...current, value]);
     setNewComplaintTemplate('');
   };
 
   const updateComplaintTemplate = (index: number, value: string) => {
-    const next = [...complaintTemplates];
-    next[index] = value;
-    saveComplaintTemplates(next);
+    setComplaintTemplateDraft(current => current.map((template, currentIndex) => currentIndex === index ? value : template));
   };
 
   const deleteComplaintTemplate = (index: number) => {
-    const next = complaintTemplates.filter((_, i) => i !== index);
-    saveComplaintTemplates(next.length > 0 ? next : DEFAULT_COMPLAINT_TEMPLATES);
+    setComplaintTemplateDraft(current => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const resetComplaintTemplates = () => {
     if (window.confirm('Kembalikan list keluhan ke template bawaan?')) {
-      saveComplaintTemplates(DEFAULT_COMPLAINT_TEMPLATES);
+      setComplaintTemplateDraft([...DEFAULT_COMPLAINT_TEMPLATES]);
     }
+  };
+
+  const openComplaintEditor = () => {
+    setComplaintTemplateDraft([...complaintTemplates]);
+    setNewComplaintTemplate('');
+    setShowComplaintEditor(true);
+  };
+
+  const finishComplaintEditor = () => {
+    const cleaned = complaintTemplateDraft.map(template => template.trim()).filter(Boolean);
+    saveComplaintTemplates(cleaned.length > 0 ? cleaned : DEFAULT_COMPLAINT_TEMPLATES);
+    setShowComplaintEditor(false);
   };
 
   const [showServiceForm, setShowServiceForm] = useState(false);
@@ -1407,7 +1421,7 @@ export default function WorkOrders() {
                     </label>
                     <button
                       type="button"
-                      onClick={() => setShowComplaintEditor(true)}
+                      onClick={openComplaintEditor}
                       className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
                       title="Edit daftar template keluhan"
                     >
@@ -2053,12 +2067,13 @@ export default function WorkOrders() {
 
               {/* Editable list */}
               <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-2">
-                {complaintTemplates.map((template, index) => (
-                  <div key={`${template}-${index}`} className="flex items-center gap-2 rounded-lg bg-gray-50 p-2">
+                {complaintTemplateDraft.map((template, index) => (
+                  <div key={index} className="flex items-center gap-2 rounded-lg bg-gray-50 p-2">
                     <input
                       type="text"
                       value={template}
                       onChange={(e) => updateComplaintTemplate(index, e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); finishComplaintEditor(); } if (e.key === 'Escape') setShowComplaintEditor(false); }}
                       className="flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                     <button
@@ -2083,7 +2098,7 @@ export default function WorkOrders() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowComplaintEditor(false)}
+                  onClick={finishComplaintEditor}
                   className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   <Save className="h-4 w-4" /> Selesai
