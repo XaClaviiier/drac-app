@@ -4,6 +4,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_brands (
     id VARCHAR(64) NOT NULL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -12,6 +13,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_models (
     brand_id VARCHAR(64) NOT NULL,
     name VARCHAR(100) NOT NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_vehicle_model (brand_id, name),
@@ -21,9 +23,16 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_colors (
     id VARCHAR(64) NOT NULL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+// Menjaga instalasi lama tetap kompatibel tanpa migrasi manual.
+foreach (['vehicle_brands', 'vehicle_models', 'vehicle_colors'] as $catalogTable) {
+    $column = $pdo->query("SHOW COLUMNS FROM {$catalogTable} LIKE 'sort_order'")->fetch();
+    if (!$column) $pdo->exec("ALTER TABLE {$catalogTable} ADD COLUMN sort_order INT NOT NULL DEFAULT 0 AFTER is_active");
+}
 
 $defaults = [
     'Toyota'=>['Agya','Avanza','Calya','Camry','Fortuner','Innova','Raize','Rush','Veloz','Yaris'],
@@ -69,9 +78,9 @@ function requireVehicleCatalogManager(PDO $pdo): array {
 switch ($method) {
     case 'GET':
         requireAuthenticatedUser($pdo);
-        $brands = $pdo->query("SELECT id,name,is_active AS isActive FROM vehicle_brands ORDER BY name")->fetchAll();
-        $models = $pdo->query("SELECT id,brand_id AS brandId,name,is_active AS isActive FROM vehicle_models ORDER BY name")->fetchAll();
-        $colors = $pdo->query("SELECT id,name,is_active AS isActive FROM vehicle_colors ORDER BY name")->fetchAll();
+        $brands = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_brands ORDER BY sort_order,name")->fetchAll();
+        $models = $pdo->query("SELECT id,brand_id AS brandId,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_models ORDER BY sort_order,name")->fetchAll();
+        $colors = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_colors ORDER BY sort_order,name")->fetchAll();
         foreach ($brands as &$brand) {
             $brand['isActive'] = (bool)$brand['isActive'];
             $brand['models'] = array_values(array_filter($models, fn($model) => $model['brandId'] === $brand['id']));
@@ -86,9 +95,9 @@ switch ($method) {
         $d = getInput(); $entity = $d['entity'] ?? ''; $name = trim((string)($d['name'] ?? ''));
         if ($name === '') respondError('Nama wajib diisi', 422);
         try {
-            if ($entity === 'brand') $pdo->prepare("INSERT INTO vehicle_brands(id,name,is_active) VALUES(?,?,1)")->execute([generateId(),$name]);
-            elseif ($entity === 'model') $pdo->prepare("INSERT INTO vehicle_models(id,brand_id,name,is_active) VALUES(?,?,?,1)")->execute([generateId(),$d['brandId'] ?? '',$name]);
-            elseif ($entity === 'color') $pdo->prepare("INSERT INTO vehicle_colors(id,name,is_active) VALUES(?,?,1)")->execute([generateId(),$name]);
+            if ($entity === 'brand') $pdo->prepare("INSERT INTO vehicle_brands(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_brands")->execute([generateId(),$name]);
+            elseif ($entity === 'model') $pdo->prepare("INSERT INTO vehicle_models(id,brand_id,name,is_active,sort_order) SELECT ?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_models WHERE brand_id=?")->execute([generateId(),$d['brandId'] ?? '',$name,$d['brandId'] ?? '']);
+            elseif ($entity === 'color') $pdo->prepare("INSERT INTO vehicle_colors(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_colors")->execute([generateId(),$name]);
             else respondError('Jenis master tidak valid', 422);
         } catch (PDOException $e) { respondError('Nama sudah digunakan atau data induk tidak valid', 409); }
         respondSuccess(null, 'Master kendaraan ditambahkan');
@@ -97,7 +106,23 @@ switch ($method) {
     case 'PUT':
         requireVehicleCatalogManager($pdo);
         if (!$id) respondError('ID required');
-        $d = getInput(); $entity = $d['entity'] ?? ''; $name = trim((string)($d['name'] ?? '')); $active = !empty($d['isActive']) ? 1 : 0;
+        $d = getInput(); $entity = $d['entity'] ?? '';
+        if (($d['action'] ?? '') === 'reorder') {
+            $table = $entity === 'brand' ? 'vehicle_brands' : ($entity === 'model' ? 'vehicle_models' : ($entity === 'color' ? 'vehicle_colors' : ''));
+            $orderedIds = is_array($d['orderedIds'] ?? null) ? $d['orderedIds'] : [];
+            if ($table === '' || !$orderedIds) respondError('Urutan master tidak valid', 422);
+            $pdo->beginTransaction();
+            try {
+                $sort = $pdo->prepare("UPDATE {$table} SET sort_order=? WHERE id=?");
+                foreach ($orderedIds as $index => $orderedId) $sort->execute([($index + 1) * 10, $orderedId]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError('Gagal menyimpan urutan master', 500);
+            }
+            respondSuccess(null, 'Urutan master kendaraan disimpan');
+        }
+        $name = trim((string)($d['name'] ?? '')); $active = !empty($d['isActive']) ? 1 : 0;
         if ($name === '') respondError('Nama wajib diisi', 422);
         $table = $entity === 'brand' ? 'vehicle_brands' : ($entity === 'model' ? 'vehicle_models' : ($entity === 'color' ? 'vehicle_colors' : ''));
         if ($table === '') respondError('Jenis master tidak valid', 422);
