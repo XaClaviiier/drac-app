@@ -13,8 +13,8 @@ import { PROCESS_QUEUE_EVENT, SystemProcess, clearFinishedSystemProcesses, readP
 function CrossedToolsIcon({ className = '' }: { className?: string }) {
   return (
     <span className={`relative inline-block ${className}`} aria-hidden="true">
-      <Wrench className="absolute left-0 top-0.5 h-[82%] w-[82%] rotate-45" />
-      <Hammer className="absolute right-0 top-0.5 h-[82%] w-[82%] -rotate-45" />
+      <Wrench className="absolute bottom-0 left-0 h-4 w-4 rotate-45 stroke-[2.4]" />
+      <Hammer className="absolute right-0 top-0 h-4 w-4 -rotate-45 stroke-[2.4]" />
     </span>
   );
 }
@@ -184,7 +184,7 @@ export default function Layout() {
             const groupPaths = accessibleItems.flatMap(item => item.path ? [item.path] : []);
             const isActive = desktopMenuOpen ? desktopMenuOpen === group.id : groupPaths.includes(location.pathname);
             return (
-              <button key={group.id} type="button" onClick={() => setDesktopMenuOpen(current => current === group.id ? null : group.id)} className={`group relative mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg py-3 text-left transition-all ${sidebarOpen ? 'px-4' : 'justify-center px-0'} ${isActive ? 'bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]' : 'text-white/80 hover:bg-blue-600 hover:text-white'}`}>
+              <button key={group.id} type="button" onClick={() => setDesktopMenuOpen(current => current === group.id ? null : group.id)} className={`group relative mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg py-3 text-left transition-all ${sidebarOpen ? 'px-4' : 'justify-center px-0'} ${isActive ? 'bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]' : 'text-white/80 hover:bg-[#12356b] hover:text-white'}`}>
                 <Icon className="h-6 w-6 flex-shrink-0" />
                 {sidebarOpen && <><span className="flex-1 text-sm font-medium">{group.label}</span><ChevronRight className={`h-4 w-4 transition-transform ${desktopMenuOpen === group.id ? 'rotate-90' : ''}`} /></>}
                 {!sidebarOpen && <span className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-[80] -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-gray-800 opacity-0 shadow-lg transition-all group-hover:translate-x-0 group-hover:opacity-100 before:absolute before:-left-1.5 before:top-1/2 before:h-3 before:w-3 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:border-amber-300 before:bg-amber-50">{group.label}</span>}
