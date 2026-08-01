@@ -4,7 +4,7 @@ import {
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
   ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
-  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Hammer,
+  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
@@ -12,9 +12,8 @@ import { PROCESS_QUEUE_EVENT, SystemProcess, clearFinishedSystemProcesses, readP
 
 function CrossedToolsIcon({ className = '' }: { className?: string }) {
   return (
-    <span className={`relative inline-block ${className}`} aria-hidden="true">
-      <Wrench className="absolute bottom-0 left-0 h-4 w-4 rotate-45 stroke-[2.4]" />
-      <Hammer className="absolute right-0 top-0 h-4 w-4 -rotate-45 stroke-[2.4]" />
+    <span className={`inline-flex items-center justify-center text-[21px] leading-none ${className}`} aria-hidden="true">
+      🛠️
     </span>
   );
 }
