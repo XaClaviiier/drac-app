@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Send, KeyRound, Sparkles, Car, Users, Package,
-  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History,
+  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
@@ -20,6 +20,7 @@ interface ChatMsg {
   error?: boolean;
   time: string;
   action?: { type: string; payload: any };
+  shareText?: string;
 }
 
 interface RegistrationDraft {
@@ -855,7 +856,26 @@ ${buildSmartContext(userMsgText)}`;
     };
     await addWorkOrder(wo);
 
-    return { woNumber, branchName, total, customerName: wo.customerName, plateNumber: wo.plateNumber, servicesCount: services.length };
+    return { woNumber, branchName, total, customerName: wo.customerName, plateNumber: wo.plateNumber, vehicleInfo: wo.vehicleInfo, description: wo.description, date: wo.date, servicesCount: services.length };
+  };
+
+  const shareRegisterToWhatsApp = async (text: string) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Register Servis Baru', text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      window.alert('Teks register sudah disalin. Buka WhatsApp lalu pilih grup tujuan.');
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
+      try {
+        await navigator.clipboard.writeText(text);
+        window.alert('Teks register sudah disalin. Buka WhatsApp lalu pilih grup tujuan.');
+      } catch {
+        window.alert('Gagal membuka menu Bagikan. Salin teks register secara manual.');
+      }
+    }
   };
 
   const send = async (text?: string) => {
@@ -985,9 +1005,11 @@ ${buildSmartContext(userMsgText)}`;
     setBusy(true);
     try {
       const r = await executeCreateWO(pendingAction, pendingBranchId);
+      const shareText = `🔧 REGISTER SERVIS BARU\n\nWO: ${r.woNumber}\nTanggal: ${new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}\nCabang: ${r.branchName.replace('CABANG ', '')}\nPelanggan: ${r.customerName}\nPlat: ${r.plateNumber}\nMobil: ${r.vehicleInfo || '-'}\nKeluhan: ${r.description || '-'}\nStatus: Pengecekan\nInput: ${currentUser?.name || '-'}`;
       setMessages(h => [...h, {
         role: 'assistant',
         time: now(),
+        shareText,
         content: `✅ **Order Kerja berhasil dibuat!**\n\n- Nomor: **${r.woNumber}**\n- Pelanggan: **${r.customerName}**\n- Kendaraan: **${r.plateNumber}**\n- Layanan: **${r.servicesCount} item**\n- Estimasi: **${fmt(r.total)}**\n- Cabang: **${r.branchName}**\n- Status: **Pengecekan** (gratis, menunggu persetujuan pelanggan)\n\nBuka menu Order Kerja untuk melanjutkan.`,
       }]);
     } catch (e: any) {
@@ -1172,6 +1194,11 @@ ${buildSmartContext(userMsgText)}`;
                     }`}
                     dangerouslySetInnerHTML={{ __html: render(msg.content) }}
                   />
+                  {msg.role === 'assistant' && msg.shareText && (
+                    <button type="button" onClick={() => void shareRegisterToWhatsApp(msg.shareText!)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-950/20 hover:bg-emerald-400 active:scale-[0.99]">
+                      <Share2 className="h-5 w-5" /> Bagikan ke Grup WA
+                    </button>
+                  )}
                   <p className={`mt-1 text-[10px] text-slate-500 ${msg.role === 'user' ? 'text-right' : ''}`}>{msg.time}</p>
                 </div>
               </div>
