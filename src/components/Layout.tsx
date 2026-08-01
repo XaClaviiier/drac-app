@@ -397,8 +397,9 @@ export default function Layout() {
             })}
           </div>
           {workspaceTabs.length > 0 && (
-            <select aria-label="Pilih modul yang terbuka" value={location.pathname === '/' ? '/' : location.pathname} onChange={event => navigate(event.target.value)} className="mb-1 ml-2 h-8 max-w-36 rounded border border-gray-300 bg-white px-2 text-xs text-gray-600 outline-none">
-              <option value="/">{workspaceTabs.length + 1} tab terbuka</option>
+            <select aria-label="Pilih modul yang terbuka" title="Pilih tab yang terbuka" value="" onChange={event => event.target.value && navigate(event.target.value)} className="ml-1 h-10 w-16 flex-shrink-0 rounded-t-md border border-b-0 border-gray-300 bg-gray-200 px-2 text-sm text-gray-700 outline-none hover:bg-gray-50">
+              <option value="">{workspaceTabs.length + 1}</option>
+              <option value="/">Dashboard</option>
               {workspaceTabs.map(tab => <option key={tab.path} value={tab.path}>{tab.label}</option>)}
             </select>
           )}
