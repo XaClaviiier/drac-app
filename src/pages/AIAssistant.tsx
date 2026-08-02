@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Send, KeyRound, Sparkles, Car, Users, Package,
-  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2, Building2,
+  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2, Building2, Grid2X2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
@@ -56,6 +56,7 @@ export default function AIAssistant() {
   const [aiConfigured, setAiConfigured] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBranchChooser, setShowBranchChooser] = useState(() => currentBranchId === 'ALL');
+  const [showStarterMenu, setShowStarterMenu] = useState(false);
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -1184,6 +1185,7 @@ ${buildSmartContext(userMsgText)}`;
   ];
 
   const runFrontAction = (command: string, direct: boolean) => {
+    setShowStarterMenu(false);
     if (direct) {
       void send(command);
       return;
@@ -1263,7 +1265,7 @@ ${buildSmartContext(userMsgText)}`;
         </aside>
 
         {/* Chat */}
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-none border border-slate-700/60 bg-slate-900 shadow-2xl lg:rounded-2xl">
+        <section className="relative flex min-h-0 flex-col overflow-hidden rounded-none border border-slate-700/60 bg-slate-900 shadow-2xl lg:rounded-2xl">
           <div className="flex items-center justify-between border-b border-slate-700/60 bg-slate-800/60 px-3 py-2.5 sm:px-4">
             <div className="flex min-w-0 items-center gap-2 text-xs">
               <span className={`flex items-center gap-1.5 rounded-full px-2 py-1 font-semibold ${hasKey ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
@@ -1275,8 +1277,35 @@ ${buildSmartContext(userMsgText)}`;
                 <span className="max-w-28 truncate">{currentBranchId === 'ALL' ? 'Pilih cabang' : cabangName(currentBranchId).replace('CABANG ', '')}</span>
               </button>
             </div>
-            <span className="hidden font-mono text-[10px] text-slate-500 sm:inline">{GROQ_MODELS.find(m => m.id === model)?.label}</span>
+            <div className="flex items-center gap-2">
+              <span className="hidden font-mono text-[10px] text-slate-500 sm:inline">{GROQ_MODELS.find(m => m.id === model)?.label}</span>
+              <button type="button" onClick={() => setShowStarterMenu(value => !value)} className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${showStarterMenu ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200' : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-cyan-500'}`} title="Menu perintah" aria-label="Buka menu perintah">
+                <Grid2X2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
+
+          {showStarterMenu && (
+            <>
+              <button type="button" aria-label="Tutup menu perintah" onClick={() => setShowStarterMenu(false)} className="absolute inset-0 z-10 bg-slate-950/25" />
+              <div className="absolute right-3 top-12 z-20 w-[min(22rem,calc(100%-1.5rem))] rounded-xl border border-slate-600 bg-slate-900 p-3 shadow-2xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-200">Menu Perintah</p>
+                  <button type="button" onClick={() => setShowStarterMenu(false)} className="rounded p-1 text-slate-400 hover:bg-slate-800"><X className="h-4 w-4" /></button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {frontActions.map(action => {
+                    const Icon = action.icon;
+                    return (
+                      <button key={`menu-${action.label}`} type="button" onClick={() => runFrontAction(action.command, action.direct)} className={`flex min-h-12 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold hover:bg-slate-800 ${action.tone}`}>
+                        <Icon className="h-4 w-4 flex-shrink-0" /><span>{action.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
 
           <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
             {(showBranchChooser || currentBranchId === 'ALL') && (
