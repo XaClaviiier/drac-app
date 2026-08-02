@@ -1117,7 +1117,7 @@ ${buildSmartContext(userMsgText)}`;
   const lowStock = data.items.filter(i => i.type === 'Persediaan' && i.stock <= 3);
 
   return (
-    <div className="relative h-[calc(100dvh-7.5rem)] min-h-0 lg:h-[calc(100vh-140px)] lg:min-h-[560px]">
+    <div className="relative h-full min-h-0 lg:h-[calc(100vh-140px)] lg:min-h-[560px]">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-cyan-200/40 blur-3xl" />
         <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-blue-200/50 blur-3xl" />
@@ -1185,7 +1185,7 @@ ${buildSmartContext(userMsgText)}`;
         </aside>
 
         {/* Chat */}
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900 shadow-2xl">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-none border border-slate-700/60 bg-slate-900 shadow-2xl lg:rounded-2xl">
           <div className="flex items-center justify-between border-b border-slate-700/60 bg-slate-800/60 px-3 py-2.5 sm:px-4">
             <div className="flex min-w-0 items-center gap-2 text-xs">
               <span className={`flex items-center gap-1.5 rounded-full px-2 py-1 font-semibold ${hasKey ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
