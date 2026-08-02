@@ -703,6 +703,20 @@ export default function WorkOrders() {
   const pendingDaysLeft = (wo: WorkOrder) =>
     Math.max(0, Math.ceil((new Date(wo.pendingUntil || Date.now()).getTime() - Date.now()) / 86400000));
 
+  const customerPhoneForWO = (wo: WorkOrder) => {
+    const customer = data.customers.find(item =>
+      item.id === wo.customerRefId
+      || (!!wo.customerId && item.customerCode === wo.customerId)
+      || item.name.trim().toLowerCase() === wo.customerName.trim().toLowerCase()
+    );
+    if (customer?.phone) return customer.phone;
+    const vehicle = data.vehicles.find(item =>
+      item.id === wo.vehicleRefId
+      || item.plateNumber.replace(/[^a-z0-9]/gi, '').toLowerCase() === wo.plateNumber.replace(/[^a-z0-9]/gi, '').toLowerCase()
+    );
+    return vehicle?.phone || '—';
+  };
+
   const createNewFromPending = async (wo: WorkOrder) => {
     const created = await continueWorkOrder(wo.id, wo.branchId);
     if (created) {
@@ -911,6 +925,7 @@ export default function WorkOrders() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="block max-w-[180px] truncate text-sm font-semibold text-gray-900">{wo.customerName}</span>
+                      <span className="mt-0.5 block text-xs text-gray-500">{customerPhoneForWO(wo)}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="block max-w-[210px] truncate text-sm text-gray-900">{wo.vehicleInfo}</span>
@@ -1186,6 +1201,7 @@ export default function WorkOrders() {
                   <div>
                     <p className="text-sm font-medium text-gray-700">Pelanggan</p>
                     <p className="text-gray-900">{wo.customerName}</p>
+                    <p className="text-xs text-gray-500">{customerPhoneForWO(wo)}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-700">Kendaraan</p>
@@ -1293,6 +1309,7 @@ export default function WorkOrders() {
                 <div>
                   <p className="text-xs text-gray-500">Pelanggan</p>
                   <p className="mt-1 font-semibold text-gray-900">{detailWO.customerName}</p>
+                  <p className="text-xs text-gray-500">{customerPhoneForWO(detailWO)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Nomor Plat</p>
