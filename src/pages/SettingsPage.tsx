@@ -50,11 +50,12 @@ export default function SettingsPage() {
     const firstBranch = data.branches[0]?.id || 'BR-001';
     const code = draft.branchDocumentCodes[firstBranch] || 'X';
     const now = new Date();
+    const branchNumbers: Record<string, string> = { 'BR-001': '3', 'BR-002': '2', 'BR-003': '1' };
     const dateKey = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     const seq = '1'.padStart(draft.documents.sequenceDigits, '0');
     return {
       workOrder: `${draft.documents.workOrderPrefix}${code}${dateKey}${seq}`,
-      invoice: `${draft.documents.invoicePrefix}${code}${dateKey}${seq}`,
+      invoice: `${code}${String(now.getFullYear()).slice(-2)}${branchNumbers[firstBranch] || '0'}001`,
     };
   }, [data.branches, draft]);
 

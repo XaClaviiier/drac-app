@@ -104,22 +104,28 @@ function nextDocumentNumber(PDO $pdo, string $type, string $branchId, ?string $d
         }
     }
 
+    $sequenceDate = $type === 'sales_invoice' ? date('Y-01-01', strtotime($date)) : $date;
     $increment = $pdo->prepare("
         INSERT INTO document_sequences (document_type, branch_id, sequence_date, last_sequence)
         VALUES (?, ?, ?, 1)
         ON DUPLICATE KEY UPDATE last_sequence = last_sequence + 1
     ");
-    $increment->execute([$type, $branchId, $date]);
+    $increment->execute([$type, $branchId, $sequenceDate]);
 
     $select = $pdo->prepare("
         SELECT last_sequence FROM document_sequences
         WHERE document_type = ? AND branch_id = ? AND sequence_date = ?
     ");
-    $select->execute([$type, $branchId, $date]);
+    $select->execute([$type, $branchId, $sequenceDate]);
     $sequence = (int)$select->fetchColumn();
 
     $dateCode = date('ymd', strtotime($date));
     $branchCode = strtoupper($branchCodes[$branchId] ?? 'X');
+    if ($type === 'sales_invoice') {
+        $branchNumbers = ['BR-001' => '3', 'BR-002' => '2', 'BR-003' => '1'];
+        return $branchCode . date('y', strtotime($date)) . ($branchNumbers[$branchId] ?? '0')
+            . str_pad((string)$sequence, 3, '0', STR_PAD_LEFT);
+    }
     return $prefix . $branchCode . $dateCode . str_pad((string)$sequence, $digits, '0', STR_PAD_LEFT);
 }
 

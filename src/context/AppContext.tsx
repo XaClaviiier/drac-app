@@ -251,18 +251,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const settings = data.settings || demoData.settings;
     const code = (settings.branchDocumentCodes[branchId] || 'X').toUpperCase();
     const yy = String(date.getFullYear()).slice(-2);
+    if (type === 'invoice') {
+      const branchNumbers: Record<string, string> = { 'BR-001': '3', 'BR-002': '2', 'BR-003': '1' };
+      const numberPrefix = `${code}${yy}${branchNumbers[branchId] || '0'}`;
+      const maxSequence = data.invoices
+        .filter(invoice => invoice.branchId === branchId && invoice.invoiceNumber.startsWith(numberPrefix))
+        .reduce((max, invoice) => {
+          const sequence = Number(invoice.invoiceNumber.slice(numberPrefix.length));
+          return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+        }, 0);
+      return `${numberPrefix}${String(maxSequence + 1).padStart(3, '0')}`;
+    }
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
     const dateKey = `${yy}${mm}${dd}`;
-    const prefix = type === 'workOrder' ? settings.documents.workOrderPrefix : settings.documents.invoicePrefix;
-    const source = type === 'workOrder' ? data.workOrders : data.invoices;
+    const prefix = settings.documents.workOrderPrefix;
+    const source = data.workOrders;
     const numberPrefix = `${prefix}${code}${dateKey}`;
     const maxSequence = source
       .filter(doc => doc.branchId === branchId)
       .reduce((max, doc) => {
-        const value = type === 'workOrder'
-          ? (doc as WorkOrder).woNumber
-          : (doc as SalesInvoice).invoiceNumber;
+        const value = (doc as WorkOrder).woNumber;
         if (!value.startsWith(numberPrefix)) return max;
         const sequence = Number(value.slice(numberPrefix.length));
         return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
