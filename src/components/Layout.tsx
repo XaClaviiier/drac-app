@@ -30,7 +30,7 @@ const navItems = [
   { path: '/suppliers', label: 'Supplier', short: 'Supplier', icon: Truck, perm: 'supplier:view' as const, color: 'from-amber-500 to-orange-600' },
   { path: '/receipts', label: 'Penerimaan Barang', short: 'Terima', icon: PackageCheck, perm: 'receipt:view' as const, color: 'from-rose-500 to-pink-600' },
   { path: '/purchase-invoices', label: 'Faktur Pembelian', short: 'Pembelian', icon: ReceiptText, perm: 'purchase:view' as const, color: 'from-fuchsia-500 to-purple-600' },
-  { path: '/ai', label: 'Asisten AI', short: 'AI', icon: Bot, perm: 'dashboard:view' as const, color: 'from-cyan-400 to-blue-600' },
+  { path: '/ai', label: 'Asisten AI', short: 'AI', icon: Bot, perm: 'ai:view' as const, color: 'from-cyan-400 to-blue-600' },
   { path: '/users', label: 'Pengguna & Akses', short: 'Pengguna', icon: Shield, perm: 'user:view' as const, color: 'from-slate-500 to-slate-700' },
   { path: '/settings', label: 'Pengaturan', short: 'Atur', icon: Settings, perm: 'settings:view' as const, color: 'from-indigo-500 to-violet-700' },
 ];
@@ -190,7 +190,7 @@ export default function Layout() {
               </button>
             );
           })}
-          {hasPermission('dashboard:view') && (
+          {hasPermission('ai:view') && (
             <NavLink to="/ai" className={`group relative mx-2 mt-4 flex items-center gap-3 rounded-lg border-t border-white/10 py-3 pt-4 transition-all ${sidebarOpen ? 'px-4' : 'justify-center px-0'} ${location.pathname === '/ai' && !desktopMenuOpen ? 'bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]' : 'text-white/80 hover:bg-blue-600 hover:text-white'}`}>
               <Bot className="h-6 w-6 flex-shrink-0" />{sidebarOpen && <span className="text-sm font-medium">Asisten AI</span>}
               {!sidebarOpen && <span className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-[80] -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-gray-800 opacity-0 shadow-lg transition-all group-hover:translate-x-0 group-hover:opacity-100 before:absolute before:-left-1.5 before:top-1/2 before:h-3 before:w-3 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:border-amber-300 before:bg-amber-50">Asisten AI</span>}
@@ -427,7 +427,7 @@ export default function Layout() {
             <MobileBottom icon={Home} label="Beranda" active={false} onClick={() => navigate('/')} />
             <MobileBottom icon={Sparkles} label="Aktivitas" active={location.pathname === '/workorders'} onClick={() => navigate('/workorders')} />
             <MobileBottom icon={CirclePlus} label="Tambah" active={false} onClick={() => navigate(currentBranchId === 'ALL' ? '/' : '/workorders')} />
-            <MobileBottom icon={Bot} label="Asisten AI" active={location.pathname === '/ai'} onClick={() => navigate('/ai')} />
+            {hasPermission('ai:view') && <MobileBottom icon={Bot} label="Asisten AI" active={location.pathname === '/ai'} onClick={() => navigate('/ai')} />}
             <MobileBottom icon={Settings} label="Akun" active={location.pathname === '/settings'} onClick={() => navigate('/settings')} />
           </nav>
         )}

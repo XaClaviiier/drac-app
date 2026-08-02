@@ -44,11 +44,11 @@ CREATE TABLE IF NOT EXISTS `roles` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `roles` (`id`, `code`, `name`, `description`, `is_active`) VALUES
-('1', 'ADM', 'Administrator', 'Akses penuh semua fitur & cabang', 1),
-('2', 'SPV', 'Supervisor', 'Mengelola operasional & semua cabang', 1),
-('3', 'KSR', 'Kasir', 'Melayani transaksi faktur', 1),
-('4', 'TKN', 'Teknisi', 'Mengerjakan order kerja service AC', 1);
+INSERT INTO `roles` (`id`, `code`, `name`, `description`, `permissions`, `is_active`) VALUES
+('1', 'ADM', 'Administrator', 'Akses penuh semua fitur & cabang', JSON_ARRAY('dashboard:view', 'ai:view'), 1),
+('2', 'SPV', 'Supervisor', 'Mengelola operasional & semua cabang', JSON_ARRAY('dashboard:view', 'ai:view'), 1),
+('3', 'KSR', 'Kasir', 'Melayani transaksi faktur', JSON_ARRAY('dashboard:view', 'ai:view'), 1),
+('4', 'TKN', 'Teknisi', 'Mengerjakan order kerja service AC', JSON_ARRAY('dashboard:view', 'ai:view', 'wo:view', 'wo:create', 'wo:edit'), 1);
 
 -- ==========================================================
 -- 3. TABEL USERS (PENGGUNA)

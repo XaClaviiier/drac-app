@@ -209,6 +209,7 @@ export interface AppSettings {
 
 export type Permission =
   | 'dashboard:view'
+  | 'ai:view'
   | 'invoice:view' | 'invoice:create' | 'invoice:edit' | 'invoice:delete'
   | 'invoice:backdate'
   | 'wo:view' | 'wo:create' | 'wo:edit' | 'wo:delete' | 'wo:backdate'

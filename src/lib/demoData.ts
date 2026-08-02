@@ -3,6 +3,7 @@ import type { AppData } from '../types';
 
 const allPermissions: any[] = [
   'dashboard:view',
+  'ai:view',
   'invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete',
   'wo:view', 'wo:create', 'wo:edit', 'wo:delete',
   'customer:view', 'customer:create', 'customer:edit', 'customer:delete',
@@ -60,8 +61,8 @@ export const demoData: AppData = {
   roles: [
     { id: '1', code: 'ADM', name: 'Administrator', permissions: allPermissions, description: 'Akses penuh', isActive: true },
     { id: '2', code: 'SPV', name: 'Supervisor', permissions: allPermissions.filter(p => !p.startsWith('user:') && !p.startsWith('role:') && !p.startsWith('branch:delete')), description: 'Kelola operasional', isActive: true },
-    { id: '3', code: 'KSR', name: 'Kasir', permissions: ['dashboard:view','invoice:view','invoice:create','invoice:edit','wo:view','customer:view','customer:create','customer:edit','vehicle:view','vehicle:create','vehicle:edit','item:view','report:view'], description: 'Kasir', isActive: true },
-    { id: '4', code: 'TKN', name: 'Teknisi', permissions: ['dashboard:view','wo:view','wo:create','wo:edit','customer:view','customer:create','vehicle:view','vehicle:create','item:view'], description: 'Teknisi', isActive: true },
+    { id: '3', code: 'KSR', name: 'Kasir', permissions: ['dashboard:view','ai:view','invoice:view','invoice:create','invoice:edit','wo:view','customer:view','customer:create','customer:edit','vehicle:view','vehicle:create','vehicle:edit','item:view','report:view'], description: 'Kasir', isActive: true },
+    { id: '4', code: 'TKN', name: 'Teknisi', permissions: ['dashboard:view','ai:view','wo:view','wo:create','wo:edit','customer:view','customer:create','vehicle:view','vehicle:create','item:view'], description: 'Teknisi', isActive: true },
   ],
   users: [
     { id: '1', username: 'admin', name: 'OWNER UTAMA', email: 'admin@dokterac.id', password: 'admin123', roleId: '1', roleName: 'Owner', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01', isOwner: true, isProtected: true },

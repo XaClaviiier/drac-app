@@ -14,6 +14,7 @@ type PermissionModule = {
 
 const permissionModules: PermissionModule[] = [
   { id: 'dashboard', name: 'Dashboard', description: 'Ringkasan operasional', permissions: ['dashboard:view'] },
+  { id: 'ai', name: 'Asisten AI', description: 'Pencarian data dan bantuan operasional', permissions: ['ai:view'] },
   { id: 'wo', name: 'Order Kerja', description: 'Pengecekan dan pengerjaan', permissions: ['wo:view', 'wo:create', 'wo:edit', 'wo:delete', 'wo:backdate'] },
   { id: 'invoice', name: 'Faktur Penjualan', description: 'Penjualan dan pembayaran', permissions: ['invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete', 'invoice:backdate', 'payment:backdate'] },
   { id: 'customer', name: 'Pelanggan', description: 'Master pelanggan', permissions: ['customer:view', 'customer:create', 'customer:edit', 'customer:delete'] },
@@ -33,6 +34,7 @@ const allPermissions: Permission[] = permissionModules.flatMap((module) => modul
 
 const permLabels: Record<string, string> = {
   'dashboard:view': 'Lihat Dashboard',
+  'ai:view': 'Akses Asisten AI',
   'invoice:view': 'Lihat Faktur', 'invoice:create': 'Buat Faktur', 'invoice:edit': 'Edit Faktur', 'invoice:delete': 'Hapus Faktur',
   'invoice:backdate': 'Ubah Tanggal Faktur', 'payment:backdate': 'Ubah Tanggal Pembayaran',
   'wo:view': 'Lihat WO', 'wo:create': 'Buat WO', 'wo:edit': 'Edit WO', 'wo:delete': 'Hapus WO',

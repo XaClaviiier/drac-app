@@ -21,7 +21,7 @@ export default function MobileDashboard(){
     ['Kendaraan','Data Kendaraan',Car,'/vehicles','from-blue-400 to-indigo-600','vehicle:view'],
     ['Barang','Data Barang',Boxes,'/items','from-cyan-400 to-teal-600','item:view'],
     ['Gudang','Stok & Mutasi',Warehouse,'/warehouses','from-lime-400 to-green-600','item:view'],
-    ['Asisten AI','Bantu Operasional',Bot,'/ai','from-fuchsia-400 to-violet-600','dashboard:view'],
+    ['Asisten AI','Bantu Operasional',Bot,'/ai','from-fuchsia-400 to-violet-600','ai:view'],
     ['Lainnya','Menu Lengkap',Grid2X2,'#more','from-slate-400 to-slate-600','dashboard:view'],
   ] as const;
   const more=[
