@@ -164,7 +164,7 @@ export default function Layout() {
   const handleBranchChange = (branchId: string) => { setCurrentBranchId(branchId); setBranchMenuOpen(false); };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-100">
+    <div className="flex h-[100dvh] overflow-hidden bg-gray-100 lg:h-screen">
       {/* ========== SIDEBAR (desktop) ========== */}
       <aside
         className={`${sidebarOpen ? 'w-64' : 'w-16'} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}

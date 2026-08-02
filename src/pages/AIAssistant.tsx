@@ -87,6 +87,10 @@ export default function AIAssistant() {
     const field = inputRef.current;
     if (!field) return;
     field.style.height = '44px';
+    if (window.innerWidth < 1024) {
+      field.style.overflowY = 'hidden';
+      return;
+    }
     field.style.height = `${Math.min(field.scrollHeight, 92)}px`;
     field.style.overflowY = field.scrollHeight > 92 ? 'auto' : 'hidden';
   }, [input]);
@@ -1375,7 +1379,7 @@ ${buildSmartContext(userMsgText)}`;
                 }}
                 rows={1}
                 placeholder="Ketik cek, list, atau reg wo…"
-                className="min-h-11 min-w-0 max-h-[92px] flex-1 resize-none rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-3 text-sm leading-5 text-slate-100 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30"
+                className="h-11 min-h-11 min-w-0 max-h-11 flex-1 resize-none overflow-hidden rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-3 text-sm leading-5 text-slate-100 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 lg:max-h-[92px]"
               />
               <button onClick={() => send()} disabled={busy || !input.trim()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg transition-all hover:scale-105 disabled:opacity-40">
                 {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
