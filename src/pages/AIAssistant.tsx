@@ -1100,7 +1100,8 @@ ${buildSmartContext(userMsgText)}`;
       const r = await executeCreateWO(pendingAction, pendingBranchId);
       const plateForShare = r.plateNumber.replace(/\s+/g, '').toUpperCase().replace(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/, (_all: string, prefix: string, number: string, suffix: string) => `${prefix} ${number}${suffix ? ` ${suffix}` : ''}`);
       const vehicleForShare = (r.vehicleInfo || '-').replace(/\s*-\s*([^-]+)$/, ' ($1)');
-      const shareText = `🔧 ${r.woNumber}\n📅 ${new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}\n🚗 ${plateForShare} – ${vehicleForShare}\n👤 ${r.customerName}${r.customerPhone ? ` ${r.customerPhone}` : ''}\n📝 Keluhan: ${r.description || '-'}\n✍️ Input: ${currentUser?.name || '-'}`;
+      const shareDate = new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID');
+      const shareText = `${r.woNumber} ( ${shareDate} )\n🚗 ${plateForShare} – ${vehicleForShare}\n👤 ${r.customerName}${r.customerPhone ? ` ${r.customerPhone}` : ''}\nKeluhan: ${r.description || '-'}\nInput: ${currentUser?.name || '-'}`;
       setMessages(h => [...h, {
         role: 'assistant',
         time: now(),
