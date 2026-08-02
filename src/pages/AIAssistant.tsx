@@ -20,6 +20,7 @@ interface ChatMsg {
   error?: boolean;
   time: string;
   action?: { type: string; payload: any };
+  actions?: Array<{ label: string; type: 'command' | 'create_wo_vehicle' | 'open_workorders'; value?: string }>;
   shareText?: string;
 }
 
@@ -34,7 +35,7 @@ interface RegistrationDraft {
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const render = (t: string) =>
-  esc(t)
+  esc(t.replace(/\n{2,}/g, '\n'))
     .replace(/```json[\s\S]*?```/g, '')
     .replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-white">$1</strong>')
     .replace(/^- (.+)$/gm, '<span class="block pl-3">• $1</span>')
@@ -938,7 +939,10 @@ ${buildSmartContext(userMsgText)}`;
 
     rememberCommand(content);
 
-    if (registrationDraft || lowerContent === 'reg wo' || lowerContent === 'ulang') {
+    const independentCommand = /^(cek|list)\b/i.test(content);
+    if (registrationDraft && independentCommand) setRegistrationDraft(null);
+
+    if ((registrationDraft && !independentCommand) || lowerContent === 'reg wo' || lowerContent === 'ulang') {
       const reply = registrationDraft ? continueRegistrationWizard(content) : startRegistrationWizard();
       setInput('');
       setMessages(history => [
@@ -966,11 +970,34 @@ ${buildSmartContext(userMsgText)}`;
     const customerLookupReply = listReply || vehicleHistoryReply ? null : buildCustomerLookupReply(content);
     const localLookupReply = listReply || vehicleHistoryReply || customerLookupReply;
     if (localLookupReply) {
+      const compactContent = normalizePlate(content);
+      const exactVehicle = vehicleHistoryReply
+        ? data.vehicles.find(vehicle => compactContent.includes(normalizePlate(vehicle.plateNumber)))
+        : undefined;
+      const customerTerms = lookupTerms(content);
+      const exactCustomer = customerLookupReply
+        ? data.customers.find(customer => customerTerms.length > 0 && customerTerms.every(term => customer.name.toLowerCase().includes(term) || customer.customerCode.toLowerCase().includes(term) || customer.phone.includes(term)))
+        : undefined;
+      const exactWO = data.workOrders.find(wo => compactContent.includes(normalizePlate(wo.woNumber)));
+      const actions: ChatMsg['actions'] = [];
+      if (exactVehicle) {
+        actions.push({ label: 'Riwayat WO', type: 'command', value: `riwayat lengkap ${exactVehicle.plateNumber}` });
+        if (hasPermission('wo:create')) actions.push({ label: 'Buat WO', type: 'create_wo_vehicle', value: exactVehicle.id });
+        const owner = data.customers.find(customer => customer.id === exactVehicle.customerRefId || customer.customerCode === exactVehicle.customerId);
+        if (owner) actions.push({ label: 'Data Pemilik', type: 'command', value: `cek ${owner.customerCode}` });
+      } else if (exactCustomer) {
+        const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === exactCustomer.id || vehicle.customerId === exactCustomer.customerCode);
+        if (vehicles[0]) actions.push({ label: 'Cek Kendaraan', type: 'command', value: `cek ${vehicles[0].plateNumber}` });
+        actions.push({ label: 'Riwayat WO', type: 'command', value: `cek riwayat ${exactCustomer.customerCode}` });
+        if (hasPermission('wo:create')) actions.push({ label: 'Buat WO', type: 'command', value: 'reg wo' });
+      } else if (exactWO) {
+        actions.push({ label: 'Buka Daftar WO', type: 'open_workorders' });
+      }
       setInput('');
       setMessages(history => [
         ...history,
         { role: 'user', content, time: now() },
-        { role: 'assistant', content: localLookupReply, time: now() },
+        { role: 'assistant', content: localLookupReply, time: now(), actions: actions.slice(0, 3) },
       ]);
       return;
     }
@@ -1033,6 +1060,35 @@ ${buildSmartContext(userMsgText)}`;
       setMessages(h => [...h, { role: 'assistant', content: `⚠️ Gagal: ${e.message}`, error: true, time: now() }]);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleMessageAction = (action: NonNullable<ChatMsg['actions']>[number]) => {
+    if (action.type === 'command' && action.value) {
+      void send(action.value);
+      return;
+    }
+    if (action.type === 'open_workorders') {
+      window.location.href = '/workorders';
+      return;
+    }
+    if (action.type === 'create_wo_vehicle' && action.value) {
+      const vehicle = data.vehicles.find(item => item.id === action.value);
+      if (!vehicle) return;
+      const customer = data.customers.find(item => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
+      setRegistrationDraft({
+        step: 'complaint',
+        plateNumber: vehicle.plateNumber,
+        customerName: customer?.name || vehicle.customerName || '',
+        phone: customer?.phone || vehicle.phone || '',
+        vehicleInfo: [vehicle.brand, vehicle.model, vehicle.year, vehicle.color].filter(Boolean).join(' '),
+      });
+      setMessages(history => [...history, {
+        role: 'assistant',
+        content: `Membuat WO untuk **${vehicle.plateNumber}**. Jelaskan keluhan atau layanan yang dibutuhkan.`,
+        time: now(),
+      }]);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
@@ -1270,13 +1326,22 @@ ${buildSmartContext(userMsgText)}`;
                 )}
                 <div className="max-w-[80%]">
                   <div
-                    className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-md ${
+                    className={`rounded-2xl px-3 py-2 text-sm leading-snug shadow-md ${
                       msg.role === 'user' ? 'rounded-br-sm bg-blue-600 text-white'
                       : msg.error ? 'rounded-bl-sm border border-red-500/40 bg-red-950/60 text-red-200'
                       : 'rounded-bl-sm border-l-2 border-cyan-400 bg-slate-800 text-slate-200'
                     }`}
                     dangerouslySetInnerHTML={{ __html: render(msg.content) }}
                   />
+                  {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {msg.actions.map((action, actionIndex) => (
+                        <button key={`${action.label}-${actionIndex}`} type="button" onClick={() => handleMessageAction(action)} className="rounded-lg border border-cyan-500/50 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20">
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {msg.role === 'assistant' && msg.shareText && (
                     <button type="button" onClick={() => void shareRegisterToWhatsApp(msg.shareText!)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-950/20 hover:bg-emerald-400 active:scale-[0.99]">
                       <Share2 className="h-5 w-5" /> Bagikan ke Grup WA
