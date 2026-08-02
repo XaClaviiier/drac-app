@@ -245,7 +245,7 @@ export default function Layout() {
       {/* ========== MAIN ========== */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className={`${location.pathname === '/' ? 'hidden lg:flex' : 'flex'} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3`}>
+        <header className={`${location.pathname === '/' || location.pathname === '/ai' ? 'hidden lg:flex' : 'flex'} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3`}>
           <div className="hidden items-center gap-3 lg:flex">
             <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
               <Wrench className="h-5 w-5 text-white" />
@@ -426,10 +426,7 @@ export default function Layout() {
           <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md items-end justify-around rounded-t-3xl border border-white/10 bg-[#092542]/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 text-white shadow-2xl backdrop-blur-xl lg:hidden">
             <MobileBottom icon={Home} label="Beranda" active={false} onClick={() => navigate('/')} />
             <MobileBottom icon={Sparkles} label="Aktivitas" active={location.pathname === '/workorders'} onClick={() => navigate('/workorders')} />
-            <button onClick={() => navigate(currentBranchId === 'ALL' ? '/' : '/workorders')} className="-mt-7 flex flex-col items-center">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#031a35] bg-gradient-to-br from-cyan-400 to-blue-600 shadow-xl"><CirclePlus className="h-8 w-8" /></span>
-              <span className="text-[10px] text-slate-300">Tambah</span>
-            </button>
+            <MobileBottom icon={CirclePlus} label="Tambah" active={false} onClick={() => navigate(currentBranchId === 'ALL' ? '/' : '/workorders')} />
             <MobileBottom icon={Bot} label="Asisten AI" active={location.pathname === '/ai'} onClick={() => navigate('/ai')} />
             <MobileBottom icon={Settings} label="Akun" active={location.pathname === '/settings'} onClick={() => navigate('/settings')} />
           </nav>

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Send, KeyRound, Sparkles, Car, Users, Package,
-  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2,
+  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2, Building2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
@@ -42,7 +42,7 @@ const render = (t: string) =>
 
 export default function AIAssistant() {
   const {
-    data, currentUser, currentBranchId, resolveBranchId,
+    data, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId,
     addWorkOrder, addCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
     hasPermission,
   } = useApp();
@@ -54,6 +54,7 @@ export default function AIAssistant() {
   const [model, setModel] = useState(GROQ_MODELS[0].id);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showBranchChooser, setShowBranchChooser] = useState(() => currentBranchId === 'ALL');
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -76,7 +77,11 @@ export default function AIAssistant() {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, busy]);
+  }, [messages, busy, showBranchChooser]);
+
+  useEffect(() => {
+    if (currentBranchId === 'ALL') setShowBranchChooser(true);
+  }, [currentBranchId]);
 
   useEffect(() => {
     const field = inputRef.current;
@@ -131,6 +136,22 @@ export default function AIAssistant() {
   // Ringkasan selalu dikirim; detail hanya kalau relevan dengan pertanyaan.
   const cabangName = (branchId?: string) =>
     data.branches.find(b => b.id === branchId)?.name || branchId || '-';
+
+  const chooseChatBranch = (branchId: string) => {
+    const branch = data.branches.find(item => item.id === branchId);
+    if (!branch) return;
+    setCurrentBranchId(branchId);
+    setPendingBranchId(branchId);
+    setShowBranchChooser(false);
+    setMessages(history => [
+      ...history,
+      {
+        role: 'assistant',
+        content: `Cabang aktif: **${branch.name.replace('CABANG ', '')}**. Pembuatan transaksi berikutnya akan masuk ke cabang ini.`,
+        time: now(),
+      },
+    ]);
+  };
 
   const normalizePlate = (value: string) => value.replace(/[^a-z0-9]/gi, '').toUpperCase();
   const editDistance = (left: string, right: string) => {
@@ -900,6 +921,17 @@ ${buildSmartContext(userMsgText)}`;
       return;
     }
 
+    if (lowerContent === 'ganti cabang' || lowerContent === 'pilih cabang' || lowerContent === 'cabang') {
+      setInput('');
+      setShowBranchChooser(true);
+      setMessages(history => [
+        ...history,
+        { role: 'user', content, time: now() },
+        { role: 'assistant', content: 'Silakan pilih cabang aktif di bawah ini.', time: now() },
+      ]);
+      return;
+    }
+
     rememberCommand(content);
 
     if (registrationDraft || lowerContent === 'reg wo' || lowerContent === 'ulang') {
@@ -1085,14 +1117,14 @@ ${buildSmartContext(userMsgText)}`;
   const lowStock = data.items.filter(i => i.type === 'Persediaan' && i.stock <= 3);
 
   return (
-    <div className="relative h-[calc(100vh-140px)] min-h-[560px]">
+    <div className="relative h-[calc(100dvh-7.5rem)] min-h-0 lg:h-[calc(100vh-140px)] lg:min-h-[560px]">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-cyan-200/40 blur-3xl" />
         <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-blue-200/50 blur-3xl" />
       </div>
 
       {/* Status dan pengaturan; judul halaman sudah tampil di header utama */}
-      <div className="mb-3 flex items-center justify-end gap-2">
+      <div className="mb-3 hidden items-center justify-end gap-2 lg:flex">
         <div className="flex items-center gap-2">
           <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${hasKey ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
             <span className={`h-2 w-2 rounded-full ${hasKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
@@ -1104,7 +1136,7 @@ ${buildSmartContext(userMsgText)}`;
         </div>
       </div>
 
-      <div className="grid h-[calc(100%-72px)] gap-4 lg:grid-cols-[300px_1fr]">
+      <div className="grid h-full gap-4 lg:h-[calc(100%-72px)] lg:grid-cols-[300px_1fr]">
         {/* Sidebar */}
         <aside className="hidden flex-col gap-4 overflow-y-auto pr-1 lg:flex">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1154,16 +1186,36 @@ ${buildSmartContext(userMsgText)}`;
 
         {/* Chat */}
         <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-700/60 bg-slate-800/60 px-4 py-2.5">
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Wrench className="h-3.5 w-3.5 text-cyan-400" />
-              <span className="font-mono">{currentUser?.name}</span>
+          <div className="flex items-center justify-between border-b border-slate-700/60 bg-slate-800/60 px-3 py-2.5 sm:px-4">
+            <div className="flex min-w-0 items-center gap-2 text-xs">
+              <span className={`flex items-center gap-1.5 rounded-full px-2 py-1 font-semibold ${hasKey ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                <span className={`h-2 w-2 rounded-full ${hasKey ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                {hasKey ? 'Terhubung' : 'Belum diatur'}
+              </span>
+              <button type="button" onClick={() => setShowBranchChooser(value => !value)} className={`flex min-w-0 items-center gap-1.5 rounded-full px-2 py-1 font-semibold ${currentBranchId === 'ALL' ? 'bg-amber-500/15 text-amber-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
+                <Building2 className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="max-w-28 truncate">{currentBranchId === 'ALL' ? 'Pilih cabang' : cabangName(currentBranchId).replace('CABANG ', '')}</span>
+              </button>
             </div>
-            <span className="font-mono text-[10px] text-slate-500">{GROQ_MODELS.find(m => m.id === model)?.label}</span>
+            <span className="hidden font-mono text-[10px] text-slate-500 sm:inline">{GROQ_MODELS.find(m => m.id === model)?.label}</span>
           </div>
 
           <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
-            {messages.length === 0 && !busy && (
+            {(showBranchChooser || currentBranchId === 'ALL') && (
+              <div className="animate-msg-in rounded-xl border border-cyan-500/50 bg-cyan-950/40 p-4">
+                <p className="mb-1 flex items-center gap-2 text-sm font-bold text-cyan-200"><Building2 className="h-4 w-4" /> Pilih Cabang Aktif</p>
+                <p className="mb-3 text-xs text-slate-400">Cabang wajib dipilih sebelum AI membuat transaksi.</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {data.branches.filter(branch => branch.isActive).map(branch => (
+                    <button key={branch.id} type="button" onClick={() => chooseChatBranch(branch.id)} className={`rounded-lg border px-3 py-2.5 text-left text-xs font-bold transition-colors ${currentBranchId === branch.id ? 'border-cyan-300 bg-cyan-400 text-slate-950' : 'border-slate-600 bg-slate-800 text-slate-100 hover:border-cyan-400'}`}>
+                      {branch.name.replace('CABANG ', '')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {messages.length === 0 && !busy && !showBranchChooser && currentBranchId !== 'ALL' && (
               <div className="flex h-full flex-col items-center justify-center text-center animate-msg-in">
                 <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-xl animate-glow">
                   <Bot className="h-10 w-10 text-white" />
