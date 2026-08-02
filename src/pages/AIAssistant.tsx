@@ -1118,6 +1118,24 @@ ${buildSmartContext(userMsgText)}`;
     'Rekap pendapatan & piutang',
   ];
 
+  const frontActions = [
+    { label: 'Registrasi WO', icon: Zap, command: 'reg wo', direct: true, tone: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' },
+    { label: 'Cek Kendaraan', icon: Car, command: 'cek ', direct: false, tone: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
+    { label: 'Cek Pelanggan', icon: Users, command: 'cek nama ', direct: false, tone: 'border-violet-500/30 bg-violet-500/10 text-violet-300' },
+    { label: 'WO Hari Ini', icon: Wrench, command: 'list wo hari ini', direct: true, tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+    { label: 'WO Pending', icon: History, command: 'list wo pending', direct: true, tone: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
+    { label: 'Stok Menipis', icon: Package, command: 'Barang apa saja yang stoknya menipis?', direct: true, tone: 'border-orange-500/30 bg-orange-500/10 text-orange-300' },
+  ];
+
+  const runFrontAction = (command: string, direct: boolean) => {
+    if (direct) {
+      void send(command);
+      return;
+    }
+    setInput(command);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   const lowStock = data.items.filter(i => i.type === 'Persediaan' && i.stock <= 3);
 
   return (
@@ -1220,19 +1238,26 @@ ${buildSmartContext(userMsgText)}`;
             )}
 
             {messages.length === 0 && !busy && !showBranchChooser && currentBranchId !== 'ALL' && (
-              <div className="flex h-full flex-col items-center justify-center text-center animate-msg-in">
-                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-xl animate-glow">
-                  <Bot className="h-10 w-10 text-white" />
+              <div className="mx-auto flex h-full w-full max-w-lg flex-col justify-center animate-msg-in">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg">
+                  <Bot className="h-6 w-6 text-white" />
                 </div>
-                <h3 className="font-display text-xl font-bold text-white">Halo, {currentUser?.name?.split(' ')[0]}! 👋</h3>
-                <p className="mt-1 max-w-sm text-sm text-slate-400">
-                  {hasKey ? 'Saya bisa cek data, jawab pertanyaan, dan membuatkan Order Kerja.' : 'Atur API Key Groq gratis dulu.'}
+                <h3 className="text-center font-display text-xl font-bold text-white">Halo, {currentUser?.name?.split(' ')[0]}! 👋</h3>
+                <p className="mt-1 text-center text-xs text-slate-400">
+                  Pilih perintah atau ketik langsung.
                 </p>
-                {!hasKey && (
-                  <button onClick={() => { window.location.href = '/settings'; }} className="mt-4 flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-cyan-400">
-                    <KeyRound className="h-4 w-4" /> Dapatkan Key Gratis
-                  </button>
-                )}
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {frontActions.map(action => {
+                    const Icon = action.icon;
+                    return (
+                      <button key={action.label} type="button" onClick={() => runFrontAction(action.command, action.direct)} className={`flex min-h-14 items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-colors hover:bg-slate-800 ${action.tone}`}>
+                        <Icon className="h-5 w-5 flex-shrink-0" />
+                        <span>{action.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {!hasKey && <p className="mt-3 text-center text-xs font-semibold text-amber-300">Integrasi AI belum diatur oleh Owner.</p>}
               </div>
             )}
 
