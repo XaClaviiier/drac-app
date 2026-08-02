@@ -1166,16 +1166,6 @@ ${buildSmartContext(userMsgText)}`;
     }
   };
 
-  const chips = [
-    'cek DD',
-    'list customer',
-    'list wo hari ini',
-    'reg wo',
-    'Barang apa saja yang stoknya menipis?',
-    'Berapa harga jasa flushing AC?',
-    'Rekap pendapatan & piutang',
-  ];
-
   const frontActions = [
     { label: 'Registrasi WO', icon: Zap, command: 'reg wo', direct: true, tone: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' },
     { label: 'Cek Kendaraan', icon: Car, command: 'cek ', direct: false, tone: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
@@ -1204,20 +1194,7 @@ ${buildSmartContext(userMsgText)}`;
         <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-blue-200/50 blur-3xl" />
       </div>
 
-      {/* Status dan pengaturan; judul halaman sudah tampil di header utama */}
-      <div className="mb-3 hidden items-center justify-end gap-2 lg:flex">
-        <div className="flex items-center gap-2">
-          <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${hasKey ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-            <span className={`h-2 w-2 rounded-full ${hasKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-            {hasKey ? 'Terhubung' : 'Belum Diatur'}
-          </span>
-          <button onClick={() => { window.location.href = '/settings'; }} className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-            <KeyRound className="h-3.5 w-3.5" /> Pengaturan
-          </button>
-        </div>
-      </div>
-
-      <div className="grid h-full gap-4 lg:h-[calc(100%-72px)] lg:grid-cols-[300px_1fr]">
+      <div className="grid h-full gap-4 lg:grid-cols-[300px_1fr]">
         {/* Sidebar */}
         <aside className="hidden flex-col gap-4 overflow-y-auto pr-1 lg:flex">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1247,13 +1224,16 @@ ${buildSmartContext(userMsgText)}`;
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-slate-800"><Zap className="h-4 w-4 text-amber-500" /> Coba Tanyakan</h3>
-            <div className="flex flex-col gap-2">
-              {chips.map(c => (
-                <button key={c} onClick={() => send(c)} disabled={busy} className="group rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-700 transition-all hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800 disabled:opacity-50">
-                  <span className="mr-1 text-cyan-500">→</span>{c}
-                </button>
-              ))}
+            <h3 className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-slate-800"><Grid2X2 className="h-4 w-4 text-blue-600" /> Menu Perintah</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {frontActions.map(action => {
+                const Icon = action.icon;
+                return (
+                  <button key={`desktop-${action.label}`} type="button" onClick={() => runFrontAction(action.command, action.direct)} disabled={busy} className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-2 text-center text-[11px] font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50">
+                    <Icon className="h-5 w-5 text-blue-600" /><span>{action.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1280,6 +1260,9 @@ ${buildSmartContext(userMsgText)}`;
             </div>
             <div className="flex items-center gap-2">
               <span className="hidden font-mono text-[10px] text-slate-500 sm:inline">{GROQ_MODELS.find(m => m.id === model)?.label}</span>
+              <button type="button" onClick={() => { window.location.href = '/settings'; }} className="hidden h-7 items-center gap-1 rounded-lg border border-slate-600 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-300 hover:border-cyan-500 lg:flex" title="Pengaturan AI">
+                <KeyRound className="h-3.5 w-3.5" /> Pengaturan
+              </button>
               <button type="button" onClick={() => setShowStarterMenu(value => !value)} className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${showStarterMenu ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200' : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-cyan-500'}`} title="Menu perintah" aria-label="Buka menu perintah">
                 <Grid2X2 className="h-4 w-4" />
               </button>
