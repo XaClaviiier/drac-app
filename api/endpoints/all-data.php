@@ -192,6 +192,15 @@ try {
 
     // Sales Invoices
     $rows = $pdo->query("SELECT * FROM sales_invoices ORDER BY date DESC, invoice_number DESC")->fetchAll();
+    $invoiceItemRows = $pdo->query("SELECT * FROM sales_invoice_items ORDER BY id")->fetchAll();
+    $itemsBySalesInvoice = [];
+    foreach ($invoiceItemRows as $item) {
+        $itemsBySalesInvoice[$item['invoice_id']][] = [
+            'id' => (string)$item['id'], 'itemId' => $item['item_id'], 'code' => $item['code'],
+            'name' => $item['name'], 'description' => $item['description'],
+            'price' => (float)$item['price'], 'qty' => (int)$item['qty'],
+        ];
+    }
     foreach ($rows as &$r) {
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['customerRefId'] = $r['customer_ref_id'];
@@ -207,6 +216,7 @@ try {
         $r['woId'] = $r['wo_id'];
         $r['woNumber'] = $r['wo_number'];
         $r['branchId'] = $r['branch_id'];
+        $r['items'] = $itemsBySalesInvoice[$r['id']] ?? [];
     }
     $data['invoices'] = $rows;
 

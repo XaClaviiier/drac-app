@@ -36,7 +36,7 @@ interface AppContextType {
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
-  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer', invoiceDate?: string, paymentDate?: string, backdateReason?: string) => Promise<SalesInvoice | null>;
+  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer', invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
   addItem: (item: Item) => Promise<void>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -374,10 +374,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
   const updateInvoice = async (id: string, inv: SalesInvoice) => {
-    await executeCRUD(
-      () => api.update('sales-invoices', id, inv),
-      () => setData(prev => ({ ...prev, invoices: prev.invoices.map(x => x.id === id ? inv : x) }))
-    );
+    if (!isDemoMode) {
+      const res = await api.update('sales-invoices', id, inv);
+      if (!res.success) throw new Error(res.message || 'Gagal memperbarui faktur');
+      await refreshData();
+      return;
+    }
+    setData(prev => {
+      const oldInvoice = prev.invoices.find(x => x.id === id);
+      const nextItems = prev.items.map(item => {
+        if (item.type !== 'Persediaan') return item;
+        const oldQty = (oldInvoice?.items || []).filter(detail => detail.itemId === item.id).reduce((sum, detail) => sum + detail.qty, 0);
+        const newQty = (inv.items || []).filter(detail => detail.itemId === item.id).reduce((sum, detail) => sum + detail.qty, 0);
+        const delta = oldQty - newQty;
+        return delta ? { ...item, stock: item.stock + delta, sellableStock: item.sellableStock + delta } : item;
+      });
+      return { ...prev, items: nextItems, invoices: prev.invoices.map(x => x.id === id ? inv : x) };
+    });
   };
   const deleteInvoice = async (id: string) => {
     await executeCRUD(
@@ -570,19 +583,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     paymentMethod: 'Tunai' | 'QRIS/Transfer',
     invoiceDate?: string,
     paymentDate?: string,
-    backdateReason?: string
+    backdateReason?: string,
+    invoiceItems?: WorkOrder['services']
   ): Promise<SalesInvoice | null> => {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
 
     const today = invoiceDate || new Date().toISOString().split('T')[0];
-    const status: SalesInvoice['status'] = payment >= wo.total ? 'Lunas' : 'Belum Lunas';
+    const finalItems = (invoiceItems || wo.services).map((item, index) => ({ ...item, id: `${Date.now()}-${index}` }));
+    const invoiceTotal = finalItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const status: SalesInvoice['status'] = payment >= invoiceTotal ? 'Lunas' : 'Belum Lunas';
     const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
     let invoiceNumber = generateDocumentNumber('invoice', wo.branchId);
     let invoiceId = Date.now().toString();
 
     if (!isDemoMode) {
-      const result = await api.createInvoiceFromWorkOrder(woId, payment, paymentMethod, today, paymentDate, backdateReason);
+      const result = await api.createInvoiceFromWorkOrder(woId, payment, paymentMethod, today, paymentDate, backdateReason, finalItems);
       if (!result.success || !result.data) {
         throw new Error(result.message || 'Gagal membuat faktur dari WO');
       }
@@ -597,9 +613,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customerId: wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
       customerName: wo.customerName,
       vehicleInfo: `${wo.vehicleInfo} ${wo.plateNumber}`,
-      description: wo.services.map((s) => s.description || s.name).join(', '),
-      total: wo.total, payment, paymentMethod, paymentDate: payment > 0 ? (paymentDate || today) : undefined, backdateReason, status, age: 0,
-      woId: wo.id, woNumber: wo.woNumber, items: wo.services,
+      description: finalItems.map((s) => s.description || s.name).join(', '),
+      total: invoiceTotal, payment, paymentMethod, paymentDate: payment > 0 ? (paymentDate || today) : undefined, backdateReason, status, age: 0,
+      woId: wo.id, woNumber: wo.woNumber, items: finalItems,
       branchId: wo.branchId,
     };
 

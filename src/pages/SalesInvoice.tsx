@@ -16,7 +16,10 @@ export default function SalesInvoice() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [showWOPicker, setShowWOPicker] = useState(false);
+  const [woCustomerId, setWoCustomerId] = useState('');
   const [selectedWOId, setSelectedWOId] = useState('');
+  const [woDraftItems, setWoDraftItems] = useState<NonNullable<SalesInvoice['items']>>([]);
+  const [woItemToAdd, setWoItemToAdd] = useState('');
   const [woPayment, setWoPayment] = useState(0);
   const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
@@ -26,6 +29,8 @@ export default function SalesInvoice() {
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingFromWO, setIsCreatingFromWO] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [formItems, setFormItems] = useState<NonNullable<SalesInvoice['items']>>([]);
+  const [formItemToAdd, setFormItemToAdd] = useState('');
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -44,6 +49,7 @@ export default function SalesInvoice() {
   });
 
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
+  const formItemsTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const handleCustomerSelect = (customerRefId: string) => {
     const customer = data.customers.find((item) => item.id === customerRefId);
@@ -119,6 +125,8 @@ export default function SalesInvoice() {
       status: 'Lunas',
     });
     setEditingInvoice(null);
+    setFormItems([]);
+    setFormItemToAdd('');
     setInvoiceDateUnlocked(false);
     setPaymentDateUnlocked(false);
   };
@@ -144,6 +152,7 @@ export default function SalesInvoice() {
         paymentMethod: invoice.paymentMethod || 'Tunai',
         status: invoice.status,
       });
+      setFormItems((invoice.items || []).map((item, index) => ({ ...item, id: `edit-${invoice.id}-${index}` })));
     } else {
       resetForm();
     }
@@ -171,21 +180,33 @@ export default function SalesInvoice() {
       return;
     }
 
+    if (formItems.length === 0) {
+      window.alert('Tambahkan minimal satu barang atau jasa.');
+      return;
+    }
+    const finalTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const finalForm = {
+      ...formData,
+      total: finalTotal,
+      payment: Math.min(formData.payment, finalTotal),
+      status: formData.payment >= finalTotal ? 'Lunas' as const : 'Belum Lunas' as const,
+      items: formItems,
+    };
     const targetBranchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
     const invoiceNumber = generateDocumentNumber('invoice', targetBranchId, new Date(`${formData.date}T12:00:00`));
 
     if (editingInvoice) {
       updateInvoice(editingInvoice.id, {
         ...editingInvoice,
-        ...formData,
-        age: formData.status === 'Lunas' ? 0 : Math.floor((Date.now() - new Date(formData.date).getTime()) / (1000 * 60 * 60 * 24)),
+        ...finalForm,
+        age: finalForm.status === 'Lunas' ? 0 : Math.floor((Date.now() - new Date(finalForm.date).getTime()) / (1000 * 60 * 60 * 24)),
       });
     } else {
       addInvoice({
         id: Date.now().toString(),
         invoiceNumber,
-        ...formData,
-        age: formData.status === 'Lunas' ? 0 : 0,
+        ...finalForm,
+        age: finalForm.status === 'Lunas' ? 0 : 0,
         branchId: targetBranchId,
       });
     }
@@ -201,12 +222,18 @@ export default function SalesInvoice() {
   // Hanya WO Selesai yang boleh difakturkan.
   const unbilledWOs = data.workOrders.filter(
     (wo) => !wo.invoiceId && !wo.continuedToWoId && wo.status === 'Selesai'
+      && (currentBranchId === 'ALL' || wo.branchId === currentBranchId)
   );
+  const customerWOs = unbilledWOs.filter((wo) => wo.customerRefId === woCustomerId);
   const selectedWO = data.workOrders.find((wo) => wo.id === selectedWOId);
+  const woDraftTotal = woDraftItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const handleOpenWOPicker = () => {
     setShowWOPicker(true);
+    setWoCustomerId('');
     setSelectedWOId('');
+    setWoDraftItems([]);
+    setWoItemToAdd('');
     setWoPayment(0);
     setWoPaymentMethod('Tunai');
     const today = new Date().toISOString().split('T')[0];
@@ -218,7 +245,49 @@ export default function SalesInvoice() {
   const handleSelectWO = (woId: string) => {
     setSelectedWOId(woId);
     const wo = data.workOrders.find((w) => w.id === woId);
-    if (wo) setWoPayment(wo.total);
+    if (wo) {
+      const copiedItems = wo.services.map((item, index) => ({ ...item, id: `invoice-${Date.now()}-${index}` }));
+      setWoDraftItems(copiedItems);
+      setWoPayment(copiedItems.reduce((sum, item) => sum + item.price * item.qty, 0));
+    }
+  };
+
+  const addFormItem = () => {
+    const item = data.items.find((entry) => entry.id === formItemToAdd);
+    if (!item) return;
+    setFormItems((current) => {
+      const existing = current.find((entry) => entry.itemId === item.id);
+      return existing
+        ? current.map((entry) => entry.id === existing.id ? { ...entry, qty: entry.qty + 1 } : entry)
+        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: item.sellingPrice, qty: 1 }];
+    });
+    setFormItemToAdd('');
+  };
+
+  const updateFormItem = (id: string, field: 'qty' | 'price', value: number) => {
+    setFormItems((current) => current.map((item) => item.id === id ? { ...item, [field]: Math.max(field === 'qty' ? 1 : 0, value) } : item));
+  };
+
+  const updateWODraftItem = (id: string, field: 'qty' | 'price', value: number) => {
+    setWoDraftItems((current) => {
+      const next = current.map((item) => item.id === id ? { ...item, [field]: Math.max(field === 'qty' ? 1 : 0, value) } : item);
+      setWoPayment(next.reduce((sum, item) => sum + item.price * item.qty, 0));
+      return next;
+    });
+  };
+
+  const addWODraftItem = () => {
+    const item = data.items.find((entry) => entry.id === woItemToAdd);
+    if (!item) return;
+    setWoDraftItems((current) => {
+      const existing = current.find((entry) => entry.itemId === item.id);
+      const next = existing
+        ? current.map((entry) => entry.id === existing.id ? { ...entry, qty: entry.qty + 1 } : entry)
+        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: item.sellingPrice, qty: 1 }];
+      setWoPayment(next.reduce((sum, entry) => sum + entry.price * entry.qty, 0));
+      return next;
+    });
+    setWoItemToAdd('');
   };
 
   const handleCreateFromWO = async () => {
@@ -238,7 +307,11 @@ export default function SalesInvoice() {
       }
       setIsCreatingFromWO(true);
       try {
-        const invoice = await createInvoiceFromWO(selectedWO.id, woPayment, woPaymentMethod, woInvoiceDate, woPayment > 0 ? woPaymentDate : undefined, woBackdateReason);
+        if (woDraftItems.length === 0) {
+          window.alert('Tambahkan minimal satu barang atau jasa ke faktur.');
+          return;
+        }
+        const invoice = await createInvoiceFromWO(selectedWO.id, woPayment, woPaymentMethod, woInvoiceDate, woPayment > 0 ? woPaymentDate : undefined, woBackdateReason, woDraftItems);
         if (invoice) {
           setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
           setTimeout(() => setSuccessMsg(''), 4000);
@@ -511,26 +584,51 @@ export default function SalesInvoice() {
 
               {/* Pelanggan & Kendaraan Picker */}
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                    <User className="w-4 h-4 text-blue-600" />
-                    Data Pelanggan <span className="text-red-500">*</span>
-                  </label>
-                  <CustomerPicker
-                    value={formData.customerRefId}
-                    onChange={handleCustomerSelect}
-                  />
+                {editingInvoice?.woId ? (
+                  <div className="grid grid-cols-1 gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:grid-cols-3">
+                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Pelanggan · terkunci</span><strong>{editingInvoice.customerName}</strong></div>
+                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Referensi · terkunci</span><strong>{editingInvoice.woNumber}</strong></div>
+                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{editingInvoice.vehicleInfo}</strong></div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                        <User className="w-4 h-4 text-blue-600" />
+                        Data Pelanggan <span className="text-red-500">*</span>
+                      </label>
+                      <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                        <Car className="w-4 h-4 text-orange-600" />
+                        Data Kendaraan <span className="text-red-500">*</span>
+                      </label>
+                      <VehiclePicker customer={selectedCustomer} value={formData.vehicleRefId} onChange={handleVehicleSelect} />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center justify-between"><label className="text-sm font-semibold text-gray-800">Barang/Jasa Invoice</label><span className="text-xs text-gray-500">Tidak mengubah barang/jasa WO</span></div>
+                <div className="flex gap-2">
+                  <select value={formItemToAdd} onChange={(e) => setFormItemToAdd(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                    <option value="">Pilih barang atau jasa...</option>
+                    {data.items.filter((item) => item.isActive && item.type !== 'Group').map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
+                  </select>
+                  <button type="button" disabled={!formItemToAdd} onClick={addFormItem} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                    <Car className="w-4 h-4 text-orange-600" />
-                    Data Kendaraan <span className="text-red-500">*</span>
-                  </label>
-                  <VehiclePicker
-                    customer={selectedCustomer}
-                    value={formData.vehicleRefId}
-                    onChange={handleVehicleSelect}
-                  />
+                <div className="max-h-56 space-y-2 overflow-y-auto">
+                  {formItems.map((item) => (
+                    <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_64px_110px_32px] items-center gap-2 rounded-lg border bg-white p-2 text-sm">
+                      <div className="min-w-0"><p className="truncate font-medium">{item.name}</p><p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa'} · {item.description}</p></div>
+                      <input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(e) => updateFormItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
+                      <input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(e) => updateFormItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
+                      <button type="button" onClick={() => setFormItems((current) => current.filter((entry) => entry.id !== item.id))} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  ))}
+                  {formItems.length === 0 && <p className="py-4 text-center text-xs text-gray-500">Belum ada barang atau jasa.</p>}
                 </div>
               </div>
 
@@ -555,11 +653,9 @@ export default function SalesInvoice() {
                   </label>
                   <input
                     type="number"
-                    required
-                    min="0"
-                    value={formData.total}
-                    onChange={(e) => setFormData({ ...formData, total: parseInt(e.target.value) || 0 })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    readOnly
+                    value={formItemsTotal}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-gray-100 font-semibold outline-none"
                   />
                 </div>
                 <div>
@@ -576,7 +672,7 @@ export default function SalesInvoice() {
                       setFormData({
                         ...formData,
                         payment,
-                        status: payment >= formData.total ? 'Lunas' : 'Belum Lunas',
+                        status: payment >= formItemsTotal ? 'Lunas' : 'Belum Lunas',
                       });
                     }}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -672,16 +768,37 @@ export default function SalesInvoice() {
             </div>
 
             <div className="p-6 space-y-4">
+              <div>
+                <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-gray-700"><User className="h-4 w-4 text-blue-600" />Pilih Pelanggan</label>
+                <CustomerPicker
+                  value={woCustomerId}
+                  onChange={(customerId) => {
+                    setWoCustomerId(customerId);
+                    setSelectedWOId('');
+                    setWoDraftItems([]);
+                    setWoPayment(0);
+                  }}
+                />
+                <p className="mt-1 text-xs text-gray-500">Nomor WO akan ditampilkan setelah pelanggan dipilih.</p>
+              </div>
               {unbilledWOs.length === 0 ? (
                 <div className="text-center py-10 text-gray-500">
                   <Wrench className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                   <p className="font-medium">Tidak ada order kerja yang bisa difakturkan</p>
                   <p className="text-sm">Semua order kerja sudah difakturkan atau masih draft</p>
                 </div>
+              ) : !woCustomerId ? (
+                <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50 px-4 py-8 text-center text-sm text-blue-700">
+                  Cari dan pilih pelanggan terlebih dahulu.
+                </div>
+              ) : customerWOs.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+                  Pelanggan ini tidak memiliki WO Selesai yang belum difakturkan.
+                </div>
               ) : (
                 <>
                   <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {unbilledWOs.map((wo) => (
+                    {customerWOs.map((wo) => (
                       <button
                         key={wo.id}
                         type="button"
@@ -717,6 +834,11 @@ export default function SalesInvoice() {
 
                   {selectedWO && (
                     <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
+                      <div className="grid grid-cols-1 gap-2 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm sm:grid-cols-3">
+                        <div><span className="block text-[10px] font-bold uppercase text-blue-500">Pelanggan · terkunci</span><strong>{selectedWO.customerName}</strong></div>
+                        <div><span className="block text-[10px] font-bold uppercase text-blue-500">Nomor WO · terkunci</span><strong>{selectedWO.woNumber}</strong></div>
+                        <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{selectedWO.plateNumber}</strong><span className="block text-xs text-gray-500">{selectedWO.vehicleInfo}</span></div>
+                      </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-semibold mb-1">Tanggal Faktur</label>
@@ -730,15 +852,28 @@ export default function SalesInvoice() {
                       {data.settings.security.requireBackdateReason !== false && (woInvoiceDate < new Date().toISOString().split('T')[0] || (woPayment > 0 && woPaymentDate < new Date().toISOString().split('T')[0])) && (
                         <input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan transaksi tanggal mundur" className="w-full px-3 py-2 border border-amber-400 bg-amber-50 rounded-lg" />
                       )}
-                      <p className="text-sm font-semibold text-gray-700">Detail Layanan {selectedWO.woNumber}</p>
-                      <div className="space-y-1">
-                        {selectedWO.services.map((s) => (
-                          <div key={s.id} className="flex justify-between text-sm">
-                            <span className="text-gray-600">{s.name} x{s.qty}</span>
-                            <span className="text-gray-900">Rp {(s.price * s.qty).toLocaleString('id-ID')}</span>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-gray-700">Barang/Jasa Invoice</p>
+                        <span className="text-xs text-gray-500">Salinan mandiri dari WO</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <select value={woItemToAdd} onChange={(e) => setWoItemToAdd(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                          <option value="">Tambah barang atau jasa...</option>
+                          {data.items.filter((item) => item.isActive && item.type !== 'Group').map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
+                        </select>
+                        <button type="button" disabled={!woItemToAdd} onClick={addWODraftItem} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
+                      </div>
+                      <div className="max-h-56 space-y-2 overflow-y-auto">
+                        {woDraftItems.map((item) => (
+                          <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_64px_110px_32px] items-center gap-2 rounded-lg border bg-white p-2 text-sm">
+                            <div className="min-w-0"><p className="truncate font-medium text-gray-800">{item.name}</p><p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa tambahan'} · {item.description}</p></div>
+                            <input aria-label={`Jumlah ${item.name}`} type="number" min="1" value={item.qty} onChange={(e) => updateWODraftItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
+                            <input aria-label={`Harga ${item.name}`} type="number" min="0" value={item.price} onChange={(e) => updateWODraftItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
+                            <button type="button" onClick={() => setWoDraftItems((current) => current.filter((entry) => entry.id !== item.id))} className="rounded p-1 text-red-600 hover:bg-red-50" title="Hapus dari invoice"><Trash2 className="h-4 w-4" /></button>
                           </div>
                         ))}
                       </div>
+                      <div className="flex justify-between border-t pt-3 text-sm font-bold"><span>Total Invoice</span><span>Rp {woDraftTotal.toLocaleString('id-ID')}</span></div>
                       <div className="pt-3 border-t border-gray-200">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Metode Pembayaran</label>
                         <div className="mb-3 grid grid-cols-2 gap-2">
@@ -766,7 +901,7 @@ export default function SalesInvoice() {
                           className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         />
                         <p className={`mt-2 text-sm font-medium ${woPayment >= selectedWO.total ? 'text-green-600' : 'text-yellow-600'}`}>
-                          Status: {woPayment >= selectedWO.total ? 'Lunas' : `Belum Lunas (sisa Rp ${(selectedWO.total - woPayment).toLocaleString('id-ID')})`}
+                          Status: {woPayment >= woDraftTotal ? 'Lunas' : `Belum Lunas (sisa Rp ${Math.max(0, woDraftTotal - woPayment).toLocaleString('id-ID')})`}
                         </p>
                       </div>
                     </div>
