@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -107,6 +107,34 @@ export default function SalesInvoice() {
         return b.invoiceNumber.localeCompare(a.invoiceNumber);
       });
   }, [data.invoices, searchTerm, filterStatus, filterDate, currentBranchId]);
+
+  const formatShareDate = (date: string) => {
+    const [year, month, day] = date.split('-');
+    return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : date;
+  };
+
+  const invoiceShareText = (invoice: SalesInvoice) => {
+    const branch = data.branches.find(item => item.id === invoice.branchId)?.name.replace('CABANG ', '') || '-';
+    const items = invoice.items || [];
+    const itemLines = items.length
+      ? items.map((item, index) => `${index + 1}. ${item.description || item.name} x${item.qty} — Rp ${(item.price * item.qty).toLocaleString('id-ID')}`).join('\n')
+      : `1. ${invoice.description || 'Faktur penjualan'} — Rp ${invoice.total.toLocaleString('id-ID')}`;
+    return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoice.status}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
+  };
+
+  const copyInvoice = async (invoice: SalesInvoice) => {
+    try {
+      await navigator.clipboard.writeText(invoiceShareText(invoice));
+      setSuccessMsg(`${invoice.invoiceNumber} berhasil disalin.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch {
+      window.alert('Teks invoice gagal disalin. Izinkan akses clipboard lalu coba lagi.');
+    }
+  };
+
+  const shareInvoiceToWhatsApp = (invoice: SalesInvoice) => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(invoiceShareText(invoice))}`, '_blank', 'noopener,noreferrer');
+  };
 
   const resetForm = () => {
     setFormData({
@@ -508,6 +536,22 @@ export default function SalesInvoice() {
                     )}
                     <td className="sticky right-0 bg-white group-hover:bg-blue-50 px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)]">
                       <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void copyInvoice(invoice)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                          title="Salin invoice"
+                        >
+                          <Copy className="h-3.5 w-3.5" /><span className="lg:hidden">Salin</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => shareInvoiceToWhatsApp(invoice)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                          title="Bagikan invoice ke WhatsApp"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" /><span className="lg:hidden">WhatsApp</span>
+                        </button>
                         {hasPermission('invoice:edit') && (
                           <button
                             onClick={() => handleOpenModal(invoice)}

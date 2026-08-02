@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -717,6 +717,38 @@ export default function WorkOrders() {
     return vehicle?.phone || '—';
   };
 
+  const formatShareDate = (date: string) => {
+    const [year, month, day] = date.split('-');
+    return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : date;
+  };
+
+  const workOrderShareText = (wo: WorkOrder) => {
+    const vehicle = data.vehicles.find(item =>
+      item.id === wo.vehicleRefId
+      || item.plateNumber.replace(/[^a-z0-9]/gi, '').toLowerCase() === wo.plateNumber.replace(/[^a-z0-9]/gi, '').toLowerCase()
+    );
+    const vehicleLabel = vehicle
+      ? `${vehicle.brand} ${vehicle.model}${vehicle.year ? ` ${vehicle.year}` : ''}${vehicle.color ? ` (${vehicle.color})` : ''}`
+      : wo.vehicleInfo;
+    const inputBy = wo.statusLog?.[0]?.byUserName || currentUser?.name || '-';
+    const phone = customerPhoneForWO(wo).replace(/^[—â€“]+$/, '');
+    return `${wo.woNumber} ( ${formatShareDate(wo.date)} )\n🚗 ${wo.plateNumber} – ${vehicleLabel}\n👤 ${wo.customerName}${phone ? ` ${phone}` : ''}\nKeluhan: ${wo.description?.trim() || '-'}\nInput: ${inputBy}`;
+  };
+
+  const copyWorkOrder = async (wo: WorkOrder) => {
+    try {
+      await navigator.clipboard.writeText(workOrderShareText(wo));
+      setSuccessMsg(`${wo.woNumber} berhasil disalin.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch {
+      window.alert('Teks WO gagal disalin. Izinkan akses clipboard lalu coba lagi.');
+    }
+  };
+
+  const shareWorkOrderToWhatsApp = (wo: WorkOrder) => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(workOrderShareText(wo))}`, '_blank', 'noopener,noreferrer');
+  };
+
   const createNewFromPending = async (wo: WorkOrder) => {
     const created = await continueWorkOrder(wo.id, wo.branchId);
     if (created) {
@@ -1176,6 +1208,22 @@ export default function WorkOrders() {
                         <ArrowLeftRight className="h-3.5 w-3.5" /> Lanjutkan di Sini
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void copyWorkOrder(wo)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                      title="Salin ringkasan WO"
+                    >
+                      <Copy className="h-3.5 w-3.5" /> Salin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareWorkOrderToWhatsApp(wo)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                      title="Bagikan WO ke WhatsApp"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                    </button>
                     {hasPermission('wo:edit') && (
                       <button
                         onClick={() => handleOpenModal(wo)}
