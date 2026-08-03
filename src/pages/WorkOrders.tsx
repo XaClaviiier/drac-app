@@ -1906,11 +1906,11 @@ export default function WorkOrders() {
                     </label>
                   </div>
                 )}
-                {(wo.findings || diagnosisMeasurementLabel(wo)) && (
+                {editingWO && (editingWO.findings || diagnosisMeasurementLabel(editingWO)) && (
                   <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">
                     <p className="font-semibold">Hasil Diagnosa</p>
-                    {diagnosisMeasurementLabel(wo) && <p className="mt-1 font-medium">{diagnosisMeasurementLabel(wo)}</p>}
-                    {wo.findings && <p className="mt-1 whitespace-pre-wrap">{wo.findings}</p>}
+                    {diagnosisMeasurementLabel(editingWO) && <p className="mt-1 font-medium">{diagnosisMeasurementLabel(editingWO)}</p>}
+                    {editingWO.findings && <p className="mt-1 whitespace-pre-wrap">{editingWO.findings}</p>}
                   </div>
                 )}
                 <textarea
