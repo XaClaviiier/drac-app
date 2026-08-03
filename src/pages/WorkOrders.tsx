@@ -188,7 +188,7 @@ export default function WorkOrders() {
     setShowComplaintEditor(false);
   };
 
-  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [showServiceForm, setShowServiceForm] = useState(true);
   const [serviceSearch, setServiceSearch] = useState('');
   const [serviceSearchFocused, setServiceSearchFocused] = useState(false);
   const [isServiceSearching, setIsServiceSearching] = useState(false);
@@ -438,7 +438,7 @@ export default function WorkOrders() {
       notes: '',
       status: 'Pengecekan',
     });
-    setShowServiceForm(false);
+    setShowServiceForm(true);
     setServiceSearch('');
     setEditingWO(null);
     setWoDateUnlocked(false);
@@ -1673,15 +1673,8 @@ export default function WorkOrders() {
 
               {/* Services */}
               <div>
-                <div className="flex items-center justify-between mb-3">
+                <div className="mb-3">
                   <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Layanan Service AC'}</label>
-                  <button
-                    type="button"
-                    onClick={() => setShowServiceForm(!showServiceForm)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    {showServiceForm ? 'Batal' : '+ Tambah Layanan'}
-                  </button>
                 </div>
 
                 {showServiceForm && (
