@@ -469,7 +469,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (from === to) return false;
     const forward: Record<WOStatus, WOStatus[]> = {
       Pengecekan: ['Proses', 'Pending'],
-      Pending: ['Proses'],
+      Pending: ['Pengecekan', 'Proses'],
       Proses: ['Selesai', 'Pengecekan', 'Batal'],
       Selesai: ['Dibayar', 'Proses'],
       Dibayar: [],

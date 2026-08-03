@@ -37,6 +37,7 @@ export default function WorkOrders() {
     currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings, refreshData, isLoading,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
@@ -410,6 +411,7 @@ export default function WorkOrders() {
   };
 
   const handleOpenModal = (wo?: WorkOrder) => {
+    setDiagnosisMode(false);
     if (wo) {
       setEditingWO(wo);
       const matchedVehicle = data.vehicles.find(
@@ -436,8 +438,23 @@ export default function WorkOrders() {
     setShowModal(true);
   };
 
+  const handleOpenDiagnosis = (wo: WorkOrder) => {
+    handleOpenModal(wo);
+    setDiagnosisMode(true);
+  };
+
+  const resumeDiagnosis = async (wo: WorkOrder) => {
+    const result = await changeWorkOrderStatus(wo.id, 'Pengecekan');
+    if (!result.ok) {
+      window.alert(result.message || 'Diagnosa tidak dapat dilanjutkan.');
+      return;
+    }
+    handleOpenDiagnosis({ ...wo, status: 'Pengecekan' });
+  };
+
   const handleCloseModal = () => {
     setShowModal(false);
+    setDiagnosisMode(false);
     resetForm();
   };
 
@@ -573,8 +590,9 @@ export default function WorkOrders() {
           ...formData,
           backdateReason: woBackdateReason.trim() || undefined,
           total: totalServices,
+          estimateTotal: diagnosisMode ? totalServices : editingWO.estimateTotal,
         });
-        setSuccessMsg(`${editingWO.woNumber} berhasil diperbarui.`);
+        setSuccessMsg(diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
       } else {
         await addWorkOrder({
           id: Date.now().toString(),
@@ -696,6 +714,7 @@ export default function WorkOrders() {
     Selesai: 'bg-green-100 text-green-800',
     Dibayar: 'bg-purple-100 text-purple-800',
   };
+  const statusLabel = (status: WorkOrder['status']) => status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Diagnosa Pending' : status === 'Proses' ? 'Dikerjakan' : status;
 
   const isPendingExpired = (wo: WorkOrder) =>
     wo.status === 'Pending' && !!wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now();
@@ -767,7 +786,15 @@ export default function WorkOrders() {
         <button type="button" onClick={handleCloseModal} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
-        {hasPermission('wo:create') && (
+        {showModal && diagnosisMode && editingWO ? (
+          <button
+            type="button"
+            className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white"
+          >
+            <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+          </button>
+        ) : hasPermission('wo:create') && (
           <button
             type="button"
             onClick={() => {
@@ -876,9 +903,9 @@ export default function WorkOrders() {
               className="h-12 flex-shrink-0 rounded-lg border border-gray-300 bg-white px-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 lg:w-[190px]"
             >
               <option value="">Semua Status</option>
-              <option value="Pengecekan">1. Pengecekan (Gratis)</option>
-              <option value="Pending">2. Pending</option>
-              <option value="Proses">3. Proses</option>
+              <option value="Pengecekan">1. Diagnosa</option>
+              <option value="Pending">2. Diagnosa Pending</option>
+              <option value="Proses">3. Dikerjakan</option>
               <option value="Selesai">4. Selesai</option>
               <option value="Dibayar">5. Dibayar</option>
             </select>
@@ -988,7 +1015,7 @@ export default function WorkOrders() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>
-                        {wo.status}
+                        {statusLabel(wo.status)}
                       </span>
                       {wo.status === 'Pending' && <span className="mt-1 block max-w-[150px] truncate text-[10px] text-orange-700" title={wo.pendingReason}>{wo.pendingReason || '-'}</span>}
                     </td>
@@ -996,14 +1023,14 @@ export default function WorkOrders() {
                       <div className="flex items-center justify-end gap-1">
                         {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
                           <>
-                            <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">Lanjut Proses</button>
+                            <button onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
                             <button onClick={() => requestStatusChange(wo, 'Pending')} className="rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-orange-600">Pending</button>
                           </>
                         )}
                         {hasPermission('wo:edit') && wo.status === 'Pending' && !wo.continuedToWoId && (
                           isPendingExpired(wo)
                             ? <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-semibold text-white">Buat WO Baru</button>
-                            : <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">Lanjut Proses ({pendingDaysLeft(wo)} hari)</button>
+                            : <button onClick={() => void resumeDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">Lanjutkan Diagnosa ({pendingDaysLeft(wo)} hari)</button>
                         )}
                         {hasPermission('wo:edit') && wo.status === 'Proses' && (
                           <button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
@@ -1115,18 +1142,18 @@ export default function WorkOrders() {
                       {wo.status === 'Selesai' && '4.'}
                       {wo.status === 'Dibayar' && '5.'}
                       {wo.status === 'Batal' && '✕'}
-                      <span>{wo.status}</span>
+                      <span>{statusLabel(wo.status)}</span>
                     </span>
 
                     {/* Tombol aksi status berurutan */}
                     {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
                       <>
                         <button
-                          onClick={() => requestStatusChange(wo, 'Proses')}
+                          onClick={() => handleOpenDiagnosis(wo)}
                           className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                           title="Pelanggan setuju → mulai pengerjaan"
                         >
-                          Lanjut Proses
+                          Hasil Diagnosa
                         </button>
                         <button
                           onClick={() => requestStatusChange(wo, 'Pending')}
@@ -1141,7 +1168,7 @@ export default function WorkOrders() {
                       isPendingExpired(wo) ? (
                         <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white">Buat WO Baru dari Data Ini</button>
                       ) : (
-                        <button onClick={() => requestStatusChange(wo, 'Proses')} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">Lanjut Proses · {pendingDaysLeft(wo)} hari tersisa</button>
+                        <button onClick={() => void resumeDiagnosis(wo)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">Lanjutkan Diagnosa · {pendingDaysLeft(wo)} hari tersisa</button>
                       )
                     )}
                     {wo.status === 'Pending' && (
@@ -1364,7 +1391,7 @@ export default function WorkOrders() {
             </div>
             <div className="flex-1 space-y-5 overflow-y-auto p-6">
               <div className="flex items-center justify-between">
-                <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{detailWO.status}</span>
+                <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
                 <span className="text-xl font-bold text-blue-700">Rp {detailWO.total.toLocaleString('id-ID')}</span>
               </div>
               <div className="grid grid-cols-2 gap-4 rounded-xl border border-gray-200 p-4">
@@ -1398,7 +1425,7 @@ export default function WorkOrders() {
             </div>
             <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
               {hasPermission('wo:edit') && detailWO.status === 'Pengecekan' && !detailWO.continuedToWoId && (
-                <button onClick={() => { requestStatusChange(detailWO, 'Proses'); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Setujui &amp; Proses</button>
+                <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
                 <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
@@ -1421,9 +1448,9 @@ export default function WorkOrders() {
             <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {editingWO ? 'Edit Order Kerja' : 'Buat Order Kerja Baru'}
+                  {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? 'Edit Order Kerja' : 'Buat Order Kerja Baru'}
                 </h3>
-                <p className="text-sm text-gray-500">Isi data order kerja service AC</p>
+                <p className="text-sm text-gray-500">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : 'Isi data order kerja service AC'}</p>
               </div>
               <button
                 onClick={handleCloseModal}
@@ -1447,6 +1474,14 @@ export default function WorkOrders() {
                   </div>
                 </div>
               )}
+              {diagnosisMode && editingWO ? (
+                <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
+                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
+                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
+                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
+                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Keluhan awal</span><strong>{editingWO.description || '-'}</strong></div>
+                </div>
+              ) : <>
               {/* Pelanggan dan tanggal */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
@@ -1547,11 +1582,12 @@ export default function WorkOrders() {
                   />
                 </div>
               </div>
+              </>}
 
               {/* Services */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-gray-700">Layanan Service AC</label>
+                  <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Layanan Service AC'}</label>
                   <button
                     type="button"
                     onClick={() => setShowServiceForm(!showServiceForm)}
@@ -1813,13 +1849,13 @@ export default function WorkOrders() {
                 )}
               </div>
 
-              {/* Catatan Internal */}
+              {/* Catatan Internal / Hasil diagnosa */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Catatan Internal Bengkel</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{diagnosisMode ? 'Hasil Diagnosa' : 'Catatan Internal Bengkel'}</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Catatan internal teknisi (sparepart, kendala, dll)..."
+                  placeholder={diagnosisMode ? 'Tuliskan hasil pemeriksaan teknisi…' : 'Catatan internal teknisi (sparepart, kendala, dll)...'}
                   rows={2}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
                 />
@@ -1839,7 +1875,7 @@ export default function WorkOrders() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
                 >
                   <Save className="w-4 h-4" />
-                  {editingWO ? 'Simpan Perubahan' : 'Simpan Order Kerja'}
+                  {diagnosisMode ? 'Simpan Diagnosa' : editingWO ? 'Simpan Perubahan' : 'Simpan Order Kerja'}
                 </button>
               </div>
             </form>
