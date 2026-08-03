@@ -359,48 +359,8 @@ export default function SalesInvoice() {
     }
   };
 
-  const branchInvoices = useMemo(() => {
-    return data.invoices.filter(inv => currentBranchId === 'ALL' || inv.branchId === currentBranchId);
-  }, [data.invoices, currentBranchId]);
-
-  const totalRevenue = branchInvoices.reduce((sum, inv) => sum + inv.payment, 0);
-  const totalPending = branchInvoices.filter((inv) => inv.status === 'Belum Lunas').reduce((sum, inv) => sum + (inv.total - inv.payment), 0);
-
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Faktur Penjualan</h2>
-          <p className="text-gray-500 mt-1">Kelola faktur penjualan service AC mobil</p>
-        </div>
-        <div className="flex gap-3">
-          {hasPermission('invoice:create') && (
-            <>
-              <button
-                onClick={handleOpenWOPicker}
-                className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-green-600/20"
-              >
-                <Wrench className="w-5 h-5" />
-                Faktur dari WO
-                {unbilledWOs.length > 0 && (
-                  <span className="bg-white text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                    {unbilledWOs.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => handleOpenModal()}
-                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
-              >
-                <Plus className="w-5 h-5" />
-                Buat Faktur
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
       {/* Success Message */}
       {successMsg && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
@@ -408,22 +368,6 @@ export default function SalesInvoice() {
           <p className="text-sm font-medium text-green-800">{successMsg}</p>
         </div>
       )}
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Total Faktur</p>
-          <p className="text-2xl font-bold text-gray-900">{data.invoices.length}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Total Pendapatan</p>
-          <p className="text-2xl font-bold text-green-600">Rp {totalRevenue.toLocaleString('id-ID')}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Piutang Belum Lunas</p>
-          <p className="text-2xl font-bold text-red-600">Rp {totalPending.toLocaleString('id-ID')}</p>
-        </div>
-      </div>
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
@@ -459,6 +403,27 @@ export default function SalesInvoice() {
             />
           </div>
           <div className="flex gap-2">
+            {hasPermission('invoice:create') && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleOpenWOPicker}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+                >
+                  <Wrench className="h-4 w-4" />
+                  <span className="hidden xl:inline">Faktur dari WO</span>
+                  {unbilledWOs.length > 0 && <span className="rounded-full bg-white px-1.5 text-xs font-bold text-green-700">{unbilledWOs.length}</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenModal()}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden xl:inline">Buat Faktur</span>
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => void handleRefresh()}
