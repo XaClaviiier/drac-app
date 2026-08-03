@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
@@ -38,6 +38,7 @@ export default function WorkOrders() {
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
+  const diagnosisSubmitAction = useRef<'save' | 'invoice'>('save');
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
@@ -600,6 +601,8 @@ export default function WorkOrders() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const shouldCreateInvoice = diagnosisMode && diagnosisSubmitAction.current === 'invoice';
+    diagnosisSubmitAction.current = 'save';
 
     // Validasi wajib
     if (!formData.customerRefId) {
@@ -641,16 +644,42 @@ export default function WorkOrders() {
     const targetBranch = resolveBranchId();
     const woNumber = generateDocumentNumber('workOrder', targetBranch, new Date(`${formData.date}T12:00:00`));
 
+    if (shouldCreateInvoice && !window.confirm(
+      'Simpan diagnosa dan langsung buat invoice? Status WO akan menjadi Selesai tanpa melalui tahap Dikerjakan.'
+    )) {
+      return;
+    }
+
     try {
       if (editingWO) {
-        await updateWorkOrder(editingWO.id, {
+        const savedWorkOrder: WorkOrder = {
           ...editingWO,
           ...formData,
           backdateReason: woBackdateReason.trim() || undefined,
           total: totalServices,
           estimateTotal: diagnosisMode ? totalServices : editingWO.estimateTotal,
-        });
+          ...(shouldCreateInvoice ? {
+            status: 'Selesai' as const,
+            statusLog: [
+              ...(editingWO.statusLog || []),
+              {
+                from: editingWO.status,
+                to: 'Selesai' as const,
+                at: new Date().toISOString(),
+                byUserId: currentUser?.id || '-',
+                byUserName: currentUser?.name || 'System',
+                reason: 'Diagnosa disimpan dan dilanjutkan langsung ke invoice.',
+              },
+            ],
+          } : {}),
+        };
+        await updateWorkOrder(editingWO.id, savedWorkOrder);
         setSuccessMsg(diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
+        if (shouldCreateInvoice) {
+          handleCloseModal();
+          handleOpenInvoiceModal(savedWorkOrder);
+          return;
+        }
       } else {
         await addWorkOrder({
           id: Date.now().toString(),
@@ -2068,11 +2097,22 @@ export default function WorkOrders() {
                 </button>
                 <button
                   type="submit"
+                  onClick={() => { diagnosisSubmitAction.current = 'save'; }}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
                 >
                   <Save className="w-4 h-4" />
-                  {diagnosisMode ? 'Simpan Diagnosa' : editingWO ? 'Simpan Perubahan' : 'Simpan Order Kerja'}
+                  {diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan Order Kerja'}
                 </button>
+                {diagnosisMode && editingWO && hasPermission('invoice:create') && !editingWO.invoiceId && (
+                  <button
+                    type="submit"
+                    onClick={() => { diagnosisSubmitAction.current = 'invoice'; }}
+                    className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-green-600/20 transition-colors hover:bg-green-700"
+                  >
+                    <Receipt className="h-4 w-4" />
+                    Buat Invoice
+                  </button>
+                )}
               </div>
             </form>
           </div>
