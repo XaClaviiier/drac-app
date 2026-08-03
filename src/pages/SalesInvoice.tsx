@@ -138,8 +138,6 @@ export default function SalesInvoice() {
 
   const handleRefresh = async () => {
     await refreshData();
-    setSuccessMsg('Data Faktur Penjualan berhasil diperbarui.');
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   const resetForm = () => {

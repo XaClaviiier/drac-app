@@ -751,8 +751,6 @@ export default function WorkOrders() {
 
   const handleRefresh = async () => {
     await refreshData();
-    setSuccessMsg('Data Order Kerja berhasil diperbarui.');
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   const createNewFromPending = async (wo: WorkOrder) => {

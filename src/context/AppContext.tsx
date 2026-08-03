@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus } from '../types';
 import { api } from '../lib/apiClient';
 import { demoData } from '../lib/demoData';
+import { failSystemProcess, finishSystemProcess, startSystemProcess } from '../lib/processQueue';
 
 interface AppContextType {
   data: AppData;
@@ -104,6 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Load all data from API (with demo fallback)
   const refreshData = async () => {
+    const processId = startSystemProcess('Refresh Data', 'Mengambil data terbaru dari server');
     const requestId = ++refreshRequestId.current;
     setIsLoading(true);
     let res = await api.loadAllData();
@@ -111,11 +113,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Coba sekali lagi sebelum memutuskan menggunakan data demo.
     if (!res.success) {
       await new Promise(resolve => setTimeout(resolve, 350));
-      if (requestId !== refreshRequestId.current) return;
+      if (requestId !== refreshRequestId.current) {
+        finishSystemProcess(processId, 'Digantikan oleh permintaan refresh terbaru');
+        return;
+      }
       res = await api.loadAllData();
     }
     // Hanya request terbaru yang boleh mengubah state aplikasi.
-    if (requestId !== refreshRequestId.current) return;
+    if (requestId !== refreshRequestId.current) {
+      finishSystemProcess(processId, 'Digantikan oleh permintaan refresh terbaru');
+      return;
+    }
     if (res.success && res.data) {
       setData({
         vehicles: (res.data.vehicles || []).map((vehicle: any) => ({
@@ -139,6 +147,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         settings: res.data.settings || demoData.settings,
       });
       setIsDemoMode(false);
+      finishSystemProcess(processId, 'Data berhasil diperbarui');
     } else if (allowDemoMode) {
       // Backend not available - fallback to demo data
       console.warn('⚠️ Backend API tidak tersedia. Menggunakan DEMO MODE (data tidak akan tersimpan).');
@@ -149,9 +158,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch { /* gunakan pengaturan bawaan */ }
       setData({ ...demoData, settings: savedSettings });
       setIsDemoMode(true);
+      finishSystemProcess(processId, 'Data lokal demo berhasil dimuat');
     } else {
       console.error('Backend API tidak tersedia. Data demo dinonaktifkan di production.');
       setIsDemoMode(false);
+      failSystemProcess(processId, 'Gagal mengambil data dari server');
     }
     if (requestId === refreshRequestId.current) setIsLoading(false);
   };

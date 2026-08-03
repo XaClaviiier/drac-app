@@ -100,6 +100,7 @@ export default function Layout() {
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
   const [processMenuOpen, setProcessMenuOpen] = useState(false);
   const [systemProcesses, setSystemProcesses] = useState<SystemProcess[]>(() => readProcessQueue());
+  const [processClock, setProcessClock] = useState(() => Date.now());
   const [workspaceTabs, setWorkspaceTabs] = useState<Array<{ path: string; label: string }>>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('drac-workspace-tabs') || '[]');
@@ -112,6 +113,8 @@ export default function Layout() {
 
   const isAll = currentBranchId === 'ALL';
   const currentBranch = isAll ? null : data.branches.find((b) => b.id === currentBranchId);
+  const refreshRunning = systemProcesses.some(task => task.label === 'Refresh Data' && task.status === 'running');
+  const recentProcessSuccess = systemProcesses.some(task => task.status === 'success' && task.finishedAt && processClock - new Date(task.finishedAt).getTime() < 2000);
 
   const visibleNavItems = navItems.filter((item) => hasPermission(item.perm));
 
@@ -148,6 +151,15 @@ export default function Layout() {
     window.addEventListener(PROCESS_QUEUE_EVENT, syncProcesses);
     return () => window.removeEventListener(PROCESS_QUEUE_EVENT, syncProcesses);
   }, []);
+  useEffect(() => {
+    setProcessClock(Date.now());
+    const latestFinished = systemProcesses.reduce((latest, task) => Math.max(latest, task.finishedAt ? new Date(task.finishedAt).getTime() : 0), 0);
+    if (!latestFinished) return;
+    const remaining = 2050 - (Date.now() - latestFinished);
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(() => setProcessClock(Date.now()), remaining);
+    return () => window.clearTimeout(timer);
+  }, [systemProcesses]);
   useEffect(() => {
     if (!desktopMenuOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDesktopMenuOpen(null); };
@@ -310,12 +322,14 @@ export default function Layout() {
             )}
 
             <div className="relative hidden sm:block">
-              <button type="button" onClick={() => setProcessMenuOpen(current => !current)} title="Antrian proses sistem" className="relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-gray-100">
-                {systemProcesses.some(task => task.status === 'running') ? (
+              <button type="button" onClick={() => setProcessMenuOpen(current => !current)} title={refreshRunning ? 'Sedang memperbarui data…' : recentProcessSuccess ? 'Data berhasil diperbarui' : 'Status proses sistem'} className="relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-gray-100">
+                {refreshRunning ? (
+                  <span className="h-3.5 w-3.5 animate-pulse rounded-full bg-green-500 shadow-[0_0_0_5px_rgba(34,197,94,0.18)]" />
+                ) : systemProcesses.some(task => task.status === 'running') ? (
                   <LoaderCircle className="h-5 w-5 animate-spin text-blue-600" />
                 ) : systemProcesses.some(task => task.status === 'error') ? (
                   <span className="h-3.5 w-3.5 rounded-full bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.14)]" />
-                ) : systemProcesses.some(task => task.status === 'success') ? (
+                ) : recentProcessSuccess ? (
                   <span className="h-3.5 w-3.5 rounded-full bg-green-500 shadow-[0_0_0_4px_rgba(34,197,94,0.14)]" />
                 ) : (
                   <span className="h-3.5 w-3.5 rounded-full bg-gray-300" />
