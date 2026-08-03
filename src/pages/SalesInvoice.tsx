@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -9,7 +9,7 @@ const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-I
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
 export default function SalesInvoice() {
-  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber } = useApp();
+  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber, refreshData, isLoading } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -134,6 +134,12 @@ export default function SalesInvoice() {
 
   const shareInvoiceToWhatsApp = (invoice: SalesInvoice) => {
     window.open(`https://wa.me/?text=${encodeURIComponent(invoiceShareText(invoice))}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleRefresh = async () => {
+    await refreshData();
+    setSuccessMsg('Data Faktur Penjualan berhasil diperbarui.');
+    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   const resetForm = () => {
@@ -455,6 +461,16 @@ export default function SalesInvoice() {
             />
           </div>
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={isLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white p-2.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60 lg:px-3"
+              title="Ambil ulang data faktur dari server"
+            >
+              <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
+            </button>
             <button className="p-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors" title="Download">
               <Download className="w-5 h-5" />
             </button>

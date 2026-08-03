@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -34,7 +34,7 @@ export default function WorkOrders() {
     addWorkOrder, updateWorkOrder, deleteWorkOrder,
     continueWorkOrder, findActiveWoByPlate, changeWorkOrderStatus,
     createInvoiceFromWO, addItem,
-    currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings,
+    currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings, refreshData, isLoading,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
@@ -749,6 +749,12 @@ export default function WorkOrders() {
     window.open(`https://wa.me/?text=${encodeURIComponent(workOrderShareText(wo))}`, '_blank', 'noopener,noreferrer');
   };
 
+  const handleRefresh = async () => {
+    await refreshData();
+    setSuccessMsg('Data Order Kerja berhasil diperbarui.');
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
   const createNewFromPending = async (wo: WorkOrder) => {
     const created = await continueWorkOrder(wo.id, wo.branchId);
     if (created) {
@@ -868,6 +874,17 @@ export default function WorkOrders() {
               <option value="Selesai">4. Selesai</option>
               <option value="Dibayar">5. Dibayar</option>
             </select>
+
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={isLoading}
+              className="inline-flex h-12 flex-shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
+              title="Ambil ulang data Order Kerja dari server"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
+            </button>
 
           </div>
 
