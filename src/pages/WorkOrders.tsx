@@ -479,6 +479,15 @@ export default function WorkOrders() {
     resetForm();
   };
 
+  const requestCloseEditor = () => {
+    const hasUnsavedNewData = !editingWO && Boolean(
+      formData.customerRefId || formData.vehicleRefId || formData.description ||
+      formData.notes || formData.findings || formData.services.length > 1
+    );
+    if (hasUnsavedNewData && !window.confirm('Tutup Data Baru? Data yang belum disimpan akan hilang.')) return;
+    handleCloseModal();
+  };
+
   const handleRemoveService = (id: string) => {
     setFormData({
       ...formData,
@@ -814,7 +823,7 @@ export default function WorkOrders() {
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
       <div className="flex items-end gap-0.5 border-b border-blue-600 bg-gray-100 px-1">
-        <button type="button" onClick={handleCloseModal} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
+        <button type="button" onClick={requestCloseEditor} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
         {showModal && diagnosisMode && editingWO ? (
@@ -825,19 +834,31 @@ export default function WorkOrders() {
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
-        ) : hasPermission('wo:create') && (
+        ) : showModal && editingWO ? (
+          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+            <Edit className="h-4 w-4" /> Edit {editingWO.woNumber}
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+          </button>
+        ) : showModal && hasPermission('wo:create') ? (
+          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+            Data Baru
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
+          </button>
+        ) : null}
+        {hasPermission('wo:create') && (
           <button
             type="button"
             onClick={() => {
+              if (showModal && !diagnosisMode && !editingWO) return;
               if (currentBranchId === 'ALL') {
                 window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
                 return;
               }
               handleOpenModal();
             }}
-            className={`flex h-11 items-center gap-2 rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}
+            className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-gray-300 bg-gray-100 px-5 text-sm font-semibold text-gray-600 transition-colors hover:bg-white hover:text-blue-700"
           >
-            <Plus className="h-4 w-4" /> {editingWO ? 'Edit Order Kerja' : 'Data Baru'}
+            <Plus className="h-4 w-4" /> NEW DATA
           </button>
         )}
         <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
