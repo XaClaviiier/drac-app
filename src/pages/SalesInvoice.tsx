@@ -245,9 +245,37 @@ export default function SalesInvoice() {
     handleCloseModal();
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus faktur ini?')) {
-      deleteInvoice(id);
+  const handleDeletePayment = async (invoice: SalesInvoice) => {
+    if (invoice.payment <= 0) return;
+    if (!window.confirm(`Hapus pembayaran Rp ${invoice.payment.toLocaleString('id-ID')} dari ${invoice.invoiceNumber}? Invoice akan kembali terutang.`)) return;
+    try {
+      await updateInvoice(invoice.id, {
+        ...invoice,
+        payment: 0,
+        paymentDate: undefined,
+        status: invoice.total <= 0 ? 'Lunas' : 'Belum Lunas',
+        age: invoice.total <= 0 ? 0 : Math.max(0, Math.floor((Date.now() - new Date(invoice.date).getTime()) / 86400000)),
+      });
+      setSuccessMsg(`Pembayaran ${invoice.invoiceNumber} dihapus. Invoice kembali ${invoice.total <= 0 ? 'Lunas (Rp0)' : 'Belum Lunas'}.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (error: any) {
+      window.alert(`Gagal menghapus pembayaran: ${error?.message || 'terjadi kesalahan'}`);
+    }
+  };
+
+  const handleDelete = async (invoice: SalesInvoice) => {
+    if (invoice.payment > 0) {
+      window.alert('Invoice masih memiliki pembayaran. Hapus pembayaran terlebih dahulu.');
+      return;
+    }
+    if (window.confirm(`Hapus ${invoice.invoiceNumber}? Stok akan dikembalikan dan WO terkait kembali berstatus Selesai.`)) {
+      try {
+        await deleteInvoice(invoice.id);
+        setSuccessMsg(`${invoice.invoiceNumber} dihapus. Stok dikembalikan dan WO terkait dibuka kembali.`);
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } catch (error: any) {
+        window.alert(`Gagal menghapus invoice: ${error?.message || 'terjadi kesalahan'}`);
+      }
     }
   };
 
@@ -540,9 +568,19 @@ export default function SalesInvoice() {
                             <Edit className="w-4 h-4" />
                           </button>
                         )}
+                        {hasPermission('invoice:edit') && invoice.payment > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeletePayment(invoice)}
+                            className="rounded-lg p-1.5 text-orange-600 shadow-sm transition-colors hover:bg-orange-100"
+                            title="Hapus pembayaran"
+                          >
+                            <Receipt className="h-4 w-4" />
+                          </button>
+                        )}
                         {hasPermission('invoice:delete') && (
                           <button
-                            onClick={() => handleDelete(invoice.id)}
+                            onClick={() => void handleDelete(invoice)}
                             className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors shadow-sm"
                             title="Hapus"
                           >

@@ -254,9 +254,12 @@ switch ($method) {
         if (!$id) respondError('ID required');
         $pdo->beginTransaction();
         try {
-            $invoiceStmt = $pdo->prepare("SELECT wo_id FROM sales_invoices WHERE id=? FOR UPDATE");
+            $invoiceStmt = $pdo->prepare("SELECT wo_id, payment FROM sales_invoices WHERE id=? FOR UPDATE");
             $invoiceStmt->execute([$id]);
-            $linkedWoId = $invoiceStmt->fetchColumn();
+            $invoiceRow = $invoiceStmt->fetch();
+            if (!$invoiceRow) throw new Exception('Faktur tidak ditemukan');
+            if ((float)$invoiceRow['payment'] > 0) throw new Exception('Hapus pembayaran terlebih dahulu sebelum menghapus faktur');
+            $linkedWoId = $invoiceRow['wo_id'];
             // Kembalikan stok sebelum detail ikut terhapus oleh ON DELETE CASCADE.
             $details = $pdo->prepare("
                 SELECT d.item_id, d.qty, i.branch_id
@@ -278,7 +281,7 @@ switch ($method) {
             respondSuccess(null, 'Faktur dihapus dan stok dikembalikan');
         } catch (Exception $e) {
             $pdo->rollBack();
-            respondError('Gagal menghapus faktur', 500, $e->getMessage());
+            respondError($e->getMessage(), 422);
         }
         break;
 

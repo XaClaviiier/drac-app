@@ -426,7 +426,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? { ...item, stock: item.stock + returnedQty, sellableStock: item.sellableStock + returnedQty }
             : item;
         });
-        return { ...prev, items: nextItems, invoices: prev.invoices.filter(x => x.id !== id) };
+        const nextWorkOrders = invoice?.woId
+          ? prev.workOrders.map(wo => wo.id === invoice.woId
+            ? { ...wo, status: 'Selesai' as const, invoiceId: undefined, invoiceNumber: undefined }
+            : wo)
+          : prev.workOrders;
+        return { ...prev, items: nextItems, workOrders: nextWorkOrders, invoices: prev.invoices.filter(x => x.id !== id) };
       })
     );
   };
