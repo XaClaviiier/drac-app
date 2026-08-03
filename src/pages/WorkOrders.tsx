@@ -224,6 +224,12 @@ export default function WorkOrders() {
     });
   };
 
+  const selectQuickService = (itemId: string) => {
+    handleUseItem(itemId);
+    setShowQuickServices(false);
+    localStorage.setItem('dokterac_wo_quick_services', 'closed');
+  };
+
   const handleQuickAddItem = () => {
     if (!quickItemForm.name) { window.alert('Nama barang/jasa harus diisi'); return; }
 
@@ -1777,7 +1783,7 @@ export default function WorkOrders() {
                               key={item.id}
                               type="button"
                               disabled={added}
-                              onClick={() => handleUseItem(item.id)}
+                              onClick={() => selectQuickService(item.id)}
                               className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${added ? 'cursor-not-allowed border-green-200 bg-green-100 text-green-700 opacity-60' : 'border-amber-300 bg-white text-gray-700 hover:bg-amber-100'}`}
                             >
                               {added ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />}
