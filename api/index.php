@@ -89,6 +89,9 @@ try {
         case 'sales-invoices':
             require 'endpoints/sales-invoices.php';
             break;
+        case 'customer-payments':
+            require 'endpoints/customer-payments.php';
+            break;
 
         // ----- GOODS RECEIPTS -----
         case 'goods-receipts':

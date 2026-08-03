@@ -62,7 +62,7 @@ const desktopGroups = [
   { id: 'sales', label: 'WORK ORDER', icon: CrossedToolsIcon, items: [
     { label: 'Order Kerja', path: '/workorders', icon: Wrench, perm: 'wo:view', tone: 'green' },
     { label: 'Faktur Penjualan', path: '/invoices', icon: FileText, perm: 'invoice:view', tone: 'green' },
-    { label: 'Pembayaran Pelanggan', icon: Banknote, tone: 'green' }, { label: 'Piutang Pelanggan', icon: CreditCard, tone: 'green' },
+    { label: 'Pembayaran Pelanggan', path: '/customer-payments', icon: Banknote, perm: 'invoice:view', tone: 'green' }, { label: 'Piutang Pelanggan', icon: CreditCard, tone: 'green' },
     { label: 'Pelanggan', path: '/customers', icon: Users, perm: 'customer:view', tone: 'blue' },
     { label: 'Kendaraan', path: '/vehicles', icon: Car, perm: 'vehicle:view', tone: 'blue' },
     { label: 'Retur / Koreksi', icon: ArrowLeftRight, tone: 'blue' }, { label: 'Riwayat Pembayaran', icon: History, tone: 'purple' },
