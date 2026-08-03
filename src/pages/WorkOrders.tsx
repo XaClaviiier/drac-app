@@ -826,6 +826,22 @@ export default function WorkOrders() {
         <button type="button" onClick={requestCloseEditor} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
+        {hasPermission('wo:create') && (
+          <button
+            type="button"
+            onClick={() => {
+              if (showModal && !diagnosisMode && !editingWO) return;
+              if (currentBranchId === 'ALL') {
+                window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
+                return;
+              }
+              handleOpenModal();
+            }}
+            className="flex h-11 items-center gap-1 rounded-t-md border border-b-0 border-gray-300 bg-gray-100 px-4 text-sm font-semibold text-gray-600 transition-colors hover:bg-white hover:text-blue-700"
+          >
+            <Plus className="h-4 w-4" /> New
+          </button>
+        )}
         {showModal && diagnosisMode && editingWO ? (
           <button
             type="button"
@@ -845,22 +861,6 @@ export default function WorkOrders() {
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
           </button>
         ) : null}
-        {hasPermission('wo:create') && (
-          <button
-            type="button"
-            onClick={() => {
-              if (showModal && !diagnosisMode && !editingWO) return;
-              if (currentBranchId === 'ALL') {
-                window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
-                return;
-              }
-              handleOpenModal();
-            }}
-            className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-gray-300 bg-gray-100 px-5 text-sm font-semibold text-gray-600 transition-colors hover:bg-white hover:text-blue-700"
-          >
-            <Plus className="h-4 w-4" /> NEW DATA
-          </button>
-        )}
         <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
           <span>{todayOnly ? 'Hari ini' : 'Semua tanggal'}</span>
           <span className="text-gray-300">•</span>
