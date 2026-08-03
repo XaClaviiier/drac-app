@@ -534,9 +534,9 @@ export default function WorkOrders() {
     const item = data.items.find((entry) => entry.id === itemId);
     if (!item) return [];
 
-    const candidateIds = item.type === 'Group'
-      ? [item.id, ...(item.groupMembers || []).map(member => member.itemId)]
-      : [item.id];
+    // Paket hanya dianggap duplikat jika header paket yang sama sudah dipilih.
+    // Komponen yang kebetulan dipakai paket lain tidak boleh menyalakan semua paket.
+    const candidateIds = [item.id];
 
     return formData.services.filter(service => service.itemId && candidateIds.includes(service.itemId));
   };
