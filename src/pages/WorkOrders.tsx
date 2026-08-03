@@ -28,27 +28,6 @@ const DEFAULT_PENDING_REASONS = [
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
-const createBlankWorkOrderForm = () => ({
-  date: new Date().toISOString().split('T')[0],
-  customerRefId: '', customerId: '', customerName: '', vehicleRefId: '',
-  plateNumber: '', vehicleInfo: '', description: '',
-  diagnosisTemperature: undefined as number | undefined,
-  diagnosisLp: undefined as number | undefined,
-  diagnosisHp: undefined as number | undefined,
-  finalTemperature: undefined as number | undefined,
-  finalLp: undefined as number | undefined,
-  finalHp: undefined as number | undefined,
-  services: [{
-    id: `svc-cek-${Date.now()}`, itemId: undefined as string | undefined,
-    code: 'CEK-AC', name: 'CEK AC - PENGECEKAN GRATIS',
-    description: 'Pengecekan kondisi AC kendaraan', price: 0, qty: 1,
-  }] as WorkOrderService[],
-  findings: '', notes: '', status: 'Pengecekan' as WorkOrder['status'],
-});
-
-type WorkOrderForm = ReturnType<typeof createBlankWorkOrderForm>;
-type WorkOrderDraft = { id: string; label: string; form: WorkOrderForm };
-
 export default function WorkOrders() {
   const {
     data,
@@ -57,7 +36,7 @@ export default function WorkOrders() {
     createInvoiceFromWO, addItem,
     currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings, refreshData, isLoading,
   } = useApp();
-  const [showModal, setShowModal] = useState(true);
+  const [showModal, setShowModal] = useState(false);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
@@ -110,13 +89,26 @@ export default function WorkOrders() {
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
 
-  const initialDraftId = useMemo(() => `draft-${Date.now()}`, []);
-  const initialDraftForm = useMemo(() => createBlankWorkOrderForm(), []);
-  const [draftTabs, setDraftTabs] = useState<WorkOrderDraft[]>([
-    { id: initialDraftId, label: 'Data Baru', form: initialDraftForm },
-  ]);
-  const [activeDraftId, setActiveDraftId] = useState<string | null>(initialDraftId);
-  const [formData, setFormData] = useState<WorkOrderForm>(initialDraftForm);
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    customerRefId: '',
+    customerId: '',
+    customerName: '',
+    vehicleRefId: '',
+    plateNumber: '',
+    vehicleInfo: '',
+    description: '',
+    diagnosisTemperature: undefined as number | undefined,
+    diagnosisLp: undefined as number | undefined,
+    diagnosisHp: undefined as number | undefined,
+    finalTemperature: undefined as number | undefined,
+    finalLp: undefined as number | undefined,
+    finalHp: undefined as number | undefined,
+    services: [] as WorkOrderService[],
+    findings: '',
+    notes: '',
+    status: 'Pengecekan' as WorkOrder['status'],
+  });
 
   useEffect(() => {
     setPendingTemplateDraft(data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS);
@@ -393,72 +385,43 @@ export default function WorkOrders() {
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
 
+  // Default layanan saat WO baru: pengecekan gratis
+  const defaultCekAcService = {
+    id: `svc-cek-${Date.now()}`,
+    itemId: undefined as string | undefined,
+    code: 'CEK-AC',
+    name: 'CEK AC - PENGECEKAN GRATIS',
+    description: 'Pengecekan kondisi AC kendaraan',
+    price: 0,
+    qty: 1,
+  };
+
   const resetForm = () => {
-    setFormData(createBlankWorkOrderForm());
+    setFormData({
+      date: new Date().toISOString().split('T')[0],
+      customerRefId: '',
+      customerId: '',
+      customerName: '',
+      vehicleRefId: '',
+      plateNumber: '',
+      vehicleInfo: '',
+      description: '',
+      diagnosisTemperature: undefined,
+      diagnosisLp: undefined,
+      diagnosisHp: undefined,
+      finalTemperature: undefined,
+      finalLp: undefined,
+      finalHp: undefined,
+      services: [{ ...defaultCekAcService, id: `svc-cek-${Date.now()}` }],
+      findings: '',
+      notes: '',
+      status: 'Pengecekan',
+    });
     setShowServiceForm(false);
     setServiceSearch('');
     setEditingWO(null);
     setWoDateUnlocked(false);
     setWoBackdateReason('');
-  };
-
-  useEffect(() => {
-    if (!activeDraftId || diagnosisMode || editingWO) return;
-    setDraftTabs(previous => previous.map(draft => draft.id === activeDraftId ? { ...draft, form: formData } : draft));
-  }, [formData, activeDraftId, diagnosisMode, editingWO]);
-
-  const openNewDraft = () => {
-    if (currentBranchId === 'ALL') {
-      window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
-      return;
-    }
-    const id = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const form = createBlankWorkOrderForm();
-    const number = draftTabs.length + 1;
-    setDraftTabs(previous => [...previous, { id, label: number === 1 ? 'Data Baru' : `Data Baru ${number}`, form }]);
-    setActiveDraftId(id);
-    setFormData(form);
-    setEditingWO(null);
-    setDiagnosisMode(false);
-    setWoDateUnlocked(false);
-    setWoBackdateReason('');
-    setShowModal(true);
-  };
-
-  const selectDraft = (draft: WorkOrderDraft) => {
-    setActiveDraftId(draft.id);
-    setFormData(draft.form);
-    setEditingWO(null);
-    setDiagnosisMode(false);
-    setWoDateUnlocked(draft.form.date !== new Date().toISOString().split('T')[0]);
-    setWoBackdateReason('');
-    setShowServiceForm(false);
-    setServiceSearch('');
-    setShowModal(true);
-  };
-
-  const closeDraft = (id: string) => {
-    const target = draftTabs.find(draft => draft.id === id);
-    const hasInput = target && Boolean(target.form.customerRefId || target.form.vehicleRefId || target.form.description || target.form.notes || target.form.services.length > 1);
-    if (hasInput && !window.confirm(`Tutup ${target?.label}? Data yang belum disimpan akan hilang.`)) return;
-    const remaining = draftTabs.filter(draft => draft.id !== id);
-    setDraftTabs(remaining);
-    if (activeDraftId === id) {
-      const next = remaining[remaining.length - 1];
-      if (next) selectDraft(next);
-      else {
-        setActiveDraftId(null);
-        setShowModal(false);
-        setEditingWO(null);
-        setDiagnosisMode(false);
-      }
-    }
-  };
-
-  const showWorkOrderList = () => {
-    setShowModal(false);
-    setEditingWO(null);
-    setDiagnosisMode(false);
   };
 
   const handleOpenModal = (wo?: WorkOrder) => {
@@ -491,9 +454,7 @@ export default function WorkOrders() {
       setWoDateUnlocked(wo.date !== new Date().toISOString().split('T')[0]);
       setWoBackdateReason(wo.backdateReason || '');
     } else {
-      const active = draftTabs.find(draft => draft.id === activeDraftId);
-      if (active) setFormData(active.form);
-      else return openNewDraft();
+      resetForm();
     }
     setShowModal(true);
   };
@@ -513,16 +474,9 @@ export default function WorkOrders() {
   };
 
   const handleCloseModal = () => {
-    if (diagnosisMode || editingWO) {
-      setDiagnosisMode(false);
-      setEditingWO(null);
-      const active = draftTabs.find(draft => draft.id === activeDraftId);
-      if (active) selectDraft(active);
-      else setShowModal(false);
-      return;
-    }
-    if (activeDraftId) closeDraft(activeDraftId);
-    else showWorkOrderList();
+    setShowModal(false);
+    setDiagnosisMode(false);
+    resetForm();
   };
 
   const handleRemoveService = (id: string) => {
@@ -610,11 +564,6 @@ export default function WorkOrders() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!editingWO && currentBranchId === 'ALL') {
-      window.alert('Pilih cabang aktif terlebih dahulu. WO baru tidak dapat disimpan pada Semua Cabang.');
-      return;
-    }
-
     // Validasi wajib
     if (!formData.customerRefId) {
       setSuccessMsg('');
@@ -679,14 +628,7 @@ export default function WorkOrders() {
         setSuccessMsg(`${woNumber} berhasil dibuat di ${bName}.`);
       }
       setTimeout(() => setSuccessMsg(''), 4000);
-      if (!editingWO && activeDraftId) {
-        setDraftTabs(previous => previous.filter(draft => draft.id !== activeDraftId));
-        setActiveDraftId(null);
-        setShowModal(false);
-        resetForm();
-      } else {
-        handleCloseModal();
-      }
+      handleCloseModal();
     } catch (err: any) {
       window.alert('Gagal menyimpan Order Kerja: ' + (err?.message || 'terjadi kesalahan'));
     }
@@ -872,20 +814,9 @@ export default function WorkOrders() {
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
       <div className="flex items-end gap-0.5 border-b border-blue-600 bg-gray-100 px-1">
-        <button type="button" onClick={showWorkOrderList} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
+        <button type="button" onClick={handleCloseModal} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
-        {draftTabs.map(draft => (
-          <button
-            key={draft.id}
-            type="button"
-            onClick={() => selectDraft(draft)}
-            className={`flex h-11 items-center gap-2 rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${showModal && !diagnosisMode && !editingWO && activeDraftId === draft.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}
-          >
-            {draft.label}
-            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); closeDraft(draft.id); }} />
-          </button>
-        ))}
         {showModal && diagnosisMode && editingWO ? (
           <button
             type="button"
@@ -894,19 +825,19 @@ export default function WorkOrders() {
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
-        ) : showModal && editingWO ? (
-          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
-            <Edit className="h-4 w-4" /> Edit {editingWO.woNumber}
-            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
-          </button>
-        ) : null}
-        {hasPermission('wo:create') && (
+        ) : hasPermission('wo:create') && (
           <button
             type="button"
-            onClick={openNewDraft}
-            className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-gray-300 bg-gray-100 px-5 text-sm font-semibold text-gray-600 transition-colors hover:bg-white hover:text-blue-700"
+            onClick={() => {
+              if (currentBranchId === 'ALL') {
+                window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
+                return;
+              }
+              handleOpenModal();
+            }}
+            className={`flex h-11 items-center gap-2 rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}
           >
-            <Plus className="h-4 w-4" /> NEW DATA
+            <Plus className="h-4 w-4" /> {editingWO ? 'Edit Order Kerja' : 'Data Baru'}
           </button>
         )}
         <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
