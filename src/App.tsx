@@ -20,6 +20,7 @@ import WorkOrderReport from './pages/WorkOrderReport';
 import ReportsIndex from './pages/ReportsIndex';
 import CustomerPayments from './pages/CustomerPayments';
 import BranchDeposits from './pages/BranchDeposits';
+import CashAccounts from './pages/CashAccounts';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useApp();
@@ -49,6 +50,8 @@ function AppRoutes() {
         <Route path="invoices" element={<SalesInvoice />} />
         <Route path="customer-payments" element={<CustomerPayments />} />
         <Route path="branch-deposits" element={<BranchDeposits />} />
+        <Route path="cash-accounts" element={<CashAccounts mode="cash" />} />
+        <Route path="bank-accounts" element={<CashAccounts mode="bank" />} />
         <Route path="customers" element={<Customers />} />
         <Route path="workorders" element={<WorkOrders />} />
         <Route path="reports/workorders" element={<WorkOrderReport />} />

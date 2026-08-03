@@ -55,7 +55,7 @@ const desktopGroups = [
     { label: 'Laba Rugi', icon: BarChart3, tone: 'purple' }, { label: 'Neraca', icon: BarChart3, tone: 'purple' },
   ]},
   { id: 'cash', label: 'Kas & Bank', icon: Landmark, items: [
-    { label: 'Kas Cabang', icon: Banknote, tone: 'green' }, { label: 'Rekening Bank', icon: Landmark, tone: 'blue' },
+    { label: 'Kas Cabang', path: '/cash-accounts', icon: Banknote, perm: 'invoice:view', tone: 'green' }, { label: 'Rekening Bank', path: '/bank-accounts', icon: Landmark, perm: 'invoice:view', tone: 'blue' },
     { label: 'Penerimaan Lain', icon: CreditCard, tone: 'green' }, { label: 'Pengeluaran', icon: CreditCard, tone: 'orange' },
     { label: 'Setoran Cabang', path: '/branch-deposits', icon: ArrowLeftRight, perm: 'invoice:view', tone: 'blue' }, { label: 'Verifikasi Setoran', path: '/branch-deposits', icon: Shield, perm: 'invoice:view', tone: 'purple' },
   ]},

@@ -177,6 +177,13 @@ function ensureApiSupportTables(PDO $pdo): void {
         is_active TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_cash_account_branch (branch_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payments (
+        id VARCHAR(64) PRIMARY KEY, payment_number VARCHAR(40) NOT NULL UNIQUE, invoice_id VARCHAR(64) NOT NULL,
+        date DATE NOT NULL, amount DECIMAL(15,2) NOT NULL DEFAULT 0, payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai',
+        account_id VARCHAR(64) NULL, account_name VARCHAR(120) NULL, notes VARCHAR(255) NULL, branch_id VARCHAR(64) NOT NULL,
+        created_by VARCHAR(64) NULL, created_by_name VARCHAR(150) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_customer_payment_invoice (invoice_id), INDEX idx_customer_payment_date (date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS branch_deposits (
         id VARCHAR(64) PRIMARY KEY, deposit_number VARCHAR(40) NOT NULL UNIQUE, date DATE NOT NULL,
         branch_id VARCHAR(20) NOT NULL, source_account_id VARCHAR(64) NOT NULL, destination_account_id VARCHAR(64) NOT NULL,
