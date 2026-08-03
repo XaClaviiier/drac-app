@@ -36,7 +36,7 @@ export default function WorkOrders() {
     createInvoiceFromWO, addItem,
     currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings, refreshData, isLoading,
   } = useApp();
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(true);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
@@ -104,7 +104,15 @@ export default function WorkOrders() {
     finalTemperature: undefined as number | undefined,
     finalLp: undefined as number | undefined,
     finalHp: undefined as number | undefined,
-    services: [] as WorkOrderService[],
+    services: [{
+      id: `svc-cek-${Date.now()}`,
+      itemId: undefined,
+      code: 'CEK-AC',
+      name: 'CEK AC - PENGECEKAN GRATIS',
+      description: 'Pengecekan kondisi AC kendaraan',
+      price: 0,
+      qty: 1,
+    }] as WorkOrderService[],
     findings: '',
     notes: '',
     status: 'Pengecekan' as WorkOrder['status'],
@@ -564,6 +572,11 @@ export default function WorkOrders() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!editingWO && currentBranchId === 'ALL') {
+      window.alert('Pilih cabang aktif terlebih dahulu. WO baru tidak dapat disimpan pada Semua Cabang.');
+      return;
+    }
+
     // Validasi wajib
     if (!formData.customerRefId) {
       setSuccessMsg('');
@@ -825,19 +838,31 @@ export default function WorkOrders() {
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
-        ) : hasPermission('wo:create') && (
+        ) : showModal && editingWO ? (
+          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+            <Edit className="h-4 w-4" /> Edit {editingWO.woNumber}
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+          </button>
+        ) : showModal && hasPermission('wo:create') ? (
+          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+            Data Baru
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+          </button>
+        ) : null}
+        {hasPermission('wo:create') && (
           <button
             type="button"
             onClick={() => {
+              if (showModal && !diagnosisMode && !editingWO) return;
               if (currentBranchId === 'ALL') {
                 window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
                 return;
               }
               handleOpenModal();
             }}
-            className={`flex h-11 items-center gap-2 rounded-t-md border border-b-0 px-5 text-sm font-semibold transition-colors ${showModal ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}
+            className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-gray-300 bg-gray-100 px-5 text-sm font-semibold text-gray-600 transition-colors hover:bg-white hover:text-blue-700"
           >
-            <Plus className="h-4 w-4" /> {editingWO ? 'Edit Order Kerja' : 'Data Baru'}
+            <Plus className="h-4 w-4" /> NEW DATA
           </button>
         )}
         <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
