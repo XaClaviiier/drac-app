@@ -489,9 +489,16 @@ export default function WorkOrders() {
   };
 
   const handleRemoveService = (id: string) => {
-    setFormData({
-      ...formData,
-      services: formData.services.filter((s) => s.id !== id),
+    setFormData(prev => {
+      const targetIndex = prev.services.findIndex(service => service.id === id);
+      if (targetIndex < 0) return prev;
+      const target = prev.services[targetIndex];
+      if (!target.name.startsWith('[PAKET]')) {
+        return { ...prev, services: prev.services.filter(service => service.id !== id) };
+      }
+      let endIndex = targetIndex + 1;
+      while (endIndex < prev.services.length && prev.services[endIndex].name.startsWith('   -')) endIndex += 1;
+      return { ...prev, services: prev.services.filter((_, index) => index < targetIndex || index >= endIndex) };
     });
   };
 
@@ -1869,27 +1876,33 @@ export default function WorkOrders() {
                                       {isGroupMember && <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">Komponen</span>}
                                     </div>
                                     {service.code && <p className="font-mono text-[10px] text-gray-400">{service.code}</p>}
-                                    <input
-                                      type="text"
-                                      value={service.description || ''}
-                                      onChange={(e) => handleUpdateService(service.id, 'description', e.target.value)}
-                                      placeholder="Keterangan (opsional)"
-                                      className="mt-1 w-full border-b border-dashed border-gray-200 bg-transparent py-0.5 text-xs text-gray-500 outline-none focus:border-blue-500"
-                                    />
+                                    {!isGroupMember && (
+                                      <input
+                                        type="text"
+                                        value={service.description || ''}
+                                        onChange={(e) => handleUpdateService(service.id, 'description', e.target.value)}
+                                        placeholder="Keterangan (opsional)"
+                                        className="mt-1 w-full border-b border-dashed border-gray-200 bg-transparent py-0.5 text-xs text-gray-500 outline-none focus:border-blue-500"
+                                      />
+                                    )}
                                   </div>
                                 </div>
                               </td>
                               <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={service.qty}
-                                  onChange={(e) => handleUpdateService(service.id, 'qty', parseInt(e.target.value) || 1)}
-                                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-center font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                />
+                                {isGroupMember ? (
+                                  <span className="block text-center text-sm font-medium text-gray-600">Qty {service.qty}</span>
+                                ) : (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={service.qty}
+                                    onChange={(e) => handleUpdateService(service.id, 'qty', parseInt(e.target.value) || 1)}
+                                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-center font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                  />
+                                )}
                               </td>
                               <td className="px-3 py-2">
-                                <div className="relative">
+                                {!isGroupMember && <div className="relative">
                                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
                                   <input
                                     type="number"
@@ -1898,15 +1911,15 @@ export default function WorkOrders() {
                                     onChange={(e) => handleUpdateService(service.id, 'price', parseInt(e.target.value) || 0)}
                                     className={`w-full rounded-lg border px-7 py-1.5 text-right outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isGroupHeader ? 'border-purple-300 bg-purple-50 font-bold text-purple-700' : service.price === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-300 bg-white'}`}
                                   />
-                                </div>
+                                </div>}
                               </td>
                               <td className={`px-3 py-2 text-right font-bold whitespace-nowrap ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>
-                                Rp {(service.price * service.qty).toLocaleString('id-ID')}
+                                {!isGroupMember && <>Rp {(service.price * service.qty).toLocaleString('id-ID')}</>}
                               </td>
                               <td className="px-3 py-2 text-center">
-                                <button type="button" onClick={() => handleRemoveService(service.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-100" title="Hapus">
+                                {!isGroupMember && <button type="button" onClick={() => handleRemoveService(service.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-100" title="Hapus">
                                   <Trash2 className="h-4 w-4" />
-                                </button>
+                                </button>}
                               </td>
                             </tr>
                           );
