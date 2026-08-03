@@ -92,6 +92,12 @@ try {
         case 'customer-payments':
             require 'endpoints/customer-payments.php';
             break;
+        case 'cash-accounts':
+            require 'endpoints/cash-accounts.php';
+            break;
+        case 'branch-deposits':
+            require 'endpoints/branch-deposits.php';
+            break;
 
         // ----- GOODS RECEIPTS -----
         case 'goods-receipts':

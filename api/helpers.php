@@ -171,6 +171,20 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_movement_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS cash_accounts (
+        id VARCHAR(64) PRIMARY KEY, code VARCHAR(30) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL,
+        account_type ENUM('cash','bank','qris') NOT NULL, branch_id VARCHAR(20) NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_cash_account_branch (branch_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS branch_deposits (
+        id VARCHAR(64) PRIMARY KEY, deposit_number VARCHAR(40) NOT NULL UNIQUE, date DATE NOT NULL,
+        branch_id VARCHAR(20) NOT NULL, source_account_id VARCHAR(64) NOT NULL, destination_account_id VARCHAR(64) NOT NULL,
+        amount DECIMAL(15,2) NOT NULL, status ENUM('Dikirim','Terverifikasi','Ditolak') NOT NULL DEFAULT 'Dikirim',
+        notes VARCHAR(255) NULL, proof_url VARCHAR(255) NULL, created_by VARCHAR(64) NULL, created_by_name VARCHAR(150) NULL,
+        verified_by VARCHAR(64) NULL, verified_by_name VARCHAR(150) NULL, verified_at DATETIME NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_deposit_branch (branch_id), INDEX idx_deposit_date (date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // Setiap cabang memiliki satu gudang utama. ID mengikuti cabang agar deterministik.
     $branches = $pdo->query("SELECT id, code, name FROM branches")->fetchAll();
@@ -185,7 +199,10 @@ function ensureApiSupportTables(PDO $pdo): void {
             'GUDANG UTAMA ' . $branch['name'],
             $branch['id'],
         ]);
+        $cashAccount = $pdo->prepare("INSERT IGNORE INTO cash_accounts (id,code,name,account_type,branch_id) VALUES (?,?,?,?,?)");
+        $cashAccount->execute(['CASH-' . $branch['id'], 'KAS-' . $branch['code'], 'KAS ' . $branch['name'], 'cash', $branch['id']]);
     }
+    $pdo->exec("INSERT IGNORE INTO cash_accounts (id,code,name,account_type,branch_id) VALUES ('BANK-PUSAT','BANK-PUSAT','BANK / KAS PUSAT','bank',NULL),('QRIS-PUSAT','QRIS-PUSAT','QRIS PERUSAHAAN','qris',NULL)");
     $pdo->exec("
         INSERT IGNORE INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
         SELECT w.id, s.item_id, s.stock, GREATEST(0, s.stock - s.sellable_stock)
@@ -421,6 +438,12 @@ function isBackdateReasonRequired(PDO $pdo): bool {
         return ($settings['security']['requireBackdateReason'] ?? true) !== false;
     } catch (Throwable $e) {
         return true;
+    }
+    if ($pdo->query("SHOW TABLES LIKE 'customer_payments'")->fetch()) {
+        $paymentColumns = array_column($pdo->query("SHOW COLUMNS FROM customer_payments")->fetchAll(), 'Field');
+        if (!in_array('account_id', $paymentColumns, true)) $pdo->exec("ALTER TABLE customer_payments ADD account_id VARCHAR(64) NULL AFTER payment_method");
+        if (!in_array('account_name', $paymentColumns, true)) $pdo->exec("ALTER TABLE customer_payments ADD account_name VARCHAR(120) NULL AFTER account_id");
+        $pdo->exec("UPDATE customer_payments p JOIN cash_accounts a ON a.branch_id=p.branch_id AND a.account_type='cash' SET p.account_id=COALESCE(p.account_id,a.id),p.account_name=COALESCE(p.account_name,a.name)");
     }
 }
 

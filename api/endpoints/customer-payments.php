@@ -6,6 +6,8 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payments (
     date DATE NOT NULL,
     amount DECIMAL(15,2) NOT NULL DEFAULT 0,
     payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai',
+    account_id VARCHAR(64) NULL,
+    account_name VARCHAR(120) NULL,
     notes VARCHAR(255) NULL,
     branch_id VARCHAR(64) NOT NULL,
     created_by VARCHAR(64) NULL,
@@ -59,6 +61,8 @@ switch ($method) {
             $row['invoicePaid'] = (float)$row['invoice_paid'];
             $row['amount'] = (float)$row['amount'];
             $row['paymentMethod'] = $row['payment_method'];
+            $row['accountId'] = $row['account_id'];
+            $row['accountName'] = $row['account_name'];
             $row['branchId'] = $row['branch_id'];
             $row['createdByName'] = $row['created_by_name'];
         }
@@ -89,8 +93,13 @@ switch ($method) {
             $countStmt->execute([$invoice['branch_id'], $period]);
             $paymentNumber = 'PAY-' . $prefix . $period . str_pad((string)((int)$countStmt->fetchColumn() + 1), 3, '0', STR_PAD_LEFT);
             $paymentId = generateId();
-            $insert = $pdo->prepare("INSERT INTO customer_payments (id,payment_number,invoice_id,date,amount,payment_method,notes,branch_id,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?)");
-            $insert->execute([$paymentId, $paymentNumber, $invoiceId, $date, $amount, $d['paymentMethod'] ?? 'Tunai', trim((string)($d['notes'] ?? '')) ?: null, $invoice['branch_id'], $d['createdBy'] ?? null, $d['createdByName'] ?? null]);
+            $accountStmt = $pdo->prepare("SELECT id,name,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1");
+            $accountStmt->execute([$d['accountId'] ?? '']);
+            $account = $accountStmt->fetch();
+            if (!$account) throw new Exception('Kas/Bank tujuan wajib dipilih');
+            if ($account['account_type']==='cash' && $account['branch_id'] !== $invoice['branch_id']) throw new Exception('Kas tujuan harus sesuai cabang invoice');
+            $insert = $pdo->prepare("INSERT INTO customer_payments (id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+            $insert->execute([$paymentId, $paymentNumber, $invoiceId, $date, $amount, $d['paymentMethod'] ?? 'Tunai', $account['id'], $account['name'], trim((string)($d['notes'] ?? '')) ?: null, $invoice['branch_id'], $d['createdBy'] ?? null, $d['createdByName'] ?? null]);
             recalculateCustomerInvoice($pdo, $invoiceId);
             $pdo->commit();
             respondSuccess(['id'=>$paymentId, 'paymentNumber'=>$paymentNumber], 'Pembayaran pelanggan disimpan');

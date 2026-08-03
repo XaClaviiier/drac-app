@@ -57,7 +57,7 @@ const desktopGroups = [
   { id: 'cash', label: 'Kas & Bank', icon: Landmark, items: [
     { label: 'Kas Cabang', icon: Banknote, tone: 'green' }, { label: 'Rekening Bank', icon: Landmark, tone: 'blue' },
     { label: 'Penerimaan Lain', icon: CreditCard, tone: 'green' }, { label: 'Pengeluaran', icon: CreditCard, tone: 'orange' },
-    { label: 'Setoran Cabang', icon: ArrowLeftRight, tone: 'blue' }, { label: 'Verifikasi Setoran', icon: Shield, tone: 'purple' },
+    { label: 'Setoran Cabang', path: '/branch-deposits', icon: ArrowLeftRight, perm: 'invoice:view', tone: 'blue' }, { label: 'Verifikasi Setoran', path: '/branch-deposits', icon: Shield, perm: 'invoice:view', tone: 'purple' },
   ]},
   { id: 'sales', label: 'WORK ORDER', icon: CrossedToolsIcon, items: [
     { label: 'Order Kerja', path: '/workorders', icon: Wrench, perm: 'wo:view', tone: 'green' },

@@ -19,6 +19,7 @@ import Warehouses from './pages/Warehouses';
 import WorkOrderReport from './pages/WorkOrderReport';
 import ReportsIndex from './pages/ReportsIndex';
 import CustomerPayments from './pages/CustomerPayments';
+import BranchDeposits from './pages/BranchDeposits';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useApp();
@@ -47,6 +48,7 @@ function AppRoutes() {
         <Route path="vehicles" element={<VehicleRegister />} />
         <Route path="invoices" element={<SalesInvoice />} />
         <Route path="customer-payments" element={<CustomerPayments />} />
+        <Route path="branch-deposits" element={<BranchDeposits />} />
         <Route path="customers" element={<Customers />} />
         <Route path="workorders" element={<WorkOrders />} />
         <Route path="reports/workorders" element={<WorkOrderReport />} />
