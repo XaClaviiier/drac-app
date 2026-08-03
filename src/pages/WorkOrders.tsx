@@ -1657,6 +1657,55 @@ export default function WorkOrders() {
                 </div>
 
                 {showServiceForm && (
+                  <div className="relative z-20 mb-4 flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={serviceSearch}
+                        onChange={(event) => setServiceSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' || !serviceSearch.trim()) return;
+                          event.preventDefault();
+                          const query = serviceSearch.trim().toLowerCase();
+                          const exact = availableServiceItems.find(item => item.code.toLowerCase() === query || (item.barcode || '').toLowerCase() === query);
+                          if (exact) { handleUseItem(exact.id); setServiceSearch(''); }
+                        }}
+                        autoFocus
+                        placeholder="Cari kode, barcode, atau nama layanan/barang..."
+                        className="w-full rounded-lg border border-blue-400 py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                      {serviceSearch.trim() && (
+                        <div className="absolute left-0 right-0 top-full mt-1 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl">
+                          {availableServiceItems.filter(item => {
+                            const query = serviceSearch.toLowerCase().trim();
+                            return item.code.toLowerCase().includes(query) || (item.barcode || '').toLowerCase().includes(query) || item.name.toLowerCase().includes(query) || (item.receiptDescription || '').toLowerCase().includes(query) || item.categoryName.toLowerCase().includes(query);
+                          }).slice(0, 12).map(item => {
+                            const added = isItemAdded(item.id);
+                            return (
+                              <button key={item.id} type="button" disabled={added} onClick={() => { handleUseItem(item.id); setServiceSearch(''); }} className={`flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-0 ${added ? 'cursor-not-allowed bg-green-50 opacity-60' : 'hover:bg-blue-50'}`}>
+                                <span className="w-24 flex-shrink-0 font-mono text-xs text-gray-500">{item.code}</span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-gray-900">{item.name}</span>
+                                  <span className="block truncate text-[10px] text-gray-400">{item.categoryName} · {item.type}</span>
+                                </span>
+                                <span className="flex-shrink-0 text-sm font-semibold text-gray-700">Rp {item.sellingPrice.toLocaleString('id-ID')}</span>
+                                {added && <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {hasPermission('item:create') && (
+                      <button type="button" onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 items-center gap-1 rounded-lg border border-green-300 px-3 text-sm font-medium text-green-700 hover:bg-green-50">
+                        <Plus className="h-4 w-4" /> Baru
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {false && showServiceForm && (
                   <div className="mb-4 overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm">
                     <div className="border-b border-blue-100 bg-blue-50 p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
