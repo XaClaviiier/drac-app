@@ -192,6 +192,7 @@ export default function WorkOrders() {
   const [serviceSearch, setServiceSearch] = useState('');
   const [serviceSearchFocused, setServiceSearchFocused] = useState(false);
   const [isServiceSearching, setIsServiceSearching] = useState(false);
+  const [showQuickServices, setShowQuickServices] = useState(() => localStorage.getItem('dokterac_wo_quick_services') === 'open');
   const availableServiceItems = data.items.filter((item) => item.isActive);
 
   // Quick-add Item modal state
@@ -213,6 +214,14 @@ export default function WorkOrders() {
     const timer = window.setTimeout(() => setIsServiceSearching(false), 180);
     return () => window.clearTimeout(timer);
   }, [serviceSearch]);
+
+  const toggleQuickServices = () => {
+    setShowQuickServices(previous => {
+      const next = !previous;
+      localStorage.setItem('dokterac_wo_quick_services', next ? 'open' : 'closed');
+      return next;
+    });
+  };
 
   const handleQuickAddItem = () => {
     if (!quickItemForm.name) { window.alert('Nama barang/jasa harus diisi'); return; }
@@ -1676,8 +1685,17 @@ export default function WorkOrders() {
                 </div>
 
                 {showServiceForm && (
-                  <div className="relative z-20 mb-4 flex items-center gap-2">
-                    <div className="relative flex-1">
+                  <div className="relative z-20 mb-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={toggleQuickServices}
+                        className={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border transition-colors ${showQuickServices ? 'border-amber-400 bg-amber-100 text-amber-600' : 'border-gray-300 bg-white text-gray-500 hover:border-amber-300 hover:text-amber-500'}`}
+                        title={showQuickServices ? 'Sembunyikan Quick Select' : 'Tampilkan Quick Select'}
+                      >
+                        <Star className={`h-5 w-5 ${showQuickServices ? 'fill-amber-400' : ''}`} />
+                      </button>
+                      <div className="relative flex-1">
                       <input
                         type="text"
                         value={serviceSearch}
@@ -1721,11 +1739,34 @@ export default function WorkOrders() {
                           })}
                         </div>
                       )}
+                      </div>
+                      {hasPermission('item:create') && (
+                        <button type="button" onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 items-center gap-1 rounded-lg border border-green-300 px-3 text-sm font-medium text-green-700 hover:bg-green-50">
+                          <Plus className="h-4 w-4" /> Baru
+                        </button>
+                      )}
                     </div>
-                    {hasPermission('item:create') && (
-                      <button type="button" onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 items-center gap-1 rounded-lg border border-green-300 px-3 text-sm font-medium text-green-700 hover:bg-green-50">
-                        <Plus className="h-4 w-4" /> Baru
-                      </button>
+                    {showQuickServices && (
+                      <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
+                        {availableServiceItems.filter(item => item.isQuickService).map(item => {
+                          const added = isItemAdded(item.id);
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              disabled={added}
+                              onClick={() => handleUseItem(item.id)}
+                              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${added ? 'cursor-not-allowed border-green-200 bg-green-100 text-green-700 opacity-60' : 'border-amber-300 bg-white text-gray-700 hover:bg-amber-100'}`}
+                            >
+                              {added ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />}
+                              {item.name}
+                            </button>
+                          );
+                        })}
+                        {availableServiceItems.filter(item => item.isQuickService).length === 0 && (
+                          <span className="px-2 py-1 text-xs italic text-gray-500">Belum ada Barang/Jasa favorit.</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
