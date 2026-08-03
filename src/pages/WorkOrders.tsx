@@ -50,7 +50,7 @@ export default function WorkOrders() {
   const [savingPendingTemplates, setSavingPendingTemplates] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [todayOnly, setTodayOnly] = useState(true);
+  const [todayOnly, setTodayOnly] = useState(false);
   const [activeBranchOnly, setActiveBranchOnly] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -813,6 +813,16 @@ export default function WorkOrders() {
             </div>
             <button
               type="button"
+              onClick={() => void handleRefresh()}
+              disabled={isLoading}
+              className="inline-flex h-12 flex-shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
+              title="Ambil ulang data Order Kerja dari server"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
+            </button>
+            <button
+              type="button"
               role="switch"
               aria-checked={todayOnly}
               onClick={() => setTodayOnly(value => !value)}
@@ -874,17 +884,6 @@ export default function WorkOrders() {
               <option value="Selesai">4. Selesai</option>
               <option value="Dibayar">5. Dibayar</option>
             </select>
-
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={isLoading}
-              className="inline-flex h-12 flex-shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
-              title="Ambil ulang data Order Kerja dari server"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
-            </button>
 
           </div>
 
