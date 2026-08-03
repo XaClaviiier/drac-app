@@ -16,6 +16,12 @@ switch ($method) {
             $r['invoiceNumber']           = $r['invoice_number'];
             $r['total']                   = (float)$r['total'];
             $r['findings']                = $r['findings'] ?? null;
+            $r['diagnosisTemperature']    = isset($r['diagnosis_temperature']) ? (float)$r['diagnosis_temperature'] : null;
+            $r['diagnosisLp']             = isset($r['diagnosis_lp']) ? (float)$r['diagnosis_lp'] : null;
+            $r['diagnosisHp']             = isset($r['diagnosis_hp']) ? (float)$r['diagnosis_hp'] : null;
+            $r['finalTemperature']        = isset($r['final_temperature']) ? (float)$r['final_temperature'] : null;
+            $r['finalLp']                 = isset($r['final_lp']) ? (float)$r['final_lp'] : null;
+            $r['finalHp']                 = isset($r['final_hp']) ? (float)$r['final_hp'] : null;
             $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
             $r['approvedAt']              = $r['approved_at'] ?? null;
             $r['pendingAt']               = $r['pending_at'] ?? null;
@@ -80,11 +86,12 @@ switch ($method) {
                     id, wo_number, date, backdate_reason,
                     customer_ref_id, customer_id, customer_name,
                     vehicle_ref_id, plate_number, vehicle_info,
-                    description, findings, total, estimate_total, approved_at, pending_at, pending_until, pending_reason,
+                    description, findings, diagnosis_temperature, diagnosis_lp, diagnosis_hp, final_temperature, final_lp, final_hp,
+                    total, estimate_total, approved_at, pending_at, pending_until, pending_reason,
                     status, cancel_reason, status_log, notes, branch_id,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $woId, $woNumber, $transactionDate, $backdateReason ?: null,
@@ -92,6 +99,8 @@ switch ($method) {
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
                 $d['description'] ?? '', $d['findings'] ?? null,
+                $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
+                $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,
                 $d['total'] ?? 0, $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
                 $d['pendingAt'] ?? null, $d['pendingUntil'] ?? null, $d['pendingReason'] ?? null,
                 $d['status'] ?? 'Pengecekan',
@@ -166,7 +175,8 @@ switch ($method) {
                     wo_number=?, date=?, backdate_reason=?,
                     customer_ref_id=?, customer_id=?, customer_name=?,
                     vehicle_ref_id=?, plate_number=?, vehicle_info=?,
-                    description=?, findings=?, total=?, estimate_total=?, approved_at=?,
+                    description=?, findings=?, diagnosis_temperature=?, diagnosis_lp=?, diagnosis_hp=?, final_temperature=?, final_lp=?, final_hp=?,
+                    total=?, estimate_total=?, approved_at=?,
                     pending_at=?, pending_until=?, pending_reason=?,
                     status=?, cancel_reason=?, status_log=?, notes=?, branch_id=?,
                     invoice_id=?, invoice_number=?,
@@ -180,6 +190,8 @@ switch ($method) {
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
                 $d['description'] ?? '', $d['findings'] ?? null,
+                $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
+                $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,
                 $d['total'] ?? 0, $d['estimateTotal'] ?? null, $d['approvedAt'] ?? null,
                 $d['pendingAt'] ?? null, $d['pendingUntil'] ?? null, $d['pendingReason'] ?? null,
                 $d['status'] ?? 'Pengecekan',

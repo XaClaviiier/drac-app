@@ -98,7 +98,14 @@ export default function WorkOrders() {
     plateNumber: '',
     vehicleInfo: '',
     description: '',
+    diagnosisTemperature: undefined as number | undefined,
+    diagnosisLp: undefined as number | undefined,
+    diagnosisHp: undefined as number | undefined,
+    finalTemperature: undefined as number | undefined,
+    finalLp: undefined as number | undefined,
+    finalHp: undefined as number | undefined,
     services: [] as WorkOrderService[],
+    findings: '',
     notes: '',
     status: 'Pengecekan' as WorkOrder['status'],
   });
@@ -399,7 +406,14 @@ export default function WorkOrders() {
       plateNumber: '',
       vehicleInfo: '',
       description: '',
+      diagnosisTemperature: undefined,
+      diagnosisLp: undefined,
+      diagnosisHp: undefined,
+      finalTemperature: undefined,
+      finalLp: undefined,
+      finalHp: undefined,
       services: [{ ...defaultCekAcService, id: `svc-cek-${Date.now()}` }],
+      findings: '',
       notes: '',
       status: 'Pengecekan',
     });
@@ -426,7 +440,14 @@ export default function WorkOrders() {
         plateNumber: wo.plateNumber,
         vehicleInfo: wo.vehicleInfo,
         description: wo.description || '',
+        diagnosisTemperature: wo.diagnosisTemperature,
+        diagnosisLp: wo.diagnosisLp,
+        diagnosisHp: wo.diagnosisHp,
+        finalTemperature: wo.finalTemperature,
+        finalLp: wo.finalLp,
+        finalHp: wo.finalHp,
         services: wo.services,
+        findings: wo.findings || '',
         notes: wo.notes || '',
         status: wo.status,
       });
@@ -715,6 +736,11 @@ export default function WorkOrders() {
     Dibayar: 'bg-purple-100 text-purple-800',
   };
   const statusLabel = (status: WorkOrder['status']) => status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Diagnosa Pending' : status === 'Proses' ? 'Dikerjakan' : status;
+  const diagnosisMeasurementLabel = (wo: WorkOrder) => [
+    wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
+    wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
+    wo.diagnosisHp != null ? `HP ${wo.diagnosisHp} PSI` : '',
+  ].filter(Boolean).join(' · ');
 
   const isPendingExpired = (wo: WorkOrder) =>
     wo.status === 'Pending' && !!wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now();
@@ -751,7 +777,12 @@ export default function WorkOrders() {
       : wo.vehicleInfo;
     const inputBy = wo.statusLog?.[0]?.byUserName || currentUser?.name || '-';
     const phone = customerPhoneForWO(wo).replace(/^[—â€“]+$/, '');
-    return `${wo.woNumber} ( ${formatShareDate(wo.date)} )\n🚗 ${wo.plateNumber} – ${vehicleLabel}\n👤 ${wo.customerName}${phone ? ` ${phone}` : ''}\nKeluhan: ${wo.description?.trim() || '-'}\nInput: ${inputBy}`;
+    const measurement = [
+      wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
+      wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
+      wo.diagnosisHp != null ? `HP ${wo.diagnosisHp} PSI` : '',
+    ].filter(Boolean).join(' · ');
+    return `${wo.woNumber} ( ${formatShareDate(wo.date)} )\n🚗 ${wo.plateNumber} – ${vehicleLabel}\n👤 ${wo.customerName}${phone ? ` ${phone}` : ''}\nKeluhan: ${wo.description?.trim() || '-'}${wo.findings ? `\nHasil diagnosa: ${wo.findings}` : ''}${measurement ? `\nPengukuran: ${measurement}` : ''}\nInput: ${inputBy}`;
   };
 
   const copyWorkOrder = async (wo: WorkOrder) => {
@@ -1420,6 +1451,13 @@ export default function WorkOrders() {
                   ))}
                 </div>
               </div>
+              {(detailWO.findings || diagnosisMeasurementLabel(detailWO)) && (
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+                  <h4 className="font-semibold text-cyan-900">Hasil Diagnosa</h4>
+                  {diagnosisMeasurementLabel(detailWO) && <p className="mt-2 text-sm font-semibold text-cyan-800">{diagnosisMeasurementLabel(detailWO)}</p>}
+                  {detailWO.findings && <p className="mt-2 whitespace-pre-wrap text-sm text-cyan-900">{detailWO.findings}</p>}
+                </div>
+              )}
               {detailWO.description && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><strong>Keluhan/Keterangan:</strong><br />{detailWO.description}</div>}
               {detailWO.notes && <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700"><strong>Catatan:</strong><br />{detailWO.notes}</div>}
             </div>
@@ -1852,9 +1890,32 @@ export default function WorkOrders() {
               {/* Catatan Internal / Hasil diagnosa */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{diagnosisMode ? 'Hasil Diagnosa' : 'Catatan Internal Bengkel'}</label>
+                {diagnosisMode && (
+                  <div className="mb-3 grid grid-cols-3 gap-2">
+                    <label className="text-xs font-semibold text-gray-600">
+                      Suhu (°C)
+                      <input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+                    </label>
+                    <label className="text-xs font-semibold text-gray-600">
+                      LP (PSI)
+                      <input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+                    </label>
+                    <label className="text-xs font-semibold text-gray-600">
+                      HP (PSI)
+                      <input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+                    </label>
+                  </div>
+                )}
+                {(wo.findings || diagnosisMeasurementLabel(wo)) && (
+                  <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">
+                    <p className="font-semibold">Hasil Diagnosa</p>
+                    {diagnosisMeasurementLabel(wo) && <p className="mt-1 font-medium">{diagnosisMeasurementLabel(wo)}</p>}
+                    {wo.findings && <p className="mt-1 whitespace-pre-wrap">{wo.findings}</p>}
+                  </div>
+                )}
                 <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  value={diagnosisMode ? formData.findings : formData.notes}
+                  onChange={(e) => setFormData(prev => diagnosisMode ? { ...prev, findings: e.target.value } : { ...prev, notes: e.target.value })}
                   placeholder={diagnosisMode ? 'Tuliskan hasil pemeriksaan teknisi…' : 'Catatan internal teknisi (sparepart, kendala, dll)...'}
                   rows={2}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"

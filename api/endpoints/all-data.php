@@ -16,6 +16,12 @@ try {
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_at DATETIME NULL AFTER approved_at");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_until DATETIME NULL AFTER pending_at");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_reason VARCHAR(255) NULL AFTER pending_until");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_temperature DECIMAL(6,2) NULL AFTER findings");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_lp DECIMAL(8,2) NULL AFTER diagnosis_temperature");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_hp DECIMAL(8,2) NULL AFTER diagnosis_lp");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_temperature DECIMAL(6,2) NULL AFTER diagnosis_hp");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_lp DECIMAL(8,2) NULL AFTER final_temperature");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_hp DECIMAL(8,2) NULL AFTER final_lp");
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
     if ($statusColumn && stripos((string)$statusColumn['Type'], "'Pending'") === false) {
         $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Pengecekan','Pending','Proses','Selesai','Dibayar','Batal') DEFAULT 'Pengecekan'");
@@ -173,6 +179,12 @@ try {
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['total'] = (float)$r['total'];
         $r['findings']                = $r['findings'] ?? null;
+        $r['diagnosisTemperature']    = isset($r['diagnosis_temperature']) ? (float)$r['diagnosis_temperature'] : null;
+        $r['diagnosisLp']             = isset($r['diagnosis_lp']) ? (float)$r['diagnosis_lp'] : null;
+        $r['diagnosisHp']             = isset($r['diagnosis_hp']) ? (float)$r['diagnosis_hp'] : null;
+        $r['finalTemperature']        = isset($r['final_temperature']) ? (float)$r['final_temperature'] : null;
+        $r['finalLp']                 = isset($r['final_lp']) ? (float)$r['final_lp'] : null;
+        $r['finalHp']                 = isset($r['final_hp']) ? (float)$r['final_hp'] : null;
         $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
         $r['approvedAt']              = $r['approved_at'] ?? null;
         $r['pendingAt']               = $r['pending_at'] ?? null;

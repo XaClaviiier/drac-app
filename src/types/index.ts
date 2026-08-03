@@ -78,6 +78,12 @@ export interface WorkOrder {
   vehicleInfo: string;
   description?: string;       // keluhan pelanggan
   findings?: string;          // hasil pemeriksaan teknisi
+  diagnosisTemperature?: number;
+  diagnosisLp?: number;
+  diagnosisHp?: number;
+  finalTemperature?: number;
+  finalLp?: number;
+  finalHp?: number;
   services: WorkOrderService[];
   total: number;
   estimateTotal?: number;     // estimasi saat pengecekan (dikunci saat masuk Proses)
