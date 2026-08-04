@@ -438,9 +438,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ===== WORK ORDERS =====
   const addWorkOrder = async (wo: WorkOrder) => {
+    const createdWorkOrder: WorkOrder = {
+      ...wo,
+      createdBy: wo.createdBy || currentUser?.id,
+      createdByName: wo.createdByName || currentUser?.name,
+    };
     await executeCRUD(
-      () => api.create('work-orders', wo),
-      () => setData(prev => ({ ...prev, workOrders: [...prev.workOrders, wo] }))
+      () => api.create('work-orders', createdWorkOrder),
+      () => setData(prev => ({ ...prev, workOrders: [...prev.workOrders, createdWorkOrder] }))
     );
   };
   const updateWorkOrder = async (id: string, wo: WorkOrder) => {

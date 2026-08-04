@@ -51,6 +51,9 @@ function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $exclud
 }
 
 function ensureApiSupportTables(PDO $pdo): void {
+    $workOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM work_orders")->fetchAll(), 'Field');
+    if (!in_array('created_by', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by VARCHAR(64) NULL AFTER branch_id");
+    if (!in_array('created_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by_name VARCHAR(150) NULL AFTER created_by");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS document_sequences (
             document_type ENUM('work_order','sales_invoice') NOT NULL,

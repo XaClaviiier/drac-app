@@ -174,6 +174,8 @@ try {
         $r['plateNumber'] = $r['plate_number'];
         $r['vehicleInfo'] = $r['vehicle_info'];
         $r['branchId'] = $r['branch_id'];
+        $r['createdBy'] = $r['created_by'] ?? null;
+        $r['createdByName'] = $r['created_by_name'] ?? null;
         $r['backdateReason'] = $r['backdate_reason'] ?? null;
         $r['invoiceId'] = $r['invoice_id'];
         $r['invoiceNumber'] = $r['invoice_number'];

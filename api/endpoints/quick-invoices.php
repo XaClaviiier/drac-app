@@ -4,7 +4,7 @@ if ($method !== 'POST') respondError('Method not allowed', 405);
 $d = getInput();
 $pdo->beginTransaction();
 try {
-    requireUserPermission($pdo, 'wo:create');
+    $actor = requireUserPermission($pdo, 'wo:create');
     requireUserPermission($pdo, 'invoice:create');
 
     $branchId = trim((string)($d['branchId'] ?? ''));
@@ -103,8 +103,8 @@ try {
     $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $date);
     $description = trim((string)($d['description'] ?? 'Transaksi cepat'));
     $backdateReason = $date < date('Y-m-d') ? 'Input transaksi tertinggal via Asisten AI REGINV' : null;
-    $wo = $pdo->prepare("INSERT INTO work_orders(id,wo_number,date,backdate_reason,customer_ref_id,customer_id,customer_name,vehicle_ref_id,plate_number,vehicle_info,description,total,estimate_total,status,notes,branch_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'Dibayar',?,?)");
-    $wo->execute([$woId,$woNumber,$date,$backdateReason,$customer['id'],$customer['customer_code'],$customer['name'],$vehicle['id'],$plate,$vehicleInfo,$description,$total,$total,'Dibuat via Asisten AI REGINV oleh '.($d['createdByName'] ?? '-'),$branchId]);
+    $wo = $pdo->prepare("INSERT INTO work_orders(id,wo_number,date,backdate_reason,customer_ref_id,customer_id,customer_name,vehicle_ref_id,plate_number,vehicle_info,description,total,estimate_total,status,notes,branch_id,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'Dibayar',?,?,?,?)");
+    $wo->execute([$woId,$woNumber,$date,$backdateReason,$customer['id'],$customer['customer_code'],$customer['name'],$vehicle['id'],$plate,$vehicleInfo,$description,$total,$total,'Dibuat via Asisten AI REGINV oleh '.($actor['name'] ?? '-'),$branchId,$actor['id'] ?? null,$actor['name'] ?? null]);
     $woItem = $pdo->prepare('INSERT INTO work_order_services(wo_id,item_id,code,name,description,price,qty,subtotal) VALUES(?,?,?,?,?,?,?,?)');
     foreach ($items as $item) $woItem->execute([$woId,$item['itemId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['price']*$item['qty']]);
 

@@ -98,6 +98,8 @@ export interface WorkOrder {
   invoiceId?: string;
   invoiceNumber?: string;
   branchId: string;
+  createdBy?: string;
+  createdByName?: string;
   // Lintas cabang: WO ini lanjutan dari WO lain
   continuedFromWoId?: string;
   continuedFromWoNumber?: string;

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -27,6 +27,19 @@ const DEFAULT_PENDING_REASONS = [
 ];
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
+
+type WorkOrderColumnKey = 'number' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'createdBy' | 'actions';
+const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
+  { key: 'number', label: 'No. WO / Tanggal', locked: true },
+  { key: 'customer', label: 'Pelanggan' },
+  { key: 'vehicle', label: 'Kendaraan' },
+  { key: 'services', label: 'Layanan' },
+  { key: 'total', label: 'Total' },
+  { key: 'status', label: 'Status' },
+  { key: 'createdBy', label: 'Dibuat Oleh' },
+  { key: 'actions', label: 'Aksi', locked: true },
+];
+const DEFAULT_WORK_ORDER_COLUMNS = WORK_ORDER_COLUMNS.map(column => column.key);
 
 export default function WorkOrders() {
   const {
@@ -56,6 +69,8 @@ export default function WorkOrders() {
   const [activeBranchOnly, setActiveBranchOnly] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<WorkOrderColumnKey[]>(DEFAULT_WORK_ORDER_COLUMNS);
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
   const [invoicePayment, setInvoicePayment] = useState(0);
   const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
@@ -89,6 +104,36 @@ export default function WorkOrders() {
     return DEFAULT_COMPLAINT_TEMPLATES;
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
+
+  const workOrderColumnStorageKey = `dokterac_wo_columns_${currentUser?.id || currentUser?.username || 'default'}`;
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(workOrderColumnStorageKey);
+      if (!saved) {
+        setVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS);
+        return;
+      }
+      const parsed = JSON.parse(saved) as WorkOrderColumnKey[];
+      const valid = parsed.filter(key => WORK_ORDER_COLUMNS.some(column => column.key === key));
+      setVisibleColumns(Array.from(new Set<WorkOrderColumnKey>(['number', ...valid, 'actions'])));
+    } catch {
+      setVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS);
+    }
+  }, [workOrderColumnStorageKey]);
+
+  const isColumnVisible = (key: WorkOrderColumnKey) => visibleColumns.includes(key);
+  const updateVisibleColumns = (columns: WorkOrderColumnKey[]) => {
+    const next = Array.from(new Set<WorkOrderColumnKey>(['number', ...columns, 'actions']));
+    setVisibleColumns(next);
+    localStorage.setItem(workOrderColumnStorageKey, JSON.stringify(next));
+  };
+  const toggleColumn = (key: WorkOrderColumnKey) => {
+    const config = WORK_ORDER_COLUMNS.find(column => column.key === key);
+    if (config?.locked) return;
+    updateVisibleColumns(isColumnVisible(key)
+      ? visibleColumns.filter(column => column !== key)
+      : [...visibleColumns, key]);
+  };
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -1038,6 +1083,45 @@ export default function WorkOrders() {
               <option value="Dibayar">5. Dibayar</option>
             </select>
 
+            <div className="relative hidden flex-shrink-0 lg:block">
+              <button
+                type="button"
+                onClick={() => setShowColumnPicker(value => !value)}
+                className={`inline-flex h-12 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                title="Pilih kolom yang tampil"
+              >
+                <Settings2 className="h-4 w-4" />
+                Kolom
+              </button>
+              {showColumnPicker && (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+                  <div className="mb-2 flex items-center justify-between border-b border-gray-100 pb-2">
+                    <span className="text-sm font-bold text-gray-800">Kolom Daftar WO</span>
+                    <button type="button" onClick={() => setShowColumnPicker(false)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Tutup pilihan kolom"><X className="h-4 w-4" /></button>
+                  </div>
+                  <div className="space-y-1">
+                    {WORK_ORDER_COLUMNS.map(column => (
+                      <label key={column.key} className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${column.locked ? 'cursor-not-allowed bg-gray-50 text-gray-500' : 'cursor-pointer text-gray-700 hover:bg-blue-50'}`}>
+                        <input
+                          type="checkbox"
+                          checked={isColumnVisible(column.key)}
+                          disabled={column.locked}
+                          onChange={() => toggleColumn(column.key)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>{column.label}</span>
+                        {column.locked && <span className="ml-auto text-[10px] font-semibold uppercase text-gray-400">Wajib</span>}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3">
+                    <button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Tampilkan Semua</button>
+                    <button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'vehicle', 'createdBy', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
           </div>
 
           {/* Hari Ini OFF: range tanggal opsional. Kosong = semua tanggal. */}
@@ -1101,19 +1185,20 @@ export default function WorkOrders() {
             <table className="w-full min-w-[1100px] text-left">
               <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">No. WO / Tanggal</th>
-                  <th className="px-4 py-3 font-semibold">Pelanggan</th>
-                  <th className="px-4 py-3 font-semibold">Kendaraan</th>
-                  <th className="px-4 py-3 font-semibold">Layanan</th>
-                  <th className="px-4 py-3 text-right font-semibold">Total</th>
-                  <th className="px-4 py-3 text-center font-semibold">Status</th>
-                  <th className="px-4 py-3 text-right font-semibold">Aksi</th>
+                  {isColumnVisible('number') && <th className="px-4 py-3 font-semibold">No. WO / Tanggal</th>}
+                  {isColumnVisible('customer') && <th className="px-4 py-3 font-semibold">Pelanggan</th>}
+                  {isColumnVisible('vehicle') && <th className="px-4 py-3 font-semibold">Kendaraan</th>}
+                  {isColumnVisible('services') && <th className="px-4 py-3 font-semibold">Layanan</th>}
+                  {isColumnVisible('total') && <th className="px-4 py-3 text-right font-semibold">Total</th>}
+                  {isColumnVisible('status') && <th className="px-4 py-3 text-center font-semibold">Status</th>}
+                  {isColumnVisible('createdBy') && <th className="px-4 py-3 font-semibold">Dibuat Oleh</th>}
+                  {isColumnVisible('actions') && <th className="px-4 py-3 text-right font-semibold">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredWOs.map((wo) => (
                   <tr key={wo.id} className="transition-colors hover:bg-blue-50/50">
-                    <td className="px-4 py-3">
+                    {isColumnVisible('number') && <td className="px-4 py-3">
                       <button type="button" onClick={() => setDetailWO(wo)} className="text-left">
                         <span className="block font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span>
                         <span className="mt-0.5 block text-xs text-gray-500">
@@ -1123,31 +1208,37 @@ export default function WorkOrders() {
                           )}
                         </span>
                       </button>
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {isColumnVisible('customer') && <td className="px-4 py-3">
                       <span className="block max-w-[180px] truncate text-sm font-semibold text-gray-900">{wo.customerName}</span>
                       <span className="mt-0.5 block text-xs text-gray-500">{customerPhoneForWO(wo)}</span>
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {isColumnVisible('vehicle') && <td className="px-4 py-3">
                       <span className="block max-w-[210px] truncate text-sm text-gray-900">{wo.vehicleInfo}</span>
                       <span className="block text-xs font-semibold text-gray-500">{wo.plateNumber}</span>
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {isColumnVisible('services') && <td className="px-4 py-3">
                       <span className="block max-w-[230px] truncate text-sm text-gray-800">
                         {wo.services.map(service => service.name).join(', ') || 'Belum ada layanan'}
                       </span>
                       <span className="block text-xs text-gray-500">{wo.services.length} item layanan</span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-bold text-gray-900">
+                    </td>}
+                    {isColumnVisible('total') && <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-bold text-gray-900">
                       Rp {wo.total.toLocaleString('id-ID')}
-                    </td>
-                    <td className="px-4 py-3 text-center">
+                    </td>}
+                    {isColumnVisible('status') && <td className="px-4 py-3 text-center">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>
                         {statusLabel(wo.status)}
                       </span>
                       {wo.status === 'Pending' && <span className="mt-1 block max-w-[150px] truncate text-[10px] text-orange-700" title={wo.pendingReason}>{wo.pendingReason || '-'}</span>}
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {isColumnVisible('createdBy') && <td className="px-4 py-3">
+                      <span className="block max-w-[170px] truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
+                        {wo.createdByName || '—'}
+                      </span>
+                      {wo.createdBy && <span className="mt-0.5 block text-[11px] text-gray-500">ID: {wo.createdBy}</span>}
+                    </td>}
+                    {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
                           <>
@@ -1184,7 +1275,7 @@ export default function WorkOrders() {
                           </button>
                         )}
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))}
               </tbody>

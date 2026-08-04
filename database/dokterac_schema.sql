@@ -250,6 +250,8 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   `invoice_id` VARCHAR(20),
   `invoice_number` VARCHAR(30),
   `branch_id` VARCHAR(20) NOT NULL,
+  `created_by` VARCHAR(64) DEFAULT NULL,
+  `created_by_name` VARCHAR(150) DEFAULT NULL,
   `continued_from_wo_id` VARCHAR(20) DEFAULT NULL,
   `continued_from_wo_number` VARCHAR(30) DEFAULT NULL,
   `continued_from_branch_name` VARCHAR(100) DEFAULT NULL,

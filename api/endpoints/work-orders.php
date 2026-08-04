@@ -11,6 +11,8 @@ switch ($method) {
             $r['plateNumber']             = $r['plate_number'];
             $r['vehicleInfo']             = $r['vehicle_info'];
             $r['branchId']                = $r['branch_id'];
+            $r['createdBy']               = $r['created_by'] ?? null;
+            $r['createdByName']           = $r['created_by_name'] ?? null;
             $r['backdateReason']          = $r['backdate_reason'] ?? null;
             $r['invoiceId']               = $r['invoice_id'];
             $r['invoiceNumber']           = $r['invoice_number'];
@@ -55,6 +57,7 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
+        $actor = requireUserPermission($pdo, 'wo:create');
         $pdo->beginTransaction();
         try {
             $woId = $d['id'] ?? generateId();
@@ -91,10 +94,10 @@ switch ($method) {
                     vehicle_ref_id, plate_number, vehicle_info,
                     description, findings, diagnosis_temperature, diagnosis_lp, diagnosis_hp, final_temperature, final_lp, final_hp,
                     total, estimate_total, approved_at, pending_at, pending_until, pending_reason,
-                    status, cancel_reason, status_log, notes, branch_id,
+                    status, cancel_reason, status_log, notes, branch_id, created_by, created_by_name,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $woId, $woNumber, $transactionDate, $backdateReason ?: null,
@@ -109,7 +112,7 @@ switch ($method) {
                 $d['status'] ?? 'Pengecekan',
                 $d['cancelReason'] ?? null,
                 isset($d['statusLog']) ? json_encode($d['statusLog']) : null,
-                $d['notes'] ?? '', $branchId,
+                $d['notes'] ?? '', $branchId, $actor['id'] ?? null, $actor['name'] ?? null,
                 $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
                 $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
             ]);
