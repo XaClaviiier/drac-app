@@ -244,20 +244,28 @@ switch ($method) {
 
             // Jangan hanya mengandalkan work_orders.invoice_id. Data lama mungkin
             // sudah memiliki sales_invoices.wo_id tetapi tautan balik WO belum terisi.
+            // Periksa kedua arah relasi secara terpisah. Membandingkan kolom ID
+            // lama dengan collation berbeda dalam satu query dapat memicu error
+            // "Illegal mix of collations" pada database hasil migrasi.
             $invoiceStmt = $pdo->prepare("
-                SELECT i.id, i.invoice_number, i.payment,
-                       (SELECT COUNT(*) FROM customer_payments p
-                        WHERE p.invoice_id COLLATE utf8mb4_unicode_ci = i.id COLLATE utf8mb4_unicode_ci) payment_count
-                FROM sales_invoices i
-                WHERE i.wo_id COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                   OR i.id COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                LIMIT 1 FOR UPDATE
+                SELECT id, invoice_number, payment
+                FROM sales_invoices WHERE wo_id = ? LIMIT 1 FOR UPDATE
             ");
-            $invoiceStmt->execute([$id, $wo['invoice_id'] ?: '']);
+            $invoiceStmt->execute([$id]);
             $invoice = $invoiceStmt->fetch();
+            if (!$invoice && !empty($wo['invoice_id'])) {
+                $invoiceStmt = $pdo->prepare("
+                    SELECT id, invoice_number, payment
+                    FROM sales_invoices WHERE id = ? LIMIT 1 FOR UPDATE
+                ");
+                $invoiceStmt->execute([$wo['invoice_id']]);
+                $invoice = $invoiceStmt->fetch();
+            }
             if ($invoice) {
+                $paymentStmt = $pdo->prepare("SELECT COUNT(*) FROM customer_payments WHERE invoice_id = ?");
+                $paymentStmt->execute([$invoice['id']]);
                 $invoiceNumber = $invoice['invoice_number'] ?: ($wo['invoice_number'] ?: 'terkait');
-                $hasPayment = (float)$invoice['payment'] > 0 || (int)$invoice['payment_count'] > 0;
+                $hasPayment = (float)$invoice['payment'] > 0 || (int)$paymentStmt->fetchColumn() > 0;
                 $instruction = $hasPayment
                     ? 'Hapus pembayaran, lalu hapus faktur terlebih dahulu.'
                     : 'Hapus faktur terlebih dahulu.';
@@ -271,6 +279,23 @@ switch ($method) {
                 throw new DomainException("WO berstatus {$wo['status']} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.");
             }
 
+            // Putuskan referensi dari WO lanjutan. Ini juga aman untuk database
+            // lama yang foreign key-nya belum memakai ON DELETE SET NULL.
+            $pdo->prepare("
+                UPDATE work_orders
+                SET continued_from_wo_id=NULL,
+                    continued_from_wo_number=NULL,
+                    continued_from_branch_name=NULL
+                WHERE continued_from_wo_id=?
+            ")->execute([$id]);
+            $pdo->prepare("
+                UPDATE work_orders
+                SET continued_to_wo_id=NULL,
+                    continued_to_wo_number=NULL,
+                    continued_to_branch_name=NULL
+                WHERE continued_to_wo_id=?
+            ")->execute([$id]);
+
             $pdo->prepare("DELETE FROM work_order_services WHERE wo_id=?")->execute([$id]);
             $pdo->prepare("DELETE FROM work_orders WHERE id=?")->execute([$id]);
             $pdo->commit();
@@ -280,7 +305,7 @@ switch ($method) {
             respondError($e->getMessage(), 422);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError('Gagal menghapus WO', 500, $e->getMessage());
+            respondError('Gagal menghapus WO: ' . $e->getMessage(), 500);
         }
         break;
 

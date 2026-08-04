@@ -718,6 +718,8 @@ export default function WorkOrders() {
     if (!window.confirm(`Hapus ${wo.woNumber}? Data layanan pada WO ini juga akan dihapus.`)) return;
     try {
       await deleteWorkOrder(wo.id);
+      setSuccessMsg(`${wo.woNumber} berhasil dihapus.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
       window.alert(err?.message || 'WO gagal dihapus.');
     }
