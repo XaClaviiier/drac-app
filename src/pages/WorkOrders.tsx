@@ -706,9 +706,20 @@ export default function WorkOrders() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus order kerja ini?')) {
-      deleteWorkOrder(id);
+  const handleDelete = async (wo: WorkOrder) => {
+    if (wo.invoiceId) {
+      window.alert(`WO tidak dapat dihapus karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}. Hapus pembayaran dan faktur terlebih dahulu.`);
+      return;
+    }
+    if (!['Pengecekan', 'Pending', 'Batal'].includes(wo.status)) {
+      window.alert(`WO berstatus ${wo.status} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`);
+      return;
+    }
+    if (!window.confirm(`Hapus ${wo.woNumber}? Data layanan pada WO ini juga akan dihapus.`)) return;
+    try {
+      await deleteWorkOrder(wo.id);
+    } catch (err: any) {
+      window.alert(err?.message || 'WO gagal dihapus.');
     }
   };
 
@@ -1165,8 +1176,8 @@ export default function WorkOrders() {
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {hasPermission('wo:delete') && (
-                          <button onClick={() => handleDelete(wo.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
+                        {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Batal'].includes(wo.status) && !wo.invoiceId && (
+                          <button onClick={() => void handleDelete(wo)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
                             <Trash2 className="h-4 w-4" />
                           </button>
                         )}
@@ -1389,9 +1400,9 @@ export default function WorkOrders() {
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
-                    {hasPermission('wo:delete') && (
+                    {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Batal'].includes(wo.status) && !wo.invoiceId && (
                       <button
-                        onClick={() => handleDelete(wo.id)}
+                        onClick={() => void handleDelete(wo)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
                         title="Hapus"
                       >

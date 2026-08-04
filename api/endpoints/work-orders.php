@@ -225,9 +225,55 @@ switch ($method) {
         break;
 
     case 'DELETE':
-        if (!$id) respondError('ID required');
-        $pdo->prepare("DELETE FROM work_orders WHERE id=?")->execute([$id]);
-        respondSuccess(null, 'WO dihapus');
+        if (!$id) respondError('ID required', 422);
+        $pdo->beginTransaction();
+        try {
+            $woStmt = $pdo->prepare("
+                SELECT id, wo_number, status, invoice_id, invoice_number
+                FROM work_orders WHERE id=? FOR UPDATE
+            ");
+            $woStmt->execute([$id]);
+            $wo = $woStmt->fetch();
+            if (!$wo) throw new InvalidArgumentException('WO tidak ditemukan.');
+
+            // Jangan hanya mengandalkan work_orders.invoice_id. Data lama mungkin
+            // sudah memiliki sales_invoices.wo_id tetapi tautan balik WO belum terisi.
+            $invoiceStmt = $pdo->prepare("
+                SELECT i.id, i.invoice_number, i.payment,
+                       (SELECT COUNT(*) FROM customer_payments p
+                        WHERE p.invoice_id COLLATE utf8mb4_unicode_ci = i.id COLLATE utf8mb4_unicode_ci) payment_count
+                FROM sales_invoices i
+                WHERE i.wo_id COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                   OR i.id COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                LIMIT 1 FOR UPDATE
+            ");
+            $invoiceStmt->execute([$id, $wo['invoice_id'] ?: '']);
+            $invoice = $invoiceStmt->fetch();
+            if ($invoice) {
+                $invoiceNumber = $invoice['invoice_number'] ?: ($wo['invoice_number'] ?: 'terkait');
+                $hasPayment = (float)$invoice['payment'] > 0 || (int)$invoice['payment_count'] > 0;
+                $instruction = $hasPayment
+                    ? 'Hapus pembayaran, lalu hapus faktur terlebih dahulu.'
+                    : 'Hapus faktur terlebih dahulu.';
+                throw new DomainException("WO tidak dapat dihapus karena terhubung dengan Faktur {$invoiceNumber}. {$instruction}");
+            }
+
+            $deletableStatuses = ['Pengecekan', 'Pending', 'Batal'];
+            if (!in_array((string)$wo['status'], $deletableStatuses, true)) {
+                throw new DomainException("WO berstatus {$wo['status']} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.");
+            }
+
+            $pdo->prepare("DELETE FROM work_order_services WHERE wo_id=?")->execute([$id]);
+            $pdo->prepare("DELETE FROM work_orders WHERE id=?")->execute([$id]);
+            $pdo->commit();
+            respondSuccess(null, 'WO dihapus');
+        } catch (InvalidArgumentException | DomainException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            respondError($e->getMessage(), 422);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            respondError('Gagal menghapus WO', 500, $e->getMessage());
+        }
         break;
 
     default: respondError('Method not allowed', 405);
