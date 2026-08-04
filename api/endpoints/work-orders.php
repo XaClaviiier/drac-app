@@ -264,7 +264,9 @@ switch ($method) {
                 throw new DomainException("WO tidak dapat dihapus karena terhubung dengan Faktur {$invoiceNumber}. {$instruction}");
             }
 
-            $deletableStatuses = ['Pengecekan', 'Pending', 'Batal'];
+            // WO selesai boleh dihapus setelah seluruh pembayaran dan faktur terkait
+            // sudah dihapus. Pemeriksaan relasi faktur dilakukan di atas.
+            $deletableStatuses = ['Pengecekan', 'Pending', 'Selesai', 'Batal'];
             if (!in_array((string)$wo['status'], $deletableStatuses, true)) {
                 throw new DomainException("WO berstatus {$wo['status']} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.");
             }

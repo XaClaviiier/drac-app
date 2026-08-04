@@ -711,7 +711,7 @@ export default function WorkOrders() {
       window.alert(`WO tidak dapat dihapus karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}. Hapus pembayaran dan faktur terlebih dahulu.`);
       return;
     }
-    if (!['Pengecekan', 'Pending', 'Batal'].includes(wo.status)) {
+    if (!['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(wo.status)) {
       window.alert(`WO berstatus ${wo.status} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`);
       return;
     }
@@ -1176,7 +1176,7 @@ export default function WorkOrders() {
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Batal'].includes(wo.status) && !wo.invoiceId && (
+                        {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(wo.status) && !wo.invoiceId && (
                           <button onClick={() => void handleDelete(wo)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1400,7 +1400,7 @@ export default function WorkOrders() {
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
-                    {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Batal'].includes(wo.status) && !wo.invoiceId && (
+                    {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(wo.status) && !wo.invoiceId && (
                       <button
                         onClick={() => void handleDelete(wo)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
@@ -1567,6 +1567,9 @@ export default function WorkOrders() {
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
               )}
               {hasPermission('wo:edit') && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
+              {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(detailWO.status) && !detailWO.invoiceId && (
+                <button onClick={() => { setDetailWO(null); void handleDelete(detailWO); }} className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Hapus WO</button>
+              )}
               <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
             </div>
           </aside>
