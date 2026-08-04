@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import type { SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
+import { api } from '../lib/apiClient';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -249,13 +250,9 @@ export default function SalesInvoice() {
     if (invoice.payment <= 0) return;
     if (!window.confirm(`Hapus pembayaran Rp ${invoice.payment.toLocaleString('id-ID')} dari ${invoice.invoiceNumber}? Invoice akan kembali terutang.`)) return;
     try {
-      await updateInvoice(invoice.id, {
-        ...invoice,
-        payment: 0,
-        paymentDate: undefined,
-        status: invoice.total <= 0 ? 'Lunas' : 'Belum Lunas',
-        age: invoice.total <= 0 ? 0 : Math.max(0, Math.floor((Date.now() - new Date(invoice.date).getTime()) / 86400000)),
-      });
+      const result = await api.deleteCustomerPaymentsForInvoice(invoice.id);
+      if (!result.success) throw new Error(result.message || 'Pembayaran gagal dihapus');
+      await refreshData();
       setSuccessMsg(`Pembayaran ${invoice.invoiceNumber} dihapus. Invoice kembali ${invoice.total <= 0 ? 'Lunas (Rp0)' : 'Belum Lunas'}.`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (error: any) {

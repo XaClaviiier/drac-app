@@ -29,7 +29,7 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
     $sum = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE invoice_id=?");
     $sum->execute([$invoiceId]);
     $paid = (float)$sum->fetchColumn();
-    $invoice = $pdo->prepare("SELECT total, date FROM sales_invoices WHERE id=? FOR UPDATE");
+    $invoice = $pdo->prepare("SELECT total, date, wo_id FROM sales_invoices WHERE id=? FOR UPDATE");
     $invoice->execute([$invoiceId]);
     $row = $invoice->fetch();
     if (!$row) throw new Exception('Invoice tidak ditemukan');
@@ -42,6 +42,11 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
     if ($method !== 'Tunai') $method = 'QRIS/Transfer';
     $update = $pdo->prepare("UPDATE sales_invoices SET payment=?, payment_date=?, payment_method=?, status=? WHERE id=?");
     $update->execute([$paid, $paymentDate, $method, $status, $invoiceId]);
+    $woStatus = $status === 'Lunas' ? 'Dibayar' : 'Selesai';
+    $pdo->prepare("UPDATE work_orders SET status=? WHERE invoice_id=?")->execute([$woStatus, $invoiceId]);
+    if (!empty($row['wo_id'])) {
+        $pdo->prepare("UPDATE work_orders SET status=? WHERE id=?")->execute([$woStatus, $row['wo_id']]);
+    }
 }
 
 switch ($method) {
@@ -123,6 +128,18 @@ switch ($method) {
         if (!$id) respondError('ID pembayaran wajib diisi', 422);
         $pdo->beginTransaction();
         try {
+            if ($id === 'invoice') {
+                $invoiceId = (string)($action ?? '');
+                if ($invoiceId === '') throw new Exception('ID invoice wajib diisi');
+                $invoiceStmt = $pdo->prepare("SELECT id FROM sales_invoices WHERE id=? FOR UPDATE");
+                $invoiceStmt->execute([$invoiceId]);
+                if (!$invoiceStmt->fetchColumn()) throw new Exception('Invoice tidak ditemukan');
+                $pdo->prepare("DELETE FROM customer_payments WHERE invoice_id=?")->execute([$invoiceId]);
+                recalculateCustomerInvoice($pdo, $invoiceId);
+                $pdo->commit();
+                respondSuccess(null, 'Seluruh pembayaran dihapus, invoice kembali terutang, dan status WO diperbarui');
+                break;
+            }
             $stmt = $pdo->prepare("SELECT invoice_id FROM customer_payments WHERE id=? FOR UPDATE");
             $stmt->execute([$id]);
             $invoiceId = $stmt->fetchColumn();

@@ -274,6 +274,8 @@ switch ($method) {
                 }
             }
             $pdo->prepare("DELETE FROM sales_invoices WHERE id=?")->execute([$id]);
+            // Bersihkan juga relasi yang tersimpan hanya melalui invoice_id (data lama).
+            $pdo->prepare("UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL WHERE invoice_id=?")->execute([$id]);
             if ($linkedWoId) {
                 $pdo->prepare("UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL WHERE id=?")->execute([$linkedWoId]);
             }

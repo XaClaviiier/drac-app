@@ -92,6 +92,9 @@ export const api = {
   remove: (resource: string, id: string) =>
     request(`/${resource}/${id}`, { method: 'DELETE' }),
 
+  deleteCustomerPaymentsForInvoice: (invoiceId: string) =>
+    request(`/customer-payments/invoice/${invoiceId}`, { method: 'DELETE' }),
+
   // ========== SPECIFIC HELPERS ==========
   addPurchasePayment: (invoiceId: string, payment: any) =>
     request(`/purchase-invoices/${invoiceId}/payments`, {
