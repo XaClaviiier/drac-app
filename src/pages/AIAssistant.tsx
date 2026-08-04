@@ -25,6 +25,7 @@ interface ChatMsg {
 }
 
 interface RegistrationDraft {
+  mode: 'wo' | 'reginv';
   step: 'plate' | 'customerName' | 'phone' | 'vehicle' | 'complaint';
   plateNumber: string;
   customerName: string;
@@ -66,7 +67,7 @@ export default function AIAssistant() {
   const {
     data, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId,
     addWorkOrder, addCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
-    hasPermission,
+    hasPermission, refreshData,
   } = useApp();
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -98,8 +99,8 @@ export default function AIAssistant() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const servicesFromCodes = (text: string) => {
-    const allowedItems = data.items.filter(item => item.isActive && item.type !== 'Persediaan');
+  const servicesFromCodes = (text: string, allowInventory = false) => {
+    const allowedItems = data.items.filter(item => item.isActive && (allowInventory || item.type !== 'Persediaan'));
     const byCode = new Map(allowedItems.map(item => [item.code.trim().toUpperCase(), item]));
     const found = new Map<string, { name: string; price: number; qty: number }>();
 
@@ -582,10 +583,13 @@ export default function AIAssistant() {
     return `Gunakan salah satu format berikut:\n\n- **list customer**\n- **list kendaraan DD**\n- **list wo hari ini**\n- **list wo proses**\n- **list faktur belum lunas**\n- **list stok menipis**\n- **list supplier**`;
   };
 
-  const startRegistrationWizard = () => {
+  const startRegistrationWizard = (mode: 'wo' | 'reginv' = 'wo') => {
     setPendingAction(null);
     setPendingBranchId('');
-    setRegistrationDraft({ step: 'plate', plateNumber: '', customerName: '', phone: '', vehicleInfo: '' });
+    setRegistrationDraft({ mode, step: 'plate', plateNumber: '', customerName: '', phone: '', vehicleInfo: '' });
+    if (mode === 'reginv') {
+      return `**REGINV Cepat — Langkah 1/4**\n\nMasukkan nomor plat kendaraan. Pada langkah terakhir tuliskan kode layanan/barang dan metode **Tunai**, **Transfer**, atau **QRIS**.\n\nKetik **batal** untuk menghentikan proses.`;
+    }
     return `**Registrasi WO Baru — Langkah 1/4**\n\nMasukkan nomor plat kendaraan.\n\nKetik **batal** untuk menghentikan proses.`;
   };
 
@@ -599,7 +603,7 @@ export default function AIAssistant() {
       setPendingBranchId('');
       return 'Registrasi WO dibatalkan. Tidak ada data yang disimpan.';
     }
-    if (lower === 'ulang') return startRegistrationWizard();
+    if (lower === 'ulang') return startRegistrationWizard(registrationDraft.mode);
 
     if (registrationDraft.step === 'plate') {
       const plateMatch = value.toUpperCase().match(/\b[A-Z]{1,2}[\s-]*\d{2,4}[\s-]*[A-Z]{1,3}\b/)?.[0];
@@ -609,6 +613,7 @@ export default function AIAssistant() {
       if (vehicle) {
         const customer = data.customers.find((item) => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
         setRegistrationDraft({
+          mode: registrationDraft.mode,
           step: 'complaint',
           plateNumber: vehicle.plateNumber,
           customerName: customer?.name || vehicle.customerName || '',
@@ -644,9 +649,15 @@ export default function AIAssistant() {
     }
 
     if (value.length < 3) return 'Keluhan terlalu singkat. Jelaskan kondisi kendaraan atau layanan yang dibutuhkan.';
-    const codedServices = servicesFromCodes(value);
+    const isRegInv = registrationDraft.mode === 'reginv';
+    const codedServices = servicesFromCodes(value, isRegInv);
+    const paymentMethod = /\bqris\b/i.test(value) ? 'QRIS'
+      : /\b(tf|transfer)\b/i.test(value) ? 'Transfer'
+      : /\btunai\b/i.test(value) ? 'Tunai' : '';
+    if (isRegInv && codedServices.length === 0) return 'REGINV wajib menyertakan minimal satu **kode layanan/barang** yang terdaftar.';
+    if (isRegInv && !paymentMethod) return 'Pilih metode pembayaran dengan mengetik **Tunai**, **Transfer**, atau **QRIS**.';
     const action = {
-      action: 'create_wo',
+      action: isRegInv ? 'create_quick_invoice' : 'create_wo',
       customerName: registrationDraft.customerName,
       phone: registrationDraft.phone,
       plateNumber: registrationDraft.plateNumber,
@@ -655,6 +666,7 @@ export default function AIAssistant() {
       services: codedServices.length > 0
         ? codedServices
         : [{ name: 'CEK AC', price: 0, qty: 1 }],
+      paymentMethod,
     };
     let parsedDate: ReturnType<typeof parseCompactTransactionDate>;
     try {
@@ -666,6 +678,9 @@ export default function AIAssistant() {
     setPendingAction(action);
     setPendingBranchId(currentBranchId === 'ALL' ? '' : currentBranchId);
     setRegistrationDraft(null);
+    if (isRegInv) {
+      return `Data REGINV sudah lengkap.\n\n- Pelanggan: **${action.customerName}**\n- Plat: **${action.plateNumber}**\n- Metode: **${paymentMethod}**\n- Item: **${codedServices.map(item => `${item.name} ×${item.qty}`).join(', ')}**\n\nPilih cabang lalu konfirmasi. Sistem akan membuat nomor WO, invoice, dan pembayaran yang berbeda.`;
+    }
     return `Data registrasi sudah lengkap.\n\n- Pelanggan: **${action.customerName}**\n- Telepon: ${action.phone}\n- Plat: **${action.plateNumber}**\n- Kendaraan: ${action.vehicleInfo}\n- Keluhan: ${action.description}\n- Layanan awal: **CEK AC (gratis)**\n\nPilih cabang lalu tekan **Konfirmasi & Buat WO**.`;
   };
 
@@ -960,6 +975,42 @@ ${buildSmartContext(userMsgText)}`;
     return { woNumber, branchName, total, customerName: wo.customerName, customerPhone: customer?.phone || a.phone || '', plateNumber: wo.plateNumber, vehicleInfo: wo.vehicleInfo, description: wo.description, date: wo.date, servicesCount: services.length };
   };
 
+  const executeQuickInvoice = async (a: any, selectedBranchId: string) => {
+    const transactionDate = /^\d{4}-\d{2}-\d{2}$/.test(String(a.date || '')) ? String(a.date) : localDateISO();
+    const today = localDateISO();
+    if (transactionDate > today) throw new Error('Tanggal transaksi tidak boleh melewati hari ini.');
+    if (transactionDate < today) {
+      const missing = [
+        ['wo:backdate', 'Input WO Tanggal Mundur'],
+        ['invoice:backdate', 'Input Faktur Tanggal Mundur'],
+        ['payment:backdate', 'Input Pembayaran Tanggal Mundur'],
+      ].filter(([permission]) => !hasPermission(permission as any)).map(([, label]) => label);
+      if (missing.length) throw new Error(`Akun belum memiliki izin: ${missing.join(', ')}.`);
+    }
+    const existingVehicle = data.vehicles.find(vehicle => normalizePlate(vehicle.plateNumber) === normalizePlate(String(a.plateNumber || '')));
+    const existingCustomer = existingVehicle
+      ? data.customers.find(customer => customer.id === existingVehicle.customerRefId || customer.customerCode === existingVehicle.customerId)
+      : data.customers.find(customer => customer.name.toUpperCase() === String(a.customerName || '').toUpperCase() || customer.phone.replace(/\D/g, '') === String(a.phone || '').replace(/\D/g, ''));
+    const result = await api.create('quick-invoices', {
+      branchId: selectedBranchId,
+      date: transactionDate,
+      customerRefId: existingCustomer?.id,
+      vehicleRefId: existingVehicle?.id,
+      customerName: a.customerName,
+      phone: a.phone,
+      plateNumber: a.plateNumber,
+      vehicleInfo: a.vehicleInfo,
+      description: a.description,
+      services: a.services,
+      paymentMethod: a.paymentMethod,
+      createdBy: currentUser?.id,
+      createdByName: currentUser?.name,
+    });
+    if (!result.success || !result.data) throw new Error(result.message || result.error || 'REGINV gagal dibuat.');
+    await refreshData();
+    return result.data as any;
+  };
+
   const shareRegisterToWhatsApp = async (text: string) => {
     try {
       if (navigator.share) {
@@ -1017,8 +1068,49 @@ ${buildSmartContext(userMsgText)}`;
     const independentCommand = /^(cek|list)\b/i.test(content);
     if (registrationDraft && independentCommand) setRegistrationDraft(null);
 
+    if (/^reginv\b/i.test(content) && !registrationDraft) {
+      const plateMatch = content.toUpperCase().match(/\b[A-Z]{1,2}[\s-]*\d{2,4}[\s-]*[A-Z]{1,3}\b/)?.[0];
+      const vehicle = plateMatch
+        ? data.vehicles.find(item => normalizePlate(item.plateNumber) === normalizePlate(plateMatch))
+        : undefined;
+      const customer = vehicle
+        ? data.customers.find(item => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId)
+        : undefined;
+      const paymentMethod = /\bqris\b/i.test(content) ? 'QRIS'
+        : /\b(tf|transfer)\b/i.test(content) ? 'Transfer'
+        : /\btunai\b/i.test(content) ? 'Tunai' : '';
+      const codedServices = servicesFromCodes(content, true);
+      let parsedDate: ReturnType<typeof parseCompactTransactionDate> = null;
+      try { parsedDate = parseCompactTransactionDate(content); }
+      catch (error: any) {
+        setInput('');
+        setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: error.message, error: true, time: now() }]);
+        return;
+      }
+      if (vehicle && customer && paymentMethod && codedServices.length > 0) {
+        const action = {
+          action: 'create_quick_invoice', customerRefId: customer.id, vehicleRefId: vehicle.id,
+          customerName: customer.name, phone: customer.phone, plateNumber: vehicle.plateNumber,
+          vehicleInfo: [vehicle.brand, vehicle.model, vehicle.year, vehicle.color].filter(Boolean).join(' '),
+          description: content.replace(/^reginv\s*/i, '').trim(), services: codedServices,
+          paymentMethod, ...(parsedDate ? { date: parsedDate.date } : {}),
+        };
+        setPendingAction(action);
+        setPendingBranchId(currentBranchId === 'ALL' ? '' : currentBranchId);
+        setInput('');
+        setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: `REGINV siap dikonfirmasi untuk **${vehicle.plateNumber}**.\n\nItem: **${codedServices.map(item => `${item.name} ×${item.qty}`).join(', ')}**\nMetode: **${paymentMethod}**`, time: now() }]);
+        return;
+      }
+      const reply = startRegistrationWizard('reginv');
+      setInput('');
+      setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: vehicle
+        ? `${reply}\n\nPlat ditemukan, tetapi perintah lengkap wajib memuat **kode item** dan metode **Tunai/Transfer/QRIS**.`
+        : reply, time: now() }]);
+      return;
+    }
+
     if ((registrationDraft && !independentCommand) || lowerContent === 'reg wo' || lowerContent === 'ulang') {
-      const reply = registrationDraft ? continueRegistrationWizard(content) : startRegistrationWizard();
+      const reply = registrationDraft ? continueRegistrationWizard(content) : startRegistrationWizard('wo');
       setInput('');
       setMessages(history => [
         ...history,
@@ -1159,6 +1251,7 @@ ${buildSmartContext(userMsgText)}`;
       if (!vehicle) return;
       const customer = data.customers.find(item => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
       setRegistrationDraft({
+        mode: 'wo',
         step: 'complaint',
         plateNumber: vehicle.plateNumber,
         customerName: customer?.name || vehicle.customerName || '',
@@ -1178,6 +1271,16 @@ ${buildSmartContext(userMsgText)}`;
     if (!pendingAction || !pendingBranchId) return;
     setBusy(true);
     try {
+      if (pendingAction.action === 'create_quick_invoice') {
+        const r = await executeQuickInvoice(pendingAction, pendingBranchId);
+        const shareDate = new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID');
+        const shareText = `${r.invoiceNumber} ( ${shareDate} )\n🚗 ${r.plateNumber} – ${r.vehicleInfo}\n👤 ${r.customerName}\nWO: ${r.woNumber}\nPembayaran: ${r.paymentNumber}\nTotal: ${fmt(Number(r.total))}\nInput: ${currentUser?.name || '-'}`;
+        setMessages(history => [...history, {
+          role: 'assistant', time: now(), shareText,
+          content: `✅ **REGINV berhasil dibuat!**\n\n- WO: **${r.woNumber}**\n- Invoice: **${r.invoiceNumber}**\n- Pembayaran: **${r.paymentNumber}**\n- Total: **${fmt(Number(r.total))}**\n- Masuk ke: **${r.accountName}**\n\nKetiga dokumen saling terhubung dan stok sudah dipotong oleh invoice.`,
+        }]);
+        return;
+      }
       const r = await executeCreateWO(pendingAction, pendingBranchId);
       const plateForShare = r.plateNumber.replace(/\s+/g, '').toUpperCase().replace(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/, (_all: string, prefix: string, number: string, suffix: string) => `${prefix} ${number}${suffix ? ` ${suffix}` : ''}`);
       const vehicleForShare = (r.vehicleInfo || '-').replace(/\s*-\s*([^-]+)$/, ' ($1)');
@@ -1450,12 +1553,13 @@ ${buildSmartContext(userMsgText)}`;
             {pendingAction && !busy && (
               <div className="animate-msg-in rounded-xl border-2 border-cyan-500 bg-cyan-950/40 p-4">
                 <p className="mb-2 flex items-center gap-2 text-sm font-bold text-cyan-300">
-                  <Wrench className="h-4 w-4" /> Konfirmasi Buat Order Kerja
+                  <Wrench className="h-4 w-4" /> {pendingAction.action === 'create_quick_invoice' ? 'Konfirmasi REGINV Cepat' : 'Konfirmasi Buat Order Kerja'}
                 </p>
                 <div className="mb-3 space-y-1 text-xs text-slate-300">
                   <p>Pelanggan: <b className="text-white">{pendingAction.customerName}</b> {pendingAction.phone && `(${pendingAction.phone})`}</p>
                   <p>Kendaraan: <b className="text-white">{pendingAction.plateNumber}</b> — {pendingAction.vehicleInfo}</p>
                   <p>Keluhan: {pendingAction.description || '-'}</p>
+                  {pendingAction.action === 'create_quick_invoice' && <p>Metode pembayaran: <b className="text-white">{pendingAction.paymentMethod}</b></p>}
                   <div className="mt-3">
                     <p className="mb-2 font-semibold text-white">Cabang tempat WO dibuat:</p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1489,7 +1593,7 @@ ${buildSmartContext(userMsgText)}`;
                 <div className="flex gap-2">
                   <button onClick={() => { setPendingAction(null); setPendingBranchId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
                   <button disabled={!pendingBranchId} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
-                    <CheckCircle2 className="h-4 w-4" /> {pendingBranchId ? `Buat di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang'}
+                    <CheckCircle2 className="h-4 w-4" /> {pendingBranchId ? `${pendingAction.action === 'create_quick_invoice' ? 'Buat REGINV' : 'Buat WO'} di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang'}
                   </button>
                 </div>
               </div>

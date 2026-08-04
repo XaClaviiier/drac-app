@@ -513,7 +513,13 @@ function requireUserPermission(PDO $pdo, string $permission): array {
     $stmt->execute([$user['role_id'] ?? '']);
     $permissions = json_decode((string)($stmt->fetchColumn() ?: '[]'), true);
     if (!is_array($permissions) || !in_array($permission, $permissions, true)) {
-        respondError('Akun tidak memiliki izin Input WO Tanggal Mundur', 403);
+        $labels = [
+            'wo:create' => 'Buat WO', 'invoice:create' => 'Buat Faktur',
+            'wo:backdate' => 'Input WO Tanggal Mundur',
+            'invoice:backdate' => 'Input Faktur Tanggal Mundur',
+            'payment:backdate' => 'Input Pembayaran Tanggal Mundur',
+        ];
+        respondError('Akun tidak memiliki izin ' . ($labels[$permission] ?? $permission), 403);
     }
     return $user;
 }

@@ -92,6 +92,9 @@ try {
         case 'customer-payments':
             require 'endpoints/customer-payments.php';
             break;
+        case 'quick-invoices':
+            require 'endpoints/quick-invoices.php';
+            break;
         case 'cash-accounts':
             require 'endpoints/cash-accounts.php';
             break;
