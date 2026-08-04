@@ -210,6 +210,28 @@ function ensureApiSupportTables(PDO $pdo): void {
         $cashAccount->execute(['CASH-' . $branch['id'], 'KAS-' . $branch['code'], 'KAS ' . $branch['name'], 'cash', $branch['id']]);
     }
     $pdo->exec("INSERT IGNORE INTO cash_accounts (id,code,name,account_type,branch_id) VALUES ('BANK-PUSAT','BANK-PUSAT','BANK / KAS PUSAT','bank',NULL),('QRIS-PUSAT','QRIS-PUSAT','QRIS PERUSAHAAN','qris',NULL)");
+
+    // Database yang sudah pernah dipakai dapat memiliki tabel pembayaran versi lama.
+    // Lengkapi kolom akun di sini (di dalam bootstrap schema), bukan di helper
+    // validasi tanggal yang belum tentu pernah dipanggil.
+    if ($pdo->query("SHOW TABLES LIKE 'customer_payments'")->fetch()) {
+        $paymentColumns = array_column($pdo->query("SHOW COLUMNS FROM customer_payments")->fetchAll(), 'Field');
+        if (!in_array('account_id', $paymentColumns, true)) {
+            $pdo->exec("ALTER TABLE customer_payments ADD account_id VARCHAR(64) NULL AFTER payment_method");
+        }
+        if (!in_array('account_name', $paymentColumns, true)) {
+            $pdo->exec("ALTER TABLE customer_payments ADD account_name VARCHAR(120) NULL AFTER account_id");
+        }
+        $pdo->exec("
+            UPDATE customer_payments p
+            JOIN cash_accounts a
+              ON a.branch_id COLLATE utf8mb4_unicode_ci = p.branch_id COLLATE utf8mb4_unicode_ci
+             AND a.account_type = 'cash'
+            SET p.account_id = COALESCE(p.account_id, a.id),
+                p.account_name = COALESCE(p.account_name, a.name)
+            WHERE p.account_id IS NULL OR p.account_name IS NULL
+        ");
+    }
     $pdo->exec("
         INSERT IGNORE INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
         SELECT w.id, s.item_id, s.stock, GREATEST(0, s.stock - s.sellable_stock)
@@ -445,12 +467,6 @@ function isBackdateReasonRequired(PDO $pdo): bool {
         return ($settings['security']['requireBackdateReason'] ?? true) !== false;
     } catch (Throwable $e) {
         return true;
-    }
-    if ($pdo->query("SHOW TABLES LIKE 'customer_payments'")->fetch()) {
-        $paymentColumns = array_column($pdo->query("SHOW COLUMNS FROM customer_payments")->fetchAll(), 'Field');
-        if (!in_array('account_id', $paymentColumns, true)) $pdo->exec("ALTER TABLE customer_payments ADD account_id VARCHAR(64) NULL AFTER payment_method");
-        if (!in_array('account_name', $paymentColumns, true)) $pdo->exec("ALTER TABLE customer_payments ADD account_name VARCHAR(120) NULL AFTER account_id");
-        $pdo->exec("UPDATE customer_payments p JOIN cash_accounts a ON a.branch_id=p.branch_id AND a.account_type='cash' SET p.account_id=COALESCE(p.account_id,a.id),p.account_name=COALESCE(p.account_name,a.name)");
     }
 }
 
