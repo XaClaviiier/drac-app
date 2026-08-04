@@ -12,7 +12,9 @@ export default function PurchaseInvoicesPage() {
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | '7_days' | '30_days' | 'custom' | 'all'>('this_month');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<PurchaseInvoice | null>(null);
@@ -41,25 +43,58 @@ export default function PurchaseInvoicesPage() {
     notes: '',
   });
 
+  const periodRange = useMemo(() => {
+    const now = new Date();
+    const toKey = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    if (periodFilter === 'this_month') return { from: toKey(startOfThisMonth), to: toKey(now) };
+    if (periodFilter === 'last_month') {
+      return {
+        from: toKey(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+        to: toKey(new Date(now.getFullYear(), now.getMonth(), 0)),
+      };
+    }
+    if (periodFilter === '7_days' || periodFilter === '30_days') {
+      const days = periodFilter === '7_days' ? 7 : 30;
+      const from = new Date(now);
+      from.setDate(from.getDate() - (days - 1));
+      return { from: toKey(from), to: toKey(now) };
+    }
+    if (periodFilter === 'custom') return { from: dateFrom, to: dateTo };
+    return { from: '', to: '' };
+  }, [periodFilter, dateFrom, dateTo]);
+
+  const periodInvoices = useMemo(() => {
+    return data.purchaseInvoices.filter((p) => {
+      const branchMatch = currentBranchId === 'ALL' || p.branchId === currentBranchId;
+      const fromMatch = !periodRange.from || p.date >= periodRange.from;
+      const toMatch = !periodRange.to || p.date <= periodRange.to;
+      return branchMatch && fromMatch && toMatch;
+    });
+  }, [data.purchaseInvoices, currentBranchId, periodRange]);
+
   const filtered = useMemo(() => {
-    return data.purchaseInvoices
+    return periodInvoices
       .filter((p) => {
-        const branchMatch = currentBranchId === 'ALL' || p.branchId === currentBranchId;
-        if (!branchMatch) return false;
         const q = search.toLowerCase();
         const searchMatch = !q ||
           p.invoiceNumber.toLowerCase().includes(q) ||
           p.supplierName.toLowerCase().includes(q) ||
           p.supplierInvoiceNumber.toLowerCase().includes(q);
         const statusMatch = !filterStatus || p.status === filterStatus;
-        const dateMatch = !filterDate || p.date === filterDate;
-        return searchMatch && statusMatch && dateMatch;
+        return searchMatch && statusMatch;
       })
       .sort((a, b) => {
         const dc = b.date.localeCompare(a.date);
         return dc !== 0 ? dc : b.invoiceNumber.localeCompare(a.invoiceNumber);
       });
-  }, [data.purchaseInvoices, search, filterStatus, filterDate, currentBranchId]);
+  }, [periodInvoices, search, filterStatus]);
 
   // Receipts available for selected supplier (still has remaining qty to invoice)
   const availableReceipts = useMemo(() => {
@@ -232,9 +267,10 @@ export default function PurchaseInvoicesPage() {
     'Batal': 'bg-gray-100 text-gray-800',
   };
 
-  const branchInvoices = data.purchaseInvoices.filter(p => currentBranchId === 'ALL' || p.branchId === currentBranchId);
-  const totalUnpaid = branchInvoices.filter(p => p.status !== 'Lunas' && p.status !== 'Batal').reduce((s, p) => s + (p.total - p.paidAmount), 0);
-  const totalPaid = branchInvoices.reduce((s, p) => s + p.paidAmount, 0);
+  const reportInvoices = periodInvoices.filter(p => p.status !== 'Batal');
+  const totalPurchases = reportInvoices.reduce((s, p) => s + p.total, 0);
+  const totalUnpaid = reportInvoices.reduce((s, p) => s + Math.max(0, p.total - p.paidAmount), 0);
+  const totalPaid = reportInvoices.reduce((s, p) => s + p.paidAmount, 0);
 
   return (
     <div className="space-y-6">
@@ -256,10 +292,14 @@ export default function PurchaseInvoicesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <p className="text-sm text-gray-500">Total Faktur</p>
-          <p className="text-2xl font-bold text-gray-900">{branchInvoices.length}</p>
+          <p className="text-2xl font-bold text-gray-900">{reportInvoices.length}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <p className="text-sm text-gray-500">Total Pembelian</p>
+          <p className="text-2xl font-bold text-blue-600">Rp {totalPurchases.toLocaleString('id-ID')}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <p className="text-sm text-gray-500">Total Terbayar</p>
@@ -288,6 +328,19 @@ export default function PurchaseInvoicesPage() {
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-gray-400" />
               <select
+                value={periodFilter}
+                onChange={(e) => setPeriodFilter(e.target.value as typeof periodFilter)}
+                className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm"
+                aria-label="Periode laporan pembelian"
+              >
+                <option value="this_month">Bulan Ini</option>
+                <option value="last_month">Bulan Lalu</option>
+                <option value="7_days">7 Hari Terakhir</option>
+                <option value="30_days">30 Hari Terakhir</option>
+                <option value="custom">Pilih Tanggal</option>
+                <option value="all">Semua Tanggal</option>
+              </select>
+              <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
                 className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm"
@@ -299,12 +352,26 @@ export default function PurchaseInvoicesPage() {
                 <option value="Batal">Batal</option>
               </select>
             </div>
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-            />
+            {periodFilter === 'custom' && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  aria-label="Tanggal awal"
+                  className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                />
+                <span className="text-sm text-gray-400">s.d.</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  aria-label="Tanggal akhir"
+                  className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                />
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <button className="p-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors" title="Download">
@@ -445,7 +512,7 @@ export default function PurchaseInvoicesPage() {
           </table>
         </div>
         <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-sm text-gray-500 flex items-center justify-between">
-          <span>Menampilkan {filtered.length} dari {branchInvoices.length} faktur pembelian</span>
+          <span>Menampilkan {filtered.length} dari {periodInvoices.length} faktur pembelian pada periode terpilih</span>
           <span>Total Nilai: Rp {filtered.reduce((s, p) => s + p.total, 0).toLocaleString('id-ID')}</span>
         </div>
       </div>
