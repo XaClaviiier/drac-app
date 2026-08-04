@@ -98,6 +98,12 @@ try {
         case 'branch-deposits':
             require 'endpoints/branch-deposits.php';
             break;
+        case 'chart-of-accounts':
+            require 'endpoints/chart-of-accounts.php';
+            break;
+        case 'branch-account-settings':
+            require 'endpoints/branch-account-settings.php';
+            break;
 
         // ----- GOODS RECEIPTS -----
         case 'goods-receipts':

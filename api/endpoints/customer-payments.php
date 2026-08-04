@@ -93,13 +93,23 @@ switch ($method) {
             $countStmt->execute([$invoice['branch_id'], $period]);
             $paymentNumber = 'PAY-' . $prefix . $period . str_pad((string)((int)$countStmt->fetchColumn() + 1), 3, '0', STR_PAD_LEFT);
             $paymentId = generateId();
+            $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
+            $accountId = (string)($d['accountId'] ?? '');
+            if ($accountId === '') {
+                $defaultColumn = $paymentMethod === 'Tunai' ? 'cash_account_id' : ($paymentMethod === 'QRIS' ? 'qris_account_id' : 'bank_account_id');
+                $defaultStmt = $pdo->prepare("SELECT {$defaultColumn} FROM branch_account_settings WHERE branch_id=?");
+                $defaultStmt->execute([$invoice['branch_id']]);
+                $accountId = (string)($defaultStmt->fetchColumn() ?: '');
+            }
             $accountStmt = $pdo->prepare("SELECT id,name,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1");
-            $accountStmt->execute([$d['accountId'] ?? '']);
+            $accountStmt->execute([$accountId]);
             $account = $accountStmt->fetch();
-            if (!$account) throw new Exception('Kas/Bank tujuan wajib dipilih');
-            if ($account['account_type']==='cash' && $account['branch_id'] !== $invoice['branch_id']) throw new Exception('Kas tujuan harus sesuai cabang invoice');
+            if (!$account) throw new Exception('Akun penerimaan belum diatur untuk cabang invoice');
+            $expectedType = $paymentMethod === 'Tunai' ? 'cash' : ($paymentMethod === 'QRIS' ? 'qris' : 'bank');
+            if ($account['account_type'] !== $expectedType) throw new Exception('Jenis akun penerimaan tidak sesuai metode pembayaran');
+            if ($account['branch_id'] && $account['branch_id'] !== $invoice['branch_id']) throw new Exception('Akun tujuan harus sesuai cabang invoice');
             $insert = $pdo->prepare("INSERT INTO customer_payments (id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
-            $insert->execute([$paymentId, $paymentNumber, $invoiceId, $date, $amount, $d['paymentMethod'] ?? 'Tunai', $account['id'], $account['name'], trim((string)($d['notes'] ?? '')) ?: null, $invoice['branch_id'], $d['createdBy'] ?? null, $d['createdByName'] ?? null]);
+            $insert->execute([$paymentId, $paymentNumber, $invoiceId, $date, $amount, $paymentMethod, $account['id'], $account['name'], trim((string)($d['notes'] ?? '')) ?: null, $invoice['branch_id'], $d['createdBy'] ?? null, $d['createdByName'] ?? null]);
             recalculateCustomerInvoice($pdo, $invoiceId);
             $pdo->commit();
             respondSuccess(['id'=>$paymentId, 'paymentNumber'=>$paymentNumber], 'Pembayaran pelanggan disimpan');

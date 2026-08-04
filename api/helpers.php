@@ -177,6 +177,37 @@ function ensureApiSupportTables(PDO $pdo): void {
         is_active TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_cash_account_branch (branch_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS chart_of_accounts (
+        id VARCHAR(64) PRIMARY KEY, code VARCHAR(30) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL,
+        account_type ENUM('Asset','Liability','Equity','Revenue','Expense') NOT NULL,
+        parent_id VARCHAR(64) NULL, normal_balance ENUM('Debit','Credit') NOT NULL DEFAULT 'Debit',
+        is_active TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_coa_parent (parent_id), INDEX idx_coa_type (account_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS branch_account_settings (
+        branch_id VARCHAR(20) PRIMARY KEY, cash_account_id VARCHAR(64) NULL,
+        bank_account_id VARCHAR(64) NULL, qris_account_id VARCHAR(64) NULL,
+        deposit_destination_account_id VARCHAR(64) NULL, receivable_coa_id VARCHAR(64) NULL,
+        service_revenue_coa_id VARCHAR(64) NULL, goods_revenue_coa_id VARCHAR(64) NULL,
+        inventory_coa_id VARCHAR(64) NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $cashColumns = array_column($pdo->query("SHOW COLUMNS FROM cash_accounts")->fetchAll(), 'Field');
+    if (!in_array('ledger_account_id', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD ledger_account_id VARCHAR(64) NULL AFTER branch_id");
+    if (!in_array('bank_name', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD bank_name VARCHAR(100) NULL AFTER ledger_account_id");
+    if (!in_array('account_number', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD account_number VARCHAR(60) NULL AFTER bank_name");
+    if (!in_array('account_holder', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD account_holder VARCHAR(120) NULL AFTER account_number");
+    $pdo->exec("INSERT IGNORE INTO chart_of_accounts(id,code,name,account_type,parent_id,normal_balance) VALUES
+        ('COA-1000','1000','ASET','Asset',NULL,'Debit'),
+        ('COA-1100','1100','Kas dan Bank','Asset','COA-1000','Debit'),
+        ('COA-1101','1101','Kas Tunai','Asset','COA-1100','Debit'),
+        ('COA-1102','1102','Bank','Asset','COA-1100','Debit'),
+        ('COA-1103','1103','QRIS','Asset','COA-1100','Debit'),
+        ('COA-1104','1104','Setoran Dalam Perjalanan','Asset','COA-1100','Debit'),
+        ('COA-1200','1200','Piutang Pelanggan','Asset','COA-1000','Debit'),
+        ('COA-1300','1300','Persediaan','Asset','COA-1000','Debit'),
+        ('COA-4000','4000','PENDAPATAN','Revenue',NULL,'Credit'),
+        ('COA-4101','4101','Pendapatan Jasa','Revenue','COA-4000','Credit'),
+        ('COA-4102','4102','Penjualan Barang','Revenue','COA-4000','Credit')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payments (
         id VARCHAR(64) PRIMARY KEY, payment_number VARCHAR(40) NOT NULL UNIQUE, invoice_id VARCHAR(64) NOT NULL,
         date DATE NOT NULL, amount DECIMAL(15,2) NOT NULL DEFAULT 0, payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai',
@@ -210,6 +241,10 @@ function ensureApiSupportTables(PDO $pdo): void {
         $cashAccount->execute(['CASH-' . $branch['id'], 'KAS-' . $branch['code'], 'KAS ' . $branch['name'], 'cash', $branch['id']]);
     }
     $pdo->exec("INSERT IGNORE INTO cash_accounts (id,code,name,account_type,branch_id) VALUES ('BANK-PUSAT','BANK-PUSAT','BANK / KAS PUSAT','bank',NULL),('QRIS-PUSAT','QRIS-PUSAT','QRIS PERUSAHAAN','qris',NULL)");
+    $pdo->exec("UPDATE cash_accounts SET ledger_account_id=CASE account_type WHEN 'cash' THEN 'COA-1101' WHEN 'bank' THEN 'COA-1102' ELSE 'COA-1103' END WHERE ledger_account_id IS NULL");
+    $pdo->exec("INSERT IGNORE INTO branch_account_settings(branch_id,cash_account_id,bank_account_id,qris_account_id,deposit_destination_account_id,receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id)
+        SELECT b.id,ca.id,'BANK-PUSAT','QRIS-PUSAT','BANK-PUSAT','COA-1200','COA-4101','COA-4102','COA-1300'
+        FROM branches b LEFT JOIN cash_accounts ca ON ca.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND ca.account_type='cash'");
 
     // Database yang sudah pernah dipakai dapat memiliki tabel pembayaran versi lama.
     // Lengkapi kolom akun di sini (di dalam bootstrap schema), bukan di helper

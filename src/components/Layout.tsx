@@ -50,7 +50,7 @@ const desktopGroups = [
     { label: 'Grup Akses', path: '/users', icon: Shield, perm: 'role:view', tone: 'blue' },
   ]},
   { id: 'ledger', label: 'Buku Besar', icon: BookOpen, items: [
-    { label: 'Daftar Akun', icon: BookOpen, tone: 'blue' }, { label: 'Jurnal Umum', icon: ClipboardList, tone: 'green' },
+    { label: 'Akun Perkiraan', path: '/chart-of-accounts', icon: BookOpen, perm: 'settings:view', tone: 'blue' }, { label: 'Jurnal Umum', icon: ClipboardList, tone: 'green' },
     { label: 'Buku Besar', icon: BookOpen, tone: 'purple' }, { label: 'Saldo Awal', icon: Banknote, tone: 'orange' },
     { label: 'Laba Rugi', icon: BarChart3, tone: 'purple' }, { label: 'Neraca', icon: BarChart3, tone: 'purple' },
   ]},

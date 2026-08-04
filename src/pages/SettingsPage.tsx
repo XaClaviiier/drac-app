@@ -31,6 +31,9 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [aiKey, setAiKey] = useState('');
   const [aiConfigured, setAiConfigured] = useState(false);
+  const [cashAccounts, setCashAccounts] = useState<any[]>([]);
+  const [ledgerAccounts, setLedgerAccounts] = useState<any[]>([]);
+  const [branchAccountSettings, setBranchAccountSettings] = useState<any[]>([]);
   const canEdit = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator');
 
   useEffect(() => {
@@ -43,6 +46,18 @@ export default function SettingsPage() {
         setAiConfigured(Boolean(result.data.configured));
         if (result.data.model) setDraft(prev => ({ ...prev, ai: { ...prev.ai, model: result.data.model } }));
       }
+    });
+  }, []);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('cash-accounts'),
+      api.get('chart-of-accounts'),
+      api.get('branch-account-settings'),
+    ]).then(([cashResult, ledgerResult, mappingResult]) => {
+      if (cashResult.success) setCashAccounts(cashResult.data || []);
+      if (ledgerResult.success) setLedgerAccounts(ledgerResult.data || []);
+      if (mappingResult.success) setBranchAccountSettings(mappingResult.data || []);
     });
   }, []);
 
@@ -64,6 +79,12 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await updateSettings(draft);
+      if (tab === 'branches') {
+        for (const mapping of branchAccountSettings) {
+          const result = await api.update('branch-account-settings', mapping.branchId, mapping);
+          if (!result.success) throw new Error(result.message || 'Gagal menyimpan pengaitan akun cabang');
+        }
+      }
       if (tab === 'ai' && currentUser?.isOwner && aiKey.trim()) {
         const result = await api.updateAISettings(aiKey.trim(), draft.ai.model);
         if (!result.success) throw new Error([result.message, result.error].filter(Boolean).join(': ') || 'Gagal menyimpan API Key Groq');
@@ -84,6 +105,13 @@ export default function SettingsPage() {
   const selectTab = (nextTab: Tab) => {
     setTab(nextTab);
     localStorage.setItem('drac-settings-tab', nextTab);
+  };
+  const setBranchAccount = (branchId: string, key: string, value: string) => {
+    setBranchAccountSettings(prev => {
+      const existing = prev.find(item => item.branchId === branchId);
+      if (existing) return prev.map(item => item.branchId === branchId ? { ...item, [key]: value || null } : item);
+      return [...prev, { branchId, [key]: value || null }];
+    });
   };
 
   if (!canEdit) {
@@ -153,15 +181,34 @@ export default function SettingsPage() {
 
           {tab === 'branches' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-              <TabHeader title="Cabang" description="Kode satu huruf digunakan pada nomor dokumen." />
+              <TabHeader title="Cabang & Pengaitan Akun" description="Tentukan akun kas, bank, setoran, piutang, pendapatan, dan persediaan untuk setiap cabang." />
               <div className="space-y-3">
-                {data.branches.map(branch => (
-                  <div key={branch.id} className="grid items-center gap-3 rounded-lg border border-gray-200 p-3 sm:grid-cols-[minmax(220px,1fr)_220px_100px]">
-                    <div><p className="font-semibold text-gray-900">{branch.name}</p><p className="text-xs text-gray-500">{branch.id} · {branch.address}</p></div>
-                    <CompanyField label="Kode"><input className={`${inputClass} uppercase`} maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></CompanyField>
-                    <span className={`rounded-full px-3 py-1 text-center text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
-                  </div>
-                ))}
+                {data.branches.map(branch => {
+                  const mapping = branchAccountSettings.find(item => item.branchId === branch.id) || { branchId: branch.id };
+                  const branchCashAccounts = cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === branch.id));
+                  const activeLedgerAccounts = ledgerAccounts.filter(account => account.isActive !== false);
+                  return (
+                    <div key={branch.id} className="rounded-lg border border-gray-200 p-3">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                        <div><p className="font-semibold text-gray-900">{branch.name}</p><p className="text-xs text-gray-500">{branch.id} · {branch.address}</p></div>
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-2 text-sm text-gray-600">Kode dokumen<input className="h-9 w-14 rounded-md border border-gray-300 text-center font-semibold uppercase" maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></label>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                        </div>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <SettingSelect label="Kas tunai cabang" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />
+                        <SettingSelect label="Bank cabang" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />
+                        <SettingSelect label="QRIS cabang" value={mapping.qrisAccountId} options={branchCashAccounts.filter(account => account.accountType === 'qris')} onChange={value => setBranchAccount(branch.id, 'qrisAccountId', value)} />
+                        <SettingSelect label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />
+                        <SettingSelect label="Piutang pelanggan" value={mapping.receivableCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'receivableCoaId', value)} />
+                        <SettingSelect label="Pendapatan jasa" value={mapping.serviceRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'serviceRevenueCoaId', value)} />
+                        <SettingSelect label="Penjualan barang" value={mapping.goodsRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'goodsRevenueCoaId', value)} />
+                        <SettingSelect label="Persediaan" value={mapping.inventoryCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'inventoryCoaId', value)} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -257,6 +304,18 @@ function CompanyField({ label, multiline = false, children }: { label: string; m
       <label className={`${multiline ? 'pt-2.5 ' : ''}text-sm font-medium text-gray-700`}>{label}</label>
       {children}
     </div>
+  );
+}
+
+function SettingSelect({ label, value, options, onChange }: { label: string; value?: string | null; options: any[]; onChange: (value: string) => void }) {
+  return (
+    <label className={labelClass}>
+      <span>{label}</span>
+      <select className={inputClass} value={value || ''} onChange={event => onChange(event.target.value)}>
+        <option value="">Belum dikaitkan</option>
+        {options.map(option => <option key={option.id} value={option.id}>{option.code ? `${option.code} · ` : ''}{option.name}</option>)}
+      </select>
+    </label>
   );
 }
 
