@@ -505,6 +505,19 @@ function isBackdateReasonRequired(PDO $pdo): bool {
     }
 }
 
+function requireUserPermission(PDO $pdo, string $permission): array {
+    $user = requireAuthenticatedUser($pdo);
+    if (!empty($user['is_owner'])) return $user;
+
+    $stmt = $pdo->prepare("SELECT permissions FROM roles WHERE id = ? AND is_active = 1 LIMIT 1");
+    $stmt->execute([$user['role_id'] ?? '']);
+    $permissions = json_decode((string)($stmt->fetchColumn() ?: '[]'), true);
+    if (!is_array($permissions) || !in_array($permission, $permissions, true)) {
+        respondError('Akun tidak memiliki izin Input WO Tanggal Mundur', 403);
+    }
+    return $user;
+}
+
 function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $itemId, int $delta): void {
     $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id = ?");
     $itemStmt->execute([$itemId]);

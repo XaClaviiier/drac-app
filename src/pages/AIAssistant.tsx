@@ -33,6 +33,27 @@ interface RegistrationDraft {
 }
 
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+const localDateISO = (date = new Date()) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const parseCompactTransactionDate = (text: string): { date: string; token: string } | null => {
+  const match = text.match(/(?:^|\s)(\d{1,2})\/(?:(\d{1,2})(?:\/(\d{2}|\d{4})?)?)?(?=\s|$|[,;])/);
+  if (!match) return null;
+
+  const today = new Date();
+  const day = Number(match[1]);
+  const month = match[2] ? Number(match[2]) : today.getMonth() + 1;
+  const rawYear = match[3] ? Number(match[3]) : today.getFullYear();
+  const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) throw new Error(`Tanggal "${match[0].trim()}" tidak valid.`);
+
+  return { date: localDateISO(parsed), token: match[0].trim() };
+};
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const render = (t: string) =>
   esc(t.replace(/\n{2,}/g, '\n'))
@@ -76,6 +97,35 @@ export default function AIAssistant() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const servicesFromCodes = (text: string) => {
+    const allowedItems = data.items.filter(item => item.isActive && item.type !== 'Persediaan');
+    const byCode = new Map(allowedItems.map(item => [item.code.trim().toUpperCase(), item]));
+    const found = new Map<string, { name: string; price: number; qty: number }>();
+
+    text.toUpperCase().split(/[\s,;|]+/).forEach(rawToken => {
+      const token = rawToken.replace(/^[^A-Z0-9]+|[^A-Z0-9*X_-]+$/g, '');
+      if (!token) return;
+      let item = byCode.get(token);
+      let qty = 1;
+      if (!item) {
+        const qtyMatch = token.match(/^(.+?)[X*](\d+)$/);
+        if (qtyMatch) {
+          item = byCode.get(qtyMatch[1]);
+          qty = Math.max(1, Number(qtyMatch[2]) || 1);
+        }
+      }
+      if (!item) return;
+      const current = found.get(item.id);
+      found.set(item.id, {
+        name: item.code,
+        price: item.sellingPrice,
+        qty: (current?.qty || 0) + qty,
+      });
+    });
+
+    return [...found.values()];
+  };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -594,6 +644,7 @@ export default function AIAssistant() {
     }
 
     if (value.length < 3) return 'Keluhan terlalu singkat. Jelaskan kondisi kendaraan atau layanan yang dibutuhkan.';
+    const codedServices = servicesFromCodes(value);
     const action = {
       action: 'create_wo',
       customerName: registrationDraft.customerName,
@@ -601,8 +652,17 @@ export default function AIAssistant() {
       plateNumber: registrationDraft.plateNumber,
       vehicleInfo: registrationDraft.vehicleInfo,
       description: value,
-      services: [{ name: 'CEK AC', price: 0, qty: 1 }],
+      services: codedServices.length > 0
+        ? codedServices
+        : [{ name: 'CEK AC', price: 0, qty: 1 }],
     };
+    let parsedDate: ReturnType<typeof parseCompactTransactionDate>;
+    try {
+      parsedDate = parseCompactTransactionDate(value);
+    } catch (error: any) {
+      return error.message;
+    }
+    if (parsedDate) Object.assign(action, { date: parsedDate.date });
     setPendingAction(action);
     setPendingBranchId(currentBranchId === 'ALL' ? '' : currentBranchId);
     setRegistrationDraft(null);
@@ -725,7 +785,7 @@ export default function AIAssistant() {
     const quickServices = data.items
       .filter(i => i.isActive && i.isQuickService && i.type !== 'Group')
       .slice(0, 10)
-      .map(i => `${i.name} (${i.type}) harga ${i.sellingPrice === 0 ? 'GRATIS Rp 0' : `Rp ${i.sellingPrice.toLocaleString('id-ID')}`}`)
+      .map(i => `${i.code} = ${i.name} (${i.type}) harga ${i.sellingPrice === 0 ? 'GRATIS Rp 0' : `Rp ${i.sellingPrice.toLocaleString('id-ID')}`}`)
       .join(', ');
 
     return `Kamu adalah "ASISTEN DOKTER AC" — asisten AI bengkel AC mobil "Dokter AC Mobil" (Perintis, Cakalang, Mamuju).
@@ -744,17 +804,23 @@ NAMA PELANGGAN/KENDARAAN:
 - Kalau user sebut nama/plat yang mirip tapi tidak persis sama, tampilkan semua kemungkinan & minta konfirmasi.
 
 MEMBUAT WO (HANYA UNTUK PESAN YANG DIMULAI "reg wo"):
+Format tanggal singkat yang boleh dipakai user:
+- "2/" berarti tanggal 2 bulan dan tahun berjalan.
+- "2/3" atau "2/3/" berarti 2 Maret tahun berjalan.
+- "2/3/26" berarti 2 Maret 2026.
+Jika ada tanggal, masukkan sebagai field "date" format YYYY-MM-DD pada JSON. Jika user tidak menulis tanggal, jangan kirim field "date".
+
 Kalau user minta buat WO tanpa menyebut layanan, OTOMATIS tambahkan default:
   {"name":"CEK AC","price":0,"qty":1}
 Ini adalah pengecekan gratis. Jangan tanya layanan kalau sudah ada keluhan yang jelas.
 
-Kalau user MENYEBUT layanan (misalnya "flushing", "isi freon"):
-- Cari nama PERSIS di LAYANAN CEPAT berikut: ${quickServices || 'tidak ada data layanan'}
+Kalau user MENYEBUT layanan atau KODE layanan (misalnya "flushing", "SV-0102"):
+- Cari kode atau nama PERSIS di LAYANAN CEPAT berikut: ${quickServices || 'tidak ada data layanan'}
 - Kalau tidak ada, gunakan nama yang user sebut & harga 0 (tanyakan ke user untuk konfirmasi harga).
 
 Setelah ada plat, pelanggan, dan keluhan — LANGSUNG keluarkan JSON tanpa bertanya lebih lanjut:
 \`\`\`json
-{"action":"create_wo","customerName":"NAMA_PERSIS","phone":"08xx","plateNumber":"PLAT_PERSIS","vehicleInfo":"Merek Model Tahun - Warna","description":"keluhan","services":[{"name":"CEK AC","price":0,"qty":1}]}
+{"action":"create_wo","date":"YYYY-MM-DD","customerName":"NAMA_PERSIS","phone":"08xx","plateNumber":"PLAT_PERSIS","vehicleInfo":"Merek Model Tahun - Warna","description":"keluhan","services":[{"name":"KODE_ATAU_NAMA_LAYANAN","price":0,"qty":1}]}
 \`\`\`
 
 Kalau plat/pelanggan tidak ditemukan di data, sertakan nama/plat yang user sebut apa adanya.
@@ -776,6 +842,13 @@ ${buildSmartContext(userMsgText)}`;
   const executeCreateWO = async (a: any, selectedBranchId: string) => {
     const branchId = selectedBranchId;
     const branchName = data.branches.find(b => b.id === branchId)?.name || branchId;
+    const suppliedDate = String(a.date || '');
+    const transactionDate = /^\d{4}-\d{2}-\d{2}$/.test(suppliedDate) ? suppliedDate : localDateISO();
+    const today = localDateISO();
+    if (transactionDate > today) throw new Error('Tanggal WO tidak boleh melewati hari ini.');
+    if (transactionDate < today && !hasPermission('wo:backdate')) {
+      throw new Error('Akun ini tidak memiliki izin Input WO Tanggal Mundur. Hubungi Owner untuk mengaktifkannya pada Grup Akses.');
+    }
 
     // 1. Pelanggan
     let customer = data.customers.find(c =>
@@ -791,7 +864,7 @@ ${buildSmartContext(userMsgText)}`;
         phone: a.phone || '',
         address: '',
         email: '',
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: transactionDate,
         branchId,
       });
     }
@@ -814,7 +887,7 @@ ${buildSmartContext(userMsgText)}`;
         customerId: customer?.customerCode || '',
         phone: customer?.phone || a.phone || '',
         address: customer?.address || '',
-        registrationDate: new Date().toISOString().split('T')[0],
+        registrationDate: transactionDate,
         notes: '',
         branchId,
       };
@@ -861,12 +934,13 @@ ${buildSmartContext(userMsgText)}`;
     const total = services.reduce((sum, s) => sum + s.price * s.qty, 0);
 
     // 4. WO
-    const woNumber = generateDocumentNumber('workOrder', branchId);
+    const woNumber = generateDocumentNumber('workOrder', branchId, new Date(`${transactionDate}T00:00:00`));
 
     const wo: WorkOrder = {
       id: Date.now().toString() + 'w',
       woNumber,
-      date: new Date().toISOString().split('T')[0],
+      date: transactionDate,
+      backdateReason: transactionDate < today ? 'Input transaksi tertinggal via Asisten AI' : undefined,
       customerRefId: customer?.id,
       customerId: customer?.customerCode || '',
       customerName: customer?.name || String(a.customerName || '').toUpperCase(),
@@ -1051,6 +1125,13 @@ ${buildSmartContext(userMsgText)}`;
       const json = await res.json();
       const reply = json.choices?.[0]?.message?.content || 'Maaf, tidak ada jawaban.';
       const action = extractAction(reply);
+
+      if (action?.action === 'create_wo') {
+        const parsedDate = parseCompactTransactionDate(content);
+        const codedServices = servicesFromCodes(content);
+        if (parsedDate) action.date = parsedDate.date;
+        if (codedServices.length > 0) action.services = codedServices;
+      }
 
       setMessages(h => [...h, { role: 'assistant', content: reply, time: now(), action }]);
       if (action?.action === 'create_wo') {
