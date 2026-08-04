@@ -680,15 +680,18 @@ export default function WorkOrders() {
     }
 
     const today = new Date().toISOString().split('T')[0];
+    const transactionDateChanged = editingWO ? formData.date !== editingWO.date : true;
     if (formData.date > today) {
       window.alert('Tanggal WO tidak boleh melewati hari ini.');
       return;
     }
-    if (formData.date < today && !hasPermission('wo:backdate')) {
+    // Mengubah harga/layanan pada WO lama bukan transaksi tanggal mundur baru.
+    // Izin dan alasan hanya diminta ketika tanggal benar-benar diubah, atau saat membuat WO baru.
+    if (transactionDateChanged && formData.date < today && !hasPermission('wo:backdate')) {
       window.alert('Anda tidak memiliki hak akses tanggal mundur.');
       return;
     }
-    if (data.settings.security.requireBackdateReason !== false && formData.date < today && !woBackdateReason.trim()) {
+    if (transactionDateChanged && data.settings.security.requireBackdateReason !== false && formData.date < today && !woBackdateReason.trim()) {
       window.alert('Alasan tanggal mundur wajib diisi.');
       return;
     }
@@ -708,7 +711,9 @@ export default function WorkOrders() {
           ...formData,
           backdateReason: woBackdateReason.trim() || undefined,
           total: totalServices,
-          estimateTotal: diagnosisMode ? totalServices : editingWO.estimateTotal,
+          estimateTotal: diagnosisMode || ['Pengecekan', 'Pending'].includes(editingWO.status)
+            ? totalServices
+            : editingWO.estimateTotal,
           ...(shouldCreateInvoice ? {
             status: 'Selesai' as const,
             statusLog: [
