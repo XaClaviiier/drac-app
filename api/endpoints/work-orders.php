@@ -71,9 +71,6 @@ switch ($method) {
                 true
             );
             assertNoActiveWorkOrder($pdo, (string)$vehicle['id']);
-            if (empty($d['services'])) {
-                throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
-            }
             if (($d['status'] ?? 'Pengecekan') === 'Pending' && trim((string)($d['pendingReason'] ?? '')) === '') {
                 throw new InvalidArgumentException('Alasan Pending wajib diisi.');
             }
@@ -162,9 +159,6 @@ switch ($method) {
             // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
             if ((string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id']) {
                 assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], (string)$id);
-            }
-            if (empty($d['services'])) {
-                throw new InvalidArgumentException('Tambahkan minimal satu layanan atau barang.');
             }
             if (($d['status'] ?? 'Pengecekan') === 'Pending' && trim((string)($d['pendingReason'] ?? '')) === '') {
                 throw new InvalidArgumentException('Alasan Pending wajib diisi.');
