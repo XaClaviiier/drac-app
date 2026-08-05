@@ -22,7 +22,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', short: 'Home', icon: LayoutDashboard, perm: 'dashboard:view' as const, color: 'from-blue-500 to-indigo-600' },
   { path: '/workorders', label: 'Order Kerja', short: 'Order', icon: Wrench, perm: 'wo:view' as const, color: 'from-orange-500 to-red-600' },
   { path: '/invoices', label: 'Faktur Penjualan', short: 'Faktur', icon: FileText, perm: 'invoice:view' as const, color: 'from-green-500 to-emerald-600' },
-  { path: '/customer-payments', label: 'Pembayaran Pelanggan', short: 'Pembayaran', icon: Banknote, perm: 'invoice:view' as const, color: 'from-green-400 to-emerald-600' },
+  { path: '/customer-payments', label: 'Pembayaran Pelanggan', short: 'Pembayaran', icon: Banknote, perm: 'payment:view' as const, color: 'from-green-400 to-emerald-600' },
   { path: '/customers', label: 'Pelanggan', short: 'Pelanggan', icon: Users, perm: 'customer:view' as const, color: 'from-violet-500 to-purple-600' },
   { path: '/vehicles', label: 'Register Kendaraan', short: 'Kendaraan', icon: Car, perm: 'vehicle:view' as const, color: 'from-sky-500 to-blue-600' },
   { path: '/items', label: 'Barang & Jasa', short: 'Barang', icon: Boxes, perm: 'item:view' as const, color: 'from-teal-500 to-cyan-600' },
@@ -63,7 +63,7 @@ const desktopGroups = [
   { id: 'sales', label: 'SERVIS JOB', icon: CrossedToolsIcon, items: [
     { label: 'Order Kerja', path: '/workorders', icon: Wrench, perm: 'wo:view', tone: 'green' },
     { label: 'Faktur Penjualan', path: '/invoices', icon: FileText, perm: 'invoice:view', tone: 'green' },
-    { label: 'Pembayaran Pelanggan', path: '/customer-payments', icon: Banknote, perm: 'invoice:view', tone: 'green' },
+    { label: 'Pembayaran Pelanggan', path: '/customer-payments', icon: Banknote, perm: 'payment:view', tone: 'green' },
     { label: 'Pelanggan', path: '/customers', icon: Users, perm: 'customer:view', tone: 'blue' },
     { label: 'Kendaraan', path: '/vehicles', icon: Car, perm: 'vehicle:view', tone: 'blue' },
     { label: 'Riwayat Pembayaran', icon: History, tone: 'purple' },

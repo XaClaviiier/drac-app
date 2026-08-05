@@ -220,6 +220,17 @@ function ensureApiSupportTables(PDO $pdo): void {
         created_by VARCHAR(64) NULL, created_by_name VARCHAR(150) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_customer_payment_invoice (invoice_id), INDEX idx_customer_payment_date (date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payment_sequences (
+        branch_id VARCHAR(64) NOT NULL, period CHAR(4) NOT NULL, last_number INT UNSIGNED NOT NULL DEFAULT 0,
+        PRIMARY KEY (branch_id, period)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payment_audit_logs (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, payment_id VARCHAR(64) NULL,
+        payment_number VARCHAR(40) NOT NULL, invoice_id VARCHAR(64) NOT NULL, action VARCHAR(30) NOT NULL,
+        reason VARCHAR(255) NULL, snapshot_json LONGTEXT NULL, user_id VARCHAR(64) NULL,
+        user_name VARCHAR(150) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_payment_audit_invoice (invoice_id), INDEX idx_payment_audit_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS branch_deposits (
         id VARCHAR(64) PRIMARY KEY, deposit_number VARCHAR(40) NOT NULL UNIQUE, date DATE NOT NULL,
         branch_id VARCHAR(20) NOT NULL, source_account_id VARCHAR(64) NOT NULL, destination_account_id VARCHAR(64) NOT NULL,
@@ -262,15 +273,37 @@ function ensureApiSupportTables(PDO $pdo): void {
         if (!in_array('account_name', $paymentColumns, true)) {
             $pdo->exec("ALTER TABLE customer_payments ADD account_name VARCHAR(120) NULL AFTER account_id");
         }
+        // Pembayaran lama dahulu selalu diarahkan ke kas tunai. Pulihkan tujuan
+        // berdasarkan metode: tunai ke kas cabang, transfer ke bank, QRIS ke QRIS.
         $pdo->exec("
             UPDATE customer_payments p
-            JOIN cash_accounts a
-              ON a.branch_id COLLATE utf8mb4_unicode_ci = p.branch_id COLLATE utf8mb4_unicode_ci
-             AND a.account_type = 'cash'
-            SET p.account_id = COALESCE(p.account_id, a.id),
-                p.account_name = COALESCE(p.account_name, a.name)
+            JOIN branch_account_settings s ON s.branch_id COLLATE utf8mb4_unicode_ci=p.branch_id COLLATE utf8mb4_unicode_ci
+            JOIN cash_accounts a ON a.id COLLATE utf8mb4_unicode_ci=(CASE
+                WHEN p.payment_method='Tunai' THEN s.cash_account_id
+                WHEN p.payment_method='QRIS' THEN s.qris_account_id
+                ELSE s.bank_account_id END) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN cash_accounts old_a ON old_a.id COLLATE utf8mb4_unicode_ci=p.account_id COLLATE utf8mb4_unicode_ci
+            SET p.account_id=a.id,p.account_name=a.name
             WHERE p.account_id IS NULL OR p.account_name IS NULL
+               OR (p.payment_method<>'Tunai' AND old_a.account_type='cash')
+               OR (p.payment_method='QRIS' AND old_a.account_type<>'qris')
         ");
+    }
+    // Hak pembayaran berdiri sendiri. Role lama otomatis mewarisi hak yang
+    // setara dari modul faktur agar tidak kehilangan menu setelah pembaruan.
+    if ($pdo->query("SHOW TABLES LIKE 'roles'")->fetch()) {
+        $roleRows = $pdo->query("SELECT id,permissions FROM roles")->fetchAll();
+        $roleUpdate = $pdo->prepare("UPDATE roles SET permissions=? WHERE id=?");
+        foreach ($roleRows as $roleRow) {
+            $permissions = json_decode((string)($roleRow['permissions'] ?? '[]'), true);
+            if (!is_array($permissions)) $permissions = [];
+            $next = $permissions;
+            if (in_array('invoice:view', $permissions, true)) $next[] = 'payment:view';
+            if (in_array('invoice:create', $permissions, true) || in_array('invoice:edit', $permissions, true)) $next[] = 'payment:create';
+            if (in_array('invoice:delete', $permissions, true) || in_array('invoice:edit', $permissions, true)) $next[] = 'payment:delete';
+            $next = array_values(array_unique($next));
+            if ($next !== $permissions) $roleUpdate->execute([json_encode($next), $roleRow['id']]);
+        }
     }
     $pdo->exec("
         INSERT IGNORE INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
@@ -523,6 +556,8 @@ function requireUserPermission(PDO $pdo, string $permission): array {
             'wo:backdate' => 'Input WO Tanggal Mundur',
             'invoice:backdate' => 'Input Faktur Tanggal Mundur',
             'payment:backdate' => 'Input Pembayaran Tanggal Mundur',
+            'payment:view' => 'Lihat Pembayaran', 'payment:create' => 'Buat Pembayaran',
+            'payment:delete' => 'Hapus Pembayaran',
         ];
         respondError('Akun tidak memiliki izin ' . ($labels[$permission] ?? $permission), 403);
     }

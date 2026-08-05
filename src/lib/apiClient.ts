@@ -91,6 +91,8 @@ export const api = {
     request(`/${resource}/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (resource: string, id: string) =>
     request(`/${resource}/${id}`, { method: 'DELETE' }),
+  removeWithReason: (resource: string, id: string, reason: string) =>
+    request(`/${resource}/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
 
   deleteCustomerPaymentsForInvoice: (invoiceId: string) =>
     request(`/customer-payments/invoice/${invoiceId}`, { method: 'DELETE' }),
