@@ -42,7 +42,8 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
     if ($method !== 'Tunai') $method = 'QRIS/Transfer';
     $update = $pdo->prepare("UPDATE sales_invoices SET payment=?, payment_date=?, payment_method=?, status=? WHERE id=?");
     $update->execute([$paid, $paymentDate, $method, $status, $invoiceId]);
-    $woStatus = $status === 'Lunas' ? 'Dibayar' : 'Selesai';
+    // Status WO menunjukkan dokumen sudah difakturkan, bukan status pelunasannya.
+    $woStatus = 'Invoiced';
     $pdo->prepare("UPDATE work_orders SET status=? WHERE invoice_id=?")->execute([$woStatus, $invoiceId]);
     if (!empty($row['wo_id'])) {
         $pdo->prepare("UPDATE work_orders SET status=? WHERE id=?")->execute([$woStatus, $row['wo_id']]);

@@ -54,7 +54,7 @@ export interface SalesInvoice {
   branchId: string;
 }
 
-export type WOStatus = 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Dibayar' | 'Batal';
+export type WOStatus = 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Invoiced' | 'Batal';
 
 export interface WOStatusLog {
   from: WOStatus;

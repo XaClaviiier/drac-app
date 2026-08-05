@@ -10,7 +10,7 @@ SET NAMES utf8mb4;
 -- Status WO final yang digunakan aplikasi.
 ALTER TABLE `work_orders`
   MODIFY COLUMN `status`
-  ENUM('Pengecekan','Proses','Selesai','Dibayar','Batal')
+  ENUM('Pengecekan','Proses','Selesai','Invoiced','Batal')
   NOT NULL DEFAULT 'Pengecekan';
 
 -- Sequence atomik untuk nomor dokumen per cabang dan tanggal.

@@ -23,8 +23,11 @@ try {
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_lp DECIMAL(8,2) NULL AFTER final_temperature");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_hp DECIMAL(8,2) NULL AFTER final_lp");
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
-    if ($statusColumn && stripos((string)$statusColumn['Type'], "'Pending'") === false) {
-        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Pengecekan','Pending','Proses','Selesai','Dibayar','Batal') DEFAULT 'Pengecekan'");
+    if ($statusColumn && (stripos((string)$statusColumn['Type'], "'Pending'") === false || stripos((string)$statusColumn['Type'], "'Invoiced'") === false || stripos((string)$statusColumn['Type'], "'Dibayar'") !== false)) {
+        // Dua tahap menjaga data lama tetap valid ketika Dibayar diganti menjadi Invoiced.
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Pengecekan','Pending','Proses','Selesai','Dibayar','Invoiced','Batal') DEFAULT 'Pengecekan'");
+        $pdo->exec("UPDATE work_orders SET status='Invoiced' WHERE status='Dibayar'");
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Pengecekan','Pending','Proses','Selesai','Invoiced','Batal') DEFAULT 'Pengecekan'");
     }
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_date DATE NULL AFTER payment");
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER payment_date");

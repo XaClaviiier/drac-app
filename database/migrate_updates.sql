@@ -35,7 +35,7 @@ UPDATE `vehicles` SET `first_seen_branch_id` = `branch_id`
 
 -- Ubah ENUM status agar support 'Batal'
 ALTER TABLE `work_orders`
-  MODIFY COLUMN `status` ENUM('Pengecekan','Proses','Selesai','Dibayar','Batal') DEFAULT 'Pengecekan';
+  MODIFY COLUMN `status` ENUM('Pengecekan','Proses','Selesai','Invoiced','Batal') DEFAULT 'Pengecekan';
 
 -- Kolom temuan teknisi
 ALTER TABLE `work_orders`
@@ -109,4 +109,4 @@ ALTER TABLE `work_orders`
   ADD COLUMN IF NOT EXISTS `pending_at` DATETIME NULL AFTER `approved_at`,
   ADD COLUMN IF NOT EXISTS `pending_until` DATETIME NULL AFTER `pending_at`,
   ADD COLUMN IF NOT EXISTS `pending_reason` VARCHAR(255) NULL AFTER `pending_until`,
-  MODIFY COLUMN `status` ENUM('Pengecekan','Pending','Proses','Selesai','Dibayar','Batal') DEFAULT 'Pengecekan';
+  MODIFY COLUMN `status` ENUM('Pengecekan','Pending','Proses','Selesai','Invoiced','Batal') DEFAULT 'Pengecekan';

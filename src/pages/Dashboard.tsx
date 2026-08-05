@@ -90,7 +90,7 @@ export default function Dashboard() {
     diagnosis: visibleWOs.filter(wo => wo.status === 'Pengecekan').length,
     pending: visibleWOs.filter(wo => wo.status === 'Pending').length,
     process: visibleWOs.filter(wo => wo.status === 'Proses').length,
-    completed: visibleWOs.filter(wo => ['Selesai', 'Dibayar'].includes(wo.status)).length,
+    completed: visibleWOs.filter(wo => ['Selesai', 'Invoiced'].includes(wo.status)).length,
   };
   const stalePending = visibleWOs.filter(wo => wo.status === 'Pending' && wo.date < dateKey(addDays(today, -7)));
   const overdueInvoices = visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7);
@@ -159,7 +159,7 @@ export default function Dashboard() {
             <ProgressRing value={salesRate} />
             <div className="min-w-0 flex-1 space-y-2">
               <FunnelRow label="WO Masuk" value={tenDayWOs.length} total={tenDayWOs.length} tone="bg-blue-500" />
-              <FunnelRow label="Disetujui" value={tenDayWOs.filter(wo => ['Proses', 'Selesai', 'Dibayar'].includes(wo.status)).length} total={tenDayWOs.length} tone="bg-cyan-500" />
+              <FunnelRow label="Disetujui" value={tenDayWOs.filter(wo => ['Proses', 'Selesai', 'Invoiced'].includes(wo.status)).length} total={tenDayWOs.length} tone="bg-cyan-500" />
               <FunnelRow label="Menjadi Invoice" value={convertedWOs.length} total={tenDayWOs.length} tone="bg-emerald-500" />
               <FunnelRow label="Lunas" value={convertedWOs.filter(wo => visibleInvoices.some(invoice => (invoice.woId === wo.id || invoice.woNumber === wo.woNumber) && invoice.status === 'Lunas')).length} total={tenDayWOs.length} tone="bg-violet-500" />
             </div>

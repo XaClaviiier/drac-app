@@ -43,7 +43,7 @@ switch ($method) {
                 $woStmt->execute([$woId]);
                 $wo = $woStmt->fetch();
                 if (!$wo) throw new Exception('WO tidak ditemukan');
-                if (!empty($wo['invoice_id']) || $wo['status'] === 'Dibayar') {
+                if (!empty($wo['invoice_id']) || $wo['status'] === 'Invoiced') {
                     throw new Exception('WO sudah memiliki faktur');
                 }
                 if ($wo['status'] !== 'Selesai') {
@@ -122,7 +122,7 @@ switch ($method) {
 
                 $updateWo = $pdo->prepare("
                     UPDATE work_orders
-                    SET status = 'Dibayar', invoice_id = ?, invoice_number = ?
+                    SET status = 'Invoiced', invoice_id = ?, invoice_number = ?
                     WHERE id = ?
                 ");
                 $updateWo->execute([$invoiceId, $invoiceNumber, $woId]);

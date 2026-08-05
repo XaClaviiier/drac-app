@@ -868,7 +868,7 @@ export default function WorkOrders() {
     Pending: 'bg-orange-100 text-orange-800',
     Proses: 'bg-blue-100 text-blue-800',
     Selesai: 'bg-green-100 text-green-800',
-    Dibayar: 'bg-purple-100 text-purple-800',
+    Invoiced: 'bg-purple-100 text-purple-800',
   };
   const statusLabel = (status: WorkOrder['status']) => status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Diagnosa Pending' : status === 'Proses' ? 'Dikerjakan' : status;
   const diagnosisMeasurementLabel = (wo: WorkOrder) => [
@@ -1085,7 +1085,7 @@ export default function WorkOrders() {
               <option value="Pending">2. Diagnosa Pending</option>
               <option value="Proses">3. Dikerjakan</option>
               <option value="Selesai">4. Selesai</option>
-              <option value="Dibayar">5. Dibayar</option>
+              <option value="Invoiced">5. Invoiced</option>
             </select>
 
             <div className="relative hidden flex-shrink-0 lg:block">
@@ -1364,7 +1364,7 @@ export default function WorkOrders() {
                       {wo.status === 'Pending' && '2.'}
                       {wo.status === 'Proses' && '3.'}
                       {wo.status === 'Selesai' && '4.'}
-                      {wo.status === 'Dibayar' && '5.'}
+                      {wo.status === 'Invoiced' && '5.'}
                       {wo.status === 'Batal' && '✕'}
                       <span>{statusLabel(wo.status)}</span>
                     </span>

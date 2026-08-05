@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   `pending_at` DATETIME DEFAULT NULL,
   `pending_until` DATETIME DEFAULT NULL,
   `pending_reason` VARCHAR(255) DEFAULT NULL,
-  `status` ENUM('Pengecekan', 'Pending', 'Proses', 'Selesai', 'Dibayar', 'Batal') DEFAULT 'Pengecekan',
+  `status` ENUM('Pengecekan', 'Pending', 'Proses', 'Selesai', 'Invoiced', 'Batal') DEFAULT 'Pengecekan',
   `notes` TEXT,
   `invoice_id` VARCHAR(20),
   `invoice_number` VARCHAR(30),

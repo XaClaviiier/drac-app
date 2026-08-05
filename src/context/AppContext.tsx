@@ -33,7 +33,7 @@ interface AppContextType {
   updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
   continueWorkOrder: (sourceWoId: string, targetBranchId: string) => Promise<WorkOrder | null>;
-  /** Cari WO aktif (Pengecekan/Proses/Selesai, belum Dibayar & belum dilanjutkan) untuk plat nomor tertentu. */
+  /** Cari WO aktif (belum Invoiced/Batal dan belum dilanjutkan) untuk plat nomor tertentu. */
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
@@ -468,7 +468,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!clean) return null;
     return data.workOrders.find(wo => {
       if (wo.plateNumber.replace(/\s+/g, '').toUpperCase() !== clean) return false;
-      if (wo.status === 'Dibayar' || wo.status === 'Batal') return false;
+      if (wo.status === 'Invoiced' || wo.status === 'Batal') return false;
       if (wo.continuedToWoId) return false; // sudah dilanjutkan di WO lain
       return true;
     }) || null;
@@ -481,8 +481,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       Pengecekan: ['Proses', 'Pending'],
       Pending: ['Pengecekan', 'Proses'],
       Proses: ['Selesai', 'Pengecekan', 'Batal'],
-      Selesai: ['Dibayar', 'Proses'],
-      Dibayar: [],
+      Selesai: ['Invoiced', 'Proses'],
+      Invoiced: [],
       Batal: [],
     };
     return forward[from]?.includes(to) ?? false;
@@ -500,13 +500,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ok: false, message: `Perubahan status ${wo.status} → ${nextStatus} tidak diizinkan.` };
     }
 
-    // Selesai → Dibayar harus lewat pembuatan faktur, bukan ubah manual.
+    // Selesai → Invoiced harus lewat pembuatan faktur, bukan ubah manual.
     if (wo.status === 'Pending' && nextStatus === 'Proses' && wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now()) {
       return { ok: false, message: 'Masa Pending sudah lewat 30 hari. Buat WO baru dari data WO lama.' };
     }
 
-    if (wo.status === 'Selesai' && nextStatus === 'Dibayar' && !wo.invoiceId) {
-      return { ok: false, message: 'Untuk menandai Dibayar, buat faktur terlebih dahulu dari tombol Buat Faktur.' };
+    if (wo.status === 'Selesai' && nextStatus === 'Invoiced' && !wo.invoiceId) {
+      return { ok: false, message: 'Status Invoiced hanya diberikan otomatis setelah faktur dibuat.' };
     }
 
     // Perubahan mundur atau Batal wajib punya alasan.
@@ -656,7 +656,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await addInvoice(newInvoice);
     await updateWorkOrder(woId, {
-      ...wo, status: 'Dibayar', invoiceId: newInvoice.id, invoiceNumber,
+      ...wo, status: 'Invoiced', invoiceId: newInvoice.id, invoiceNumber,
     });
     return newInvoice;
   };
