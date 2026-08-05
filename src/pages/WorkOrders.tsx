@@ -40,6 +40,7 @@ const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked
   { key: 'actions', label: 'Aksi', locked: true },
 ];
 const DEFAULT_WORK_ORDER_COLUMNS = WORK_ORDER_COLUMNS.map(column => column.key);
+type WorkOrderPeriod = 'all' | 'today' | '7days' | 'thisMonth' | 'lastMonth' | 'custom';
 
 export default function WorkOrders() {
   const {
@@ -65,6 +66,8 @@ export default function WorkOrders() {
   const [savingPendingTemplates, setSavingPendingTemplates] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [periodFilter, setPeriodFilter] = useState<WorkOrderPeriod>('all');
+  // State lama dipertahankan sementara agar tampilan mobile lama tetap kompatibel.
   const [todayOnly, setTodayOnly] = useState(false);
   const [activeBranchOnly, setActiveBranchOnly] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
@@ -391,47 +394,46 @@ export default function WorkOrders() {
 
   const activeBranchIds = data.branches.filter(branch => branch.isActive).map(branch => branch.id);
 
-  // Saat dropdown header berganti cabang, filter cabang tersebut otomatis ON.
-  useEffect(() => {
-    setActiveBranchOnly(true);
-  }, [currentBranchId]);
-
   const isAllBranchDropdown = currentBranchId === 'ALL';
-  const branchScopeLabel = isAllBranchDropdown || !activeBranchOnly
-    ? 'Semua Cabang'
-    : selectedBranchLabel;
+  const branchScopeLabel = isAllBranchDropdown ? 'Semua Cabang' : selectedBranchLabel;
 
-  const setLastSevenDays = () => {
-    const start = new Date();
-    start.setDate(start.getDate() - 6);
-    setDateFrom(toLocalDate(start));
-    setDateTo(todayDate);
-  };
-
-  const setCurrentMonth = () => {
+  const periodRange = useMemo(() => {
     const now = new Date();
-    setDateFrom(toLocalDate(new Date(now.getFullYear(), now.getMonth(), 1)));
-    setDateTo(todayDate);
-  };
+    if (periodFilter === 'today') return { from: todayDate, to: todayDate };
+    if (periodFilter === '7days') {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 6);
+      return { from: toLocalDate(start), to: todayDate };
+    }
+    if (periodFilter === 'thisMonth') {
+      return { from: toLocalDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: todayDate };
+    }
+    if (periodFilter === 'lastMonth') {
+      return {
+        from: toLocalDate(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+        to: toLocalDate(new Date(now.getFullYear(), now.getMonth(), 0)),
+      };
+    }
+    if (periodFilter === 'custom') return { from: dateFrom, to: dateTo };
+    return { from: '', to: '' };
+  }, [periodFilter, todayDate, dateFrom, dateTo]);
 
   const filteredWOs = useMemo(() => {
     return data.workOrders
       .filter((wo) => {
-        // Dropdown Semua Cabang atau toggle cabang OFF = seluruh cabang aktif.
-        const branchMatch = isAllBranchDropdown || !activeBranchOnly
+        // Cabang selalu otomatis mengikuti dropdown cabang pada header.
+        const branchMatch = isAllBranchDropdown
           ? activeBranchIds.includes(wo.branchId)
           : wo.branchId === selectedBranchId;
         if (!branchMatch) return false;
 
-        // Hari Ini ON mengabaikan range. OFF tanpa range berarti semua tanggal.
-        const dateMatch = todayOnly
-          ? wo.date === todayDate
-          : (!dateFrom || wo.date >= dateFrom) && (!dateTo || wo.date <= dateTo);
+        const dateMatch = (!periodRange.from || wo.date >= periodRange.from) && (!periodRange.to || wo.date <= periodRange.to);
         if (!dateMatch) return false;
 
         const matchesSearch =
           wo.woNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
           wo.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (data.customers.find(customer => customer.id === wo.customerRefId || customer.customerCode === wo.customerId)?.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           wo.plateNumber.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = !filterStatus || wo.status === filterStatus;
         return matchesSearch && matchesStatus;
@@ -444,30 +446,16 @@ export default function WorkOrders() {
       });
   }, [
     data.workOrders,
+    data.customers,
     searchTerm,
     filterStatus,
     isAllBranchDropdown,
-    activeBranchOnly,
     activeBranchIds,
     selectedBranchId,
-    todayOnly,
-    todayDate,
-    dateFrom,
-    dateTo,
+    periodRange,
   ]);
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
-
-  // Default layanan saat WO baru: pengecekan gratis
-  const defaultCekAcService = {
-    id: `svc-cek-${Date.now()}`,
-    itemId: undefined as string | undefined,
-    code: 'CEK-AC',
-    name: 'CEK AC - PENGECEKAN GRATIS',
-    description: 'Pengecekan kondisi AC kendaraan',
-    price: 0,
-    qty: 1,
-  };
 
   const resetForm = () => {
     setFormData({
@@ -485,7 +473,7 @@ export default function WorkOrders() {
       finalTemperature: undefined,
       finalLp: undefined,
       finalHp: undefined,
-      services: [{ ...defaultCekAcService, id: `svc-cek-${Date.now()}` }],
+      services: [],
       findings: '',
       notes: '',
       status: 'Pengecekan',
@@ -665,7 +653,7 @@ export default function WorkOrders() {
       window.alert('Kendaraan wajib dipilih dari data kendaraan.');
       return;
     }
-    if (formData.services.length === 0) {
+    if (diagnosisMode && formData.services.length === 0) {
       window.alert('Tambahkan minimal 1 layanan/barang sebelum menyimpan.');
       return;
     }
@@ -939,6 +927,15 @@ export default function WorkOrders() {
     await refreshData();
   };
 
+  const openNewRegistration = () => {
+    if (showModal && !diagnosisMode && !editingWO) return;
+    if (currentBranchId === 'ALL') {
+      window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat registrasi WO.');
+      return;
+    }
+    handleOpenModal();
+  };
+
   const createNewFromPending = async (wo: WorkOrder) => {
     const created = await continueWorkOrder(wo.id, wo.branchId);
     if (created) {
@@ -953,22 +950,6 @@ export default function WorkOrders() {
         <button type="button" onClick={requestCloseEditor} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
-        {hasPermission('wo:create') && (
-          <button
-            type="button"
-            onClick={() => {
-              if (showModal && !diagnosisMode && !editingWO) return;
-              if (currentBranchId === 'ALL') {
-                window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat Order Kerja.\n\nWO harus terikat pada satu cabang agar stok, faktur, dan laporan cabang akurat.');
-                return;
-              }
-              handleOpenModal();
-            }}
-            className="flex h-11 items-center gap-1 rounded-t-md border border-b-0 border-gray-300 bg-gray-100 px-4 text-sm font-semibold text-gray-600 transition-colors hover:bg-white hover:text-blue-700"
-          >
-            <Plus className="h-4 w-4" /> New
-          </button>
-        )}
         {showModal && diagnosisMode && editingWO ? (
           <button
             type="button"
@@ -984,13 +965,16 @@ export default function WorkOrders() {
           </button>
         ) : showModal && hasPermission('wo:create') ? (
           <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
-            Data Baru
+            Register Baru
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
           </button>
         ) : null}
-        <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-4 text-xs font-medium text-gray-500">
-          <span>{todayOnly ? 'Hari ini' : 'Semua tanggal'}</span>
-          <span className="text-gray-300">•</span>
+        <div className="ml-auto flex h-11 items-center gap-3 border-b-0 px-2 text-xs font-medium text-gray-500">
+          {!showModal && hasPermission('wo:create') && (
+            <button type="button" onClick={openNewRegistration} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+              <Plus className="h-4 w-4" /> Register Baru
+            </button>
+          )}
           <span className="font-semibold text-gray-700">{branchScopeLabel}</span>
           <span className="text-gray-300">•</span>
           <span className="font-semibold text-blue-700">{filteredWOs.length} WO</span>
@@ -1007,7 +991,64 @@ export default function WorkOrders() {
       )}
 
       {/* Filters */}
-      <div className="px-3 py-0.5">
+      <div className="px-3 py-1">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Cari nomor WO, pelanggan, telepon, atau nomor plat..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 lg:w-40">
+            <option value="all">Semua Tanggal</option>
+            <option value="today">Hari Ini</option>
+            <option value="7days">7 Hari</option>
+            <option value="thisMonth">Bulan Ini</option>
+            <option value="lastMonth">Bulan Lalu</option>
+            <option value="custom">Pilih Tanggal</option>
+          </select>
+          {periodFilter === 'custom' && (
+            <div className="flex items-center gap-1">
+              <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
+              <span className="text-gray-400">–</span>
+              <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
+            </div>
+          )}
+          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 lg:w-44">
+            <option value="">Semua Status</option>
+            <option value="Pengecekan">Diagnosa</option>
+            <option value="Pending">Diagnosa Pending</option>
+            <option value="Proses">Dikerjakan</option>
+            <option value="Selesai">Selesai</option>
+            <option value="Dibayar">Dibayar</option>
+          </select>
+          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+          <div className="relative hidden flex-shrink-0 lg:block">
+            <button type="button" onClick={() => setShowColumnPicker(value => !value)} className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Pilih kolom">
+              <Settings2 className="h-4 w-4" />
+            </button>
+            {showColumnPicker && (
+              <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+                <div className="mb-2 flex items-center justify-between border-b border-gray-100 pb-2"><span className="text-sm font-bold text-gray-800">Kolom Daftar WO</span><button type="button" onClick={() => setShowColumnPicker(false)} className="p-1 text-gray-400"><X className="h-4 w-4" /></button></div>
+                {WORK_ORDER_COLUMNS.map(column => (
+                  <label key={column.key} className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${column.locked ? 'cursor-not-allowed bg-gray-50 text-gray-500' : 'cursor-pointer hover:bg-blue-50'}`}>
+                    <input type="checkbox" checked={isColumnVisible(column.key)} disabled={column.locked} onChange={() => toggleColumn(column.key)} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <span className="whitespace-nowrap text-xs font-semibold text-gray-600 lg:min-w-16 lg:text-right">{filteredWOs.length} WO</span>
+        </div>
+      </div>
+      <div className="hidden px-3 py-0.5">
         <div className="flex flex-col gap-2">
           {/* Quick list toggles */}
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
@@ -1690,9 +1731,9 @@ export default function WorkOrders() {
             <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? 'Edit Order Kerja' : 'Buat Order Kerja Baru'}
+                  {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? 'Edit Registrasi WO' : 'Register Baru'}
                 </h3>
-                <p className="text-sm text-gray-500">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : 'Isi data order kerja service AC'}</p>
+                <p className="text-sm text-gray-500">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : 'Registrasi kendaraan masuk tanpa estimasi layanan'}</p>
               </div>
               <button
                 onClick={handleCloseModal}
@@ -1826,7 +1867,8 @@ export default function WorkOrders() {
               </div>
               </>}
 
-              {/* Services */}
+              {diagnosisMode && <>
+              {/* Services hanya diisi pada tahap diagnosa, bukan saat registrasi */}
               <div>
                 <div className="mb-3">
                   <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Layanan Service AC'}</label>
@@ -2211,6 +2253,7 @@ export default function WorkOrders() {
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
                 />
               </div>
+              </>}
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
@@ -2227,7 +2270,7 @@ export default function WorkOrders() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
                 >
                   <Save className="w-4 h-4" />
-                  {diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan Order Kerja'}
+                  {diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan Registrasi'}
                 </button>
                 {diagnosisMode && editingWO && hasPermission('invoice:create') && !editingWO.invoiceId && (
                   <button
