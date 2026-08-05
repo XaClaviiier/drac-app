@@ -37,7 +37,9 @@ function resolveCustomerVehicle(PDO $pdo, string $customerRefId, string $vehicle
 
 function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $excludeWoId = null): void {
     $sql = "SELECT wo_number FROM work_orders
-            WHERE vehicle_ref_id = ? AND status IN ('Pengecekan', 'Proses', 'Selesai')";
+            WHERE vehicle_ref_id = ?
+              AND (status IN ('Pengecekan', 'Proses', 'Selesai')
+                   OR (status = 'Pending' AND (pending_until IS NULL OR pending_until > NOW())))";
     $params = [$vehicleRefId];
     if ($excludeWoId !== null) {
         $sql .= " AND id <> ?";

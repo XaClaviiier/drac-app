@@ -54,7 +54,7 @@ export interface SalesInvoice {
   branchId: string;
 }
 
-export type WOStatus = 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Invoiced' | 'Batal';
+export type WOStatus = 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Invoiced' | 'Closed';
 
 export interface WOStatusLog {
   from: WOStatus;
@@ -62,7 +62,7 @@ export interface WOStatusLog {
   at: string;              // ISO datetime
   byUserId: string;
   byUserName: string;
-  reason?: string;         // wajib untuk Batal atau perubahan mundur
+  reason?: string;         // wajib untuk Closed atau perubahan mundur
 }
 
 export interface WorkOrder {
@@ -93,7 +93,7 @@ export interface WorkOrder {
   pendingReason?: string;
   status: WOStatus;
   statusLog?: WOStatusLog[];  // jejak audit perubahan status
-  cancelReason?: string;      // alasan pembatalan bila status Batal
+  cancelReason?: string;      // alasan penutupan bila status Closed
   notes: string;
   invoiceId?: string;
   invoiceNumber?: string;

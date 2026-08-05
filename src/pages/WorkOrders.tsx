@@ -761,7 +761,7 @@ export default function WorkOrders() {
       window.alert(`WO tidak dapat dihapus karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}. Hapus pembayaran dan faktur terlebih dahulu.`);
       return;
     }
-    if (!['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(wo.status)) {
+    if (!['Pengecekan', 'Pending', 'Selesai'].includes(wo.status)) {
       window.alert(`WO berstatus ${wo.status} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`);
       return;
     }
@@ -869,8 +869,9 @@ export default function WorkOrders() {
     Proses: 'bg-blue-100 text-blue-800',
     Selesai: 'bg-green-100 text-green-800',
     Invoiced: 'bg-purple-100 text-purple-800',
+    Closed: 'bg-gray-200 text-gray-700',
   };
-  const statusLabel = (status: WorkOrder['status']) => status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Diagnosa Pending' : status === 'Proses' ? 'Dikerjakan' : status;
+  const statusLabel = (status: WorkOrder['status']) => status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Pending — Menunggu Keputusan' : status === 'Proses' ? 'Dikerjakan' : status === 'Closed' ? 'Closed — Tidak Dilanjutkan' : status;
   const diagnosisMeasurementLabel = (wo: WorkOrder) => [
     wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
     wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
@@ -1082,7 +1083,8 @@ export default function WorkOrders() {
             >
               <option value="">Semua Status</option>
               <option value="Pengecekan">1. Diagnosa</option>
-              <option value="Pending">2. Diagnosa Pending</option>
+              <option value="Pending">2. Pending — Menunggu Keputusan</option>
+              <option value="Closed">Closed — Tidak Dilanjutkan</option>
               <option value="Proses">3. Dikerjakan</option>
               <option value="Selesai">4. Selesai</option>
               <option value="Invoiced">5. Invoiced</option>
@@ -1256,6 +1258,9 @@ export default function WorkOrders() {
                             ? <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-semibold text-white">Buat WO Baru</button>
                             : <button onClick={() => void resumeDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">Lanjutkan Diagnosa ({pendingDaysLeft(wo)} hari)</button>
                         )}
+                        {hasPermission('wo:edit') && wo.status === 'Closed' && !wo.continuedToWoId && (
+                          <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-semibold text-white">Buat WO Baru</button>
+                        )}
                         {hasPermission('wo:edit') && wo.status === 'Proses' && (
                           <button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
                             Selesai
@@ -1269,12 +1274,12 @@ export default function WorkOrders() {
                         <button onClick={() => setDetailWO(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
                           <Eye className="h-4 w-4" />
                         </button>
-                        {hasPermission('wo:edit') && (
+                        {hasPermission('wo:edit') && wo.status !== 'Closed' && wo.status !== 'Invoiced' && (
                           <button onClick={() => handleOpenModal(wo)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit">
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(wo.status) && !wo.invoiceId && (
+                        {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Closed'].includes(wo.status) && !wo.invoiceId && (
                           <button onClick={() => void handleDelete(wo)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1365,7 +1370,7 @@ export default function WorkOrders() {
                       {wo.status === 'Proses' && '3.'}
                       {wo.status === 'Selesai' && '4.'}
                       {wo.status === 'Invoiced' && '5.'}
-                      {wo.status === 'Batal' && '✕'}
+                      {wo.status === 'Closed' && '✕'}
                       <span>{statusLabel(wo.status)}</span>
                     </span>
 
@@ -1398,6 +1403,9 @@ export default function WorkOrders() {
                     {wo.status === 'Pending' && (
                       <span className="text-[11px] text-orange-700">Alasan: {wo.pendingReason || '-'}{isPendingExpired(wo) ? ' · Kedaluwarsa' : ''}</span>
                     )}
+                    {hasPermission('wo:edit') && wo.status === 'Closed' && !wo.continuedToWoId && (
+                      <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white">Buat WO Baru dari Data Ini</button>
+                    )}
                     {hasPermission('wo:edit') && wo.status === 'Proses' && (
                       <>
                         <button
@@ -1415,10 +1423,10 @@ export default function WorkOrders() {
                           ← Pengecekan
                         </button>
                         <button
-                          onClick={() => requestStatusChange(wo, 'Batal')}
+                          onClick={() => requestStatusChange(wo, 'Closed')}
                           className="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
                         >
-                          Batal
+                          Closed
                         </button>
                       </>
                     )}
@@ -1431,7 +1439,7 @@ export default function WorkOrders() {
                         ← Proses
                       </button>
                     )}
-                    {wo.status === 'Batal' && wo.cancelReason && (
+                    {wo.status === 'Closed' && wo.cancelReason && (
                       <span className="text-[11px] italic text-gray-500" title={wo.cancelReason}>
                         Alasan: {wo.cancelReason}
                       </span>
@@ -1489,7 +1497,7 @@ export default function WorkOrders() {
                     >
                       <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                     </button>
-                    {hasPermission('wo:edit') && (
+                    {hasPermission('wo:edit') && wo.status !== 'Closed' && wo.status !== 'Invoiced' && (
                       <button
                         onClick={() => handleOpenModal(wo)}
                         className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
@@ -1498,7 +1506,7 @@ export default function WorkOrders() {
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
-                    {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(wo.status) && !wo.invoiceId && (
+                    {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Closed'].includes(wo.status) && !wo.invoiceId && (
                       <button
                         onClick={() => void handleDelete(wo)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
@@ -1664,8 +1672,8 @@ export default function WorkOrders() {
               {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
               )}
-              {hasPermission('wo:edit') && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
-              {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Batal'].includes(detailWO.status) && !detailWO.invoiceId && (
+              {hasPermission('wo:edit') && detailWO.status !== 'Closed' && detailWO.status !== 'Invoiced' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
+              {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai', 'Closed'].includes(detailWO.status) && !detailWO.invoiceId && (
                 <button onClick={() => { setDetailWO(null); void handleDelete(detailWO); }} className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Hapus WO</button>
               )}
               <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
@@ -2298,7 +2306,7 @@ export default function WorkOrders() {
       {statusDialog && (() => {
         const { wo, next } = statusDialog;
         const needsReason = next === 'Pending'
-          || next === 'Batal'
+          || next === 'Closed'
           || (wo.status === 'Proses' && next === 'Pengecekan')
           || (wo.status === 'Selesai' && next === 'Proses');
         return (
@@ -2344,7 +2352,7 @@ export default function WorkOrders() {
                       value={statusReason}
                       onChange={(e) => setStatusReason(e.target.value)}
                       rows={3}
-                      placeholder={next === 'Pending' ? 'Pilih alasan di atas atau tulis alasan lainnya' : next === 'Batal' ? 'Contoh: pelanggan menolak estimasi' : 'Contoh: perlu tambah sparepart'}
+                      placeholder={next === 'Pending' ? 'Contoh: pikir-pikir dulu atau diskusi dengan keluarga' : next === 'Closed' ? 'Contoh: tidak ada keputusan selama 10 hari' : 'Contoh: perlu tambah sparepart'}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                     />
                   </div>

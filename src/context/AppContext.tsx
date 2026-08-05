@@ -33,7 +33,7 @@ interface AppContextType {
   updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
   continueWorkOrder: (sourceWoId: string, targetBranchId: string) => Promise<WorkOrder | null>;
-  /** Cari WO aktif (belum Invoiced/Batal dan belum dilanjutkan) untuk plat nomor tertentu. */
+  /** Cari WO aktif (belum Invoiced/Closed dan belum dilanjutkan) untuk plat nomor tertentu. */
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
@@ -468,7 +468,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!clean) return null;
     return data.workOrders.find(wo => {
       if (wo.plateNumber.replace(/\s+/g, '').toUpperCase() !== clean) return false;
-      if (wo.status === 'Invoiced' || wo.status === 'Batal') return false;
+      if (wo.status === 'Invoiced' || wo.status === 'Closed') return false;
       if (wo.continuedToWoId) return false; // sudah dilanjutkan di WO lain
       return true;
     }) || null;
@@ -480,10 +480,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const forward: Record<WOStatus, WOStatus[]> = {
       Pengecekan: ['Proses', 'Pending'],
       Pending: ['Pengecekan', 'Proses'],
-      Proses: ['Selesai', 'Pengecekan', 'Batal'],
+      Proses: ['Selesai', 'Pengecekan', 'Closed'],
       Selesai: ['Invoiced', 'Proses'],
       Invoiced: [],
-      Batal: [],
+      Closed: [],
     };
     return forward[from]?.includes(to) ?? false;
   };
@@ -502,16 +502,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Selesai → Invoiced harus lewat pembuatan faktur, bukan ubah manual.
     if (wo.status === 'Pending' && nextStatus === 'Proses' && wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now()) {
-      return { ok: false, message: 'Masa Pending sudah lewat 30 hari. Buat WO baru dari data WO lama.' };
+      return { ok: false, message: 'Masa Pending sudah lewat 10 hari. Buat WO baru dari data WO lama.' };
     }
 
     if (wo.status === 'Selesai' && nextStatus === 'Invoiced' && !wo.invoiceId) {
       return { ok: false, message: 'Status Invoiced hanya diberikan otomatis setelah faktur dibuat.' };
     }
 
-    // Perubahan mundur atau Batal wajib punya alasan.
+    // Perubahan mundur atau Closed wajib punya alasan.
     const needsReason = nextStatus === 'Pending'
-      || nextStatus === 'Batal'
+      || nextStatus === 'Closed'
       || (wo.status === 'Proses' && nextStatus === 'Pengecekan')
       || (wo.status === 'Selesai' && nextStatus === 'Proses');
     if (needsReason && !reason?.trim()) {
@@ -520,7 +520,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const now = new Date().toISOString();
     const databaseNow = now.slice(0, 19).replace('T', ' ');
-    const pendingDeadline = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+    const pendingDeadline = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 19).replace('T', ' ');
     const log = [
       ...(wo.statusLog || []),
       {
@@ -537,7 +537,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...wo,
       status: nextStatus,
       statusLog: log,
-      cancelReason: nextStatus === 'Batal' ? reason?.trim() : wo.cancelReason,
+      cancelReason: nextStatus === 'Closed' ? reason?.trim() : wo.cancelReason,
       pendingAt: nextStatus === 'Pending' ? databaseNow : wo.pendingAt,
       pendingUntil: nextStatus === 'Pending'
         ? pendingDeadline
@@ -587,7 +587,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return sum + (currentItem?.sellingPrice ?? service.price) * service.qty;
       }, 0),
       estimateTotal: undefined,
-      status: src.status === 'Pending' ? 'Pengecekan' : 'Proses',
+      status: ['Pending', 'Closed'].includes(src.status) ? 'Pengecekan' : 'Proses',
       notes: `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,
       branchId: targetBranchId,
       continuedFromWoId: src.id,

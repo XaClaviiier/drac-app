@@ -6,7 +6,7 @@ import {
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WOStatus, WorkOrder } from '../types';
 
-const statuses: Array<WOStatus | ''> = ['', 'Pengecekan', 'Pending', 'Proses', 'Selesai', 'Invoiced', 'Batal'];
+const statuses: Array<WOStatus | ''> = ['', 'Pengecekan', 'Pending', 'Proses', 'Selesai', 'Invoiced', 'Closed'];
 const rupiah = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const dateLabel = (value: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('id-ID') : '-';
 const today = () => new Date().toISOString().slice(0, 10);
@@ -18,7 +18,7 @@ const statusTone: Record<WOStatus, string> = {
   Proses: 'bg-blue-100 text-blue-800',
   Selesai: 'bg-emerald-100 text-emerald-800',
   Invoiced: 'bg-purple-100 text-purple-800',
-  Batal: 'bg-red-100 text-red-700',
+  Closed: 'bg-gray-200 text-gray-700',
 };
 
 type ReportRow = WorkOrder & { invoice?: SalesInvoice; branchName: string; customerPhone: string };
@@ -63,14 +63,14 @@ export default function WorkOrderReport() {
     .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber)), [scopedRows, status]);
 
   const metrics = useMemo(() => {
-    const valid = rows.filter(wo => wo.status !== 'Batal');
+    const valid = rows.filter(wo => wo.status !== 'Closed');
     return {
       estimate: valid.reduce((sum, wo) => sum + Number(wo.estimateTotal ?? wo.total ?? 0), 0),
       invoiced: valid.reduce((sum, wo) => sum + Number(wo.invoice?.total || 0), 0),
       received: valid.reduce((sum, wo) => sum + Number(wo.invoice?.payment || 0), 0),
       active: rows.filter(wo => ['Pengecekan', 'Pending', 'Proses'].includes(wo.status)).length,
       completed: rows.filter(wo => ['Selesai', 'Invoiced'].includes(wo.status)).length,
-      cancelled: rows.filter(wo => wo.status === 'Batal').length,
+      cancelled: rows.filter(wo => wo.status === 'Closed').length,
     };
   }, [rows]);
 
@@ -136,7 +136,7 @@ export default function WorkOrderReport() {
           <button type="button" onClick={() => setStatus('')} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${!status ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>Semua <b className="ml-1">{scopedRows.length}</b></button>
           {statusCounts.map(item => <button key={item.status} type="button" onClick={() => setStatus(item.status)} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${status === item.status ? statusTone[item.status] + ' border-current' : 'border-gray-200 bg-white text-gray-600'}`}>{item.status} <b className="ml-1">{item.count}</b></button>)}
           <span className="ml-auto inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Selesai {metrics.completed}</span>
-          <span className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 text-xs font-semibold text-red-700"><XCircle className="h-3.5 w-3.5" /> Batal {metrics.cancelled}</span>
+          <span className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-700"><XCircle className="h-3.5 w-3.5" /> Closed {metrics.cancelled}</span>
         </div>
       </div>
 

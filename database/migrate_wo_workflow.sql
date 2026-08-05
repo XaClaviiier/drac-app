@@ -2,12 +2,12 @@
 -- Jalankan sekali melalui phpMyAdmin untuk database lama.
 
 ALTER TABLE `work_orders`
-  MODIFY COLUMN `status` ENUM('Draft','Pengecekan','Proses','Selesai','Invoiced','Batal') NOT NULL DEFAULT 'Pengecekan';
+  MODIFY COLUMN `status` ENUM('Draft','Pengecekan','Proses','Selesai','Invoiced','Closed') NOT NULL DEFAULT 'Pengecekan';
 
 UPDATE `work_orders` SET `status` = 'Pengecekan' WHERE `status` = 'Draft';
 
 ALTER TABLE `work_orders`
-  MODIFY COLUMN `status` ENUM('Pengecekan','Proses','Selesai','Invoiced','Batal') NOT NULL DEFAULT 'Pengecekan',
+  MODIFY COLUMN `status` ENUM('Pengecekan','Proses','Selesai','Invoiced','Closed') NOT NULL DEFAULT 'Pengecekan',
   ADD COLUMN IF NOT EXISTS `findings` TEXT NULL AFTER `description`,
   ADD COLUMN IF NOT EXISTS `estimate_total` DECIMAL(15,2) NULL AFTER `total`,
   ADD COLUMN IF NOT EXISTS `approved_at` DATE NULL AFTER `estimate_total`,

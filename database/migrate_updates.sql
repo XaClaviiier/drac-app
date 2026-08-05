@@ -26,16 +26,16 @@ UPDATE `vehicles` SET `first_seen_branch_id` = `branch_id`
 
 -- ----------------------------------------------------------
 -- 3. work_orders: tambah kolom baru
---    - status diperluas (Batal)
+--    - status diperluas (Closed)
 --    - findings, estimate_total, approved_at
 --    - status_log (JSON)
 --    - cancel_reason
 --    - lintas cabang: continued_from/to
 -- ----------------------------------------------------------
 
--- Ubah ENUM status agar support 'Batal'
+-- Ubah ENUM status agar support 'Closed'
 ALTER TABLE `work_orders`
-  MODIFY COLUMN `status` ENUM('Pengecekan','Proses','Selesai','Invoiced','Batal') DEFAULT 'Pengecekan';
+  MODIFY COLUMN `status` ENUM('Pengecekan','Proses','Selesai','Invoiced','Closed') DEFAULT 'Pengecekan';
 
 -- Kolom temuan teknisi
 ALTER TABLE `work_orders`
@@ -109,4 +109,4 @@ ALTER TABLE `work_orders`
   ADD COLUMN IF NOT EXISTS `pending_at` DATETIME NULL AFTER `approved_at`,
   ADD COLUMN IF NOT EXISTS `pending_until` DATETIME NULL AFTER `pending_at`,
   ADD COLUMN IF NOT EXISTS `pending_reason` VARCHAR(255) NULL AFTER `pending_until`,
-  MODIFY COLUMN `status` ENUM('Pengecekan','Pending','Proses','Selesai','Invoiced','Batal') DEFAULT 'Pengecekan';
+  MODIFY COLUMN `status` ENUM('Pengecekan','Pending','Proses','Selesai','Invoiced','Closed') DEFAULT 'Pengecekan';

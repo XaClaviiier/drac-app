@@ -1,6 +1,8 @@
 <?php
 switch ($method) {
     case 'GET':
+        $pdo->exec("UPDATE work_orders SET pending_until=DATE_ADD(pending_at, INTERVAL 10 DAY) WHERE status='Pending' AND pending_at IS NOT NULL AND (pending_until IS NULL OR pending_until > DATE_ADD(pending_at, INTERVAL 10 DAY))");
+        $pdo->exec("UPDATE work_orders SET status='Closed', cancel_reason=COALESCE(NULLIF(cancel_reason,''), 'Tidak ada keputusan selama 10 hari') WHERE status='Pending' AND pending_until IS NOT NULL AND pending_until <= NOW()");
         $rows = $pdo->query("SELECT * FROM work_orders ORDER BY date DESC, wo_number DESC")->fetchAll();
         foreach ($rows as &$r) {
             $r['woNumber']                = $r['wo_number'];
@@ -147,11 +149,14 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
-            $currentStmt = $pdo->prepare("SELECT vehicle_ref_id, date, backdate_reason FROM work_orders WHERE id = ?");
+            $currentStmt = $pdo->prepare("SELECT vehicle_ref_id, date, backdate_reason, status FROM work_orders WHERE id = ?");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
             if (!$currentWorkOrder) {
                 throw new InvalidArgumentException('WO tidak ditemukan.');
+            }
+            if ((string)$currentWorkOrder['status'] === 'Closed' && (string)($d['status'] ?? '') !== 'Closed') {
+                throw new InvalidArgumentException('WO Closed tidak dapat dibuka kembali. Buat WO baru dari data WO ini.');
             }
             // Validasi WO aktif hanya diperlukan bila kendaraan benar-benar diganti.
             // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
@@ -277,7 +282,7 @@ switch ($method) {
 
             // WO selesai boleh dihapus setelah seluruh pembayaran dan faktur terkait
             // sudah dihapus. Pemeriksaan relasi faktur dilakukan di atas.
-            $deletableStatuses = ['Pengecekan', 'Pending', 'Selesai', 'Batal'];
+            $deletableStatuses = ['Pengecekan', 'Pending', 'Selesai', 'Closed'];
             if (!in_array((string)$wo['status'], $deletableStatuses, true)) {
                 throw new DomainException("WO berstatus {$wo['status']} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.");
             }
