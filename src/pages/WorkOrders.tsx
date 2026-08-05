@@ -1896,8 +1896,23 @@ export default function WorkOrders() {
                           if (event.key !== 'Enter' || !serviceSearch.trim()) return;
                           event.preventDefault();
                           const query = serviceSearch.trim().toLowerCase();
-                          const exact = availableServiceItems.find(item => item.code.toLowerCase() === query || (item.barcode || '').toLowerCase() === query);
-                          if (exact) { handleUseItem(exact.id); setServiceSearch(''); }
+                          const matchingItems = availableServiceItems.filter(item =>
+                            item.code.toLowerCase().includes(query)
+                            || (item.barcode || '').toLowerCase().includes(query)
+                            || item.name.toLowerCase().includes(query)
+                            || (item.receiptDescription || '').toLowerCase().includes(query)
+                            || item.categoryName.toLowerCase().includes(query)
+                          );
+                          const selectedItem = matchingItems.find(item =>
+                            item.code.toLowerCase() === query
+                            || (item.barcode || '').toLowerCase() === query
+                            || item.name.toLowerCase() === query
+                          ) || matchingItems[0];
+                          if (selectedItem) {
+                            handleUseItem(selectedItem.id);
+                            setServiceSearch('');
+                            setServiceSearchFocused(false);
+                          }
                         }}
                         autoFocus
                         placeholder="Cari/Pilih Barang dan Jasa"
@@ -1916,7 +1931,19 @@ export default function WorkOrders() {
                           }).slice(0, 12).map(item => {
                             const added = isItemAdded(item.id);
                             return (
-                              <button key={item.id} type="button" disabled={added} onClick={() => { handleUseItem(item.id); setServiceSearch(''); }} className={`flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-0 ${added ? 'cursor-not-allowed bg-green-50 opacity-60' : 'hover:bg-blue-50'}`}>
+                              <button
+                                key={item.id}
+                                type="button"
+                                disabled={added}
+                                onPointerDown={(event) => {
+                                  event.preventDefault();
+                                  if (added) return;
+                                  handleUseItem(item.id);
+                                  setServiceSearch('');
+                                  setServiceSearchFocused(false);
+                                }}
+                                className={`flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-0 ${added ? 'cursor-not-allowed bg-green-50 opacity-60' : 'hover:bg-blue-50'}`}
+                              >
                                 <span className="w-24 flex-shrink-0 font-mono text-xs text-gray-500">{item.code}</span>
                                 <span className="min-w-0 flex-1">
                                   <span className="block truncate text-sm font-medium text-gray-900">{item.name}</span>
