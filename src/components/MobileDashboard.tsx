@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Bot, Boxes, Building2, Car, ChevronDown, CirclePlus, FileText, Grid2X2, Home, LogOut, PackagePlus, Settings, Sparkles, Users, Warehouse, Wrench, X, Truck, FolderTree, ReceiptText, Shield } from 'lucide-react';
+import { Banknote, Bell, Bot, Boxes, Building2, Car, ChevronDown, CirclePlus, FileText, Grid2X2, Home, LogOut, PackagePlus, Settings, Sparkles, Users, Warehouse, Wrench, X, Truck, FolderTree, ReceiptText, Shield } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function MobileDashboard(){
@@ -17,6 +17,7 @@ export default function MobileDashboard(){
     ['Dashboard','Ringkasan',Grid2X2,'/','from-sky-400 to-blue-600','dashboard:view'],
     ['Order','Buat & Kelola',Wrench,'/workorders','from-orange-400 to-orange-600','wo:view'],
     ['Faktur','Invoice & Bayar',FileText,'/invoices','from-emerald-400 to-green-600','invoice:view'],
+    ['Pembayaran','Terima & Riwayat Bayar',Banknote,'/customer-payments','from-green-400 to-emerald-600','invoice:view'],
     ['Pelanggan','Data Pelanggan',Users,'/customers','from-violet-400 to-purple-600','customer:view'],
     ['Kendaraan','Data Kendaraan',Car,'/vehicles','from-blue-400 to-indigo-600','vehicle:view'],
     ['Barang','Data Barang',Boxes,'/items','from-cyan-400 to-teal-600','item:view'],
