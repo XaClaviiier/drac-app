@@ -59,7 +59,7 @@ const desktopGroups = [
     { label: 'Penerimaan Lain', icon: CreditCard, tone: 'green' }, { label: 'Pengeluaran', icon: CreditCard, tone: 'orange' },
     { label: 'Setoran Cabang', path: '/branch-deposits', icon: ArrowLeftRight, perm: 'invoice:view', tone: 'blue' }, { label: 'Verifikasi Setoran', path: '/branch-deposits', icon: Shield, perm: 'invoice:view', tone: 'purple' },
   ]},
-  { id: 'sales', label: 'WORK ORDER', icon: CrossedToolsIcon, items: [
+  { id: 'sales', label: 'SERVIS JOB', icon: CrossedToolsIcon, items: [
     { label: 'Order Kerja', path: '/workorders', icon: Wrench, perm: 'wo:view', tone: 'green' },
     { label: 'Faktur Penjualan', path: '/invoices', icon: FileText, perm: 'invoice:view', tone: 'green' },
     { label: 'Pembayaran Pelanggan', path: '/customer-payments', icon: Banknote, perm: 'invoice:view', tone: 'green' },
