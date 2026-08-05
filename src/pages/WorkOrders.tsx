@@ -1199,8 +1199,8 @@ export default function WorkOrders() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={setLastSevenDays} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">7 Hari Terakhir</button>
-                  <button type="button" onClick={setCurrentMonth} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Bulan Ini</button>
+                  <button type="button" onClick={() => setPeriodFilter('7days')} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">7 Hari Terakhir</button>
+                  <button type="button" onClick={() => setPeriodFilter('thisMonth')} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Bulan Ini</button>
                   <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); }} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100">Reset</button>
                 </div>
               </div>
