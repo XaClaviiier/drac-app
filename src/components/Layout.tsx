@@ -22,6 +22,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', short: 'Home', icon: LayoutDashboard, perm: 'dashboard:view' as const, color: 'from-blue-500 to-indigo-600' },
   { path: '/workorders', label: 'Order Kerja', short: 'Order', icon: Wrench, perm: 'wo:view' as const, color: 'from-orange-500 to-red-600' },
   { path: '/invoices', label: 'Faktur Penjualan', short: 'Faktur', icon: FileText, perm: 'invoice:view' as const, color: 'from-green-500 to-emerald-600' },
+  { path: '/customer-payments', label: 'Pembayaran Pelanggan', short: 'Pembayaran', icon: Banknote, perm: 'invoice:view' as const, color: 'from-green-400 to-emerald-600' },
   { path: '/customers', label: 'Pelanggan', short: 'Pelanggan', icon: Users, perm: 'customer:view' as const, color: 'from-violet-500 to-purple-600' },
   { path: '/vehicles', label: 'Register Kendaraan', short: 'Kendaraan', icon: Car, perm: 'vehicle:view' as const, color: 'from-sky-500 to-blue-600' },
   { path: '/items', label: 'Barang & Jasa', short: 'Barang', icon: Boxes, perm: 'item:view' as const, color: 'from-teal-500 to-cyan-600' },
