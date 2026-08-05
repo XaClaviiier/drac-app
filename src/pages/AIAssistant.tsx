@@ -303,6 +303,10 @@ export default function AIAssistant() {
       )
       .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
     const visibleWOs = allVehicleWOs.filter((wo) => allowedBranchIds.has(wo.branchId));
+    const activeWO = visibleWOs.find((wo) =>
+      ['Pengecekan', 'Pending', 'Proses', 'Selesai'].includes(wo.status) && !wo.continuedToWoId
+    );
+    const latestClosedWO = visibleWOs.find((wo) => wo.status === 'Closed' && !wo.continuedToWoId);
     const showAll = /(semua|seluruh|lengkap)/i.test(lower);
     const listedWOs = showAll ? visibleWOs : visibleWOs.slice(0, 5);
 
@@ -317,6 +321,23 @@ export default function AIAssistant() {
       ``,
       `**Riwayat servis: ${visibleWOs.length} WO yang dapat Anda akses**`,
     ];
+
+    if (activeWO) {
+      lines.push(
+        '',
+        `⚠️ **WO aktif ditemukan: ${activeWO.woNumber}**`,
+        `Status: **${activeWO.status}** · Cabang: ${cabangName(activeWO.branchId)}`,
+        `Keluhan: ${activeWO.description || '-'}`,
+        '',
+        '**Apakah WO ini mau dilanjutkan?** Gunakan tombol **Lanjutkan WO Aktif**. Jangan membuat WO baru selama WO ini masih aktif.',
+      );
+    } else if (latestClosedWO) {
+      lines.push(
+        '',
+        `ℹ️ WO terakhir **${latestClosedWO.woNumber}** sudah **Closed**.`,
+        'Jika pelanggan kembali, gunakan **Buat WO Lanjutan (Lanjut Kembali)**. Sistem akan membuat nomor WO baru dan tetap menghubungkannya dengan WO lama.',
+      );
+    }
 
     if (listedWOs.length === 0) {
       lines.push('', 'Belum ada riwayat WO pada cabang yang dapat Anda akses.');
@@ -1149,7 +1170,18 @@ ${buildSmartContext(userMsgText)}`;
       const actions: ChatMsg['actions'] = [];
       if (exactVehicle) {
         actions.push({ label: 'Riwayat WO', type: 'command', value: `riwayat lengkap ${exactVehicle.plateNumber}` });
-        if (hasPermission('wo:create')) actions.push({ label: 'Buat WO', type: 'create_wo_vehicle', value: exactVehicle.id });
+        const vehicleWOs = data.workOrders
+          .filter(wo => (wo.vehicleRefId && wo.vehicleRefId === exactVehicle.id) || normalizePlate(wo.plateNumber) === normalizePlate(exactVehicle.plateNumber))
+          .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
+        const activeWO = vehicleWOs.find(wo => ['Pengecekan', 'Pending', 'Proses', 'Selesai'].includes(wo.status) && !wo.continuedToWoId);
+        const latestClosedWO = vehicleWOs.find(wo => wo.status === 'Closed' && !wo.continuedToWoId);
+        if (activeWO && hasPermission('wo:edit')) {
+          actions.push({ label: `Lanjutkan WO Aktif ${activeWO.woNumber}`, type: 'open_workorders' });
+        } else if (latestClosedWO && hasPermission('wo:create')) {
+          actions.push({ label: 'Buat WO Lanjutan (Lanjut Kembali)', type: 'open_workorders' });
+        } else if (hasPermission('wo:create')) {
+          actions.push({ label: 'Buat WO Baru', type: 'create_wo_vehicle', value: exactVehicle.id });
+        }
         const owner = data.customers.find(customer => customer.id === exactVehicle.customerRefId || customer.customerCode === exactVehicle.customerId);
         if (owner) actions.push({ label: 'Data Pemilik', type: 'command', value: `cek ${owner.customerCode}` });
       } else if (exactCustomer) {
