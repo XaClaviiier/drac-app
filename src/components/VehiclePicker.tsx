@@ -3,6 +3,7 @@ import { Plus, Car, Check, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Vehicle, Customer } from '../types';
 import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
+import { localDateKey } from '../lib/date';
 
 /** Tunggu vehicle dengan id tertentu muncul di data, lalu callback. */
 function useWaitForVehicle(targetId: string | null, onFound: (v: Vehicle) => void) {
@@ -146,7 +147,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     }
 
     const newId = Date.now().toString();
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey();
     const vehicle: Vehicle = {
       id: newId,
       plateNumber: plate,

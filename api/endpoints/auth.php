@@ -8,6 +8,36 @@ $password = $input['password'] ?? '';
 
 if (!$username || !$password) respondError('Username & password wajib diisi');
 
+// Batasi brute-force per kombinasi username dan alamat IP. Nilai mengikuti
+// Pengaturan > Keamanan dan otomatis kembali normal setelah 15 menit atau
+// setelah login berhasil.
+$maxLoginAttempts = 5;
+try {
+    $settingsRow = $pdo->query("SELECT settings_json FROM app_settings WHERE id = 1")->fetch();
+    if ($settingsRow) {
+        $settings = json_decode((string)$settingsRow['settings_json'], true);
+        $maxLoginAttempts = max(3, min(10, (int)($settings['security']['maxLoginAttempts'] ?? 5)));
+    }
+} catch (Throwable $e) {
+    // Gunakan nilai aman bawaan jika pengaturan belum tersedia.
+}
+$attemptStmt = $pdo->prepare("
+    SELECT COUNT(*) FROM login_audit_logs failed
+    WHERE failed.username = ? AND failed.ip_address = ?
+      AND failed.event_type = 'login_failed'
+      AND failed.created_at >= DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+      AND failed.created_at > COALESCE((
+          SELECT MAX(ok.created_at) FROM login_audit_logs ok
+          WHERE ok.username = failed.username AND ok.ip_address = failed.ip_address
+            AND ok.event_type = 'login_success'
+      ), '1970-01-01 00:00:00')
+");
+$attemptStmt->execute([$username, requestIp()]);
+if ((int)$attemptStmt->fetchColumn() >= $maxLoginAttempts) {
+    writeLoginAudit($pdo, null, $username, 'login_blocked', 'Terlalu banyak percobaan login');
+    respondError('Terlalu banyak percobaan login. Coba kembali dalam 15 menit.', 429);
+}
+
 $stmt = $pdo->prepare("
     SELECT u.*, r.name as role_name, r.permissions, b.name as branch_name
     FROM users u
@@ -20,7 +50,7 @@ $user = $stmt->fetch();
 
 if (!$user) {
     writeLoginAudit($pdo,null,$username,'login_failed','Username tidak ditemukan');
-    respondError('Username tidak ditemukan', 401);
+    respondError('Username atau password salah', 401);
 }
 
 $storedPassword = (string)$user['password'];
@@ -28,7 +58,7 @@ $isHashed = str_starts_with($storedPassword, '$2y$') || str_starts_with($storedP
 $passwordValid = $isHashed ? password_verify($password, $storedPassword) : hash_equals($storedPassword, $password);
 if (!$passwordValid) {
     writeLoginAudit($pdo,$user['id'],$username,'login_failed','Password salah');
-    respondError('Password salah', 401);
+    respondError('Username atau password salah', 401);
 }
 // Upgrade otomatis password lama (plain text) ketika login berhasil.
 if (!$isHashed) {

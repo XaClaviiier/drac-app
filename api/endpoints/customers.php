@@ -28,8 +28,10 @@ switch ($method) {
             FROM customers WHERE customer_code REGEXP '^PLG-[0-9]+$'
         ")->fetchColumn();
         $code = 'PLG-' . str_pad((string)(((int)$maxRow) + 1), 3, '0', STR_PAD_LEFT);
-        $branchId          = $d['branchId'] ?? 'BR-001';
-        $firstSeenBranchId = $d['firstSeenBranchId'] ?? $branchId;
+        $branchId = (string)($d['branchId'] ?? '');
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        $firstSeenBranchId = (string)($d['firstSeenBranchId'] ?? $branchId);
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
         $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
@@ -45,13 +47,23 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        $currentStmt = $pdo->prepare("SELECT branch_id FROM customers WHERE id=?");
+        $currentStmt->execute([$id]);
+        $current = $currentStmt->fetch();
+        if (!$current) respondError('Pelanggan tidak ditemukan', 404);
+        $branchId = (string)($d['branchId'] ?? $current['branch_id']);
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
         $stmt = $pdo->prepare("UPDATE customers SET name=?, phone=?, email=?, address=?, branch_id=? WHERE id=?");
-        $stmt->execute([$d['name'], $d['phone'] ?? '', $d['email'] ?? '', $d['address'] ?? '', $d['branchId'] ?? 'BR-001', $id]);
+        $stmt->execute([$d['name'], $d['phone'] ?? '', $d['email'] ?? '', $d['address'] ?? '', $branchId, $id]);
         respondSuccess(null, 'Pelanggan diupdate');
         break;
 
     case 'DELETE':
         if (!$id) respondError('ID required');
+        foreach ([['vehicles','customer_id'],['work_orders','customer_ref_id'],['sales_invoices','customer_ref_id']] as [$table,$column]) {
+            $check=$pdo->prepare("SELECT COUNT(*) FROM {$table} WHERE {$column}=?");$check->execute([$id]);
+            if((int)$check->fetchColumn()>0) respondError('Pelanggan sudah memiliki kendaraan atau transaksi. Nonaktifkan/arsipkan data, jangan hapus histori.',409);
+        }
         $pdo->prepare("DELETE FROM customers WHERE id=?")->execute([$id]);
         respondSuccess(null, 'Pelanggan dihapus');
         break;

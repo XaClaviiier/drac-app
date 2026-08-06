@@ -5,6 +5,7 @@ import type { SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { api } from '../lib/apiClient';
+import { localDateKey } from '../lib/date';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -25,8 +26,8 @@ export default function SalesInvoice() {
   const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'Transfer'>('Tunai');
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
   const [paymentDateUnlocked, setPaymentDateUnlocked] = useState(false);
-  const [woInvoiceDate, setWoInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [woPaymentDate, setWoPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [woInvoiceDate, setWoInvoiceDate] = useState(localDateKey());
+  const [woPaymentDate, setWoPaymentDate] = useState(localDateKey());
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingFromWO, setIsCreatingFromWO] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -34,7 +35,7 @@ export default function SalesInvoice() {
   const [formItemToAdd, setFormItemToAdd] = useState('');
 
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: localDateKey(),
     customerRefId: '',
     customerId: '',
     customerName: '',
@@ -43,7 +44,7 @@ export default function SalesInvoice() {
     description: '',
     total: 0,
     payment: 0,
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: localDateKey(),
     backdateReason: '',
     paymentMethod: 'Tunai' as 'Tunai' | 'Transfer',
     status: 'Lunas' as 'Lunas' | 'Belum Lunas',
@@ -143,7 +144,7 @@ export default function SalesInvoice() {
 
   const resetForm = () => {
     setFormData({
-      date: new Date().toISOString().split('T')[0],
+      date: localDateKey(),
       customerRefId: '',
       customerId: '',
       customerName: '',
@@ -152,7 +153,7 @@ export default function SalesInvoice() {
       description: '',
       total: 0,
       payment: 0,
-      paymentDate: new Date().toISOString().split('T')[0],
+      paymentDate: localDateKey(),
       backdateReason: '',
       paymentMethod: 'Tunai',
       status: 'Lunas',
@@ -199,7 +200,7 @@ export default function SalesInvoice() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey();
     if (formData.date > today || (formData.payment > 0 && formData.paymentDate > today)) {
       window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
       return;
@@ -298,7 +299,7 @@ export default function SalesInvoice() {
     setWoItemToAdd('');
     setWoPayment(0);
     setWoPaymentMethod('Tunai');
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey();
     setWoInvoiceDate(today);
     setWoPaymentDate(today);
     setWoBackdateReason('');
@@ -354,7 +355,7 @@ export default function SalesInvoice() {
 
   const handleCreateFromWO = async () => {
     if (selectedWO && !isCreatingFromWO) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = localDateKey();
       if (woInvoiceDate > today || (woPayment > 0 && woPaymentDate > today)) {
         window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
         return;
@@ -631,7 +632,7 @@ export default function SalesInvoice() {
                 <input
                   type="date"
                   required
-                  max={new Date().toISOString().split('T')[0]}
+                  max={localDateKey()}
                   disabled={!invoiceDateUnlocked}
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -641,7 +642,7 @@ export default function SalesInvoice() {
                   {invoiceDateUnlocked ? 'Kunci tanggal' : 'Buka tanggal mundur'}
                 </button>
               </div>
-              {data.settings.security.requireBackdateReason !== false && (formData.date < new Date().toISOString().split('T')[0] || (formData.payment > 0 && formData.paymentDate < new Date().toISOString().split('T')[0])) && (
+              {data.settings.security.requireBackdateReason !== false && (formData.date < localDateKey() || (formData.payment > 0 && formData.paymentDate < localDateKey())) && (
                 <input required value={formData.backdateReason} onChange={(e) => setFormData({ ...formData, backdateReason: e.target.value })} placeholder="Alasan transaksi tanggal mundur" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" />
               )}
 
@@ -757,7 +758,7 @@ export default function SalesInvoice() {
                 </div>
                 {formData.payment > 0 && <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Pembayaran</label>
-                  <input type="date" min={formData.date} max={new Date().toISOString().split('T')[0]} disabled={!paymentDateUnlocked} value={formData.paymentDate} onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })} className="w-full px-4 py-2.5 border rounded-lg disabled:bg-gray-100" />
+                  <input type="date" min={formData.date} max={localDateKey()} disabled={!paymentDateUnlocked} value={formData.paymentDate} onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })} className="w-full px-4 py-2.5 border rounded-lg disabled:bg-gray-100" />
                   <button type="button" onClick={() => hasPermission('payment:backdate') ? setPaymentDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal pembayaran.')} className="mt-1 text-xs font-semibold text-blue-600">Buka tanggal pembayaran</button>
                 </div>}
                 <div className="md:col-span-2">
@@ -899,14 +900,14 @@ export default function SalesInvoice() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-semibold mb-1">Tanggal Faktur</label>
-                          <input type="date" max={new Date().toISOString().split('T')[0]} value={woInvoiceDate} onChange={(e) => setWoInvoiceDate(e.target.value)} disabled={!hasPermission('invoice:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                          <input type="date" max={localDateKey()} value={woInvoiceDate} onChange={(e) => setWoInvoiceDate(e.target.value)} disabled={!hasPermission('invoice:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
                         </div>
                         {woPayment > 0 && <div>
                           <label className="block text-xs font-semibold mb-1">Tanggal Pembayaran</label>
-                          <input type="date" min={woInvoiceDate} max={new Date().toISOString().split('T')[0]} value={woPaymentDate} onChange={(e) => setWoPaymentDate(e.target.value)} disabled={!hasPermission('payment:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                          <input type="date" min={woInvoiceDate} max={localDateKey()} value={woPaymentDate} onChange={(e) => setWoPaymentDate(e.target.value)} disabled={!hasPermission('payment:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
                         </div>}
                       </div>
-                      {data.settings.security.requireBackdateReason !== false && (woInvoiceDate < new Date().toISOString().split('T')[0] || (woPayment > 0 && woPaymentDate < new Date().toISOString().split('T')[0])) && (
+                      {data.settings.security.requireBackdateReason !== false && (woInvoiceDate < localDateKey() || (woPayment > 0 && woPaymentDate < localDateKey())) && (
                         <input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan transaksi tanggal mundur" className="w-full px-3 py-2 border border-amber-400 bg-amber-50 rounded-lg" />
                       )}
                       <div className="flex items-center justify-between gap-3">

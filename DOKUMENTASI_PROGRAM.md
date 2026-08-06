@@ -41,7 +41,7 @@ Program dibuat untuk membantu bengkel dalam:
 - Tailwind CSS 4
 - React Router
 - Lucide React Icons
-- SheetJS/XLSX untuk import Excel
+- read-excel-file untuk import Excel `.xlsx` dan parser bawaan untuk CSV
 
 ### Backend Opsi A
 
@@ -111,16 +111,9 @@ Fitur:
 - Session pengguna frontend disimpan agar tetap login setelah refresh.
 - Logout tersedia pada menu pengguna.
 
-Contoh akun demo:
-
-| Username | Password | Role |
-|---|---|---|
-| admin | admin123 | Administrator |
-| kasir1 | kasir123 | Kasir |
-| teknisi1 | teknisi123 | Teknisi |
-| spv1 | spv123 | Supervisor |
-
-> Untuk produksi, password default harus segera diganti dan backend perlu menggunakan password hash.
+Tidak ada kredensial produksi yang boleh ditulis dalam dokumentasi atau repository.
+Owner membuat akun operasional, mengatur role, cabang, jam login, dan mengganti
+password awal sebelum aplikasi dipakai.
 
 ---
 
@@ -190,22 +183,22 @@ Fitur:
 
 ### 5.5 Order Kerja
 
-Order Kerja menggunakan empat tahap:
+Order Kerja menggunakan alur operasional berikut:
 
-1. **Pengecekan**
-2. **Proses**
-3. **Selesai**
-4. **Dibayar**
+1. **Diagnosa** (mobil masuk/register)
+2. **Pending** atau **Dikerjakan** setelah hasil diagnosa
+3. **Selesai** dan siap dibuatkan faktur
+4. **Invoiced/Dibayar** mengikuti faktur dan pembayaran
 
-#### Pengecekan
+#### Diagnosa
 
 - Pemeriksaan awal kendaraan.
 - Pengecekan diberikan gratis.
 - Teknisi mencatat keluhan dan hasil pemeriksaan.
 - Sistem menyimpan rekomendasi serta estimasi harga.
-- Jika pelanggan belum setuju, WO tetap berada pada status Pengecekan.
+- Jika pelanggan belum setuju, WO dipindahkan ke Pending beserta alasannya.
 
-#### Proses
+#### Dikerjakan
 
 - Digunakan setelah pelanggan menyetujui estimasi.
 - Barang, sparepart, dan jasa masih dapat ditambahkan.
@@ -218,7 +211,7 @@ Order Kerja menggunakan empat tahap:
 - Total akhir sudah diketahui.
 - WO siap dibuatkan faktur.
 
-#### Dibayar
+#### Invoiced/Dibayar
 
 - Faktur sudah dibuat dan pembayaran telah dicatat.
 - Stok barang persediaan dipotong pada tahap akhir melalui proses faktur.
@@ -658,7 +651,8 @@ dist/.htaccess
 3. Berikan semua privilege.
 4. Import `database/dokterac_schema.sql` melalui phpMyAdmin.
 5. Untuk database lama, jalankan `database/migrate_wo_workflow.sql`.
-6. Isi konfigurasi database pada `api/config.php`.
+6. Atur environment `DRAC_DB_HOST`, `DRAC_DB_NAME`, `DRAC_DB_USER`, dan
+   `DRAC_DB_PASS` di server. Jangan menyimpan password database di repository.
 
 ### Test API
 
@@ -694,13 +688,13 @@ Production Mode:
 Sebelum aplikasi digunakan untuk operasional nyata, disarankan:
 
 1. Gunakan HTTPS/SSL.
-2. Ganti semua password default.
-3. Simpan password user menggunakan `password_hash()` dan validasi menggunakan `password_verify()`.
-4. Tambahkan token autentikasi atau session server.
+2. Ganti semua password awal dan nonaktifkan akun yang tidak dipakai.
+3. Pastikan password user tersimpan sebagai hash.
+4. Pastikan session server, pembatasan jam login, dan pencabutan sesi aktif.
 5. Batasi CORS hanya ke domain aplikasi.
 6. Jangan membagikan `api/config.php`.
 7. Jangan menyimpan Groq API key pada repository publik.
-8. Backup database secara berkala.
+8. Backup database setiap hari dan uji proses restore secara berkala.
 9. Batasi akses phpMyAdmin.
 10. Audit aktivitas edit/hapus untuk transaksi penting.
 

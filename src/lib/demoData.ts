@@ -65,10 +65,10 @@ export const demoData: AppData = {
     { id: '4', code: 'TKN', name: 'Teknisi', permissions: ['dashboard:view','ai:view','wo:view','wo:create','wo:edit','customer:view','customer:create','vehicle:view','vehicle:create','item:view'], description: 'Teknisi', isActive: true },
   ],
   users: [
-    { id: '1', username: 'admin', name: 'OWNER UTAMA', email: 'admin@dokterac.id', password: 'admin123', roleId: '1', roleName: 'Owner', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01', isOwner: true, isProtected: true },
-    { id: '2', username: 'kasir1', name: 'SITI KASIR', email: 'kasir1@dokterac.id', password: 'kasir123', roleId: '3', roleName: 'Kasir', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-15' },
-    { id: '3', username: 'teknisi1', name: 'BUDI TEKNISI', email: 'teknisi1@dokterac.id', password: 'teknisi123', roleId: '4', roleName: 'Teknisi', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-02-01' },
-    { id: '4', username: 'spv1', name: 'AGUS SUPERVISOR', email: 'spv1@dokterac.id', password: 'spv123', roleId: '2', roleName: 'Supervisor', branchId: 'BR-002', branchName: 'CABANG CAKALANG', isActive: true, createdAt: '2026-01-10' },
+    { id: '1', username: 'demo-owner', name: 'OWNER DEMO', email: '', password: '', roleId: '1', roleName: 'Owner', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01', isOwner: true, isProtected: true },
+    { id: '2', username: 'demo-kasir', name: 'KASIR DEMO', email: '', password: '', roleId: '3', roleName: 'Kasir', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-15' },
+    { id: '3', username: 'demo-teknisi', name: 'TEKNISI DEMO', email: '', password: '', roleId: '4', roleName: 'Teknisi', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-02-01' },
+    { id: '4', username: 'demo-supervisor', name: 'SUPERVISOR DEMO', email: '', password: '', roleId: '2', roleName: 'Supervisor', branchId: 'BR-002', branchName: 'CABANG CAKALANG', isActive: true, createdAt: '2026-01-10' },
   ],
   customers: [
     { id: '1', customerCode: 'PLG-001', name: 'AHMAD', phone: '085179958522', address: 'Jl. Sudirman No. 10', email: 'ahmad@email.com', createdAt: '2026-01-15', branchId: 'BR-001' },

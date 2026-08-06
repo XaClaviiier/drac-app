@@ -25,7 +25,8 @@ $pdo->exec("INSERT IGNORE INTO customer_payments
     LEFT JOIN cash_accounts a ON a.id COLLATE utf8mb4_unicode_ci=(CASE
         WHEN COALESCE(i.payment_method,'Tunai')='Tunai' THEN s.cash_account_id
         ELSE s.bank_account_id END) COLLATE utf8mb4_unicode_ci
-    WHERE i.payment>0");
+    WHERE i.payment>0
+      AND NOT EXISTS (SELECT 1 FROM customer_payments existing WHERE existing.invoice_id=i.id)");
 
 function paymentUserCanAccessBranch(PDO $pdo, array $user, string $branchId): bool {
     if (!empty($user['is_owner'])) return true;

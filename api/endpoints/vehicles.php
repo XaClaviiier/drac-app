@@ -27,8 +27,10 @@ switch ($method) {
         if (!$customer) respondError('Pelanggan kendaraan tidak ditemukan.', 422);
         $duplicate = findVehicleByNormalizedPlate($pdo, $plate);
         if ($duplicate) respondError('Plat sudah terdaftar atas nama ' . $duplicate['customer_name'] . '.', 409);
-        $branchId          = $d['branchId'] ?? 'BR-001';
-        $firstSeenBranchId = $d['firstSeenBranchId'] ?? $branchId;
+        $branchId = (string)($d['branchId'] ?? '');
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        $firstSeenBranchId = (string)($d['firstSeenBranchId'] ?? $branchId);
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
         $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
@@ -47,6 +49,12 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        $currentStmt = $pdo->prepare("SELECT branch_id FROM vehicles WHERE id=?");
+        $currentStmt->execute([$id]);
+        $current = $currentStmt->fetch();
+        if (!$current) respondError('Kendaraan tidak ditemukan', 404);
+        $branchId = (string)($d['branchId'] ?? $current['branch_id']);
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
         $plate = normalizeVehiclePlate((string)($d['plateNumber'] ?? ''));
         if ($plate === '') respondError('Nomor plat wajib diisi.', 422);
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
@@ -64,13 +72,15 @@ switch ($method) {
             $d['year'] ?? 0, $d['color'] ?? '',
             $customer['id'], $customer['name'],
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
-            $d['notes'] ?? '', $d['branchId'] ?? 'BR-001', $id
+            $d['notes'] ?? '', $branchId, $id
         ]);
         respondSuccess(null, 'Kendaraan diupdate');
         break;
 
     case 'DELETE':
         if (!$id) respondError('ID required');
+        $check=$pdo->prepare("SELECT COUNT(*) FROM work_orders WHERE vehicle_ref_id=?");$check->execute([$id]);
+        if((int)$check->fetchColumn()>0) respondError('Kendaraan sudah memiliki histori WO dan tidak dapat dihapus.',409);
         $pdo->prepare("DELETE FROM vehicles WHERE id=?")->execute([$id]);
         respondSuccess(null, 'Kendaraan dihapus');
         break;

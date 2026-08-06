@@ -14,8 +14,8 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-router-dom": "^7.18.0",
-    "tailwind-merge": "3.4.0",
-    "xlsx": "^0.18.5"
+    "read-excel-file": "^6.0.1",
+    "tailwind-merge": "3.4.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.17",
@@ -23,9 +23,11 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.1",
+    "esbuild": "^0.28.1",
+    "postcss": "^8.5.26",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
-    "vite": "7.3.2",
+    "vite": "^7.3.6",
     "vite-plugin-singlefile": "2.3.0"
   }
 }

@@ -1,6 +1,8 @@
 <?php
 switch ($method) {
     case 'GET':
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
         $rows = $pdo->query("SELECT * FROM items ORDER BY code")->fetchAll();
         $stockTable = $pdo->query("SHOW TABLES LIKE 'branch_item_stocks'")->fetch();
         $stockRows = $stockTable
@@ -8,6 +10,7 @@ switch ($method) {
             : [];
         $stocksByItem = [];
         foreach ($stockRows as $stockRow) {
+            if (!isset($allowedBranchMap[(string)$stockRow['branch_id']])) continue;
             $stocksByItem[$stockRow['item_id']][$stockRow['branch_id']] = [
                 'stock' => (int)$stockRow['stock'],
                 'sellableStock' => (int)$stockRow['sellable_stock'],
@@ -46,6 +49,12 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        $branchId = (string)($d['branchId'] ?? '');
+        requireAccessibleBranch($pdo, $actor, $branchId);
+        $type = (string)($d['type'] ?? '');
+        if (!in_array($type, ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'], true)) respondError('Jenis barang/jasa tidak valid', 422);
+        if (trim((string)($d['code'] ?? '')) === '' || trim((string)($d['name'] ?? '')) === '') respondError('Kode dan nama wajib diisi', 422);
         $barcode = trim((string)($d['barcode'] ?? ''));
         if ($barcode !== '') {
             $check = $pdo->prepare("SELECT id, name FROM items WHERE barcode = ? LIMIT 1");
@@ -58,14 +67,14 @@ switch ($method) {
             $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, unit, stock, sellable_stock, purchase_price, selling_price, is_active, is_quick_service, description, receipt_description, barcode, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $itemId, $d['code'], $d['name'],
-                $d['categoryId'] ?? '', $d['categoryName'] ?? '',
-                $d['type'], $d['brand'] ?? '', $d['unit'] ?? 'PCS',
-                $d['stock'] ?? 0, $d['sellableStock'] ?? 0,
-                $d['purchasePrice'] ?? 0, $d['sellingPrice'] ?? 0,
+                ($d['categoryId'] ?? '') ?: null, $d['categoryName'] ?? '',
+                $type, $d['brand'] ?? '', $d['unit'] ?? 'PCS',
+                0, 0,
+                max(0, (float)($d['purchasePrice'] ?? 0)), max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
                 !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
-                $d['branchId'] ?? 'BR-001'
+                $branchId
             ]);
 
             $stockStmt = $pdo->prepare("
@@ -74,26 +83,36 @@ switch ($method) {
                 ON DUPLICATE KEY UPDATE stock = VALUES(stock), sellable_stock = VALUES(sellable_stock)
             ");
             $stockStmt->execute([
-                $d['branchId'] ?? 'BR-001', $itemId,
-                max(0, (int)($d['stock'] ?? 0)), max(0, (int)($d['sellableStock'] ?? 0)),
+                $branchId, $itemId, 0, 0,
             ]);
             $warehouseStock = $pdo->prepare("
                 INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity)
                 VALUES (?,?,?,?)
                 ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),reserved_quantity=VALUES(reserved_quantity)
             ");
-            $initialStock=max(0,(int)($d['stock']??0));
-            $warehouseStock->execute([defaultWarehouseId($pdo,$d['branchId']??'BR-001'),$itemId,$initialStock,max(0,$initialStock-(int)($d['sellableStock']??0))]);
+            $warehouseStock->execute([defaultWarehouseId($pdo,$branchId),$itemId,0,0]);
 
             // Insert group members
             if (($d['type'] ?? '') === 'Group' && !empty($d['groupMembers'])) {
                 $memStmt = $pdo->prepare("INSERT INTO item_group_members (group_item_id, member_item_id, member_code, member_name, member_type, qty, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $memberCheck = $pdo->prepare("SELECT code,name,type,selling_price FROM items WHERE id=? AND is_active=1");
+                $seenMembers = [];
                 foreach ($d['groupMembers'] as $m) {
-                    $memStmt->execute([$itemId, $m['itemId'], $m['itemCode'], $m['itemName'], $m['itemType'], $m['qty'], $m['unitPrice']]);
+                    $memberId = (string)($m['itemId'] ?? '');
+                    if ($memberId === '' || $memberId === $itemId || isset($seenMembers[$memberId])) throw new InvalidArgumentException('Komponen paket tidak valid atau duplikat');
+                    $memberCheck->execute([$memberId]);
+                    $member = $memberCheck->fetch();
+                    if (!$member || $member['type'] === 'Group') throw new InvalidArgumentException('Komponen paket harus barang/jasa aktif dan bukan paket lain');
+                    $qty = max(1, (int)($m['qty'] ?? 1));
+                    $memStmt->execute([$itemId, $memberId, $member['code'], $member['name'], $member['type'], $qty, max(0, (float)$member['selling_price'])]);
+                    $seenMembers[$memberId] = true;
                 }
             }
             $pdo->commit();
             respondSuccess(['id' => $itemId], 'Barang/Jasa ditambahkan');
+        } catch (InvalidArgumentException $e) {
+            $pdo->rollBack();
+            respondError($e->getMessage(), 422);
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal menambah item', 500, $e->getMessage());
@@ -103,6 +122,9 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        $type = (string)($d['type'] ?? '');
+        if (!in_array($type, ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'], true)) respondError('Jenis barang/jasa tidak valid', 422);
+        if (trim((string)($d['code'] ?? '')) === '' || trim((string)($d['name'] ?? '')) === '') respondError('Kode dan nama wajib diisi', 422);
         $barcode = trim((string)($d['barcode'] ?? ''));
         if ($barcode !== '') {
             $check = $pdo->prepare("SELECT id, name FROM items WHERE barcode = ? AND id <> ? LIMIT 1");
@@ -111,46 +133,40 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
-            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, stock=?, sellable_stock=?, purchase_price=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=?, branch_id=? WHERE id=?");
+            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, purchase_price=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=? WHERE id=?");
             $stmt->execute([
                 $d['code'], $d['name'],
-                $d['categoryId'] ?? '', $d['categoryName'] ?? '',
-                $d['type'], $d['brand'] ?? '', $d['unit'] ?? 'PCS',
-                $d['stock'] ?? 0, $d['sellableStock'] ?? 0,
-                $d['purchasePrice'] ?? 0, $d['sellingPrice'] ?? 0,
+                ($d['categoryId'] ?? '') ?: null, $d['categoryName'] ?? '',
+                $type, $d['brand'] ?? '', $d['unit'] ?? 'PCS',
+                max(0, (float)($d['purchasePrice'] ?? 0)), max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
                 !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
-                $d['branchId'] ?? 'BR-001', $id
+                $id
             ]);
-
-            $stockStmt = $pdo->prepare("
-                INSERT INTO branch_item_stocks (branch_id, item_id, stock, sellable_stock)
-                VALUES (?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE stock = VALUES(stock), sellable_stock = VALUES(sellable_stock)
-            ");
-            $stockStmt->execute([
-                $d['branchId'] ?? 'BR-001', $id,
-                max(0, (int)($d['stock'] ?? 0)), max(0, (int)($d['sellableStock'] ?? 0)),
-            ]);
-            $warehouseStock = $pdo->prepare("
-                INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity)
-                VALUES (?,?,?,?)
-                ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),reserved_quantity=VALUES(reserved_quantity)
-            ");
-            $updatedStock=max(0,(int)($d['stock']??0));
-            $warehouseStock->execute([defaultWarehouseId($pdo,$d['branchId']??'BR-001'),$id,$updatedStock,max(0,$updatedStock-(int)($d['sellableStock']??0))]);
 
             // Refresh group members
             $pdo->prepare("DELETE FROM item_group_members WHERE group_item_id = ?")->execute([$id]);
             if (($d['type'] ?? '') === 'Group' && !empty($d['groupMembers'])) {
                 $memStmt = $pdo->prepare("INSERT INTO item_group_members (group_item_id, member_item_id, member_code, member_name, member_type, qty, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $memberCheck = $pdo->prepare("SELECT code,name,type,selling_price FROM items WHERE id=? AND is_active=1");
+                $seenMembers = [];
                 foreach ($d['groupMembers'] as $m) {
-                    $memStmt->execute([$id, $m['itemId'], $m['itemCode'], $m['itemName'], $m['itemType'], $m['qty'], $m['unitPrice']]);
+                    $memberId = (string)($m['itemId'] ?? '');
+                    if ($memberId === '' || $memberId === $id || isset($seenMembers[$memberId])) throw new InvalidArgumentException('Komponen paket tidak valid atau duplikat');
+                    $memberCheck->execute([$memberId]);
+                    $member = $memberCheck->fetch();
+                    if (!$member || $member['type'] === 'Group') throw new InvalidArgumentException('Komponen paket harus barang/jasa aktif dan bukan paket lain');
+                    $qty = max(1, (int)($m['qty'] ?? 1));
+                    $memStmt->execute([$id, $memberId, $member['code'], $member['name'], $member['type'], $qty, max(0, (float)$member['selling_price'])]);
+                    $seenMembers[$memberId] = true;
                 }
             }
             $pdo->commit();
             respondSuccess(null, 'Item diupdate');
+        } catch (InvalidArgumentException $e) {
+            $pdo->rollBack();
+            respondError($e->getMessage(), 422);
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal update item', 500, $e->getMessage());
@@ -159,6 +175,16 @@ switch ($method) {
 
     case 'DELETE':
         if (!$id) respondError('ID required');
+        $references = [
+            'work_order_services' => 'item_id', 'sales_invoice_items' => 'item_id',
+            'goods_receipt_items' => 'item_id', 'purchase_invoice_items' => 'item_id',
+            'item_group_members' => 'member_item_id',
+        ];
+        foreach ($references as $table => $column) {
+            $check = $pdo->prepare("SELECT COUNT(*) FROM {$table} WHERE {$column}=?");
+            $check->execute([$id]);
+            if ((int)$check->fetchColumn() > 0) respondError('Barang/jasa sudah dipakai. Nonaktifkan agar histori transaksi tetap utuh.', 409);
+        }
         $pdo->prepare("DELETE FROM items WHERE id=?")->execute([$id]);
         respondSuccess(null, 'Item dihapus');
         break;

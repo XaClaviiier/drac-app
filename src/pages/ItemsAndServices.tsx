@@ -3,6 +3,7 @@ import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Laye
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
 import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
+import { localDateKey } from '../lib/date';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -410,7 +411,7 @@ export default function ItemsAndServices() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `barang_jasa_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `barang_jasa_${localDateKey()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     finishSystemProcess(processId, `${rows.length} item berhasil diekspor`);
@@ -711,18 +712,14 @@ export default function ItemsAndServices() {
     setImportPreview([]);
 
     const fileName = file.name.toLowerCase();
-    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const isExcel = fileName.endsWith('.xlsx');
 
     try {
       if (isExcel) {
-        // Dynamically import xlsx
-        const XLSX = await import('xlsx');
-        const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        // Convert to array of arrays
-        const rows: string[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false }) as string[][];
+        // Gunakan parser XLSX yang tidak membawa advisori keamanan SheetJS.
+        const { default: readXlsxFile } = await import('read-excel-file');
+        const parsedRows = await readXlsxFile(file);
+        const rows: string[][] = parsedRows.map(row => row.map(value => value == null ? '' : String(value)));
         if (rows.length < 2) {
           setImportErrors(['File Excel kosong atau hanya berisi header']);
           return;
@@ -1383,7 +1380,7 @@ export default function ItemsAndServices() {
                 <Upload className="h-6 w-6" />
                 <div>
                   <h3 className="text-lg font-bold">Import Barang & Jasa dari CSV / Excel</h3>
-                  <p className="text-sm text-green-100">Support file export Accurate Online (.xls / .xlsx)</p>
+                  <p className="text-sm text-green-100">Mendukung file Accurate Online (.xlsx) dan CSV</p>
                 </div>
               </div>
               <button onClick={() => setShowImportModal(false)} className="rounded-lg p-2 hover:bg-white/20">
@@ -1410,8 +1407,8 @@ export default function ItemsAndServices() {
                     <p className="text-xs font-bold text-blue-800 mb-1">📥 Dari Accurate Online:</p>
                     <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
                       <li>Buka Accurate Online → <strong>Barang & Jasa</strong></li>
-                      <li>Klik tombol <strong>Export / Download</strong> (Excel .xls / .xlsx)</li>
-                      <li>File akan ter-download (mis: Barang & Jasa.xls)</li>
+                      <li>Klik tombol <strong>Export / Download</strong> (Excel .xlsx atau CSV)</li>
+                      <li>Pilih format .xlsx atau CSV saat mengunduh dari Accurate</li>
                       <li>Upload file tersebut di bawah → sistem otomatis mapping kolom</li>
                     </ol>
                     <div className="mt-2 bg-white rounded p-2 border border-blue-200">
@@ -1462,7 +1459,7 @@ export default function ItemsAndServices() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.txt,.xlsx,.xls"
+                    accept=".csv,.txt,.xlsx"
                     onChange={handleFileUpload}
                     className="hidden"
                   />

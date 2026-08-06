@@ -10,6 +10,7 @@ try {
     $branchId = trim((string)($d['branchId'] ?? ''));
     $date = (string)($d['date'] ?? date('Y-m-d'));
     if ($branchId === '' || $branchId === 'ALL') throw new InvalidArgumentException('Pilih cabang transaksi terlebih dahulu.');
+    requireAccessibleBranch($pdo, $actor, $branchId);
     if ($date > date('Y-m-d')) throw new InvalidArgumentException('Tanggal transaksi tidak boleh melewati hari ini.');
     if ($date < date('Y-m-d')) {
         requireUserPermission($pdo, 'wo:backdate');
@@ -81,7 +82,7 @@ try {
         if (!$item) throw new InvalidArgumentException("Kode layanan/barang {$key} tidak ditemukan atau nonaktif.");
         $qty = max(1, (int)($service['qty'] ?? 1));
         $price = max(0, (float)$item['selling_price']);
-        $items[] = ['itemId'=>$item['id'], 'code'=>$item['code'], 'name'=>$item['name'], 'description'=>$item['receipt_description'] ?? '', 'price'=>$price, 'qty'=>$qty];
+        $items[] = ['itemId'=>$item['id'], 'code'=>$item['code'], 'name'=>$item['name'], 'description'=>$item['receipt_description'] ?? '', 'price'=>$price, 'qty'=>$qty, 'isStockItem'=>(string)$item['type']==='Persediaan'];
     }
     $total = array_reduce($items, fn($sum, $item) => $sum + $item['price'] * $item['qty'], 0);
     if ($total <= 0) throw new InvalidArgumentException('REGINV tidak dapat diproses karena total invoice Rp0. Gunakan layanan/barang yang memiliki harga.');
@@ -115,7 +116,7 @@ try {
     $invoiceItem = $pdo->prepare('INSERT INTO sales_invoice_items(invoice_id,item_id,code,name,description,price,qty,subtotal) VALUES(?,?,?,?,?,?,?,?)');
     foreach ($items as $item) {
         $invoiceItem->execute([$invoiceId,$item['itemId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['price']*$item['qty']]);
-        adjustBranchStockAllowNegative($pdo, $branchId, $item['itemId'], -$item['qty']);
+        if ($item['isStockItem']) adjustBranchStockAllowNegative($pdo, $branchId, $item['itemId'], -$item['qty']);
     }
 
     // Gunakan ID migrasi yang sama agar sinkronisasi legacy di endpoint pembayaran
@@ -123,7 +124,7 @@ try {
     $paymentId = 'legacy-' . $invoiceId;
     $paymentNumber = 'PAY-' . $invoiceNumber;
     $payment = $pdo->prepare('INSERT INTO customer_payments(id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
-    $payment->execute([$paymentId,$paymentNumber,$invoiceId,$date,$total,$paymentMethod,$account['id'],$account['name'],'Pembayaran penuh via REGINV',$branchId,$d['createdBy'] ?? null,$d['createdByName'] ?? null]);
+    $payment->execute([$paymentId,$paymentNumber,$invoiceId,$date,$total,$paymentMethod,$account['id'],$account['name'],'Pembayaran penuh via REGINV',$branchId,$actor['id'] ?? null,$actor['name'] ?? null]);
     $pdo->prepare('UPDATE work_orders SET invoice_id=?,invoice_number=? WHERE id=?')->execute([$invoiceId,$invoiceNumber,$woId]);
 
     $pdo->commit();

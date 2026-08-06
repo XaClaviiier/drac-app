@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, Banknote, CalendarCheck, Clock3, Coins, Edit, Plus, RefreshCw, Save, Settings2, Trash2, Users, X } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import { useApp } from '../context/AppContext';
+import { localDateKey } from '../lib/date';
 
 type Tab = 'summary' | 'attendance' | 'rules' | 'calculation' | 'history';
 type Attendance = { id:string;attendanceDate:string;userId:string;userName:string;branchId:string;status:string;checkIn?:string;checkOut?:string;lateMinutes:number;notes?:string };
@@ -13,7 +14,7 @@ type Daily = { date:string;vehicles:number;completed:number;woValue:number;invoi
 type Payload = { users:Array<{id:string;name:string;roleName:string;branchId:string}>;attendance:Attendance[];rules:Rule[];runs:Run[];daily:Daily[];depositSummary:any[];calculation:Calculation|null };
 
 const money = (value:number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
-const today = new Date().toISOString().slice(0,10);
+const today = localDateKey();
 const currentPeriod = today.slice(0,7);
 const metricLabels:Record<string,string> = {
   attendance_days:'Hari hadir', completed_work_orders:'WO selesai', paid_revenue:'Pendapatan terbayar', late_minutes:'Menit terlambat', absence_days:'Hari alpha',

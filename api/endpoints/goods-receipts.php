@@ -1,7 +1,12 @@
 <?php
 switch ($method) {
     case 'GET':
-        $rows = $pdo->query("SELECT * FROM goods_receipts ORDER BY date DESC, receipt_number DESC")->fetchAll();
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
+        $rows = array_values(array_filter(
+            $pdo->query("SELECT * FROM goods_receipts ORDER BY date DESC, receipt_number DESC")->fetchAll(),
+            fn($row) => isset($allowedBranchMap[(string)$row['branch_id']])
+        ));
         foreach ($rows as &$r) {
             $r['receiptNumber'] = $r['receipt_number'];
             $r['supplierId'] = $r['supplier_id'];
@@ -31,27 +36,44 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
+        $branchId = (string)($d['branchId'] ?? '');
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        if (empty($d['supplierId'])) respondError('Supplier wajib dipilih dari master', 422);
+        $supplierCheck = $pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");
+        $supplierCheck->execute([$d['supplierId']]);
+        $supplier = $supplierCheck->fetch();
+        if (!$supplier) respondError('Supplier tidak ditemukan atau nonaktif', 422);
+        if (empty($d['items']) || !is_array($d['items'])) respondError('Tambahkan minimal satu barang', 422);
+        $newStatus = (string)($d['status'] ?? 'Draft');
+        if (!in_array($newStatus, ['Draft', 'Diterima'], true)) respondError('Status awal penerimaan tidak valid', 422);
         $pdo->beginTransaction();
         try {
             $rId = $d['id'] ?? generateId();
-            $branchId = $d['branchId'] ?? 'BR-001';
             $stmt = $pdo->prepare("INSERT INTO goods_receipts (id, receipt_number, date, supplier_id, supplier_name, do_number, status, notes, branch_id, received_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $rId, $d['receiptNumber'], $d['date'],
-                $d['supplierId'], $d['supplierName'], $d['doNumber'] ?? '',
-                $d['status'] ?? 'Draft', $d['notes'] ?? '',
+                $d['supplierId'], $supplier['name'], $d['doNumber'] ?? '',
+                $newStatus, $d['notes'] ?? '',
                 $branchId, $d['receivedBy'] ?? null
             ]);
 
             if (!empty($d['items'])) {
                 $iStmt = $pdo->prepare("INSERT INTO goods_receipt_items (receipt_id, item_id, item_code, item_name, qty, unit, qty_invoiced) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $itemCheck = $pdo->prepare("SELECT code,name,unit,type FROM items WHERE id=? AND is_active=1");
+                $seenItems = [];
                 foreach ($d['items'] as $i) {
-                    $iStmt->execute([$rId, $i['itemId'], $i['itemCode'] ?? '', $i['itemName'] ?? '', $i['qty'] ?? 0, $i['unit'] ?? '', $i['qtyInvoiced'] ?? 0]);
+                    $itemCheck->execute([$i['itemId'] ?? '']);
+                    $item = $itemCheck->fetch();
+                    $qty = (int)($i['qty'] ?? 0);
+                    if (!$item || $item['type'] !== 'Persediaan' || $qty <= 0) throw new InvalidArgumentException('Penerimaan hanya boleh berisi barang persediaan aktif dengan qty lebih dari 0');
+                    if (isset($seenItems[(string)$i['itemId']])) throw new InvalidArgumentException('Barang yang sama tidak boleh diduplikasi dalam satu penerimaan');
+                    $seenItems[(string)$i['itemId']] = true;
+                    $iStmt->execute([$rId, $i['itemId'], $item['code'], $item['name'], $qty, $item['unit'], 0]);
                 }
             }
 
             // Auto-increment stock jika status Diterima
-            if (($d['status'] ?? '') === 'Diterima' && !empty($d['items'])) {
+            if ($newStatus === 'Diterima' && !empty($d['items'])) {
                 foreach ($d['items'] as $i) {
                     adjustBranchStockAllowNegative($pdo, $branchId, $i['itemId'], (int)$i['qty']);
                 }
@@ -59,6 +81,9 @@ switch ($method) {
 
             $pdo->commit();
             respondSuccess(['id' => $rId], 'Penerimaan disimpan');
+        } catch (InvalidArgumentException | DomainException $e) {
+            $pdo->rollBack();
+            respondError($e->getMessage(), 422);
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal simpan penerimaan', 500, $e->getMessage());
@@ -71,35 +96,57 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             // Get old status untuk logic stock
-            $oldRowStmt = $pdo->prepare("SELECT status, branch_id FROM goods_receipts WHERE id = ?");
+            $oldRowStmt = $pdo->prepare("SELECT status, branch_id FROM goods_receipts WHERE id = ? FOR UPDATE");
             $oldRowStmt->execute([$id]);
             $oldRow = $oldRowStmt->fetch();
+            if (!$oldRow) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
             $oldStatus = $oldRow['status'] ?? '';
             $oldBranchId = $oldRow['branch_id'] ?? ($d['branchId'] ?? 'BR-001');
-            $newBranchId = $d['branchId'] ?? 'BR-001';
+            $newBranchId = (string)($d['branchId'] ?? $oldBranchId);
+            $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+            requireAccessibleBranch($pdo, $actor, (string)$oldBranchId);
+            requireAccessibleBranch($pdo, $actor, $newBranchId);
+            if (empty($d['items']) || !is_array($d['items'])) throw new InvalidArgumentException('Tambahkan minimal satu barang');
+            $newStatus = (string)($d['status'] ?? 'Draft');
+            if (!in_array($newStatus, ['Draft', 'Diterima', 'Batal'], true)) throw new InvalidArgumentException('Status penerimaan hanya boleh Draft, Diterima, atau Batal');
             $oldItems = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
             $oldItems->execute([$id]);
             $oldItemsList = $oldItems->fetchAll();
+            foreach ($oldItemsList as $oldItem) {
+                if ((int)$oldItem['qty_invoiced'] > 0) throw new DomainException('Penerimaan yang sudah difakturkan tidak boleh diubah. Koreksi atau hapus faktur pembelian terlebih dahulu.');
+            }
+            if (empty($d['supplierId'])) throw new InvalidArgumentException('Supplier wajib dipilih dari master');
+            $supplierCheck = $pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");
+            $supplierCheck->execute([$d['supplierId']]);
+            $supplier = $supplierCheck->fetch();
+            if (!$supplier) throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');
 
             $stmt = $pdo->prepare("UPDATE goods_receipts SET receipt_number=?, date=?, supplier_id=?, supplier_name=?, do_number=?, status=?, notes=?, branch_id=?, received_by=? WHERE id=?");
             $stmt->execute([
                 $d['receiptNumber'], $d['date'],
-                $d['supplierId'], $d['supplierName'], $d['doNumber'] ?? '',
-                $d['status'] ?? 'Draft', $d['notes'] ?? '',
-                $d['branchId'] ?? 'BR-001', $d['receivedBy'] ?? null,
+                $d['supplierId'], $supplier['name'], $d['doNumber'] ?? '',
+                $newStatus, $d['notes'] ?? '',
+                $newBranchId, $d['receivedBy'] ?? null,
                 $id
             ]);
 
             $pdo->prepare("DELETE FROM goods_receipt_items WHERE receipt_id = ?")->execute([$id]);
             if (!empty($d['items'])) {
                 $iStmt = $pdo->prepare("INSERT INTO goods_receipt_items (receipt_id, item_id, item_code, item_name, qty, unit, qty_invoiced) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $itemCheck = $pdo->prepare("SELECT code,name,unit,type FROM items WHERE id=? AND is_active=1");
+                $seenItems = [];
                 foreach ($d['items'] as $i) {
-                    $iStmt->execute([$id, $i['itemId'], $i['itemCode'] ?? '', $i['itemName'] ?? '', $i['qty'] ?? 0, $i['unit'] ?? '', $i['qtyInvoiced'] ?? 0]);
+                    $itemCheck->execute([$i['itemId'] ?? '']);
+                    $item = $itemCheck->fetch();
+                    $qty = (int)($i['qty'] ?? 0);
+                    if (!$item || $item['type'] !== 'Persediaan' || $qty <= 0) throw new InvalidArgumentException('Penerimaan hanya boleh berisi barang persediaan aktif dengan qty lebih dari 0');
+                    if (isset($seenItems[(string)$i['itemId']])) throw new InvalidArgumentException('Barang yang sama tidak boleh diduplikasi dalam satu penerimaan');
+                    $seenItems[(string)$i['itemId']] = true;
+                    $iStmt->execute([$id, $i['itemId'], $item['code'], $item['name'], $qty, $item['unit'], 0]);
                 }
             }
 
             // Stock logic
-            $newStatus = $d['status'] ?? 'Draft';
             $wasReceived = in_array($oldStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
             $isReceived = in_array($newStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
 
@@ -118,6 +165,9 @@ switch ($method) {
 
             $pdo->commit();
             respondSuccess(null, 'Penerimaan diupdate');
+        } catch (InvalidArgumentException | DomainException $e) {
+            $pdo->rollBack();
+            respondError($e->getMessage(), 422);
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal update penerimaan', 500, $e->getMessage());
@@ -131,6 +181,11 @@ switch ($method) {
             $rowStmt = $pdo->prepare("SELECT status, branch_id FROM goods_receipts WHERE id = ? FOR UPDATE");
             $rowStmt->execute([$id]);
             $row = $rowStmt->fetch();
+            if (!$row) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
+            requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), (string)$row['branch_id']);
+            $linked = $pdo->prepare("SELECT COUNT(*) FROM purchase_invoice_items WHERE receipt_id=?");
+            $linked->execute([$id]);
+            if ((int)$linked->fetchColumn() > 0) throw new DomainException('Penerimaan sudah dipakai pada faktur pembelian dan tidak dapat dihapus');
             if ($row && in_array($row['status'], ['Diterima', 'Difakturkan', 'Sebagian'])) {
                 $items = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
                 $items->execute([$id]);
@@ -143,6 +198,9 @@ switch ($method) {
             $pdo->prepare("DELETE FROM goods_receipts WHERE id=?")->execute([$id]);
             $pdo->commit();
             respondSuccess(null, 'Penerimaan dihapus');
+        } catch (InvalidArgumentException | DomainException $e) {
+            $pdo->rollBack();
+            respondError($e->getMessage(), 409);
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError('Gagal menghapus penerimaan', 500, $e->getMessage());

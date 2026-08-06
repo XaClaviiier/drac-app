@@ -3,7 +3,7 @@ import { Wrench, Eye, EyeOff, Building2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function Login() {
-  const { login, data, isDemoMode } = useApp();
+  const { login } = useApp();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -94,23 +94,6 @@ export default function Login() {
             </button>
           </form>
 
-          {isDemoMode && <div className="mt-6 border-t border-gray-200 pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Akun Demo</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {data.users.slice(0, 4).map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => { setUsername(user.username); setPassword(user.password); }}
-                  className="rounded-lg border border-gray-200 p-2 text-left transition-colors hover:border-blue-300 hover:bg-blue-50"
-                >
-                  <p className="font-medium text-gray-900">{user.name}</p>
-                  <p className="text-gray-500">{user.username} / {user.password}</p>
-                  <span className="mt-1 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{user.roleName}</span>
-                </button>
-              ))}
-            </div>
-          </div>}
         </div>
 
         <p className="mt-6 text-center text-xs text-blue-300">

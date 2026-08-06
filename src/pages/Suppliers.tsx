@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Building, Download, Edit, List, Mail, MapPin, PackageCheck, Phone, Plus, Printer, RotateCcw, Save, Search, Settings2, Trash2, Truck, X } from 'lucide-react';
+import { Building, Download, Edit, List, Mail, MapPin, Phone, Plus, Printer, RotateCcw, Save, Search, Settings2, Trash2, Truck, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Supplier } from '../types';
+import { localDateKey } from '../lib/date';
 
 type SupplierColumn = 'name' | 'contact' | 'phone' | 'email' | 'address' | 'status' | 'receipts' | 'invoices' | 'actions';
 const columns: Array<{ id: SupplierColumn; label: string; locked?: boolean }> = [
@@ -49,7 +50,7 @@ export default function Suppliers() {
   };
   const save = (event: React.FormEvent) => {
     event.preventDefault();
-    const payload: Supplier = { id: editing?.id || Date.now().toString(), code: editing?.code || generateSupplierCode(), ...form, name: form.name.toUpperCase(), createdAt: editing?.createdAt || new Date().toISOString().split('T')[0] };
+    const payload: Supplier = { id: editing?.id || Date.now().toString(), code: editing?.code || generateSupplierCode(), ...form, name: form.name.toUpperCase(), createdAt: editing?.createdAt || localDateKey() };
     if (editing) updateSupplier(editing.id, payload); else addSupplier(payload);
     close(true);
   };
@@ -73,7 +74,7 @@ export default function Suppliers() {
   };
   const exportCsv = () => {
     const csv = [reportColumns.map(column => `"${column.label}"`).join(','), ...filtered.map(supplier => reportColumns.map(column => `"${fieldValue(supplier, column.id).replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `daftar_supplier_${new Date().toISOString().split('T')[0]}.csv`; link.click(); URL.revokeObjectURL(url);
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `daftar_supplier_${localDateKey()}.csv`; link.click(); URL.revokeObjectURL(url);
   };
   const printList = () => {
     const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

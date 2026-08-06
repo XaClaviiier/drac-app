@@ -23,6 +23,11 @@ import BranchDeposits from './pages/BranchDeposits';
 import CashAccounts from './pages/CashAccounts';
 import ChartOfAccounts from './pages/ChartOfAccounts';
 import PerformanceBonus from './pages/PerformanceBonus';
+import SalesReport from './pages/SalesReport';
+import PurchaseReport from './pages/PurchaseReport';
+import InventoryReport from './pages/InventoryReport';
+import CashBankReport from './pages/CashBankReport';
+import type { Permission } from './types';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useApp();
@@ -32,6 +37,16 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
   return <>{children}</>;
 }
+
+function RequirePermission({ permission, children }: { permission: Permission; children: React.ReactNode }) {
+  const { hasPermission } = useApp();
+  if (!hasPermission(permission)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+const protectedPage = (permission: Permission, page: React.ReactNode) => (
+  <RequirePermission permission={permission}>{page}</RequirePermission>
+);
 
 function AppRoutes() {
   const { currentUser } = useApp();
@@ -48,27 +63,31 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="vehicles" element={<VehicleRegister />} />
-        <Route path="invoices" element={<SalesInvoice />} />
-        <Route path="customer-payments" element={<CustomerPayments />} />
-        <Route path="branch-deposits" element={<BranchDeposits />} />
-        <Route path="cash-accounts" element={<CashAccounts mode="cash" />} />
-        <Route path="bank-accounts" element={<CashAccounts mode="bank" />} />
-        <Route path="chart-of-accounts" element={<ChartOfAccounts />} />
-        <Route path="customers" element={<Customers />} />
-        <Route path="workorders" element={<WorkOrders />} />
-        <Route path="reports/workorders" element={<WorkOrderReport />} />
-        <Route path="reports" element={<ReportsIndex />} />
-        <Route path="performance-bonus" element={<PerformanceBonus />} />
-        <Route path="items" element={<ItemsAndServices />} />
-        <Route path="suppliers" element={<Suppliers />} />
-        <Route path="receipts" element={<GoodsReceiptPage />} />
-        <Route path="purchase-invoices" element={<PurchaseInvoicesPage />} />
-        <Route path="categories" element={<Categories />} />
-        <Route path="ai" element={<AIAssistant />} />
-        <Route path="users" element={<UsersAndRoles />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="warehouses" element={<Warehouses />} />
+        <Route path="vehicles" element={protectedPage('vehicle:view', <VehicleRegister />)} />
+        <Route path="invoices" element={protectedPage('invoice:view', <SalesInvoice />)} />
+        <Route path="customer-payments" element={protectedPage('payment:view', <CustomerPayments />)} />
+        <Route path="branch-deposits" element={protectedPage('report:view', <BranchDeposits />)} />
+        <Route path="cash-accounts" element={protectedPage('report:view', <CashAccounts mode="cash" />)} />
+        <Route path="bank-accounts" element={protectedPage('report:view', <CashAccounts mode="bank" />)} />
+        <Route path="chart-of-accounts" element={protectedPage('report:view', <ChartOfAccounts />)} />
+        <Route path="customers" element={protectedPage('customer:view', <Customers />)} />
+        <Route path="workorders" element={protectedPage('wo:view', <WorkOrders />)} />
+        <Route path="reports/workorders" element={protectedPage('report:view', <WorkOrderReport />)} />
+        <Route path="reports/sales" element={protectedPage('report:view', <SalesReport />)} />
+        <Route path="reports/purchases" element={protectedPage('report:view', <PurchaseReport />)} />
+        <Route path="reports/inventory" element={protectedPage('report:view', <InventoryReport />)} />
+        <Route path="reports/cash-bank" element={protectedPage('report:view', <CashBankReport />)} />
+        <Route path="reports" element={protectedPage('report:view', <ReportsIndex />)} />
+        <Route path="performance-bonus" element={protectedPage('report:view', <PerformanceBonus />)} />
+        <Route path="items" element={protectedPage('item:view', <ItemsAndServices />)} />
+        <Route path="suppliers" element={protectedPage('supplier:view', <Suppliers />)} />
+        <Route path="receipts" element={protectedPage('receipt:view', <GoodsReceiptPage />)} />
+        <Route path="purchase-invoices" element={protectedPage('purchase:view', <PurchaseInvoicesPage />)} />
+        <Route path="categories" element={protectedPage('item:view', <Categories />)} />
+        <Route path="ai" element={protectedPage('ai:view', <AIAssistant />)} />
+        <Route path="users" element={protectedPage('user:view', <UsersAndRoles />)} />
+        <Route path="settings" element={protectedPage('settings:view', <SettingsPage />)} />
+        <Route path="warehouses" element={protectedPage('item:view', <Warehouses />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

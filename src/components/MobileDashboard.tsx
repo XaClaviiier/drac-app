@@ -8,7 +8,7 @@ export default function MobileDashboard(){
   const navigate=useNavigate(); const [branchesOpen,setBranchesOpen]=useState(false); const [userOpen,setUserOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false); const [addOpen,setAddOpen]=useState(false);
   const isAll=currentBranchId==='ALL'; const activeBranch=data.branches.find(b=>b.id===currentBranchId);
   const filter=<T extends {branchId:string}>(items:T[])=>items.filter(i=>isAll||i.branchId===currentBranchId);
-  const today=new Date().toISOString().slice(0,10); const invoices=filter(data.invoices); const workOrders=filter(data.workOrders);
+  const dateNow=new Date(); const today=`${dateNow.getFullYear()}-${String(dateNow.getMonth()+1).padStart(2,'0')}-${String(dateNow.getDate()).padStart(2,'0')}`; const invoices=filter(data.invoices); const workOrders=filter(data.workOrders);
   const todayInvoices=invoices.filter(i=>i.date===today);
   const orderNew=workOrders.filter(w=>w.status==='Pengecekan').length; const orderProcess=workOrders.filter(w=>w.status==='Proses').length; const orderDone=workOrders.filter(w=>w.status==='Selesai').length;
   const lowStock=data.items.filter(i=>i.type==='Persediaan'&&i.stock<=0).length;

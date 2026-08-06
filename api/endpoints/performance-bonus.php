@@ -63,13 +63,15 @@ function buildBonusCalculation(PDO $pdo, string $period, string $branchId, float
     return ['period'=>$period,'branchId'=>$branchId,'bonusPool'=>$pool,'totalPoints'=>$totalPoints,'totalFixed'=>$totalFixed,'totalBonus'=>array_sum(array_column($rows,'bonus')),'technicians'=>$rows];
 }
 
-function performancePayload(PDO $pdo, string $period, string $branchId): array {
+function performancePayload(PDO $pdo, string $period, string $branchId, array $actor): array {
     [$start,$end] = bonusPeriodRange($period);
-    $users = $pdo->prepare("SELECT u.id,u.name,COALESCE(r.name,'') roleName,u.branch_id branchId FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.is_active=1 AND COALESCE(u.is_owner,0)=0 ORDER BY u.name");
-    $users->execute();
+    $users = $pdo->prepare("SELECT u.id,u.name,COALESCE(r.name,'') roleName,u.branch_id branchId FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.is_active=1 AND COALESCE(u.is_owner,0)=0 AND (?='ALL' OR u.branch_id=? OR EXISTS(SELECT 1 FROM user_branch_access uba WHERE uba.user_id=u.id AND uba.branch_id=?)) ORDER BY u.name");
+    $users->execute([$branchId,$branchId,$branchId]);
     $attendance = $pdo->prepare("SELECT id,attendance_date attendanceDate,user_id userId,user_name userName,branch_id branchId,status,check_in checkIn,check_out checkOut,late_minutes lateMinutes,notes FROM technician_attendance WHERE attendance_date BETWEEN ? AND ? AND (?='ALL' OR branch_id=?) ORDER BY attendance_date DESC,user_name");
     $attendance->execute([$start,$end,$branchId,$branchId]);
-    $rules = $pdo->query("SELECT id,name,metric,calculation_mode calculationMode,operator_symbol operatorSymbol,threshold_value thresholdValue,result_type resultType,result_value resultValue,branch_id branchId,is_active isActive,valid_from validFrom,valid_until validUntil FROM bonus_rules ORDER BY is_active DESC,created_at,id")->fetchAll();
+    $rulesStmt = $pdo->prepare("SELECT id,name,metric,calculation_mode calculationMode,operator_symbol operatorSymbol,threshold_value thresholdValue,result_type resultType,result_value resultValue,branch_id branchId,is_active isActive,valid_from validFrom,valid_until validUntil FROM bonus_rules WHERE (?='ALL' OR branch_id IS NULL OR branch_id='' OR branch_id=?) ORDER BY is_active DESC,created_at,id");
+    $rulesStmt->execute([$branchId,$branchId]);
+    $rules = $rulesStmt->fetchAll();
     foreach ($rules as &$rule) { $rule['thresholdValue']=(float)$rule['thresholdValue'];$rule['resultValue']=(float)$rule['resultValue'];$rule['isActive']=(bool)$rule['isActive']; } unset($rule);
     $runs = $pdo->prepare("SELECT r.*,b.name branch_name FROM bonus_runs r LEFT JOIN branches b ON b.id=r.branch_id WHERE (?='ALL' OR r.branch_id=?) ORDER BY r.period DESC,r.created_at DESC");
     $runs->execute([$branchId,$branchId]);
@@ -86,33 +88,40 @@ function performancePayload(PDO $pdo, string $period, string $branchId): array {
     $present=$pdo->prepare("SELECT attendance_date,user_name FROM technician_attendance WHERE attendance_date BETWEEN ? AND ? AND status='Hadir' AND (?='ALL' OR branch_id=?) ORDER BY user_name");$present->execute([$start,$end,$branchId,$branchId]);foreach($present->fetchAll() as $row){$daily[$row['attendance_date']]=$daily[$row['attendance_date']]??$emptyDay($row['attendance_date']);$daily[$row['attendance_date']]['technicians'][]=$row['user_name'];}
     foreach($daily as &$day)$day['unsubmittedDaily']=max(0,$day['cashReceived']-$day['deposited']);unset($day);
     krsort($daily);
-    return ['period'=>$period,'users'=>$users->fetchAll(),'attendance'=>$attendance->fetchAll(),'rules'=>$rules,'runs'=>$runRows,'daily'=>array_values($daily),'depositSummary'=>branchCashSummary($pdo),'calculation'=>$branchId==='ALL'?null:buildBonusCalculation($pdo,$period,$branchId,0)];
+    return ['period'=>$period,'users'=>$users->fetchAll(),'attendance'=>$attendance->fetchAll(),'rules'=>$rules,'runs'=>$runRows,'daily'=>array_values($daily),'depositSummary'=>branchCashSummary($pdo,$actor),'calculation'=>$branchId==='ALL'?null:buildBonusCalculation($pdo,$period,$branchId,0)];
 }
 
 try {
     if ($method === 'GET') {
         $period=$_GET['period']??date('Y-m');$branchId=$_GET['branchId']??'ALL';
-        respondSuccess(performancePayload($pdo,$period,$branchId));
+        if ($branchId === 'ALL') {
+            requireUserPermission($pdo, 'all_branches');
+        } else {
+            requireAccessibleBranch($pdo, $actor, $branchId);
+        }
+        respondSuccess(performancePayload($pdo,$period,$branchId,$actor));
     }
     if ($method === 'POST') {
         $d=getInput();$type=$d['type']??'';
         if ($type==='attendance') {
+            requireAccessibleBranch($pdo,$actor,(string)($d['branchId']??''));
             $user=$pdo->prepare("SELECT name FROM users WHERE id=? AND is_active=1");$user->execute([$d['userId']??'']);$name=$user->fetchColumn();if(!$name)throw new InvalidArgumentException('Pengguna tidak ditemukan.');
             $rowId=generateId();$stmt=$pdo->prepare("INSERT INTO technician_attendance(id,attendance_date,user_id,user_name,branch_id,status,check_in,check_out,late_minutes,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status),check_in=VALUES(check_in),check_out=VALUES(check_out),late_minutes=VALUES(late_minutes),notes=VALUES(notes),updated_at=NOW()");
             $stmt->execute([$rowId,$d['attendanceDate'],$d['userId'],$name,$d['branchId'],$d['status']??'Hadir',($d['checkIn']??'')?:null,($d['checkOut']??'')?:null,max(0,(int)($d['lateMinutes']??0)),($d['notes']??'')?:null,$actor['id']??null]);respondSuccess(null,'Kehadiran disimpan');
         }
         if ($type==='rule') {
-            requireUserPermission($pdo,'settings:edit');$ruleId=generateId();$stmt=$pdo->prepare("INSERT INTO bonus_rules(id,name,metric,calculation_mode,operator_symbol,threshold_value,result_type,result_value,branch_id,is_active,valid_from,valid_until,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");$stmt->execute([$ruleId,$d['name'],$d['metric'],$d['calculationMode']??'per_unit',$d['operatorSymbol']??'gte',(float)($d['thresholdValue']??0),$d['resultType']??'points',(float)($d['resultValue']??0),($d['branchId']??'')?:null,!empty($d['isActive'])?1:0,($d['validFrom']??'')?:null,($d['validUntil']??'')?:null,$actor['id']??null]);respondSuccess(['id'=>$ruleId],'Rule bonus dibuat');
+            requireUserPermission($pdo,'settings:edit');$ruleBranch=($d['branchId']??'')?:null;if($ruleBranch)requireAccessibleBranch($pdo,$actor,(string)$ruleBranch);$ruleId=generateId();$stmt=$pdo->prepare("INSERT INTO bonus_rules(id,name,metric,calculation_mode,operator_symbol,threshold_value,result_type,result_value,branch_id,is_active,valid_from,valid_until,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");$stmt->execute([$ruleId,$d['name'],$d['metric'],$d['calculationMode']??'per_unit',$d['operatorSymbol']??'gte',(float)($d['thresholdValue']??0),$d['resultType']??'points',(float)($d['resultValue']??0),$ruleBranch,!empty($d['isActive'])?1:0,($d['validFrom']??'')?:null,($d['validUntil']??'')?:null,$actor['id']??null]);respondSuccess(['id'=>$ruleId],'Rule bonus dibuat');
         }
         if ($type==='calculate') {
             if (($d['branchId']??'ALL')==='ALL') throw new InvalidArgumentException('Pilih satu cabang untuk menghitung bonus.');
+            requireAccessibleBranch($pdo,$actor,(string)$d['branchId']);
             $calc=buildBonusCalculation($pdo,$d['period'],$d['branchId'],max(0,(float)($d['bonusPool']??0)));$runId=generateId();$pdo->prepare("INSERT INTO bonus_runs(id,period,branch_id,bonus_pool,total_points,total_bonus,status,snapshot_json,created_by,created_by_name) VALUES(?,?,?,?,?,?,'Draft',?,?,?)")->execute([$runId,$d['period'],$d['branchId'],$calc['bonusPool'],$calc['totalPoints'],$calc['totalBonus'],json_encode($calc),$actor['id']??null,$actor['name']??null]);respondSuccess(['id'=>$runId,'calculation'=>$calc],'Perhitungan bonus disimpan sebagai Draft');
         }
         respondError('Jenis data tidak valid',422);
     }
     if ($method === 'PUT') {
         if(!$id)respondError('ID wajib',422);$d=getInput();$type=$d['type']??'';
-        if($type==='rule'){requireUserPermission($pdo,'settings:edit');$pdo->prepare("UPDATE bonus_rules SET name=?,metric=?,calculation_mode=?,operator_symbol=?,threshold_value=?,result_type=?,result_value=?,branch_id=?,is_active=?,valid_from=?,valid_until=? WHERE id=?")->execute([$d['name'],$d['metric'],$d['calculationMode'],$d['operatorSymbol'],(float)$d['thresholdValue'],$d['resultType'],(float)$d['resultValue'],($d['branchId']??'')?:null,!empty($d['isActive'])?1:0,($d['validFrom']??'')?:null,($d['validUntil']??'')?:null,$id]);respondSuccess(null,'Rule bonus diperbarui');}
+        if($type==='rule'){requireUserPermission($pdo,'settings:edit');$ruleBranch=($d['branchId']??'')?:null;if($ruleBranch)requireAccessibleBranch($pdo,$actor,(string)$ruleBranch);$pdo->prepare("UPDATE bonus_rules SET name=?,metric=?,calculation_mode=?,operator_symbol=?,threshold_value=?,result_type=?,result_value=?,branch_id=?,is_active=?,valid_from=?,valid_until=? WHERE id=?")->execute([$d['name'],$d['metric'],$d['calculationMode'],$d['operatorSymbol'],(float)$d['thresholdValue'],$d['resultType'],(float)$d['resultValue'],$ruleBranch,!empty($d['isActive'])?1:0,($d['validFrom']??'')?:null,($d['validUntil']??'')?:null,$id]);respondSuccess(null,'Rule bonus diperbarui');}
         if($type==='runStatus'){if(empty($actor['is_owner']))respondError('Hanya Owner dapat menyetujui atau membayar bonus',403);$status=$d['status']??'';if(!in_array($status,['Disetujui','Dibayar'],true))throw new InvalidArgumentException('Status tidak valid.');$pdo->prepare("UPDATE bonus_runs SET status=?,approved_by_name=IF(?='Disetujui',?,approved_by_name),approved_at=IF(?='Disetujui',NOW(),approved_at),paid_at=IF(?='Dibayar',NOW(),paid_at) WHERE id=?")->execute([$status,$status,$actor['name']??null,$status,$status,$id]);respondSuccess(null,'Status bonus diperbarui');}
         respondError('Jenis data tidak valid',422);
     }

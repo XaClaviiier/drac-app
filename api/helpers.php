@@ -248,6 +248,14 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('bank_name', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD bank_name VARCHAR(100) NULL AFTER ledger_account_id");
     if (!in_array('account_number', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD account_number VARCHAR(60) NULL AFTER bank_name");
     if (!in_array('account_holder', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD account_holder VARCHAR(120) NULL AFTER account_number");
+    $purchasePaymentTable = $pdo->query("SHOW TABLES LIKE 'purchase_payments'")->fetchColumn();
+    if ($purchasePaymentTable) {
+        $purchasePaymentColumns = array_column($pdo->query("SHOW COLUMNS FROM purchase_payments")->fetchAll(), 'Field');
+        if (!in_array('account_id', $purchasePaymentColumns, true)) $pdo->exec("ALTER TABLE purchase_payments ADD account_id VARCHAR(64) NULL AFTER payment_method");
+        if (!in_array('branch_id', $purchasePaymentColumns, true)) $pdo->exec("ALTER TABLE purchase_payments ADD branch_id VARCHAR(64) NULL AFTER notes");
+        $pdo->exec("UPDATE purchase_payments pp JOIN purchase_invoices pi ON pi.id COLLATE utf8mb4_unicode_ci=pp.invoice_id COLLATE utf8mb4_unicode_ci SET pp.branch_id=pi.branch_id WHERE pp.branch_id IS NULL OR pp.branch_id=''");
+        $pdo->exec("UPDATE purchase_payments SET account_id=bank_account WHERE (account_id IS NULL OR account_id='') AND bank_account IS NOT NULL AND bank_account<>''");
+    }
     $coaIds = seedChartOfAccounts($pdo);
     $pdo->exec("UPDATE chart_of_accounts SET is_active=0 WHERE code IN ('1000','1300','4101','4102')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payments (
@@ -430,6 +438,9 @@ function getBearerToken(): string {
 }
 
 function requireAuthenticatedUser(PDO $pdo): array {
+    static $authenticatedUser = null;
+    if (is_array($authenticatedUser)) return $authenticatedUser;
+
     $token = getBearerToken();
     if ($token === '') respondError('Sesi login diperlukan', 401);
     $stmt = $pdo->prepare("
@@ -455,7 +466,42 @@ function requireAuthenticatedUser(PDO $pdo): array {
         }
     }
     $pdo->prepare("UPDATE api_sessions SET last_activity=NOW() WHERE token_hash=?")->execute([hash('sha256', $token)]);
-    return $user;
+    $authenticatedUser = $user;
+    return $authenticatedUser;
+}
+
+function getUserPermissions(PDO $pdo, array $user): array {
+    if (!empty($user['is_owner'])) return ['*'];
+    $stmt = $pdo->prepare("SELECT permissions FROM roles WHERE id = ? AND is_active = 1 LIMIT 1");
+    $stmt->execute([$user['role_id'] ?? '']);
+    $permissions = json_decode((string)($stmt->fetchColumn() ?: '[]'), true);
+    return is_array($permissions) ? array_values(array_unique(array_map('strval', $permissions))) : [];
+}
+
+function authenticatedUserHasPermission(PDO $pdo, array $user, string $permission): bool {
+    return !empty($user['is_owner']) || in_array($permission, getUserPermissions($pdo, $user), true);
+}
+
+function requireAuthenticatedUserPermission(PDO $pdo, array $user, string $permission): void {
+    if (authenticatedUserHasPermission($pdo, $user, $permission)) return;
+    respondError('Akun tidak memiliki izin ' . $permission, 403);
+}
+
+function getAccessibleBranchIds(PDO $pdo, array $user): array {
+    if (!empty($user['is_owner']) || authenticatedUserHasPermission($pdo, $user, 'all_branches')) {
+        return array_map('strval', array_column($pdo->query("SELECT id FROM branches WHERE is_active = 1 ORDER BY id")->fetchAll(), 'id'));
+    }
+
+    $ids = getUserBranchIds($pdo, (string)$user['id']);
+    if (!empty($user['branch_id'])) $ids[] = (string)$user['branch_id'];
+    return array_values(array_unique(array_filter(array_map('strval', $ids))));
+}
+
+function requireAccessibleBranch(PDO $pdo, array $user, ?string $branchId): void {
+    if ($branchId === null || $branchId === '') respondError('Cabang wajib dipilih', 422);
+    if (!in_array($branchId, getAccessibleBranchIds($pdo, $user), true)) {
+        respondError('Akun tidak memiliki akses ke cabang tersebut', 403);
+    }
 }
 
 function requestIp(): string {
@@ -642,12 +688,7 @@ function isBackdateReasonRequired(PDO $pdo): bool {
 
 function requireUserPermission(PDO $pdo, string $permission): array {
     $user = requireAuthenticatedUser($pdo);
-    if (!empty($user['is_owner'])) return $user;
-
-    $stmt = $pdo->prepare("SELECT permissions FROM roles WHERE id = ? AND is_active = 1 LIMIT 1");
-    $stmt->execute([$user['role_id'] ?? '']);
-    $permissions = json_decode((string)($stmt->fetchColumn() ?: '[]'), true);
-    if (!is_array($permissions) || !in_array($permission, $permissions, true)) {
+    if (!authenticatedUserHasPermission($pdo, $user, $permission)) {
         $labels = [
             'wo:create' => 'Buat WO', 'invoice:create' => 'Buat Faktur',
             'wo:backdate' => 'Input WO Tanggal Mundur',
@@ -693,4 +734,20 @@ function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $item
         WHERE i.id = ? AND i.branch_id = ?
     ");
     $sync->execute([$itemId, $branchId]);
+}
+
+function branchCashSummary(PDO $pdo, ?array $actor = null): array {
+    $sql="SELECT b.id branch_id,b.name branch_name,a.id account_id,a.name account_name,
+        COALESCE((SELECT SUM(p.amount) FROM customer_payments p WHERE p.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND p.account_id COLLATE utf8mb4_unicode_ci=a.id COLLATE utf8mb4_unicode_ci),0) cash_received,
+        COALESCE((SELECT SUM(pp.amount) FROM purchase_payments pp WHERE pp.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND pp.account_id COLLATE utf8mb4_unicode_ci=a.id COLLATE utf8mb4_unicode_ci),0) cash_expenses,
+        COALESCE((SELECT SUM(d.amount) FROM branch_deposits d WHERE d.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND d.source_account_id COLLATE utf8mb4_unicode_ci=a.id COLLATE utf8mb4_unicode_ci AND d.status IN ('Dikirim','Terverifikasi')),0) deposited
+        FROM branches b JOIN cash_accounts a ON a.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND a.account_type='cash' WHERE b.is_active=1 AND a.is_active=1";
+    $rows=$pdo->query($sql)->fetchAll();
+    if($actor){$allowed=array_fill_keys(getAccessibleBranchIds($pdo,$actor),true);$rows=array_values(array_filter($rows,fn($row)=>isset($allowed[(string)$row['branch_id']])));}
+    foreach($rows as &$r){
+        $r['branchId']=$r['branch_id'];$r['branchName']=$r['branch_name'];$r['accountId']=$r['account_id'];$r['accountName']=$r['account_name'];
+        $r['cashReceived']=(float)$r['cash_received'];$r['cashExpenses']=(float)$r['cash_expenses'];$r['deposited']=(float)$r['deposited'];
+        $r['unsubmitted']=max(0,$r['cashReceived']-$r['cashExpenses']-$r['deposited']);
+    }
+    return $rows;
 }

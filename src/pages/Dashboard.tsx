@@ -129,7 +129,7 @@ export default function Dashboard() {
         {canViewFinancial ? <>
           <KpiCard label="Kas Masuk · 10 Hari" value={compactMoney(cashIn10)} note={`${cashGrowth >= 0 ? '+' : ''}${cashGrowth}% dibanding 10 hari sebelumnya`} icon={ArrowDownRight} tone="emerald" />
           <KpiCard label="Arus Kas Bersih" value={compactMoney(netCash10)} note={`Keluar ${compactMoney(cashOut10)}`} icon={netCash10 >= 0 ? TrendingUp : ArrowUpRight} tone={netCash10 >= 0 ? 'blue' : 'red'} />
-          <KpiCard label="Keberhasilan Sales" value={`${salesRate}%`} note={`${convertedWOs.length} dari ${tenDayWOs.length} WO menjadi invoice`} icon={Gauge} tone={salesRate >= 70 ? 'emerald' : salesRate >= 50 ? 'amber' : 'red'} />
+          <KpiCard label="Konversi WO → Invoice" value={`${salesRate}%`} note={`${convertedWOs.length} dari ${tenDayWOs.length} WO menjadi invoice`} icon={Gauge} tone={salesRate >= 70 ? 'emerald' : salesRate >= 50 ? 'amber' : 'red'} />
           <KpiCard label="Piutang Pelanggan" value={compactMoney(receivables)} note={`${visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas').length} faktur belum lunas`} icon={WalletCards} tone="amber" />
         </> : <>
           <KpiCard label="Diagnosa" value={String(statusCounts.diagnosis)} note="Menunggu hasil diagnosa" icon={Wrench} tone="amber" />
@@ -142,7 +142,7 @@ export default function Dashboard() {
       {canViewFinancial && <section className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-start justify-between">
-            <div><h2 className="font-bold text-slate-900">Arus Kas 10 Hari Terakhir</h2><p className="text-xs text-slate-500">Pembayaran pelanggan dibanding pembayaran pembelian.</p></div>
+            <div><h2 className="font-bold text-slate-900">Arus Kas Operasional 10 Hari</h2><p className="text-xs text-slate-500">Pembayaran pelanggan dibanding pembayaran supplier; biaya non-pembelian belum termasuk.</p></div>
             <div className="flex gap-3 text-xs"><span className="flex items-center gap-1 text-emerald-700"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Masuk</span><span className="flex items-center gap-1 text-red-600"><i className="h-2.5 w-2.5 rounded-sm bg-red-400" />Keluar</span></div>
           </div>
           <CashFlowChart rows={trends} />
@@ -170,7 +170,7 @@ export default function Dashboard() {
 
       <section className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><div><h2 className="font-bold text-slate-900">Performa Cabang · 10 Hari</h2><p className="text-xs text-slate-500">Konversi dan penerimaan per cabang.</p></div>{currentBranchId === 'ALL' && <span className="text-xs text-slate-400">{branchPerformance.length} cabang</span>}</div>
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><div><h2 className="font-bold text-slate-900">Performa Cabang · 10 Hari</h2><p className="text-xs text-slate-500">WO, konversi, dan kas masuk 10 hari; piutang menunjukkan saldo berjalan.</p></div>{currentBranchId === 'ALL' && <span className="text-xs text-slate-400">{branchPerformance.length} cabang</span>}</div>
           <table className="w-full text-sm"><thead className="bg-slate-50 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-2.5">Cabang</th><th className="px-3 py-2.5 text-center">WO</th><th className="px-3 py-2.5 text-center">Invoice</th><th className="px-3 py-2.5">Konversi</th>{canViewFinancial && <><th className="px-3 py-2.5 text-right">Kas Masuk</th><th className="px-4 py-2.5 text-right">Piutang</th></>}</tr></thead><tbody className="divide-y divide-slate-100">{branchPerformance.map(branch => <tr key={branch.id} className="hover:bg-slate-50"><td className="px-4 py-3"><b className="text-slate-800">{branch.name.replace('CABANG ', '')}</b><small className="block text-slate-400">{branch.code}</small></td><td className="px-3 text-center font-semibold">{branch.wo}</td><td className="px-3 text-center font-semibold text-emerald-700">{branch.converted}</td><td className="px-3"><div className="flex items-center gap-2"><div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-500" style={{ width: `${branch.rate}%` }} /></div><span className="text-xs font-semibold">{branch.rate}%</span></div></td>{canViewFinancial && <><td className="px-3 text-right font-semibold text-emerald-700">{compactMoney(branch.cash)}</td><td className="px-4 text-right font-semibold text-amber-700">{compactMoney(branch.receivable)}</td></>}</tr>)}</tbody></table>
         </div>
 

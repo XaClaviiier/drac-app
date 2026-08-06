@@ -3,6 +3,7 @@ import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertC
 import { useApp } from '../context/AppContext';
 import type { GoodsReceipt, GoodsReceiptItem, PurchaseInvoice, PurchaseInvoiceItem } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { addLocalDays, localDateKey } from '../lib/date';
 
 export default function GoodsReceiptPage() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function GoodsReceiptPage() {
   const [editing, setEditing] = useState<GoodsReceipt | null>(null);
   const [viewing, setViewing] = useState<GoodsReceipt | null>(null);
   const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: localDateKey(),
     supplierId: '',
     doNumber: '',
     items: [] as GoodsReceiptItem[],
@@ -37,8 +38,8 @@ export default function GoodsReceiptPage() {
   // === Invoice Preview Modal ===
   const [invoiceReceipt, setInvoiceReceipt] = useState<GoodsReceipt | null>(null);
   const [invoiceForm, setInvoiceForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    date: localDateKey(),
+    dueDate: addLocalDays(30),
     supplierInvoiceNumber: '',
     items: [] as PurchaseInvoiceItem[],
     discount: 0,
@@ -66,8 +67,8 @@ export default function GoodsReceiptPage() {
       });
     setInvoiceReceipt(r);
     setInvoiceForm({
-      date: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      date: localDateKey(),
+      dueDate: addLocalDays(30),
       supplierInvoiceNumber: '',
       items: newItems,
       discount: 0, tax: 0, notes: '',
@@ -115,7 +116,7 @@ export default function GoodsReceiptPage() {
       status: 'Belum Lunas',
       notes: invoiceForm.notes,
       branchId,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: localDateKey(),
     };
     const created = await addPurchaseInvoice(payload);
     setShowSuccessMsg(`Faktur Pembelian ${created.invoiceNumber} berhasil dibuat!`);
@@ -178,7 +179,7 @@ export default function GoodsReceiptPage() {
     } else {
       setEditing(null);
       setForm({
-        date: new Date().toISOString().split('T')[0],
+        date: localDateKey(),
         supplierId: '', doNumber: '', items: [], notes: '', status: 'Draft',
       });
     }
@@ -227,7 +228,7 @@ export default function GoodsReceiptPage() {
         receiptNumber: generateReceiptNumber(branchId),
         ...form, supplierName: supplier.name, branchId,
         receivedBy: form.status === 'Diterima' ? (currentUser?.name || 'System') : undefined,
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: localDateKey(),
       });
     }
     setShowModal(false);

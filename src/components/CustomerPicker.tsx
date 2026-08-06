@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Search, Plus, User, Phone, Check, X, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer } from '../types';
+import { localDateKey } from '../lib/date';
 
 interface CustomerPickerProps {
   value: string;
@@ -123,7 +124,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
       return;
     }
     const newId = Date.now().toString();
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey();
 
     try {
       await addCustomer({

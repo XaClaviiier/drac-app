@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Building2, Edit, Eye, KeyRound, Plus, Save, Search, Shield, Trash2, Users, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import UserSessionsTab from '../components/UserSessionsTab';
 import type { User, Role, Permission, Branch } from '../types';
@@ -137,7 +138,7 @@ export default function UsersAndRoles() {
       branchName: branch?.name || '-',
       branchIds: editingUser?.isOwner ? data.branches.filter(b=>b.isActive).map(b=>b.id) : userForm.branchIds,
       isActive: userForm.isActive,
-      createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
+      createdAt: editingUser?.createdAt || localDateKey(),
       lastLogin: editingUser?.lastLogin,
     };
     if (editingUser) updateUser(editingUser.id, payload);

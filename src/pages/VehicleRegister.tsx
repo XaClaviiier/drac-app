@@ -5,6 +5,7 @@ import { Vehicle } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
 import { api } from '../lib/apiClient';
+import { localDateKey } from '../lib/date';
 
 type CatalogModel = { id: string; name: string; isActive: boolean; brandId: string; sortOrder: number };
 type CatalogBrand = { id: string; name: string; isActive: boolean; sortOrder: number; models: CatalogModel[] };
@@ -156,7 +157,7 @@ export default function VehicleRegister() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date().toISOString().split('T')[0];
+    const now = localDateKey();
     const normalizedPlate = formData.plateNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     const duplicate = data.vehicles.find(vehicle =>
       vehicle.id !== editingVehicle?.id &&

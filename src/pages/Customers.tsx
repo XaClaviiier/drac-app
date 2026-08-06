@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer } from '../types';
+import { localDateKey } from '../lib/date';
 
 type CustomerColumn = 'name' | 'phone' | 'plates' | 'email' | 'address' | 'vehicles' | 'workOrders' | 'invoices' | 'firstBranch' | 'actions';
 const customerColumns: Array<{ id: CustomerColumn; label: string; locked?: boolean }> = [
@@ -74,7 +75,7 @@ export default function Customers() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `daftar_pelanggan_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `daftar_pelanggan_${localDateKey()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -121,7 +122,7 @@ export default function Customers() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date().toISOString().split('T')[0];
+    const now = localDateKey();
 
     if (editingCustomer) {
       updateCustomer(editingCustomer.id, {
@@ -247,7 +248,7 @@ export default function Customers() {
                         </div>
                       </td>}
                       {visibleColumns.includes('phone') && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-800">{customer.phone || '—'}</td>}
-                      {visibleColumns.includes('plates') && <td className="px-4 py-3"><div className="flex max-w-[240px] flex-wrap gap-1">{customerVehicles.slice(0, 2).map(vehicle => <span key={vehicle.id} title={vehicle.vehicleInfo} className="rounded-md bg-sky-100 px-2 py-1 font-mono text-xs font-semibold text-sky-800">{vehicle.plateNumber}</span>)}{customerVehicles.length > 2 && <span title={customerVehicles.slice(2).map(vehicle => `${vehicle.plateNumber} — ${vehicle.vehicleInfo}`).join('\n')} className="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">+{customerVehicles.length - 2} lainnya</span>}{customerVehicles.length === 0 && <span className="text-sm text-gray-400">—</span>}</div></td>}
+                      {visibleColumns.includes('plates') && <td className="px-4 py-3"><div className="flex max-w-[240px] flex-wrap gap-1">{customerVehicles.slice(0, 2).map(vehicle => <span key={vehicle.id} title={`${vehicle.brand} ${vehicle.model} ${vehicle.year || ''} - ${vehicle.color}`} className="rounded-md bg-sky-100 px-2 py-1 font-mono text-xs font-semibold text-sky-800">{vehicle.plateNumber}</span>)}{customerVehicles.length > 2 && <span title={customerVehicles.slice(2).map(vehicle => `${vehicle.plateNumber} — ${vehicle.brand} ${vehicle.model} ${vehicle.year || ''} - ${vehicle.color}`).join('\n')} className="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">+{customerVehicles.length - 2} lainnya</span>}{customerVehicles.length === 0 && <span className="text-sm text-gray-400">—</span>}</div></td>}
                       {visibleColumns.includes('email') && <td className="px-4 py-3 text-sm text-gray-700">
                         <span className="block max-w-[190px] truncate" title={customer.email}>{customer.email || '—'}</span>
                       </td>}

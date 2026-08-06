@@ -2,6 +2,7 @@
 // ==========================================================
 // DOKTER AC MOBIL - Main API Router
 // ==========================================================
+date_default_timezone_set('Asia/Makassar');
 require_once 'config.php';
 require_once 'helpers.php';
 ensureApiSupportTables($pdo);
@@ -14,6 +15,48 @@ $parts = explode('/', trim($route, '/'));
 $resource = $parts[0] ?? '';
 $id = $parts[1] ?? null;
 $action = $parts[2] ?? null;
+
+// Login adalah satu-satunya endpoint publik. Semua data bisnis harus melalui
+// sesi server yang aktif; pemeriksaan di endpoint tetap dipertahankan sebagai
+// lapisan tambahan untuk aturan yang lebih spesifik.
+$requestUser = null;
+if ($resource !== 'login') {
+    $requestUser = requireAuthenticatedUser($pdo);
+}
+
+// Hak akses dasar per modul dan metode HTTP. Endpoint dengan alur khusus
+// (pembayaran, AI, sesi) melakukan pemeriksaan tambahan di dalam endpoint.
+$permissionByResource = [
+    'branches' => 'branch', 'roles' => 'role', 'users' => 'user',
+    'customers' => 'customer', 'vehicles' => 'vehicle', 'vehicle-catalog' => 'vehicle',
+    'suppliers' => 'supplier', 'items' => 'item',
+    'item-categories' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item',
+    'work-orders' => 'wo', 'sales-invoices' => 'invoice',
+    'goods-receipts' => 'receipt', 'purchase-invoices' => 'purchase',
+];
+if ($requestUser && isset($permissionByResource[$resource])) {
+    $operationByMethod = ['GET' => 'view', 'POST' => 'create', 'PUT' => 'edit', 'PATCH' => 'edit', 'DELETE' => 'delete'];
+    $operation = $operationByMethod[$method] ?? null;
+    if ($operation !== null) {
+        $permission = ($resource === 'purchase-invoices' && $action === 'payments')
+            ? 'purchase:pay'
+            : $permissionByResource[$resource] . ':' . $operation;
+        requireAuthenticatedUserPermission($pdo, $requestUser, $permission);
+    }
+}
+
+if ($requestUser && in_array($resource, ['settings', 'ai-settings'], true)) {
+    requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'settings:view' : 'settings:edit');
+}
+if ($requestUser && $resource === 'ai-chat') {
+    requireAuthenticatedUserPermission($pdo, $requestUser, 'ai:view');
+}
+if ($requestUser && $resource === 'quick-invoices') {
+    requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
+}
+if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
+    requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
+}
 
 // ==========================================================
 // ROUTING

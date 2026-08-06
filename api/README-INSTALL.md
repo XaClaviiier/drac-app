@@ -53,15 +53,19 @@ Cek: Di panel kiri akan muncul **18 tabel** (branches, users, items, dll)
 
 ---
 
-### **STEP 3: Edit File Konfigurasi**
+### **STEP 3: Atur Konfigurasi Rahasia**
 
-Edit file `api/config.php` dan ganti bagian ini:
+Atur environment server berikut (lihat juga `.env.example`):
 
-```php
-define('DB_NAME', 'GANTI_NAMA_DATABASE');      // → username_dokterac
-define('DB_USER', 'GANTI_USER_DATABASE');       // → username_admin
-define('DB_PASS', 'GANTI_PASSWORD_DATABASE');   // → password Anda
+```text
+DRAC_DB_HOST
+DRAC_DB_NAME
+DRAC_DB_USER
+DRAC_DB_PASS
 ```
+
+Jangan menulis password database di repository. Workflow deployment tidak
+menimpa `api/config.php` milik server agar konfigurasi hosting tetap terjaga.
 
 ---
 
@@ -75,7 +79,7 @@ public_html/
 ├── .htaccess           ← Config routing (dari dist/.htaccess)
 └── api/
     ├── index.php
-    ├── config.php      ← Sudah diedit sesuai DB Anda
+    ├── config.php      ← Membaca environment server
     ├── .htaccess
     └── endpoints/
         ├── auth.php
@@ -134,40 +138,35 @@ Content-Type: application/json
 
 {
   "username": "admin",
-  "password": "admin123"
+  "password": "PASSWORD_AKUN_UJI"
 }
 ```
 
 ---
 
-### **STEP 6: Update Frontend untuk Pakai API**
+### **STEP 6: Uji Frontend dan API**
 
-Frontend perlu dimodifikasi untuk connect ke API ini. Perubahan yang perlu dilakukan:
-
-1. Set base URL API di frontend
-2. Ganti semua state management → fetch dari API
-3. Setiap add/update/delete → panggil API endpoint
-
-**Info ke saya jika ingin frontend disambungkan ke API ini**, saya akan modify kode React-nya.
+Frontend sudah menggunakan API relatif `/api`. Login, buka setiap modul, kemudian
+jalankan skenario pada `docs/GO_LIVE_CHECKLIST.md` sebelum digunakan untuk transaksi nyata.
 
 ---
 
 ## 🔒 KEAMANAN (PENTING!)
 
-### Setelah semua jalan, upgrade keamanan:
+### Sebelum dipakai untuk operasional:
 
-1. **Hash Password** — Sekarang masih plain text. Update `auth.php` untuk pakai `password_verify()`
-2. **Rate Limiting** — Batasi request per menit
-3. **JWT Token** — Tambah auth token untuk session management
-4. **Aktifkan HTTPS** — Wajib pakai SSL/Let's Encrypt
-5. **Backup Database** — Setup cronjob untuk backup mingguan
+1. **Rotasi password database dan akun awal**
+2. **Aktifkan HTTPS** — wajib memakai SSL/Let's Encrypt
+3. **Verifikasi session dan rate limit login**
+4. **Batasi role serta cabang setiap pengguna**
+5. **Backup database** — harian, serta uji restore berkala
 
 ---
 
 ## ❓ TROUBLESHOOTING
 
 ### ❌ 500 Internal Server Error
-- Cek `api/config.php` → password DB benar?
+- Cek environment `DRAC_DB_*` dan akses user database.
 - Cek versi PHP → minimal 7.4
 - Cek error log di cPanel
 
@@ -176,8 +175,7 @@ Frontend perlu dimodifikasi untuk connect ke API ini. Perubahan yang perlu dilak
 - Cek mod_rewrite aktif → hubungi hosting provider
 
 ### ❌ CORS error dari browser
-- Sudah di-handle di `.htaccess` dan `config.php`
-- Jika masih error, whitelist domain spesifik di `config.php`
+- Cek header origin pada `api/.htaccess` dan pastikan domain produksi yang dipakai.
 
 ### ❌ Database connection failed
 - Pastikan nama DB pakai prefix cPanel (username_)

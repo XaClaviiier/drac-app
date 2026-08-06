@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Clock3, History, Laptop, LogOut, RefreshCw, Settings2, ShieldCheck } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import { useApp } from '../context/AppContext';
+import { localDateKey } from '../lib/date';
 
 type Session = { sessionId:string;userId:string;name:string;username:string;branchName:string;createdAt:string;lastActivity:string;expiresAt:string;ipAddress:string;userAgent:string;status:'online'|'idle';isOwner:boolean };
 type Rule = { userId:string;sessionHours:number;idleTimeoutMinutes:number;scheduleMode:'unrestricted'|'custom';schedule:Record<string,{enabled:boolean;start:string;end:string}>;singleDevice:boolean;autoLogout:boolean };
@@ -16,7 +17,7 @@ export default function UserSessionsTab(){
   const load=async()=>{setLoading(true);const r=await api.get('user-sessions');if(r.success&&r.data)setPayload(r.data);setLoading(false)};
   useEffect(()=>{load()},[]);
   const online=payload.sessions.filter(s=>s.status==='online').length;
-  const todayLogs=payload.logs.filter(l=>l.createdAt?.slice(0,10)===new Date().toISOString().slice(0,10));
+  const todayLogs=payload.logs.filter(l=>l.createdAt?.slice(0,10)===localDateKey());
   const openRule=(userId:string)=>{const current=payload.rules.find(r=>r.userId===userId);setRule(current?{sessionHours:current.sessionHours,idleTimeoutMinutes:current.idleTimeoutMinutes??30,scheduleMode:current.scheduleMode,schedule:{...defaultSchedule,...current.schedule},singleDevice:current.singleDevice,autoLogout:current.autoLogout}:{sessionHours:8,idleTimeoutMinutes:30,scheduleMode:'unrestricted',schedule:defaultSchedule,singleDevice:false,autoLogout:true});setEditing(userId)};
   const saveRule=async(e:React.FormEvent)=>{e.preventDefault();if(!editing)return;const r=await api.update('user-sessions',`${editing}/rules`,rule);if(!r.success)return alert(r.message);setEditing(null);await load()};
   const revoke=async(s:Session)=>{if(!confirm(`Putuskan sesi ${s.name}?`))return;const r=await api.remove('user-sessions',s.sessionId);if(!r.success)alert(r.message);else await load()};
@@ -32,4 +33,4 @@ export default function UserSessionsTab(){
 }
 function Stat({label,value,color}:{label:string;value:number;color:string}){const colorClass=color==='emerald'?'text-emerald-600':color==='red'?'text-red-600':'text-blue-600';return <div className="rounded-xl border bg-white p-4"><p className="text-sm text-gray-500">{label}</p><p className={`text-2xl font-bold ${colorClass}`}>{value}</p></div>}
 function deviceName(ua:string){if(!ua)return'-';const os=/Android/i.test(ua)?'Android':/iPhone|iPad/i.test(ua)?'iOS':/Windows/i.test(ua)?'Windows':'Perangkat';const browser=/Edg/i.test(ua)?'Edge':/Chrome/i.test(ua)?'Chrome':/Firefox/i.test(ua)?'Firefox':/Safari/i.test(ua)?'Safari':'Browser';return `${browser} · ${os}`}
-function EventBadge({event}:{event:string}){const ok=event==='login_success';return <span className={`rounded px-2 py-1 text-xs ${ok?'bg-emerald-100 text-emerald-700':event==='logout'?'bg-gray-100 text-gray-600':'bg-red-100 text-red-700'}`}>{event.replaceAll('_',' ')}</span>}
+function EventBadge({event}:{event:string}){const ok=event==='login_success';return <span className={`rounded px-2 py-1 text-xs ${ok?'bg-emerald-100 text-emerald-700':event==='logout'?'bg-gray-100 text-gray-600':'bg-red-100 text-red-700'}`}>{event.replace(/_/g,' ')}</span>}

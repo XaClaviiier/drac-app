@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
+import { localDateKey } from '../lib/date';
 import type { WorkOrder, WorkOrderService } from '../types';
 
 const GROQ_URL = `${window.location.origin}/api/ai-chat`;
@@ -65,7 +66,7 @@ const render = (t: string) =>
 
 export default function AIAssistant() {
   const {
-    data, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId,
+    data, currentUser, currentBranchId, setCurrentBranchId,
     addWorkOrder, addCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
     hasPermission, refreshData,
   } = useApp();
@@ -545,7 +546,7 @@ export default function AIAssistant() {
 
     if (/\b(wo|order kerja)\b/.test(lower)) {
       const status = ['pengecekan', 'proses', 'selesai', 'dibayar', 'batal'].find((item) => lower.includes(item));
-      const today = new Date().toISOString().split('T')[0];
+      const today = localDateKey();
       const filtered = data.workOrders
         .filter((wo) => allowedBranchIds.has(wo.branchId))
         .filter((wo) => !status || wo.status.toLowerCase() === status)
@@ -706,7 +707,7 @@ export default function AIAssistant() {
 
   const buildSmartContext = (userMsgText: string): string => {
     const parts: string[] = [];
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey();
     const lower = userMsgText.toLowerCase();
     const words = lower.split(/[^a-z0-9]+/).filter(w => w.length > 2);
 

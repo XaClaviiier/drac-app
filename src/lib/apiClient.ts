@@ -84,7 +84,7 @@ export const api = {
     request('/ai-chat', { method: 'POST', body: JSON.stringify({ messages }) }),
 
   // ========== GENERIC CRUD ==========
-  get: (resource: string) => request(`/${resource}`, { method: 'GET' }),
+  get: <T = any>(resource: string) => request<T>(`/${resource}`, { method: 'GET' }),
   create: (resource: string, data: any) =>
     request(`/${resource}`, { method: 'POST', body: JSON.stringify(data) }),
   update: (resource: string, id: string, data: any) =>
@@ -102,6 +102,11 @@ export const api = {
     request(`/purchase-invoices/${invoiceId}/payments`, {
       method: 'POST',
       body: JSON.stringify(payment),
+    }),
+  deletePurchasePayment: (invoiceId: string, paymentId: string) =>
+    request(`/purchase-invoices/${invoiceId}/payments`, {
+      method: 'DELETE',
+      body: JSON.stringify({ paymentId }),
     }),
   createInvoiceFromWorkOrder: (woId: string, payment: number, paymentMethod: 'Tunai' | 'Transfer', date?: string, paymentDate?: string, backdateReason?: string, items?: any[]) =>
     request('/sales-invoices/from-work-order', {

@@ -6,6 +6,19 @@
 if ($method !== 'GET') respondError('Method not allowed', 405);
 
 try {
+    $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+    $allowedBranchIds = getAccessibleBranchIds($pdo, $actor);
+    $allowedBranchMap = array_fill_keys($allowedBranchIds, true);
+    $canViewUsers = authenticatedUserHasPermission($pdo, $actor, 'user:view');
+    $canViewRoles = authenticatedUserHasPermission($pdo, $actor, 'role:view');
+    $canUseAi = authenticatedUserHasPermission($pdo, $actor, 'ai:view');
+    $canUseCustomers = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'customer:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create');
+    $canUseVehicles = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'vehicle:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create');
+    $canUseItems = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'item:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create') || authenticatedUserHasPermission($pdo, $actor, 'invoice:create');
+    $canUseWorkOrders = authenticatedUserHasPermission($pdo, $actor, 'wo:view');
+    $canUseInvoices = authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view');
+    $canUseReceipts = authenticatedUserHasPermission($pdo, $actor, 'receipt:view');
+    $canUsePurchases = authenticatedUserHasPermission($pdo, $actor, 'purchase:view');
     $data = [];
 
     // Migrasi ringan agar field master barang baru langsung tersedia setelah deploy.
@@ -38,7 +51,7 @@ try {
     // Branches
     $rows = $pdo->query("SELECT * FROM branches ORDER BY code")->fetchAll();
     foreach ($rows as &$r) $r['isActive'] = (bool)$r['is_active'];
-    $data['branches'] = $rows;
+    $data['branches'] = array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['id']])));
 
     // Roles
     $rows = $pdo->query("SELECT * FROM roles ORDER BY code")->fetchAll();
@@ -46,7 +59,9 @@ try {
         $r['isActive'] = (bool)$r['is_active'];
         $r['permissions'] = $r['permissions'] ? json_decode($r['permissions']) : [];
     }
-    $data['roles'] = $rows;
+    $data['roles'] = $canViewRoles
+        ? $rows
+        : array_values(array_filter($rows, fn($row) => (string)$row['id'] === (string)($actor['role_id'] ?? '')));
 
     // Users (tanpa password)
     $rows = $pdo->query("SELECT u.*, r.name as role_name, b.name as branch_name FROM users u LEFT JOIN roles r ON u.role_id = r.id LEFT JOIN branches b ON u.branch_id = b.id")->fetchAll();
@@ -60,7 +75,22 @@ try {
         $r['branchIds'] = getUserBranchIds($pdo, $r['id']);
         $r['lastLogin'] = $r['last_login']; $r['createdAt'] = $r['created_at'];
     }
-    $data['users'] = $rows;
+    if ($canViewUsers) {
+        $data['users'] = $rows;
+    } elseif ($canUseWorkOrders) {
+        // Untuk penugasan teknisi cukup kirim identitas operasional, bukan data akun.
+        $data['users'] = array_map(function($row) {
+            return [
+                'id' => $row['id'], 'name' => $row['name'], 'username' => '', 'email' => '',
+                'roleId' => $row['roleId'], 'roleName' => $row['roleName'],
+                'branchId' => $row['branchId'], 'branchName' => $row['branchName'],
+                'branchIds' => $row['branchIds'], 'isActive' => $row['isActive'],
+                'isOwner' => false, 'isProtected' => false, 'createdAt' => '',
+            ];
+        }, array_values(array_filter($rows, fn($row) => !empty($row['isActive']) && count(array_intersect($row['branchIds'], $allowedBranchIds)) > 0)));
+    } else {
+        $data['users'] = array_values(array_filter($rows, fn($row) => (string)$row['id'] === (string)$actor['id']));
+    }
 
     // Customers
     $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
@@ -70,7 +100,7 @@ try {
         $r['firstSeenBranchId'] = $r['first_seen_branch_id'] ?? $r['branch_id'];
         $r['createdAt']         = $r['created_at'];
     }
-    $data['customers'] = $rows;
+    $data['customers'] = $canUseCustomers ? $rows : [];
 
     // Vehicles
     $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
@@ -83,7 +113,7 @@ try {
         $r['branchId']          = $r['branch_id'];
         $r['firstSeenBranchId'] = $r['first_seen_branch_id'] ?? $r['branch_id'];
     }
-    $data['vehicles'] = $rows;
+    $data['vehicles'] = $canUseVehicles ? $rows : [];
 
     // Suppliers
     $rows = $pdo->query("SELECT * FROM suppliers ORDER BY code")->fetchAll();
@@ -92,12 +122,12 @@ try {
         $r['isActive'] = (bool)$r['is_active'];
         $r['createdAt'] = $r['created_at'];
     }
-    $data['suppliers'] = $rows;
+    $data['suppliers'] = ($canUseReceipts || $canUsePurchases || authenticatedUserHasPermission($pdo, $actor, 'supplier:view')) ? $rows : [];
 
     // Item Categories
     $rows = $pdo->query("SELECT * FROM item_categories ORDER BY code")->fetchAll();
     foreach ($rows as &$r) $r['isActive'] = (bool)$r['is_active'];
-    $data['itemCategories'] = $rows;
+    $data['itemCategories'] = $canUseItems ? $rows : [];
 
     // Items (with group members)
     $rows = $pdo->query("SELECT * FROM items ORDER BY code")->fetchAll();
@@ -136,25 +166,30 @@ try {
         $r['isQuickService'] = (bool)$r['is_quick_service'];
         $r['receiptDescription'] = $r['receipt_description'] ?? '';
         $r['branchId'] = $r['branch_id'];
-        $r['branchStocks'] = $stocksByItem[$r['id']] ?? [];
+        $r['branchStocks'] = array_intersect_key($stocksByItem[$r['id']] ?? [], $allowedBranchMap);
         $r['stock'] = array_sum(array_column($r['branchStocks'], 'stock'));
         $r['sellableStock'] = array_sum(array_column($r['branchStocks'], 'sellableStock'));
         if ($r['type'] === 'Group') {
             $r['groupMembers'] = $membersByGroup[$r['id']] ?? [];
         }
     }
-    $data['items'] = $rows;
+    $data['items'] = $canUseItems ? $rows : [];
 
     // Gudang, saldo stok per gudang, dan histori mutasi.
     $warehouses = $pdo->query("SELECT w.*,b.name branch_name FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id COLLATE utf8mb4_unicode_ci ORDER BY b.name,w.is_default DESC,w.name")->fetchAll();
     foreach($warehouses as &$w){$w['branchId']=$w['branch_id'];$w['branchName']=$w['branch_name'];$w['isDefault']=(bool)$w['is_default'];$w['isSellable']=(bool)$w['is_sellable'];$w['isActive']=(bool)$w['is_active'];}
-    $data['warehouses']=$warehouses;
+    $warehouses = array_values(array_filter($warehouses, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']])));
+    $data['warehouses']=($canUseItems || $canUseReceipts || $canUsePurchases) ? $warehouses : [];
+    $allowedWarehouseMap = array_fill_keys(array_map(fn($row) => (string)$row['id'], $warehouses), true);
     $warehouseStocks=$pdo->query("SELECT warehouse_id,item_id,quantity,reserved_quantity FROM warehouse_stocks")->fetchAll();
     foreach($warehouseStocks as &$s){$s['warehouseId']=$s['warehouse_id'];$s['itemId']=$s['item_id'];$s['quantity']=(int)$s['quantity'];$s['reservedQuantity']=(int)$s['reserved_quantity'];}
-    $data['warehouseStocks']=$warehouseStocks;
+    $data['warehouseStocks']=$canUseItems ? array_values(array_filter($warehouseStocks, fn($row) => isset($allowedWarehouseMap[(string)$row['warehouse_id']]))) : [];
     $movements=$pdo->query("SELECT m.*,i.name item_name,sw.name source_name,dw.name destination_name FROM stock_movements m JOIN items i ON i.id=m.item_id COLLATE utf8mb4_unicode_ci LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id ORDER BY m.created_at DESC LIMIT 200")->fetchAll();
     foreach($movements as &$m){$m['itemId']=$m['item_id'];$m['itemName']=$m['item_name'];$m['sourceWarehouseId']=$m['source_warehouse_id'];$m['sourceName']=$m['source_name'];$m['destinationWarehouseId']=$m['destination_warehouse_id'];$m['destinationName']=$m['destination_name'];$m['movementType']=$m['movement_type'];$m['quantity']=(int)$m['quantity'];$m['createdAt']=$m['created_at'];}
-    $data['stockMovements']=$movements;
+    $data['stockMovements']=$canUseItems ? array_values(array_filter($movements, function($row) use ($allowedWarehouseMap) {
+        return (!empty($row['source_warehouse_id']) && isset($allowedWarehouseMap[(string)$row['source_warehouse_id']]))
+            || (!empty($row['destination_warehouse_id']) && isset($allowedWarehouseMap[(string)$row['destination_warehouse_id']]));
+    })) : [];
 
     // Work Orders
     $rows = $pdo->query("SELECT * FROM work_orders ORDER BY date DESC, wo_number DESC")->fetchAll();
@@ -210,7 +245,7 @@ try {
         $r['continuedToBranchName']   = $r['continued_to_branch_name'] ?? null;
         $r['services']                = $servicesByWO[$r['id']] ?? [];
     }
-    $data['workOrders'] = $rows;
+    $data['workOrders'] = $canUseWorkOrders ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];
 
     // Sales Invoices
     $rows = $pdo->query("SELECT * FROM sales_invoices ORDER BY date DESC, invoice_number DESC")->fetchAll();
@@ -240,7 +275,7 @@ try {
         $r['branchId'] = $r['branch_id'];
         $r['items'] = $itemsBySalesInvoice[$r['id']] ?? [];
     }
-    $data['invoices'] = $rows;
+    $data['invoices'] = $canUseInvoices ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];
 
     // Goods Receipts
     $rows = $pdo->query("SELECT * FROM goods_receipts ORDER BY date DESC")->fetchAll();
@@ -267,7 +302,7 @@ try {
         $r['createdAt'] = $r['created_at'];
         $r['items'] = $itemsByReceipt[$r['id']] ?? [];
     }
-    $data['goodsReceipts'] = $rows;
+    $data['goodsReceipts'] = $canUseReceipts ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];
 
     // Purchase Invoices
     $rows = $pdo->query("SELECT * FROM purchase_invoices ORDER BY date DESC")->fetchAll();
@@ -297,7 +332,7 @@ try {
             'date' => $p['date'],
             'amount' => (float)$p['amount'],
             'paymentMethod' => $p['payment_method'],
-            'bankAccount' => $p['bank_account'],
+            'bankAccount' => $p['account_id'] ?? $p['bank_account'],
             'notes' => $p['notes'],
         ];
     }
@@ -318,7 +353,7 @@ try {
         $r['payments'] = $paymentsById[$r['id']] ?? [];
         $r['receiptIds'] = array_values(array_unique(array_map(function($x) { return $x['receiptId']; }, $r['items'])));
     }
-    $data['purchaseInvoices'] = $rows;
+    $data['purchaseInvoices'] = $canUsePurchases ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];
 
     $settingsTable = $pdo->query("SHOW TABLES LIKE 'app_settings'")->fetch();
     if ($settingsTable) {

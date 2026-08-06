@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { api } from "../lib/apiClient";
+import { localDateKey } from "../lib/date";
 import { useApp } from "../context/AppContext";
 type Summary = {
   branchId: string;
@@ -31,7 +32,7 @@ export default function BranchDeposits() {
     [accounts, setAccounts] = useState<Account[]>([]),
     [loading, setLoading] = useState(false),
     [show, setShow] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
   const [form, setForm] = useState({
     branchId: "",
     sourceAccountId: "",

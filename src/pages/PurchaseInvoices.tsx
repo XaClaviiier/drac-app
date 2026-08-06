@@ -1,7 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, Wallet, Eye, CreditCard, Receipt, Filter, Download, Printer } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { PurchaseInvoice, PurchaseInvoiceItem, PurchasePayment, GoodsReceipt } from '../types';
+import { addLocalDays, localDateKey } from '../lib/date';
+import { api } from '../lib/apiClient';
+
+type CashAccount = {
+  id: string;
+  name: string;
+  code?: string;
+  accountType: 'cash' | 'bank';
+  branchId?: string | null;
+  isActive: boolean;
+};
 
 export default function PurchaseInvoicesPage() {
   const {
@@ -15,13 +26,14 @@ export default function PurchaseInvoicesPage() {
   const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | '7_days' | '30_days' | 'custom' | 'all'>('this_month');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<PurchaseInvoice | null>(null);
   const [viewing, setViewing] = useState<PurchaseInvoice | null>(null);
   const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    date: localDateKey(),
+    dueDate: addLocalDays(30),
     supplierId: '',
     supplierInvoiceNumber: '',
     receiptIds: [] as string[],
@@ -33,10 +45,18 @@ export default function PurchaseInvoicesPage() {
 
   const [showReceiptPicker, setShowReceiptPicker] = useState(false);
 
+  useEffect(() => {
+    let mounted = true;
+    api.get<CashAccount[]>('cash-accounts').then((result) => {
+      if (mounted && result.success) setCashAccounts(result.data || []);
+    });
+    return () => { mounted = false; };
+  }, []);
+
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<PurchaseInvoice | null>(null);
   const [paymentForm, setPaymentForm] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: localDateKey(),
     amount: 0,
     paymentMethod: 'Transfer Bank' as PurchasePayment['paymentMethod'],
     bankAccount: '',
@@ -123,8 +143,8 @@ export default function PurchaseInvoicesPage() {
     } else {
       setEditing(null);
       setForm({
-        date: new Date().toISOString().split('T')[0],
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        date: localDateKey(),
+        dueDate: addLocalDays(30),
         supplierId: '', supplierInvoiceNumber: '', receiptIds: [], items: [], discount: 0, tax: 0, notes: '',
       });
     }
@@ -198,7 +218,7 @@ export default function PurchaseInvoicesPage() {
       paidAmount: editing?.paidAmount || 0,
       status: editing?.status || 'Belum Lunas',
       notes: form.notes, branchId,
-      createdAt: editing?.createdAt || new Date().toISOString().split('T')[0],
+      createdAt: editing?.createdAt || localDateKey(),
     };
 
     if (editing) updatePurchaseInvoice(editing.id, payload);
@@ -220,7 +240,7 @@ export default function PurchaseInvoicesPage() {
     const remaining = inv.total - inv.paidAmount;
     setPayingInvoice(inv);
     setPaymentForm({
-      date: new Date().toISOString().split('T')[0],
+      date: localDateKey(),
       amount: remaining,
       paymentMethod: 'Transfer Bank',
       bankAccount: '',
@@ -229,10 +249,11 @@ export default function PurchaseInvoicesPage() {
     setShowPaymentModal(true);
   };
 
-  const savePayment = (e: React.FormEvent) => {
+  const savePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingInvoice) return;
     if (paymentForm.amount <= 0) { window.alert('Jumlah pembayaran harus > 0'); return; }
+    if (!paymentForm.bankAccount) { window.alert('Pilih akun kas/bank pembayaran.'); return; }
     const remaining = payingInvoice.total - payingInvoice.paidAmount;
     if (paymentForm.amount > remaining) {
       if (!window.confirm(`Pembayaran melebihi sisa tagihan (Rp ${remaining.toLocaleString('id-ID')}). Lanjutkan?`)) return;
@@ -246,9 +267,13 @@ export default function PurchaseInvoicesPage() {
       bankAccount: paymentForm.bankAccount,
       notes: paymentForm.notes,
     };
-    addPurchasePayment(payingInvoice.id, payment);
-    setShowPaymentModal(false);
-    setViewing(prev => prev ? data.purchaseInvoices.find(p => p.id === prev.id) || prev : prev);
+    try {
+      await addPurchasePayment(payingInvoice.id, payment);
+      setShowPaymentModal(false);
+      setViewing(null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Pembayaran supplier gagal disimpan');
+    }
   };
 
   const removePayment = (invId: string, paymentId: string) => {
@@ -704,19 +729,27 @@ export default function PurchaseInvoicesPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Metode Bayar *</label>
-                <select value={paymentForm.paymentMethod} onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value as PurchasePayment['paymentMethod'] })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500">
+                <select value={paymentForm.paymentMethod} onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value as PurchasePayment['paymentMethod'], bankAccount: '' })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500">
                   <option value="Kas">Kas</option>
                   <option value="Transfer Bank">Transfer Bank</option>
                   <option value="Cek">Cek</option>
                   <option value="Lainnya">Lainnya</option>
                 </select>
               </div>
-              {(paymentForm.paymentMethod === 'Transfer Bank' || paymentForm.paymentMethod === 'Cek') && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">No. Rekening / Cek</label>
-                  <input value={paymentForm.bankAccount} onChange={(e) => setPaymentForm({ ...paymentForm, bankAccount: e.target.value })} placeholder="Mis: BCA 1234567890" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-green-500" />
-                </div>
-              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Akun Pembayaran *</label>
+                <select required value={paymentForm.bankAccount} onChange={(e) => setPaymentForm({ ...paymentForm, bankAccount: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-green-500">
+                  <option value="">Pilih akun kas/bank</option>
+                  {cashAccounts
+                    .filter(account => account.isActive !== false)
+                    .filter(account => !account.branchId || account.branchId === payingInvoice.branchId)
+                    .filter(account => paymentForm.paymentMethod === 'Kas' ? account.accountType === 'cash' : account.accountType === 'bank')
+                    .map(account => <option key={account.id} value={account.id}>{account.code ? `${account.code} - ` : ''}{account.name}</option>)}
+                </select>
+                {cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === payingInvoice.branchId)).length === 0 && (
+                  <p className="mt-1 text-xs text-red-600">Belum ada akun kas/bank aktif untuk cabang faktur.</p>
+                )}
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Catatan</label>
                 <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} rows={2} className="w-full resize-none rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-green-500" />

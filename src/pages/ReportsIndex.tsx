@@ -3,12 +3,12 @@ import { BarChart3, Boxes, Coins, History, Landmark, ShoppingCart, Wrench } from
 
 const reports = [
   { label: 'Laporan WO', description: 'Status, nilai, pelanggan, kendaraan, dan cabang.', icon: Wrench, path: '/reports/workorders', tone: 'green' },
-  { label: 'Laporan Penjualan', description: 'Faktur, pembayaran, pendapatan, dan piutang.', icon: BarChart3, tone: 'green' },
-  { label: 'Laporan Pembelian', description: 'Pembelian, pembayaran supplier, dan utang.', icon: ShoppingCart, tone: 'blue' },
-  { label: 'Laporan Persediaan', description: 'Stok, mutasi, nilai persediaan, dan minimum.', icon: Boxes, tone: 'blue' },
-  { label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, dan setoran cabang.', icon: Landmark, tone: 'purple' },
+  { label: 'Laporan Penjualan', description: 'Faktur, pembayaran, pendapatan, dan piutang.', icon: BarChart3, path: '/reports/sales', tone: 'green' },
+  { label: 'Laporan Pembelian', description: 'Pembelian, pembayaran supplier, dan utang.', icon: ShoppingCart, path: '/reports/purchases', tone: 'blue' },
+  { label: 'Laporan Persediaan', description: 'Stok, nilai persediaan, gudang, dan stok kosong.', icon: Boxes, path: '/reports/inventory', tone: 'blue' },
+  { label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, transfer, dan saldo akun.', icon: Landmark, path: '/reports/cash-bank', tone: 'purple' },
   { label: 'Kinerja & Bonus', description: 'Kehadiran, produktivitas teknisi, rules custom, dan pembayaran bonus.', icon: Coins, path: '/performance-bonus', tone: 'purple' },
-  { label: 'Audit Log', description: 'Riwayat aktivitas dan perubahan data pengguna.', icon: History, path: '/users', tone: 'purple' },
+  { label: 'Audit Log', description: 'Riwayat aktivitas dan perubahan data pengguna.', icon: History, tone: 'purple' },
 ] as const;
 
 export default function ReportsIndex() {

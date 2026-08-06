@@ -5,11 +5,12 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WOStatus, WorkOrder } from '../types';
+import { localDateKey } from '../lib/date';
 
 const statuses: Array<WOStatus | ''> = ['', 'Pengecekan', 'Pending', 'Proses', 'Selesai', 'Invoiced', 'Closed'];
 const rupiah = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const dateLabel = (value: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('id-ID') : '-';
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDateKey();
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 const statusTone: Record<WOStatus, string> = {
@@ -84,7 +85,7 @@ export default function WorkOrderReport() {
     const start = new Date(end);
     if (mode === 'week') start.setDate(end.getDate() - 6);
     if (mode === 'month') start.setDate(1);
-    setDateFrom(mode === 'today' ? today() : start.toISOString().slice(0, 10));
+    setDateFrom(mode === 'today' ? today() : localDateKey(start));
     setDateTo(today());
   };
 

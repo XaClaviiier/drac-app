@@ -3,6 +3,7 @@ import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item,
 import { api } from '../lib/apiClient';
 import { demoData } from '../lib/demoData';
 import { failSystemProcess, finishSystemProcess, startSystemProcess } from '../lib/processQueue';
+import { localDateKey } from '../lib/date';
 
 interface AppContextType {
   data: AppData;
@@ -79,7 +80,9 @@ const emptyData: AppData = {
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-const allowDemoMode = import.meta.env.DEV;
+// Demo tidak boleh aktif hanya karena backend gagal. Pengembang harus
+// mengaktifkannya secara eksplisit dan build produksi tetap selalu memakai API.
+const allowDemoMode = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_MODE === 'true';
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData);
@@ -478,10 +481,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isStatusTransitionAllowed = (from: WOStatus, to: WOStatus): boolean => {
     if (from === to) return false;
     const forward: Record<WOStatus, WOStatus[]> = {
-      Pengecekan: ['Proses', 'Pending'],
-      Pending: ['Pengecekan', 'Proses'],
-      Proses: ['Selesai', 'Pengecekan', 'Closed'],
-      Selesai: ['Invoiced', 'Proses'],
+      Pengecekan: ['Proses', 'Pending', 'Selesai', 'Closed'],
+      Pending: ['Proses', 'Closed'],
+      Proses: ['Selesai', 'Closed'],
+      Selesai: ['Invoiced'],
       Invoiced: [],
       Closed: [],
     };
@@ -544,7 +547,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : wo.pendingUntil,
       pendingReason: nextStatus === 'Pending' ? reason?.trim() : wo.pendingReason,
       approvedAt: (wo.status === 'Pengecekan' || wo.status === 'Pending') && nextStatus === 'Proses'
-        ? new Date().toISOString().split('T')[0]
+        ? localDateKey()
         : wo.approvedAt,
       estimateTotal: wo.status === 'Pengecekan' && nextStatus === 'Proses' && !wo.estimateTotal
         ? wo.total
@@ -562,7 +565,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const tgtBranch = data.branches.find(b => b.id === targetBranchId);
     if (!tgtBranch) return null;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey();
     const newWoNumber = generateDocumentNumber('workOrder', targetBranchId);
     const newId = Date.now().toString();
 
@@ -619,7 +622,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
 
-    const today = invoiceDate || new Date().toISOString().split('T')[0];
+    const today = invoiceDate || localDateKey();
     const finalItems = (invoiceItems || wo.services).map((item, index) => ({ ...item, id: `${Date.now()}-${index}` }));
     const invoiceTotal = finalItems.reduce((sum, item) => sum + item.price * item.qty, 0);
     const status: SalesInvoice['status'] = payment >= invoiceTotal ? 'Lunas' : 'Belum Lunas';
@@ -822,10 +825,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
   const deletePurchasePayment = async (invoiceId: string, paymentId: string) => {
-    // Backend belum expose delete payment, workaround: skip or use PUT
-    // Untuk sekarang, refresh saja
-    console.warn('Delete payment endpoint not yet implemented on backend', invoiceId, paymentId);
-    await refreshData();
+    await executeCRUD(
+      () => api.deletePurchasePayment(invoiceId, paymentId),
+      () => setData(prev => ({
+        ...prev,
+        purchaseInvoices: prev.purchaseInvoices.map(inv => {
+          if (inv.id !== invoiceId) return inv;
+          const payments = inv.payments.filter(payment => payment.id !== paymentId);
+          const paidAmount = payments.reduce((sum, payment) => sum + payment.amount, 0);
+          const status: PurchaseInvoice['status'] = paidAmount <= 0 ? 'Belum Lunas' : (paidAmount >= inv.total ? 'Lunas' : 'Sebagian');
+          return { ...inv, payments, paidAmount, status };
+        }),
+      }))
+    );
   };
 
   return (

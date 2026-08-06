@@ -5,15 +5,28 @@
 // GANTI value di bawah dengan info database cPanel Anda!
 // ==========================================================
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'cer46181_dokterac');
-define('DB_USER', 'cer46181_dokterac');
-define('DB_PASS', '12345678');
+// Kredensial wajib berasal dari environment hosting; jangan simpan secret di Git.
+define('DB_HOST', getenv('DRAC_DB_HOST') ?: '');
+define('DB_NAME', getenv('DRAC_DB_NAME') ?: '');
+define('DB_USER', getenv('DRAC_DB_USER') ?: '');
+define('DB_PASS', getenv('DRAC_DB_PASS') ?: '');
 
 // ==========================================================
 // CORS - agar frontend bisa akses API
 // ==========================================================
-header("Access-Control-Allow-Origin: *");
+date_default_timezone_set('Asia/Makassar');
+
+$requestOrigin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOrigins = [
+    'https://cerdikapp.my.id',
+    'https://www.cerdikapp.my.id',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+];
+if ($requestOrigin !== '' && in_array($requestOrigin, $allowedOrigins, true)) {
+    header('Access-Control-Allow-Origin: ' . $requestOrigin);
+    header('Vary: Origin');
+}
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
