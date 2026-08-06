@@ -15,6 +15,8 @@ switch ($method) {
             $r['branchId']                = $r['branch_id'];
             $r['createdBy']               = $r['created_by'] ?? null;
             $r['createdByName']           = $r['created_by_name'] ?? null;
+            $r['technicianId']            = $r['technician_id'] ?? null;
+            $r['technicianName']          = $r['technician_name'] ?? null;
             $r['backdateReason']          = $r['backdate_reason'] ?? null;
             $r['invoiceId']               = $r['invoice_id'];
             $r['invoiceNumber']           = $r['invoice_number'];
@@ -93,10 +95,10 @@ switch ($method) {
                     vehicle_ref_id, plate_number, vehicle_info,
                     description, findings, diagnosis_temperature, diagnosis_lp, diagnosis_hp, final_temperature, final_lp, final_hp,
                     total, estimate_total, approved_at, pending_at, pending_until, pending_reason,
-                    status, cancel_reason, status_log, notes, branch_id, created_by, created_by_name,
+                    status, cancel_reason, status_log, notes, branch_id, created_by, created_by_name, technician_id, technician_name,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $woId, $woNumber, $transactionDate, $backdateReason ?: null,
@@ -112,6 +114,7 @@ switch ($method) {
                 $d['cancelReason'] ?? null,
                 isset($d['statusLog']) ? json_encode($d['statusLog']) : null,
                 $d['notes'] ?? '', $branchId, $actor['id'] ?? null, $actor['name'] ?? null,
+                ($d['technicianId'] ?? '') ?: null, ($d['technicianName'] ?? '') ?: null,
                 $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
                 $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
             ]);
@@ -186,7 +189,7 @@ switch ($method) {
                     description=?, findings=?, diagnosis_temperature=?, diagnosis_lp=?, diagnosis_hp=?, final_temperature=?, final_lp=?, final_hp=?,
                     total=?, estimate_total=?, approved_at=?,
                     pending_at=?, pending_until=?, pending_reason=?,
-                    status=?, cancel_reason=?, status_log=?, notes=?, branch_id=?,
+                    status=?, cancel_reason=?, status_log=?, notes=?, branch_id=?, technician_id=?, technician_name=?,
                     invoice_id=?, invoice_number=?,
                     continued_from_wo_id=?, continued_from_wo_number=?, continued_from_branch_name=?,
                     continued_to_wo_id=?, continued_to_wo_number=?, continued_to_branch_name=?
@@ -206,6 +209,7 @@ switch ($method) {
                 $d['cancelReason'] ?? null,
                 isset($d['statusLog']) ? json_encode($d['statusLog']) : null,
                 $d['notes'] ?? '', $d['branchId'] ?? 'BR-001',
+                ($d['technicianId'] ?? '') ?: null, ($d['technicianName'] ?? '') ?: null,
                 $d['invoiceId'] ?? null, $d['invoiceNumber'] ?? null,
                 $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
                 $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,

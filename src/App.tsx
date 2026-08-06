@@ -22,6 +22,7 @@ import CustomerPayments from './pages/CustomerPayments';
 import BranchDeposits from './pages/BranchDeposits';
 import CashAccounts from './pages/CashAccounts';
 import ChartOfAccounts from './pages/ChartOfAccounts';
+import PerformanceBonus from './pages/PerformanceBonus';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useApp();
@@ -58,6 +59,7 @@ function AppRoutes() {
         <Route path="workorders" element={<WorkOrders />} />
         <Route path="reports/workorders" element={<WorkOrderReport />} />
         <Route path="reports" element={<ReportsIndex />} />
+        <Route path="performance-bonus" element={<PerformanceBonus />} />
         <Route path="items" element={<ItemsAndServices />} />
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="receipts" element={<GoodsReceiptPage />} />

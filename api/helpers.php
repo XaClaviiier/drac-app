@@ -101,6 +101,8 @@ function ensureApiSupportTables(PDO $pdo): void {
     $workOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM work_orders")->fetchAll(), 'Field');
     if (!in_array('created_by', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by VARCHAR(64) NULL AFTER branch_id");
     if (!in_array('created_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by_name VARCHAR(150) NULL AFTER created_by");
+    if (!in_array('technician_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_id VARCHAR(64) NULL AFTER created_by_name");
+    if (!in_array('technician_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_name VARCHAR(150) NULL AFTER technician_id");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS document_sequences (
             document_type ENUM('work_order','sales_invoice') NOT NULL,
@@ -274,6 +276,45 @@ function ensureApiSupportTables(PDO $pdo): void {
         verified_by VARCHAR(64) NULL, verified_by_name VARCHAR(150) NULL, verified_at DATETIME NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_deposit_branch (branch_id), INDEX idx_deposit_date (date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS technician_attendance (
+        id VARCHAR(64) PRIMARY KEY, attendance_date DATE NOT NULL, user_id VARCHAR(64) NOT NULL,
+        user_name VARCHAR(150) NOT NULL, branch_id VARCHAR(20) NOT NULL,
+        status ENUM('Hadir','Izin','Sakit','Libur','Alpha') NOT NULL DEFAULT 'Hadir',
+        check_in TIME NULL, check_out TIME NULL, late_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        notes VARCHAR(255) NULL, created_by VARCHAR(64) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_attendance_day (attendance_date,user_id,branch_id),
+        INDEX idx_attendance_date (attendance_date), INDEX idx_attendance_branch (branch_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bonus_rules (
+        id VARCHAR(64) PRIMARY KEY, name VARCHAR(150) NOT NULL,
+        metric ENUM('attendance_days','completed_work_orders','paid_revenue','late_minutes','absence_days') NOT NULL,
+        calculation_mode ENUM('per_unit','threshold') NOT NULL DEFAULT 'per_unit',
+        operator_symbol ENUM('gte','lte','eq') NOT NULL DEFAULT 'gte', threshold_value DECIMAL(15,2) NOT NULL DEFAULT 0,
+        result_type ENUM('points','fixed') NOT NULL DEFAULT 'points', result_value DECIMAL(15,2) NOT NULL DEFAULT 0,
+        branch_id VARCHAR(20) NULL, is_active TINYINT(1) NOT NULL DEFAULT 1,
+        valid_from DATE NULL, valid_until DATE NULL, created_by VARCHAR(64) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_bonus_rule_branch (branch_id), INDEX idx_bonus_rule_metric (metric)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bonus_runs (
+        id VARCHAR(64) PRIMARY KEY, period CHAR(7) NOT NULL, branch_id VARCHAR(20) NOT NULL,
+        bonus_pool DECIMAL(15,2) NOT NULL DEFAULT 0, total_points DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total_bonus DECIMAL(15,2) NOT NULL DEFAULT 0,
+        status ENUM('Draft','Disetujui','Dibayar') NOT NULL DEFAULT 'Draft', snapshot_json LONGTEXT NOT NULL,
+        created_by VARCHAR(64) NULL, created_by_name VARCHAR(150) NULL, approved_by_name VARCHAR(150) NULL,
+        approved_at DATETIME NULL, paid_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_bonus_run_period (period), INDEX idx_bonus_run_branch (branch_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $defaultBonusRules = [
+        ['BONUS-ATTENDANCE','Hadir penuh','attendance_days','per_unit','gte',0,'points',1],
+        ['BONUS-WO','WO selesai','completed_work_orders','per_unit','gte',0,'points',2],
+        ['BONUS-REVENUE','Pendapatan terbayar per Rp1 juta','paid_revenue','per_unit','gte',1000000,'points',1],
+        ['BONUS-LATE','Penalti keterlambatan per 15 menit','late_minutes','per_unit','gte',15,'points',-0.5],
+        ['BONUS-ABSENT','Penalti alpha','absence_days','per_unit','gte',0,'points',-3],
+    ];
+    $bonusSeed = $pdo->prepare("INSERT IGNORE INTO bonus_rules(id,name,metric,calculation_mode,operator_symbol,threshold_value,result_type,result_value,is_active) VALUES(?,?,?,?,?,?,?,?,1)");
+    foreach ($defaultBonusRules as $bonusRule) $bonusSeed->execute($bonusRule);
 
     // Setiap cabang memiliki satu gudang utama. ID mengikuti cabang agar deterministik.
     $branches = $pdo->query("SELECT id, code, name FROM branches")->fetchAll();

@@ -156,6 +156,8 @@ export default function WorkOrders() {
     services: [] as WorkOrderService[],
     findings: '',
     notes: '',
+    technicianId: '',
+    technicianName: '',
     status: 'Pengecekan' as WorkOrder['status'],
   });
 
@@ -476,6 +478,8 @@ export default function WorkOrders() {
       services: [],
       findings: '',
       notes: '',
+      technicianId: '',
+      technicianName: '',
       status: 'Pengecekan',
     });
     setShowServiceForm(true);
@@ -510,6 +514,8 @@ export default function WorkOrders() {
         services: wo.services,
         findings: wo.findings || '',
         notes: wo.notes || '',
+        technicianId: wo.technicianId || '',
+        technicianName: wo.technicianName || '',
         status: wo.status,
       });
       setWoDateUnlocked(wo.date !== new Date().toISOString().split('T')[0]);
@@ -1758,11 +1764,30 @@ export default function WorkOrders() {
                 </div>
               )}
               {diagnosisMode && editingWO ? (
-                <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
-                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
-                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
-                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
-                  <div><span className="block text-xs font-semibold uppercase text-slate-500">Keluhan awal</span><strong>{editingWO.description || '-'}</strong></div>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Keluhan awal</span><strong>{editingWO.description || '-'}</strong></div>
+                  </div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Teknisi penanggung jawab <span className="text-red-500">*</span>
+                    <select
+                      required
+                      value={formData.technicianId}
+                      onChange={(event) => {
+                        const technician = data.users.find(user => user.id === event.target.value);
+                        setFormData(previous => ({ ...previous, technicianId: event.target.value, technicianName: technician?.name || '' }));
+                      }}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">Pilih teknisi yang menangani</option>
+                      {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO.branchId) || user.branchId === editingWO.branchId)).map(user => (
+                        <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               ) : <>
               {/* Pelanggan dan tanggal */}

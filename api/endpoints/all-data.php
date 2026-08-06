@@ -182,6 +182,8 @@ try {
         $r['branchId'] = $r['branch_id'];
         $r['createdBy'] = $r['created_by'] ?? null;
         $r['createdByName'] = $r['created_by_name'] ?? null;
+        $r['technicianId'] = $r['technician_id'] ?? null;
+        $r['technicianName'] = $r['technician_name'] ?? null;
         $r['backdateReason'] = $r['backdate_reason'] ?? null;
         $r['invoiceId'] = $r['invoice_id'];
         $r['invoiceNumber'] = $r['invoice_number'];

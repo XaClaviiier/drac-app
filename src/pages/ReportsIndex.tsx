@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Boxes, History, Landmark, ShoppingCart, Wrench } from 'lucide-react';
+import { BarChart3, Boxes, Coins, History, Landmark, ShoppingCart, Wrench } from 'lucide-react';
 
 const reports = [
   { label: 'Laporan WO', description: 'Status, nilai, pelanggan, kendaraan, dan cabang.', icon: Wrench, path: '/reports/workorders', tone: 'green' },
@@ -7,6 +7,7 @@ const reports = [
   { label: 'Laporan Pembelian', description: 'Pembelian, pembayaran supplier, dan utang.', icon: ShoppingCart, tone: 'blue' },
   { label: 'Laporan Persediaan', description: 'Stok, mutasi, nilai persediaan, dan minimum.', icon: Boxes, tone: 'blue' },
   { label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, dan setoran cabang.', icon: Landmark, tone: 'purple' },
+  { label: 'Kinerja & Bonus', description: 'Kehadiran, produktivitas teknisi, rules custom, dan pembayaran bonus.', icon: Coins, path: '/performance-bonus', tone: 'purple' },
   { label: 'Audit Log', description: 'Riwayat aktivitas dan perubahan data pengguna.', icon: History, path: '/users', tone: 'purple' },
 ] as const;
 

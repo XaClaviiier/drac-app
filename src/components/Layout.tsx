@@ -4,7 +4,7 @@ import {
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
   ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
-  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle,
+  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Coins,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
@@ -58,6 +58,7 @@ const pageTitles: Record<string, string> = {
   '/bank-accounts': 'Rekening Bank',
   '/branch-deposits': 'Setoran Cabang',
   '/chart-of-accounts': 'Akun Perkiraan',
+  '/performance-bonus': 'Kinerja & Bonus',
 };
 
 type DesktopMenuItem = {
@@ -114,6 +115,7 @@ const desktopGroups = [
   ]},
   { id: 'reports', label: 'Daftar Laporan', icon: BarChart3, items: [
     { label: 'Daftar Laporan', path: '/reports', icon: BarChart3, perm: 'report:view', tone: 'blue' },
+    { label: 'Kinerja & Bonus', path: '/performance-bonus', icon: Coins, perm: 'report:view', tone: 'purple' },
   ]},
 ] satisfies Array<{ id: string; label: string; icon: any; items: DesktopMenuItem[] }>;
 

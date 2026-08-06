@@ -107,6 +107,9 @@ try {
         case 'branch-account-settings':
             require 'endpoints/branch-account-settings.php';
             break;
+        case 'performance-bonus':
+            require 'endpoints/performance-bonus.php';
+            break;
 
         // ----- GOODS RECEIPTS -----
         case 'goods-receipts':
