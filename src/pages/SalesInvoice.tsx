@@ -17,7 +17,7 @@ export default function SalesInvoice() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [showWOPicker, setShowWOPicker] = useState(false);
-  const [woCustomerId, setWoCustomerId] = useState('');
+  const [woSearchTerm, setWoSearchTerm] = useState('');
   const [selectedWOId, setSelectedWOId] = useState('');
   const [woDraftItems, setWoDraftItems] = useState<NonNullable<SalesInvoice['items']>>([]);
   const [woItemToAdd, setWoItemToAdd] = useState('');
@@ -281,13 +281,18 @@ export default function SalesInvoice() {
     (wo) => !wo.invoiceId && !wo.continuedToWoId && wo.status === 'Selesai'
       && (currentBranchId === 'ALL' || wo.branchId === currentBranchId)
   );
-  const customerWOs = unbilledWOs.filter((wo) => wo.customerRefId === woCustomerId);
+  const visibleUnbilledWOs = unbilledWOs.filter((wo) => {
+    const term = woSearchTerm.trim().toLowerCase();
+    if (!term) return true;
+    return [wo.woNumber, wo.customerName, wo.plateNumber, wo.vehicleInfo]
+      .some((value) => value?.toLowerCase().includes(term));
+  });
   const selectedWO = data.workOrders.find((wo) => wo.id === selectedWOId);
   const woDraftTotal = woDraftItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const handleOpenWOPicker = () => {
     setShowWOPicker(true);
-    setWoCustomerId('');
+    setWoSearchTerm('');
     setSelectedWOId('');
     setWoDraftItems([]);
     setWoItemToAdd('');
@@ -826,18 +831,15 @@ export default function SalesInvoice() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-gray-700"><User className="h-4 w-4 text-blue-600" />Pilih Pelanggan</label>
-                <CustomerPicker
-                  value={woCustomerId}
-                  onChange={(customerId) => {
-                    setWoCustomerId(customerId);
-                    setSelectedWOId('');
-                    setWoDraftItems([]);
-                    setWoPayment(0);
-                  }}
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={woSearchTerm}
+                  onChange={(event) => setWoSearchTerm(event.target.value)}
+                  placeholder="Cari nomor WO, pelanggan, atau nomor polisi..."
+                  className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                 />
-                <p className="mt-1 text-xs text-gray-500">Nomor WO akan ditampilkan setelah pelanggan dipilih.</p>
               </div>
               {unbilledWOs.length === 0 ? (
                 <div className="text-center py-10 text-gray-500">
@@ -845,18 +847,14 @@ export default function SalesInvoice() {
                   <p className="font-medium">Tidak ada order kerja yang bisa difakturkan</p>
                   <p className="text-sm">Semua order kerja sudah difakturkan atau masih draft</p>
                 </div>
-              ) : !woCustomerId ? (
-                <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50 px-4 py-8 text-center text-sm text-blue-700">
-                  Cari dan pilih pelanggan terlebih dahulu.
-                </div>
-              ) : customerWOs.length === 0 ? (
+              ) : visibleUnbilledWOs.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
-                  Pelanggan ini tidak memiliki WO Selesai yang belum difakturkan.
+                  WO selesai yang dicari tidak ditemukan.
                 </div>
               ) : (
                 <>
                   <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {customerWOs.map((wo) => (
+                    {visibleUnbilledWOs.map((wo) => (
                       <button
                         key={wo.id}
                         type="button"
@@ -875,8 +873,9 @@ export default function SalesInvoice() {
                               {selectedWOId === wo.id ? <CheckCircle2 className="w-5 h-5" /> : <Wrench className="w-5 h-5" />}
                             </div>
                             <div>
-                              <p className="font-medium text-gray-900">{wo.woNumber}</p>
-                              <p className="text-xs text-gray-500">{wo.customerName} • {wo.plateNumber} • {wo.services.length} layanan</p>
+                              <p className="font-semibold text-gray-900">{wo.woNumber}</p>
+                              <p className="text-sm font-medium text-gray-800">{wo.customerName}</p>
+                              <p className="text-xs text-gray-500">{wo.plateNumber} · {wo.vehicleInfo} · {wo.services.length} layanan</p>
                             </div>
                           </div>
                           <div className="text-right">
