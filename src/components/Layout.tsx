@@ -36,6 +36,30 @@ const navItems = [
   { path: '/settings', label: 'Pengaturan', short: 'Atur', icon: Settings, perm: 'settings:view' as const, color: 'from-indigo-500 to-violet-700' },
 ];
 
+const pageTitles: Record<string, string> = {
+  '/': 'Dashboard',
+  '/workorders': 'Order Kerja',
+  '/invoices': 'Faktur Penjualan',
+  '/customer-payments': 'Pembayaran Pelanggan',
+  '/customers': 'Pelanggan',
+  '/vehicles': 'Register Kendaraan',
+  '/items': 'Barang & Jasa',
+  '/warehouses': 'Gudang & Mutasi',
+  '/categories': 'Kategori',
+  '/suppliers': 'Supplier',
+  '/receipts': 'Penerimaan Barang',
+  '/purchase-invoices': 'Faktur Pembelian',
+  '/ai': 'Asisten AI',
+  '/users': 'Pengguna & Akses',
+  '/settings': 'Pengaturan',
+  '/reports': 'Daftar Laporan',
+  '/reports/workorders': 'Laporan WO',
+  '/cash-accounts': 'Kas Cabang',
+  '/bank-accounts': 'Rekening Bank',
+  '/branch-deposits': 'Setoran Cabang',
+  '/chart-of-accounts': 'Akun Perkiraan',
+};
+
 type DesktopMenuItem = {
   label: string;
   path?: string;
@@ -120,10 +144,9 @@ export default function Layout() {
   const visibleNavItems = navItems.filter((item) => hasPermission(item.perm));
 
   const getPageTitle = () => {
-    if (location.pathname === '/reports') return 'Daftar Laporan';
-    if (location.pathname === '/reports/workorders') return 'Laporan WO';
-    const item = visibleNavItems.find((n) => n.path === location.pathname);
-    return item ? item.label : 'Dashboard';
+    return pageTitles[location.pathname]
+      || visibleNavItems.find((item) => item.path === location.pathname)?.label
+      || 'Dashboard';
   };
 
   const closeWorkspaceTab = (path: string) => {
@@ -140,11 +163,13 @@ export default function Layout() {
   useEffect(() => { setMobileMenuOpen(false); setDesktopMenuOpen(null); }, [location.pathname]);
   useEffect(() => {
     if (location.pathname === '/') return;
-    const item = navItems.find(nav => nav.path === location.pathname);
-    const label = item?.label || getPageTitle();
-    setWorkspaceTabs(current => current.some(tab => tab.path === location.pathname)
-      ? current
-      : [...current, { path: location.pathname, label }]);
+    const label = getPageTitle();
+    setWorkspaceTabs(current => {
+      const existing = current.find(tab => tab.path === location.pathname);
+      if (!existing) return [...current, { path: location.pathname, label }];
+      if (existing.label === label) return current;
+      return current.map(tab => tab.path === location.pathname ? { ...tab, label } : tab);
+    });
   }, [location.pathname]);
   useEffect(() => { localStorage.setItem('drac-workspace-tabs', JSON.stringify(workspaceTabs)); }, [workspaceTabs]);
   useEffect(() => {
