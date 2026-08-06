@@ -18,9 +18,9 @@ try {
     }
 
     $rawMethod = strtoupper(trim((string)($d['paymentMethod'] ?? '')));
-    $methodMap = ['TUNAI' => 'Tunai', 'TF' => 'Transfer', 'TRANSFER' => 'Transfer', 'QRIS' => 'QRIS'];
+    $methodMap = ['TUNAI' => 'Tunai', 'TF' => 'Transfer', 'TRANSFER' => 'Transfer'];
     $paymentMethod = $methodMap[$rawMethod] ?? null;
-    if (!$paymentMethod) throw new InvalidArgumentException('Metode pembayaran wajib Tunai, Transfer, atau QRIS.');
+    if (!$paymentMethod) throw new InvalidArgumentException('Metode pembayaran wajib Tunai atau Transfer.');
 
     $customer = null;
     $customerRefId = trim((string)($d['customerRefId'] ?? ''));
@@ -86,14 +86,14 @@ try {
     $total = array_reduce($items, fn($sum, $item) => $sum + $item['price'] * $item['qty'], 0);
     if ($total <= 0) throw new InvalidArgumentException('REGINV tidak dapat diproses karena total invoice Rp0. Gunakan layanan/barang yang memiliki harga.');
 
-    $defaultColumn = $paymentMethod === 'Tunai' ? 'cash_account_id' : ($paymentMethod === 'QRIS' ? 'qris_account_id' : 'bank_account_id');
+    $defaultColumn = $paymentMethod === 'Tunai' ? 'cash_account_id' : 'bank_account_id';
     $accountStmt = $pdo->prepare("SELECT {$defaultColumn} FROM branch_account_settings WHERE branch_id=?");
     $accountStmt->execute([$branchId]);
     $accountId = (string)($accountStmt->fetchColumn() ?: '');
     $account = $pdo->prepare('SELECT id,name,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1');
     $account->execute([$accountId]);
     $account = $account->fetch();
-    $expected = $paymentMethod === 'Tunai' ? 'cash' : ($paymentMethod === 'QRIS' ? 'qris' : 'bank');
+    $expected = $paymentMethod === 'Tunai' ? 'cash' : 'bank';
     if (!$account || $account['account_type'] !== $expected || ($account['branch_id'] && $account['branch_id'] !== $branchId)) {
         throw new InvalidArgumentException("Akun {$paymentMethod} belum dipetakan dengan benar untuk cabang ini.");
     }
@@ -111,7 +111,7 @@ try {
     $invoiceId = generateId();
     $invoiceNumber = nextDocumentNumber($pdo, 'sales_invoice', $branchId, $date);
     $invoice = $pdo->prepare("INSERT INTO sales_invoices(id,invoice_number,date,customer_ref_id,customer_id,customer_name,vehicle_info,description,total,payment,payment_date,backdate_reason,payment_method,status,age,wo_id,wo_number,branch_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'Lunas',0,?,?,?)");
-    $invoice->execute([$invoiceId,$invoiceNumber,$date,$customer['id'],$customer['customer_code'],$customer['name'],trim($vehicleInfo.' '.$plate),$description,$total,$total,$date,$backdateReason,$paymentMethod === 'Tunai' ? 'Tunai' : 'QRIS/Transfer',$woId,$woNumber,$branchId]);
+    $invoice->execute([$invoiceId,$invoiceNumber,$date,$customer['id'],$customer['customer_code'],$customer['name'],trim($vehicleInfo.' '.$plate),$description,$total,$total,$date,$backdateReason,$paymentMethod,$woId,$woNumber,$branchId]);
     $invoiceItem = $pdo->prepare('INSERT INTO sales_invoice_items(invoice_id,item_id,code,name,description,price,qty,subtotal) VALUES(?,?,?,?,?,?,?,?)');
     foreach ($items as $item) {
         $invoiceItem->execute([$invoiceId,$item['itemId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['price']*$item['qty']]);

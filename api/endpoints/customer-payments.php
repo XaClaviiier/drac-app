@@ -49,7 +49,7 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
     $last->execute([$invoiceId]);
     $latest = $last->fetch();
     $method = (string)($latest['payment_method'] ?? 'Tunai');
-    if ($method !== 'Tunai') $method = 'QRIS/Transfer';
+    if ($method !== 'Tunai') $method = 'Transfer';
     $pdo->prepare("UPDATE sales_invoices SET payment=?,payment_date=?,payment_method=?,status=? WHERE id=?")
         ->execute([$paid,$latest['date'] ?? null,$method,$status,$invoiceId]);
     $pdo->prepare("UPDATE work_orders SET status='Invoiced' WHERE invoice_id=?")->execute([$invoiceId]);
@@ -113,16 +113,16 @@ case 'POST':
         if($date>date('Y-m-d'))throw new Exception('Tanggal pembayaran tidak boleh melewati hari ini');
         if($date<date('Y-m-d')) requireUserPermission($pdo,'payment:backdate');
         $methodName=(string)($d['paymentMethod']??'Tunai');
-        if(!in_array($methodName,['Tunai','Transfer','QRIS'],true))throw new Exception('Metode pembayaran tidak valid');
+        if(!in_array($methodName,['Tunai','Transfer'],true))throw new Exception('Metode pembayaran wajib Tunai atau Transfer');
         $accountId=(string)($d['accountId']??'');
         if($accountId===''){
-            $column=$methodName==='Tunai'?'cash_account_id':($methodName==='QRIS'?'qris_account_id':'bank_account_id');
+            $column=$methodName==='Tunai'?'cash_account_id':'bank_account_id';
             $default=$pdo->prepare("SELECT {$column} FROM branch_account_settings WHERE branch_id=?");$default->execute([$invoice['branch_id']]);
             $accountId=(string)($default->fetchColumn()?:'');
         }
         $accountStmt=$pdo->prepare("SELECT id,name,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1");$accountStmt->execute([$accountId]);$account=$accountStmt->fetch();
         if(!$account)throw new Exception('Akun penerimaan belum diatur untuk cabang faktur');
-        $expected=$methodName==='Tunai'?'cash':($methodName==='QRIS'?'qris':'bank');
+        $expected=$methodName==='Tunai'?'cash':'bank';
         if($account['account_type']!==$expected)throw new Exception('Jenis akun penerimaan tidak sesuai metode pembayaran');
         if($account['branch_id']&&$account['branch_id']!==$invoice['branch_id'])throw new Exception('Akun tujuan harus sesuai cabang faktur');
         $branch=$pdo->prepare("SELECT code FROM branches WHERE id=?");$branch->execute([$invoice['branch_id']]);

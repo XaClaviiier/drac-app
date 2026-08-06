@@ -37,7 +37,7 @@ interface AppContextType {
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
-  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'QRIS/Transfer', invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
+  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'Transfer', invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
   addItem: (item: Item) => Promise<void>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -610,7 +610,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createInvoiceFromWO = async (
     woId: string,
     payment: number,
-    paymentMethod: 'Tunai' | 'QRIS/Transfer',
+    paymentMethod: 'Tunai' | 'Transfer',
     invoiceDate?: string,
     paymentDate?: string,
     backdateReason?: string,

@@ -64,7 +64,7 @@ switch ($method) {
                     throw new Exception('Alasan tanggal mundur wajib diisi');
                 }
                 $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
-                if (!in_array($paymentMethod, ['Tunai', 'QRIS/Transfer'], true)) {
+                if (!in_array($paymentMethod, ['Tunai', 'Transfer'], true)) {
                     throw new Exception('Metode pembayaran tidak valid');
                 }
                 $servicesStmt = $pdo->prepare("SELECT * FROM work_order_services WHERE wo_id = ?");
@@ -140,7 +140,7 @@ switch ($method) {
             $branchId = $d['branchId'] ?? 'BR-001';
             $invoiceNumber = nextDocumentNumber($pdo, 'sales_invoice', $branchId, $d['date'] ?? null);
             $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
-            if (!in_array($paymentMethod, ['Tunai', 'QRIS/Transfer'], true)) {
+            if (!in_array($paymentMethod, ['Tunai', 'Transfer'], true)) {
                 throw new Exception('Metode pembayaran tidak valid');
             }
             $invoiceDate = (string)($d['date'] ?? date('Y-m-d'));
@@ -198,7 +198,7 @@ switch ($method) {
             if (!$current) throw new Exception('Faktur tidak ditemukan');
 
             $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
-            if (!in_array($paymentMethod, ['Tunai', 'QRIS/Transfer'], true)) throw new Exception('Metode pembayaran tidak valid');
+            if (!in_array($paymentMethod, ['Tunai', 'Transfer'], true)) throw new Exception('Metode pembayaran tidak valid');
             $invoiceDate = (string)($d['date'] ?? date('Y-m-d'));
             $paymentDate = (float)($d['payment'] ?? 0) > 0 ? ($d['paymentDate'] ?? $invoiceDate) : null;
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));

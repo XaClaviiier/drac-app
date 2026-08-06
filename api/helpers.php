@@ -6,6 +6,51 @@ function normalizeVehiclePlate(string $value): string {
     return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $value));
 }
 
+function seedChartOfAccounts(PDO $pdo): array {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
+        migration_key VARCHAR(100) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $migrationKey = 'coa_excel_structure_v1';
+    $checkMigration = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $checkMigration->execute([$migrationKey]);
+    if ((int)$checkMigration->fetchColumn() > 0) {
+        $ids = [];
+        foreach ($pdo->query('SELECT id,code FROM chart_of_accounts')->fetchAll() as $row) $ids[$row['code']] = $row['id'];
+        return $ids;
+    }
+    $rows = require __DIR__ . '/coa-seed.php';
+    $typeMap = [
+        'BANK'=>'Asset','OCAS'=>'Asset','AREC'=>'Asset','INTR'=>'Asset','FASS'=>'Asset','DEPR'=>'Asset',
+        'LTLY'=>'Liability','OCLY'=>'Liability','APAY'=>'Liability','EQTY'=>'Equity',
+        'REVE'=>'Revenue','OINC'=>'Revenue','EXPS'=>'Expense','OEXP'=>'Expense','COGS'=>'Expense',
+    ];
+    $creditTypes = ['DEPR','LTLY','OCLY','APAY','EQTY','REVE','OINC'];
+    $find = $pdo->prepare('SELECT id FROM chart_of_accounts WHERE code=?');
+    $insert = $pdo->prepare('INSERT INTO chart_of_accounts(id,code,name,account_type,parent_id,normal_balance,is_active) VALUES(?,?,?,?,NULL,?,?)');
+    $update = $pdo->prepare('UPDATE chart_of_accounts SET name=?,account_type=?,normal_balance=?,is_active=? WHERE id=?');
+    $ids = [];
+    foreach ($rows as [$code,$sourceType,$name,$parentCode,$active]) {
+        $find->execute([$code]);
+        $id = $find->fetchColumn();
+        $accountType = $typeMap[$sourceType] ?? 'Asset';
+        $normal = in_array($sourceType,$creditTypes,true) ? 'Credit' : 'Debit';
+        if (!$id) {
+            $id = 'COA-' . strtoupper(substr(hash('sha256',$code),0,20));
+            $insert->execute([$id,$code,$name,$accountType,$normal,$active]);
+        } else {
+            $update->execute([$name,$accountType,$normal,$active,$id]);
+        }
+        $ids[$code] = $id;
+    }
+    $parentUpdate = $pdo->prepare('UPDATE chart_of_accounts SET parent_id=? WHERE id=?');
+    foreach ($rows as [$code,$sourceType,$name,$parentCode]) {
+        $parentUpdate->execute([$parentCode ? ($ids[$parentCode] ?? null) : null,$ids[$code]]);
+    }
+    $markMigration = $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)');
+    $markMigration->execute([$migrationKey]);
+    return $ids;
+}
+
 function findVehicleByNormalizedPlate(PDO $pdo, string $plate, ?string $excludeId = null): ?array {
     $rows = $pdo->query("SELECT id, plate_number, customer_name FROM vehicles")->fetchAll();
     foreach ($rows as $row) {
@@ -201,18 +246,8 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('bank_name', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD bank_name VARCHAR(100) NULL AFTER ledger_account_id");
     if (!in_array('account_number', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD account_number VARCHAR(60) NULL AFTER bank_name");
     if (!in_array('account_holder', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD account_holder VARCHAR(120) NULL AFTER account_number");
-    $pdo->exec("INSERT IGNORE INTO chart_of_accounts(id,code,name,account_type,parent_id,normal_balance) VALUES
-        ('COA-1000','1000','ASET','Asset',NULL,'Debit'),
-        ('COA-1100','1100','Kas dan Bank','Asset','COA-1000','Debit'),
-        ('COA-1101','1101','Kas Tunai','Asset','COA-1100','Debit'),
-        ('COA-1102','1102','Bank','Asset','COA-1100','Debit'),
-        ('COA-1103','1103','QRIS','Asset','COA-1100','Debit'),
-        ('COA-1104','1104','Setoran Dalam Perjalanan','Asset','COA-1100','Debit'),
-        ('COA-1200','1200','Piutang Pelanggan','Asset','COA-1000','Debit'),
-        ('COA-1300','1300','Persediaan','Asset','COA-1000','Debit'),
-        ('COA-4000','4000','PENDAPATAN','Revenue',NULL,'Credit'),
-        ('COA-4101','4101','Pendapatan Jasa','Revenue','COA-4000','Credit'),
-        ('COA-4102','4102','Penjualan Barang','Revenue','COA-4000','Credit')");
+    $coaIds = seedChartOfAccounts($pdo);
+    $pdo->exec("UPDATE chart_of_accounts SET is_active=0 WHERE code IN ('1000','1300','4101','4102')");
     $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payments (
         id VARCHAR(64) PRIMARY KEY, payment_number VARCHAR(40) NOT NULL UNIQUE, invoice_id VARCHAR(64) NOT NULL,
         date DATE NOT NULL, amount DECIMAL(15,2) NOT NULL DEFAULT 0, payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai',
@@ -242,6 +277,10 @@ function ensureApiSupportTables(PDO $pdo): void {
 
     // Setiap cabang memiliki satu gudang utama. ID mengikuti cabang agar deterministik.
     $branches = $pdo->query("SELECT id, code, name FROM branches")->fetchAll();
+    $branchMappingKey = 'branch_coa_mapping_v1';
+    $branchMappingCheck = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $branchMappingCheck->execute([$branchMappingKey]);
+    $branchMappingPending = (int)$branchMappingCheck->fetchColumn() === 0;
     $warehouseInsert = $pdo->prepare("
         INSERT IGNORE INTO warehouses (id, code, name, branch_id, is_default, is_sellable, is_active)
         VALUES (?, ?, ?, ?, 1, 1, 1)
@@ -253,14 +292,31 @@ function ensureApiSupportTables(PDO $pdo): void {
             'GUDANG UTAMA ' . $branch['name'],
             $branch['id'],
         ]);
-        $cashAccount = $pdo->prepare("INSERT IGNORE INTO cash_accounts (id,code,name,account_type,branch_id) VALUES (?,?,?,?,?)");
-        $cashAccount->execute(['CASH-' . $branch['id'], 'KAS-' . $branch['code'], 'KAS ' . $branch['name'], 'cash', $branch['id']]);
+        $normalizedBranch = strtoupper((string)$branch['name']);
+        $branchLedger = str_contains($normalizedBranch,'PERINTIS')
+            ? ['PR.110102','PR.110101']
+            : (str_contains($normalizedBranch,'CAKALANG') ? ['CK.1101-01','CK.1101-02'] : (str_contains($normalizedBranch,'MAMUJU') ? ['MM.1101-01','MM.1101-02'] : [null,null]));
+        if ($branchLedger[0] && isset($coaIds[$branchLedger[0]],$coaIds[$branchLedger[1]])) {
+            $cashId = 'CASH-' . $branch['id'];
+            $bankId = 'BANK-' . $branch['id'];
+            $cashAccount = $pdo->prepare("INSERT INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id,is_active) VALUES(?,?,?,?,?,?,1)
+                ON DUPLICATE KEY UPDATE name=VALUES(name),account_type='cash',branch_id=VALUES(branch_id),ledger_account_id=VALUES(ledger_account_id),is_active=1");
+            $cashAccount->execute([$cashId,'KAS-'.$branch['code'],'KAS TUNAI '.$branch['name'],'cash',$branch['id'],$coaIds[$branchLedger[0]]]);
+            $bankAccount = $pdo->prepare("INSERT INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id,is_active) VALUES(?,?,?,?,?,?,1)
+                ON DUPLICATE KEY UPDATE name=VALUES(name),account_type='bank',branch_id=VALUES(branch_id),ledger_account_id=VALUES(ledger_account_id),is_active=1");
+            $bankAccount->execute([$bankId,'BANK-'.$branch['code'],'BANK / TRANSFER '.$branch['name'],'bank',$branch['id'],$coaIds[$branchLedger[1]]]);
+            if ($branchMappingPending) {
+                $setting = $pdo->prepare("INSERT INTO branch_account_settings(branch_id,cash_account_id,bank_account_id,qris_account_id,deposit_destination_account_id,receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id)
+                    VALUES(?,?,?,NULL,?,?,?,?,?) ON DUPLICATE KEY UPDATE cash_account_id=VALUES(cash_account_id),bank_account_id=VALUES(bank_account_id),qris_account_id=NULL,deposit_destination_account_id=VALUES(deposit_destination_account_id),receivable_coa_id=VALUES(receivable_coa_id),service_revenue_coa_id=VALUES(service_revenue_coa_id),goods_revenue_coa_id=VALUES(goods_revenue_coa_id),inventory_coa_id=VALUES(inventory_coa_id)");
+                $setting->execute([$branch['id'],$cashId,$bankId,$bankId,$coaIds['110301'],$coaIds['400002'],$coaIds['400001'],$coaIds['110401']]);
+            }
+        }
     }
-    $pdo->exec("INSERT IGNORE INTO cash_accounts (id,code,name,account_type,branch_id) VALUES ('BANK-PUSAT','BANK-PUSAT','BANK / KAS PUSAT','bank',NULL),('QRIS-PUSAT','QRIS-PUSAT','QRIS PERUSAHAAN','qris',NULL)");
-    $pdo->exec("UPDATE cash_accounts SET ledger_account_id=CASE account_type WHEN 'cash' THEN 'COA-1101' WHEN 'bank' THEN 'COA-1102' ELSE 'COA-1103' END WHERE ledger_account_id IS NULL");
-    $pdo->exec("INSERT IGNORE INTO branch_account_settings(branch_id,cash_account_id,bank_account_id,qris_account_id,deposit_destination_account_id,receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id)
-        SELECT b.id,ca.id,'BANK-PUSAT','QRIS-PUSAT','BANK-PUSAT','COA-1200','COA-4101','COA-4102','COA-1300'
-        FROM branches b LEFT JOIN cash_accounts ca ON ca.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND ca.account_type='cash'");
+    if ($branchMappingPending) {
+        $markBranchMapping = $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)');
+        $markBranchMapping->execute([$branchMappingKey]);
+    }
+    $pdo->exec("UPDATE cash_accounts SET is_active=0 WHERE account_type='qris' OR code LIKE '%QRIS%'");
 
     // Database yang sudah pernah dipakai dapat memiliki tabel pembayaran versi lama.
     // Lengkapi kolom akun di sini (di dalam bootstrap schema), bukan di helper
@@ -273,20 +329,20 @@ function ensureApiSupportTables(PDO $pdo): void {
         if (!in_array('account_name', $paymentColumns, true)) {
             $pdo->exec("ALTER TABLE customer_payments ADD account_name VARCHAR(120) NULL AFTER account_id");
         }
-        // Pembayaran lama dahulu selalu diarahkan ke kas tunai. Pulihkan tujuan
-        // berdasarkan metode: tunai ke kas cabang, transfer ke bank, QRIS ke QRIS.
+        // QRIS lama digabung ke Transfer dan diarahkan ke bank cabang.
+        $pdo->exec("UPDATE customer_payments SET payment_method='Transfer' WHERE payment_method IN ('QRIS','QRIS/Transfer')");
+        if ($pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()) {
+            $pdo->exec("UPDATE sales_invoices SET payment_method='Transfer' WHERE payment_method IN ('QRIS','QRIS/Transfer')");
+        }
         $pdo->exec("
             UPDATE customer_payments p
             JOIN branch_account_settings s ON s.branch_id COLLATE utf8mb4_unicode_ci=p.branch_id COLLATE utf8mb4_unicode_ci
             JOIN cash_accounts a ON a.id COLLATE utf8mb4_unicode_ci=(CASE
-                WHEN p.payment_method='Tunai' THEN s.cash_account_id
-                WHEN p.payment_method='QRIS' THEN s.qris_account_id
-                ELSE s.bank_account_id END) COLLATE utf8mb4_unicode_ci
+                WHEN p.payment_method='Tunai' THEN s.cash_account_id ELSE s.bank_account_id END) COLLATE utf8mb4_unicode_ci
             LEFT JOIN cash_accounts old_a ON old_a.id COLLATE utf8mb4_unicode_ci=p.account_id COLLATE utf8mb4_unicode_ci
             SET p.account_id=a.id,p.account_name=a.name
             WHERE p.account_id IS NULL OR p.account_name IS NULL
-               OR (p.payment_method<>'Tunai' AND old_a.account_type='cash')
-               OR (p.payment_method='QRIS' AND old_a.account_type<>'qris')
+               OR (p.payment_method<>'Tunai' AND old_a.account_type<>'bank')
         ");
     }
     // Hak pembayaran berdiri sendiri. Role lama otomatis mewarisi hak yang

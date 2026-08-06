@@ -43,7 +43,7 @@ export interface SalesInvoice {
   description: string;
   total: number;
   payment: number;
-  paymentMethod?: 'Tunai' | 'QRIS/Transfer';
+  paymentMethod?: 'Tunai' | 'Transfer';
   paymentDate?: string;
   backdateReason?: string;
   status: 'Lunas' | 'Belum Lunas';

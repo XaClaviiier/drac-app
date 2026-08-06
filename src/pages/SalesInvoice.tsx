@@ -22,7 +22,7 @@ export default function SalesInvoice() {
   const [woDraftItems, setWoDraftItems] = useState<NonNullable<SalesInvoice['items']>>([]);
   const [woItemToAdd, setWoItemToAdd] = useState('');
   const [woPayment, setWoPayment] = useState(0);
-  const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
+  const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'Transfer'>('Tunai');
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
   const [paymentDateUnlocked, setPaymentDateUnlocked] = useState(false);
   const [woInvoiceDate, setWoInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -45,7 +45,7 @@ export default function SalesInvoice() {
     payment: 0,
     paymentDate: new Date().toISOString().split('T')[0],
     backdateReason: '',
-    paymentMethod: 'Tunai' as 'Tunai' | 'QRIS/Transfer',
+    paymentMethod: 'Tunai' as 'Tunai' | 'Transfer',
     status: 'Lunas' as 'Lunas' | 'Belum Lunas',
   });
 
@@ -742,12 +742,12 @@ export default function SalesInvoice() {
                     value={formData.paymentMethod}
                     onChange={(e) => setFormData({
                       ...formData,
-                      paymentMethod: e.target.value as 'Tunai' | 'QRIS/Transfer',
+                      paymentMethod: e.target.value as 'Tunai' | 'Transfer',
                     })}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   >
                     <option value="Tunai">Tunai</option>
-                    <option value="QRIS/Transfer">QRIS/Transfer</option>
+                    <option value="Transfer">Transfer</option>
                   </select>
                 </div>
                 {formData.payment > 0 && <div className="md:col-span-2">
@@ -935,7 +935,7 @@ export default function SalesInvoice() {
                       <div className="pt-3 border-t border-gray-200">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Metode Pembayaran</label>
                         <div className="mb-3 grid grid-cols-2 gap-2">
-                          {(['Tunai', 'QRIS/Transfer'] as const).map((method) => (
+                          {(['Tunai', 'Transfer'] as const).map((method) => (
                             <button
                               key={method}
                               type="button"

@@ -4,7 +4,7 @@ import { api } from "../lib/apiClient";
 import { useApp } from "../context/AppContext";
 
 type PaymentRow = { id:string; paymentNumber:string; invoiceId:string; invoiceNumber:string; date:string; customerName:string; customerId:string; vehicleInfo:string; invoiceTotal:number; invoicePaid:number; amount:number; balanceAfter:number; paymentStatus:"Lunas"|"Cicilan"; paymentMethod:string; accountId?:string; accountName?:string; branchId:string; createdByName?:string };
-type CashAccount = { id:string; name:string; accountType:"cash"|"bank"|"qris"; branchId?:string };
+type CashAccount = { id:string; name:string; accountType:"cash"|"bank"; branchId?:string };
 type DepositSummary = { branchId:string; unsubmitted:number };
 type Period = "today"|"this_month"|"last_month"|"custom"|"all";
 
@@ -29,7 +29,7 @@ export default function CustomerPayments(){
   const unpaid=data.invoices.filter(i=>i.total>i.payment&&(currentBranchId==="ALL"||i.branchId===currentBranchId));
   const invoice=data.invoices.find(i=>i.id===form.invoiceId),outstanding=invoice?Math.max(0,invoice.total-invoice.payment):0;
   const invoiceChoices=useMemo(()=>{const q=invoiceSearch.trim().toLowerCase();return unpaid.filter(i=>{const customer=data.customers.find(c=>c.id===i.customerRefId||c.id===i.customerId||c.name===i.customerName);return `${i.invoiceNumber} ${i.customerName} ${customer?.phone||""} ${i.vehicleInfo}`.toLowerCase().includes(q)}).slice(0,60)},[unpaid,invoiceSearch,data.customers]);
-  const expectedAccountType=form.paymentMethod==="Tunai"?"cash":form.paymentMethod==="QRIS"?"qris":"bank";
+  const expectedAccountType=form.paymentMethod==="Tunai"?"cash":"bank";
   const availableAccounts=accounts.filter(a=>a.accountType===expectedAccountType&&(!a.branchId||a.branchId===invoice?.branchId));
 
   const periodRange=useMemo(()=>{const now=new Date();if(period==="all")return ["",""];if(period==="today")return [today,today];if(period==="custom")return [dateFrom,dateTo];
@@ -49,7 +49,7 @@ export default function CustomerPayments(){
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       <Summary icon={Banknote} label="Total Diterima" value={rupiah(totalReceived)} tone="blue"/>
       <Summary icon={WalletCards} label="Tunai" value={rupiah(cashReceived)} tone="green"/>
-      <Summary icon={Landmark} label="Transfer / QRIS" value={rupiah(digitalReceived)} tone="violet"/>
+      <Summary icon={Landmark} label="Transfer" value={rupiah(digitalReceived)} tone="violet"/>
       <Summary icon={CalendarDays} label="Tunai Belum Disetor" value={rupiah(unsubmitted)} tone="amber"/>
     </div>
 
@@ -57,7 +57,7 @@ export default function CustomerPayments(){
       <div className="relative min-w-[240px] flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari pembayaran, faktur, pelanggan, plat..." className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm"/></div>
       <select value={period} onChange={e=>setPeriod(e.target.value as Period)} className="rounded-lg border px-3 py-2 text-sm"><option value="today">Hari Ini</option><option value="this_month">Bulan Ini</option><option value="last_month">Bulan Lalu</option><option value="custom">Pilih Tanggal</option><option value="all">Semua Tanggal</option></select>
       {period==="custom"&&<><input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="rounded-lg border px-2 py-2 text-sm"/><input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="rounded-lg border px-2 py-2 text-sm"/></>}
-      <select value={methodFilter} onChange={e=>setMethodFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm"><option value="ALL">Semua Metode</option><option>Tunai</option><option>Transfer</option><option>QRIS</option><option>QRIS/Transfer</option></select>
+      <select value={methodFilter} onChange={e=>setMethodFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm"><option value="ALL">Semua Metode</option><option>Tunai</option><option>Transfer</option></select>
       <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm"><option value="ALL">Semua Status</option><option>Lunas</option><option>Cicilan</option></select>
       <select value={accountFilter} onChange={e=>setAccountFilter(e.target.value)} className="max-w-[190px] rounded-lg border px-3 py-2 text-sm"><option value="ALL">Semua Akun</option>{visibleAccounts.map(a=><option value={a.id} key={a.id}>{a.name}</option>)}</select>
       <select value={userFilter} onChange={e=>setUserFilter(e.target.value)} className="max-w-[170px] rounded-lg border px-3 py-2 text-sm"><option value="ALL">Semua Input</option>{inputUsers.map(name=><option key={name}>{name}</option>)}</select>
@@ -72,7 +72,7 @@ export default function CustomerPayments(){
       <label className="block text-sm">Cari Faktur<input value={invoiceSearch} onChange={e=>setInvoiceSearch(e.target.value)} placeholder="Nomor faktur, pelanggan, HP, atau kendaraan" className="mt-1 w-full rounded-lg border p-2.5"/></label>
       <label className="block text-sm">Faktur<select required value={form.invoiceId} onChange={e=>{const selected=data.invoices.find(x=>x.id===e.target.value);setForm({...form,invoiceId:e.target.value,amount:selected?selected.total-selected.payment:0,accountId:""})}} className="mt-1 w-full rounded-lg border p-2.5"><option value="">Pilih faktur ({invoiceChoices.length})</option>{invoiceChoices.map(i=><option key={i.id} value={i.id}>{i.invoiceNumber} · {i.customerName} · {rupiah(i.total-i.payment)}</option>)}</select></label>
       {invoice&&<div className="grid grid-cols-3 rounded-lg bg-blue-50 p-3 text-sm"><span>Total<br/><b>{rupiah(invoice.total)}</b></span><span>Dibayar<br/><b>{rupiah(invoice.payment)}</b></span><span>Sisa<br/><b className="text-red-600">{rupiah(outstanding)}</b></span></div>}
-      <div className="grid grid-cols-2 gap-3"><label className="text-sm">Tanggal<input type="date" min={invoice?.date} max={today} value={form.date} onChange={e=>setForm({...form,date:e.target.value})} className="mt-1 w-full rounded-lg border p-2.5"/></label><label className="text-sm">Metode<select value={form.paymentMethod} onChange={e=>setForm({...form,paymentMethod:e.target.value,accountId:""})} className="mt-1 w-full rounded-lg border p-2.5"><option>Tunai</option><option>Transfer</option><option>QRIS</option></select></label></div>
+      <div className="grid grid-cols-2 gap-3"><label className="text-sm">Tanggal<input type="date" min={invoice?.date} max={today} value={form.date} onChange={e=>setForm({...form,date:e.target.value})} className="mt-1 w-full rounded-lg border p-2.5"/></label><label className="text-sm">Metode<select value={form.paymentMethod} onChange={e=>setForm({...form,paymentMethod:e.target.value,accountId:""})} className="mt-1 w-full rounded-lg border p-2.5"><option>Tunai</option><option>Transfer</option></select></label></div>
       <label className="block text-sm">Diterima ke<select value={form.accountId} onChange={e=>setForm({...form,accountId:e.target.value})} className="mt-1 w-full rounded-lg border p-2.5"><option value="">Otomatis sesuai pengaturan cabang</option>{availableAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><small className="text-gray-500">Pilihan akun otomatis mengikuti metode pembayaran.</small></label>
       <label className="block text-sm">Nominal<input type="number" min="1" max={outstanding} value={form.amount||""} onChange={e=>setForm({...form,amount:Number(e.target.value)})} className="mt-1 w-full rounded-lg border p-2.5 text-lg font-bold"/></label>
       <label className="block text-sm">Catatan (opsional)<textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} className="mt-1 w-full rounded-lg border p-2.5"/></label>

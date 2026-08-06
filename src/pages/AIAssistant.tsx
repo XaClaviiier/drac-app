@@ -609,7 +609,7 @@ export default function AIAssistant() {
     setPendingBranchId('');
     setRegistrationDraft({ mode, step: 'plate', plateNumber: '', customerName: '', phone: '', vehicleInfo: '' });
     if (mode === 'reginv') {
-      return `**REGINV Cepat — Langkah 1/4**\n\nMasukkan nomor plat kendaraan. Pada langkah terakhir tuliskan kode layanan/barang dan metode **Tunai**, **Transfer**, atau **QRIS**.\n\nKetik **batal** untuk menghentikan proses.`;
+      return `**REGINV Cepat — Langkah 1/4**\n\nMasukkan nomor plat kendaraan. Pada langkah terakhir tuliskan kode layanan/barang dan metode **Tunai** atau **Transfer**.\n\nKetik **batal** untuk menghentikan proses.`;
     }
     return `**Registrasi WO Baru — Langkah 1/4**\n\nMasukkan nomor plat kendaraan.\n\nKetik **batal** untuk menghentikan proses.`;
   };
@@ -672,11 +672,10 @@ export default function AIAssistant() {
     if (value.length < 3) return 'Keluhan terlalu singkat. Jelaskan kondisi kendaraan atau layanan yang dibutuhkan.';
     const isRegInv = registrationDraft.mode === 'reginv';
     const codedServices = servicesFromCodes(value, isRegInv);
-    const paymentMethod = /\bqris\b/i.test(value) ? 'QRIS'
-      : /\b(tf|transfer)\b/i.test(value) ? 'Transfer'
+    const paymentMethod = /\b(tf|transfer)\b/i.test(value) ? 'Transfer'
       : /\btunai\b/i.test(value) ? 'Tunai' : '';
     if (isRegInv && codedServices.length === 0) return 'REGINV wajib menyertakan minimal satu **kode layanan/barang** yang terdaftar.';
-    if (isRegInv && !paymentMethod) return 'Pilih metode pembayaran dengan mengetik **Tunai**, **Transfer**, atau **QRIS**.';
+    if (isRegInv && !paymentMethod) return 'Pilih metode pembayaran dengan mengetik **Tunai** atau **Transfer**.';
     const action = {
       action: isRegInv ? 'create_quick_invoice' : 'create_wo',
       customerName: registrationDraft.customerName,
@@ -1097,8 +1096,7 @@ ${buildSmartContext(userMsgText)}`;
       const customer = vehicle
         ? data.customers.find(item => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId)
         : undefined;
-      const paymentMethod = /\bqris\b/i.test(content) ? 'QRIS'
-        : /\b(tf|transfer)\b/i.test(content) ? 'Transfer'
+      const paymentMethod = /\b(tf|transfer)\b/i.test(content) ? 'Transfer'
         : /\btunai\b/i.test(content) ? 'Tunai' : '';
       const codedServices = servicesFromCodes(content, true);
       let parsedDate: ReturnType<typeof parseCompactTransactionDate> = null;
@@ -1125,7 +1123,7 @@ ${buildSmartContext(userMsgText)}`;
       const reply = startRegistrationWizard('reginv');
       setInput('');
       setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: vehicle
-        ? `${reply}\n\nPlat ditemukan, tetapi perintah lengkap wajib memuat **kode item** dan metode **Tunai/Transfer/QRIS**.`
+        ? `${reply}\n\nPlat ditemukan, tetapi perintah lengkap wajib memuat **kode item** dan metode **Tunai/Transfer**.`
         : reply, time: now() }]);
       return;
     }

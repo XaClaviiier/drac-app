@@ -76,7 +76,7 @@ export default function WorkOrders() {
   const [visibleColumns, setVisibleColumns] = useState<WorkOrderColumnKey[]>(DEFAULT_WORK_ORDER_COLUMNS);
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
   const [invoicePayment, setInvoicePayment] = useState(0);
-  const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<'Tunai' | 'QRIS/Transfer'>('Tunai');
+  const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<'Tunai' | 'Transfer'>('Tunai');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [invoicePaymentDate, setInvoicePaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
@@ -2811,7 +2811,7 @@ export default function WorkOrders() {
                   Metode Pembayaran
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['Tunai', 'QRIS/Transfer'] as const).map((method) => (
+                  {(['Tunai', 'Transfer'] as const).map((method) => (
                     <button
                       key={method}
                       type="button"
