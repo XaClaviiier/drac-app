@@ -206,10 +206,11 @@ switch ($method) {
             $currentStatus = (string)$currentWorkOrder['status'];
             $nextStatus = (string)($d['status'] ?? $currentStatus);
             $allowedTransitions = [
-                'Pengecekan' => ['Pengecekan', 'Pending', 'Proses', 'Selesai', 'Closed'],
+                'Pengecekan' => ['Pengecekan', 'Pending', 'Proses', 'Closed'],
                 // Pending boleh dilanjutkan kembali ke Diagnosa/Pengecekan.
                 'Pending' => ['Pending', 'Pengecekan', 'Proses', 'Closed'],
-                'Proses' => ['Proses', 'Selesai', 'Closed'],
+                // Setelah pekerjaan dimulai, status hanya boleh maju ke Selesai.
+                'Proses' => ['Proses', 'Selesai'],
                 'Selesai' => ['Selesai'],
                 // Closed ditampilkan sebagai Lost Sales. Dapat dipulihkan bila
                 // pelanggan menyetujui masalah yang sama.

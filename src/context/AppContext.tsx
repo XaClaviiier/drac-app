@@ -552,10 +552,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isStatusTransitionAllowed = (from: WOStatus, to: WOStatus): boolean => {
     if (from === to) return false;
     const forward: Record<WOStatus, WOStatus[]> = {
-      Pengecekan: ['Proses', 'Pending', 'Selesai', 'Closed'],
+      Pengecekan: ['Proses', 'Pending', 'Closed'],
       // Pending dapat dibuka kembali ke tahap Diagnosa selama belum kedaluwarsa.
       Pending: ['Pengecekan', 'Proses', 'Closed'],
-      Proses: ['Selesai', 'Closed'],
+      // Setelah pekerjaan dimulai, WO hanya boleh diselesaikan.
+      Proses: ['Selesai'],
       Selesai: ['Invoiced'],
       Invoiced: [],
       // Lost Sales dapat dipulihkan bila pelanggan menyetujui masalah yang sama.
@@ -585,11 +586,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ok: false, message: 'Status Invoiced hanya diberikan otomatis setelah faktur dibuat.' };
     }
 
-    // Perubahan mundur atau Closed wajib punya alasan.
+    // Pending dan Lost Sales wajib punya alasan.
     const needsReason = nextStatus === 'Pending'
-      || nextStatus === 'Closed'
-      || (wo.status === 'Proses' && nextStatus === 'Pengecekan')
-      || (wo.status === 'Selesai' && nextStatus === 'Proses');
+      || nextStatus === 'Closed';
     if (needsReason && !reason?.trim()) {
       return { ok: false, message: 'Alasan wajib diisi untuk perubahan ini.' };
     }

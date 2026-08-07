@@ -1553,36 +1553,12 @@ export default function WorkOrders() {
                       <span className="text-[11px] text-orange-700">Alasan: {wo.pendingReason || '-'}{isPendingExpired(wo) ? ' · Kedaluwarsa' : ''}</span>
                     )}
                     {hasPermission('wo:edit') && wo.status === 'Proses' && (
-                      <>
-                        <button
-                          onClick={() => requestStatusChange(wo, 'Selesai')}
-                          className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
-                          title="Pekerjaan selesai, siap dibuat faktur"
-                        >
-                          Tandai Selesai
-                        </button>
-                        <button
-                          onClick={() => requestStatusChange(wo, 'Pengecekan')}
-                          className="inline-flex items-center rounded-lg border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
-                          title="Kembalikan ke Pengecekan"
-                        >
-                          ← Pengecekan
-                        </button>
-                        <button
-                          onClick={() => requestStatusChange(wo, 'Closed')}
-                          className="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                        >
-                          Lost Sales
-                        </button>
-                      </>
-                    )}
-                    {hasPermission('wo:edit') && wo.status === 'Selesai' && !wo.invoiceId && (
                       <button
-                        onClick={() => requestStatusChange(wo, 'Proses')}
-                        className="inline-flex items-center rounded-lg border border-blue-300 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
-                        title="Perlu tambah item / koreksi"
+                        onClick={() => requestStatusChange(wo, 'Selesai')}
+                        className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                        title="Pekerjaan selesai, siap dibuat faktur"
                       >
-                        ← Proses
+                        Tandai Selesai
                       </button>
                     )}
                     {wo.status === 'Closed' && wo.cancelReason && (
@@ -2567,9 +2543,7 @@ export default function WorkOrders() {
       {statusDialog && (() => {
         const { wo, next } = statusDialog;
         const needsReason = next === 'Pending'
-          || next === 'Closed'
-          || (wo.status === 'Proses' && next === 'Pengecekan')
-          || (wo.status === 'Selesai' && next === 'Proses');
+          || next === 'Closed';
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
