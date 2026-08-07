@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice } from '../types';
@@ -11,6 +12,7 @@ const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-I
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
 export default function SalesInvoice() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber, refreshData, isLoading } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
@@ -314,6 +316,14 @@ export default function SalesInvoice() {
       setWoPayment(copiedItems.reduce((sum, item) => sum + item.price * item.qty, 0));
     }
   };
+
+  useEffect(() => {
+    const woId = searchParams.get('woId');
+    if (!woId || !data.workOrders.some((wo) => wo.id === woId)) return;
+    handleOpenWOPicker();
+    handleSelectWO(woId);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, data.workOrders, setSearchParams]);
 
   const addFormItem = () => {
     const item = data.items.find((entry) => entry.id === formItemToAdd);

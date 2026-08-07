@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Banknote, CalendarDays, Landmark, Plus, RefreshCw, Search, Trash2, WalletCards, X } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { useApp } from "../context/AppContext";
@@ -13,6 +14,7 @@ const localDate=(date=new Date())=>`${date.getFullYear()}-${String(date.getMonth
 const displayDate=(value:string)=>value?new Intl.DateTimeFormat("id-ID",{day:"2-digit",month:"short",year:"numeric"}).format(new Date(`${value}T00:00:00`)):"-";
 
 export default function CustomerPayments(){
+  const [searchParams,setSearchParams]=useSearchParams();
   const {data,currentBranchId,hasPermission,refreshData}=useApp();
   const [rows,setRows]=useState<PaymentRow[]>([]),[accounts,setAccounts]=useState<CashAccount[]>([]),[depositSummary,setDepositSummary]=useState<DepositSummary[]>([]);
   const [loading,setLoading]=useState(false),[search,setSearch]=useState(""),[showForm,setShowForm]=useState(false),[invoiceSearch,setInvoiceSearch]=useState("");
@@ -31,6 +33,17 @@ export default function CustomerPayments(){
   const invoiceChoices=useMemo(()=>{const q=invoiceSearch.trim().toLowerCase();return unpaid.filter(i=>{const customer=data.customers.find(c=>c.id===i.customerRefId||c.id===i.customerId||c.name===i.customerName);return `${i.invoiceNumber} ${i.customerName} ${customer?.phone||""} ${i.vehicleInfo}`.toLowerCase().includes(q)}).slice(0,60)},[unpaid,invoiceSearch,data.customers]);
   const expectedAccountType=form.paymentMethod==="Tunai"?"cash":"bank";
   const availableAccounts=accounts.filter(a=>a.accountType===expectedAccountType&&(!a.branchId||a.branchId===invoice?.branchId));
+
+  useEffect(()=>{
+    const invoiceId=searchParams.get("invoiceId");
+    if(!invoiceId)return;
+    const selected=data.invoices.find(item=>item.id===invoiceId);
+    if(!selected||selected.total<=selected.payment)return;
+    setInvoiceSearch("");
+    setForm({invoiceId:selected.id,date:today,amount:Math.max(0,selected.total-selected.payment),paymentMethod:"Tunai",accountId:"",notes:""});
+    setShowForm(true);
+    setSearchParams({}, {replace:true});
+  },[searchParams,data.invoices,today,setSearchParams]);
 
   const periodRange=useMemo(()=>{const now=new Date();if(period==="all")return ["",""];if(period==="today")return [today,today];if(period==="custom")return [dateFrom,dateTo];
     const base=period==="last_month"?new Date(now.getFullYear(),now.getMonth()-1,1):new Date(now.getFullYear(),now.getMonth(),1);

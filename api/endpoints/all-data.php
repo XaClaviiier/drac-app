@@ -288,6 +288,8 @@ try {
         $r['woId'] = $r['wo_id'];
         $r['woNumber'] = $r['wo_number'];
         $r['branchId'] = $r['branch_id'];
+        $r['createdAt'] = $r['created_at'] ?? null;
+        $r['updatedAt'] = $r['updated_at'] ?? null;
         $r['items'] = $itemsBySalesInvoice[$r['id']] ?? [];
     }
     $data['invoices'] = $canUseInvoices ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];

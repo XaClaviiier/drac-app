@@ -55,6 +55,8 @@ export interface SalesInvoice {
   woNumber?: string;
   items?: WorkOrderService[];
   branchId: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type WOStatus = 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Invoiced' | 'Closed';

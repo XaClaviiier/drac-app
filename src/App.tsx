@@ -7,6 +7,7 @@ import VehicleRegister from './pages/VehicleRegister';
 import SalesInvoice from './pages/SalesInvoice';
 import Customers from './pages/Customers';
 import WorkOrders from './pages/WorkOrders';
+import WorkOrderTimeline from './pages/WorkOrderTimeline';
 import ItemsAndServices from './pages/ItemsAndServices';
 import UsersAndRoles from './pages/UsersAndRoles';
 import GoodsReceiptPage from './pages/GoodsReceipt';
@@ -75,6 +76,7 @@ function AppRoutes() {
         <Route path="chart-of-accounts" element={protectedPage('report:view', <ChartOfAccounts />)} />
         <Route path="customers" element={protectedPage('customer:view', <Customers />)} />
         <Route path="workorders" element={protectedPage('wo:view', <WorkOrders />)} />
+        <Route path="workorders/timeline" element={protectedPage('wo:view', <WorkOrderTimeline />)} />
         <Route path="reports/workorders" element={protectedPage('report:view', <WorkOrderReport />)} />
         <Route path="reports/sales" element={protectedPage('report:view', <SalesReport />)} />
         <Route path="reports/purchases" element={protectedPage('report:view', <PurchaseReport />)} />
