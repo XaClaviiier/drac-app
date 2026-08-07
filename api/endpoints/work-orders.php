@@ -30,6 +30,73 @@ $normalizeWorkOrderServices = static function (PDO $pdo, array $services): array
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        if ($id && $action === 'timeline') {
+            $woStmt = $pdo->prepare("SELECT id, branch_id, invoice_id, invoice_number FROM work_orders WHERE id=? LIMIT 1");
+            $woStmt->execute([$id]);
+            $timelineWo = $woStmt->fetch();
+            if (!$timelineWo) throw new InvalidArgumentException('WO tidak ditemukan.');
+            requireAccessibleBranch($pdo, $actor, (string)$timelineWo['branch_id']);
+
+            $payload = [
+                'woId' => (string)$timelineWo['id'],
+                'invoice' => null,
+                'payments' => [],
+                'paymentAudits' => [],
+                'canViewPayments' => authenticatedUserHasPermission($pdo, $actor, 'payment:view'),
+            ];
+            if (!authenticatedUserHasPermission($pdo, $actor, 'invoice:view')) {
+                respondSuccess($payload);
+            }
+
+            $invoiceStmt = $pdo->prepare("SELECT * FROM sales_invoices WHERE id=? OR wo_id=? ORDER BY created_at DESC LIMIT 1");
+            $invoiceStmt->execute([(string)($timelineWo['invoice_id'] ?? ''), (string)$timelineWo['id']]);
+            $invoice = $invoiceStmt->fetch();
+            if (!$invoice) respondSuccess($payload);
+
+            $payload['invoice'] = [
+                'id' => (string)$invoice['id'],
+                'invoiceNumber' => (string)$invoice['invoice_number'],
+                'date' => (string)$invoice['date'],
+                'total' => (float)$invoice['total'],
+                'payment' => (float)$invoice['payment'],
+                'status' => (string)$invoice['status'],
+                'createdAt' => $invoice['created_at'] ?? null,
+                'updatedAt' => $invoice['updated_at'] ?? null,
+            ];
+
+            if ($payload['canViewPayments']) {
+                $paymentStmt = $pdo->prepare("SELECT * FROM customer_payments WHERE invoice_id=? ORDER BY date ASC, created_at ASC, id ASC");
+                $paymentStmt->execute([(string)$invoice['id']]);
+                $payload['payments'] = array_map(static fn($payment) => [
+                    'id' => (string)$payment['id'],
+                    'paymentNumber' => (string)$payment['payment_number'],
+                    'date' => (string)$payment['date'],
+                    'amount' => (float)$payment['amount'],
+                    'paymentMethod' => (string)$payment['payment_method'],
+                    'accountName' => (string)($payment['account_name'] ?? ''),
+                    'createdByName' => (string)($payment['created_by_name'] ?? ''),
+                    'createdAt' => $payment['created_at'] ?? null,
+                ], $paymentStmt->fetchAll());
+
+                $auditStmt = $pdo->prepare("SELECT * FROM customer_payment_audit_logs WHERE invoice_id=? ORDER BY created_at ASC, id ASC");
+                $auditStmt->execute([(string)$invoice['id']]);
+                $payload['paymentAudits'] = array_map(static function($audit) {
+                    $snapshot = json_decode((string)($audit['snapshot_json'] ?? '{}'), true);
+                    return [
+                        'id' => (string)$audit['id'],
+                        'paymentNumber' => (string)($audit['payment_number'] ?? ''),
+                        'action' => (string)($audit['action'] ?? ''),
+                        'reason' => (string)($audit['reason'] ?? ''),
+                        'amount' => (float)($snapshot['amount'] ?? 0),
+                        'paymentMethod' => (string)($snapshot['payment_method'] ?? ''),
+                        'accountName' => (string)($snapshot['account_name'] ?? ''),
+                        'userName' => (string)($audit['user_name'] ?? ''),
+                        'createdAt' => $audit['created_at'] ?? null,
+                    ];
+                }, $auditStmt->fetchAll());
+            }
+            respondSuccess($payload);
+        }
         $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
         $pdo->exec("UPDATE work_orders SET pending_until=DATE_ADD(pending_at, INTERVAL 10 DAY) WHERE status='Pending' AND pending_at IS NOT NULL AND (pending_until IS NULL OR pending_until > DATE_ADD(pending_at, INTERVAL 10 DAY))");
         $pdo->exec("UPDATE work_orders SET status='Closed', cancel_reason=COALESCE(NULLIF(cancel_reason,''), 'Tidak ada keputusan selama 10 hari') WHERE status='Pending' AND pending_until IS NOT NULL AND pending_until <= NOW()");

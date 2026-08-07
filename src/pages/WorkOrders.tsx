@@ -5,6 +5,7 @@ import type { WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { localDateKey } from '../lib/date';
+import { api } from '../lib/apiClient';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -53,6 +54,14 @@ const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked
 ];
 const DEFAULT_WORK_ORDER_COLUMNS = WORK_ORDER_COLUMNS.map(column => column.key);
 type WorkOrderPeriod = 'all' | 'today' | '7days' | 'thisMonth' | 'lastMonth' | 'custom';
+type WorkOrderFinancialTimeline = {
+  woId: string;
+  invoice: null | { id: string; invoiceNumber: string; date: string; total: number; payment: number; status: string; createdAt?: string; updatedAt?: string };
+  payments: Array<{ id: string; paymentNumber: string; date: string; amount: number; paymentMethod: string; accountName?: string; createdByName?: string; createdAt?: string }>;
+  paymentAudits: Array<{ id: string; paymentNumber: string; action: string; reason?: string; amount: number; paymentMethod?: string; accountName?: string; userName?: string; createdAt?: string }>;
+  canViewPayments: boolean;
+};
+const EMPTY_FINANCIAL_TIMELINE: WorkOrderFinancialTimeline = { woId: '', invoice: null, payments: [], paymentAudits: [], canViewPayments: false };
 
 export default function WorkOrders() {
   const {
@@ -98,6 +107,8 @@ export default function WorkOrders() {
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
+  const [financialTimeline, setFinancialTimeline] = useState<WorkOrderFinancialTimeline>(EMPTY_FINANCIAL_TIMELINE);
+  const [financialTimelineLoading, setFinancialTimelineLoading] = useState(false);
   const [lostSalesFollowUp, setLostSalesFollowUp] = useState<WorkOrder | null>(null);
   const [isFollowingUpLostSales, setIsFollowingUpLostSales] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -121,6 +132,23 @@ export default function WorkOrders() {
     return DEFAULT_COMPLAINT_TEMPLATES;
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!detailWO) {
+      setFinancialTimeline(EMPTY_FINANCIAL_TIMELINE);
+      setFinancialTimelineLoading(false);
+      return () => { cancelled = true; };
+    }
+    setFinancialTimeline(EMPTY_FINANCIAL_TIMELINE);
+    setFinancialTimelineLoading(true);
+    void api.get<WorkOrderFinancialTimeline>(`work-orders/${detailWO.id}/timeline`).then(result => {
+      if (cancelled) return;
+      if (result.success && result.data) setFinancialTimeline(result.data);
+      setFinancialTimelineLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [detailWO?.id]);
 
   const workOrderColumnStorageKey = `dokterac_wo_columns_${currentUser?.id || currentUser?.username || 'default'}`;
   useEffect(() => {
@@ -962,6 +990,37 @@ export default function WorkOrders() {
       description: `Oleh ${log.byUserName || '-'}${log.reason ? ` · ${log.reason}` : ''}`,
       tone: 'bg-amber-500',
     }));
+    const finance = financialTimeline.woId === wo.id ? financialTimeline : EMPTY_FINANCIAL_TIMELINE;
+    if (finance.invoice) {
+      const invoice = finance.invoice;
+      events.push({
+        at: invoice.createdAt || `${invoice.date}T23:57:00`,
+        title: `Faktur ${invoice.invoiceNumber} dibuat`,
+        description: `Tanggal faktur ${formatBusinessDate(invoice.date)} · Total Rp ${Number(invoice.total).toLocaleString('id-ID')} · ${invoice.status}`,
+        tone: 'bg-emerald-600',
+      });
+      finance.payments.forEach(payment => events.push({
+        at: payment.createdAt || `${payment.date}T23:58:00`,
+        title: `Pembayaran ${payment.paymentNumber}`,
+        description: `Rp ${Number(payment.amount).toLocaleString('id-ID')} · ${payment.paymentMethod}${payment.accountName ? ` → ${payment.accountName}` : ''} · Input ${payment.createdByName || '-'}`,
+        tone: 'bg-green-600',
+      }));
+      finance.paymentAudits.filter(audit => audit.action === 'delete').forEach(audit => events.push({
+        at: audit.createdAt || invoice.updatedAt || `${invoice.date}T23:59:00`,
+        title: `Pembayaran ${audit.paymentNumber || '-'} dihapus`,
+        description: `Rp ${Number(audit.amount).toLocaleString('id-ID')} · Oleh ${audit.userName || '-'}${audit.reason ? ` · ${audit.reason}` : ''}`,
+        tone: 'bg-red-600',
+      }));
+      if (invoice.status === 'Lunas') {
+        const lastPayment = finance.payments[finance.payments.length - 1];
+        events.push({
+          at: lastPayment?.createdAt || invoice.updatedAt || invoice.createdAt || `${invoice.date}T23:59:30`,
+          title: 'Faktur Lunas',
+          description: `Total pembayaran Rp ${Number(invoice.payment).toLocaleString('id-ID')} dari nilai faktur Rp ${Number(invoice.total).toLocaleString('id-ID')}`,
+          tone: 'bg-green-800',
+        });
+      }
+    }
     if (wo.continuedToWoId) events.push({
       at: wo.continuedAt || data.workOrders.find(item => item.id === wo.continuedToWoId)?.createdAt || wo.updatedAt || wo.date,
       title: `Dilanjutkan ke ${wo.continuedToWoNumber || 'WO baru'}`,
@@ -969,7 +1028,11 @@ export default function WorkOrders() {
       tone: 'bg-violet-600',
       continuation: true,
     });
-    return events.sort((left, right) => left.at.localeCompare(right.at));
+    return events.sort((left, right) => {
+      const leftTime = new Date(left.at.includes('T') ? left.at : left.at.replace(' ', 'T')).getTime();
+      const rightTime = new Date(right.at.includes('T') ? right.at : right.at.replace(' ', 'T')).getTime();
+      return (Number.isNaN(leftTime) || Number.isNaN(rightTime)) ? left.at.localeCompare(right.at) : leftTime - rightTime;
+    });
   };
 
   const formatShareDate = (date: string) => {
@@ -1797,7 +1860,11 @@ export default function WorkOrders() {
               {detailWO.description && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><strong>Keluhan/Keterangan:</strong><br />{detailWO.description}</div>}
               {detailWO.notes && <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700"><strong>Catatan:</strong><br />{detailWO.notes}</div>}
               <div className="rounded-xl border border-gray-200 p-4">
-                <div className="mb-4 flex items-center gap-2"><Clock3 className="h-5 w-5 text-blue-600" /><h4 className="font-semibold text-gray-900">Timeline WO</h4></div>
+                <div className="mb-4 flex items-center gap-2">
+                  <Clock3 className="h-5 w-5 text-blue-600" />
+                  <h4 className="font-semibold text-gray-900">Timeline WO</h4>
+                  {financialTimelineLoading && <span className="ml-auto text-xs text-gray-400">Memuat transaksi…</span>}
+                </div>
                 <div className="relative ml-2 border-l-2 border-gray-200 pl-6">
                   {workOrderAuditTimeline(detailWO).map((event, index) => (
                     <div key={`${event.at}-${event.title}-${index}`} className="relative pb-5 last:pb-0">
