@@ -1423,12 +1423,6 @@ export default function WorkOrders() {
                     </td>}
                     {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
-                          <>
-                            <button onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
-                            <button onClick={() => requestStatusChange(wo, 'Closed')} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">Lost Sales</button>
-                          </>
-                        )}
                         {hasPermission('wo:edit') && wo.status === 'Pending' && !wo.continuedToWoId && (
                           isPendingExpired(wo)
                             ? <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-semibold text-white">Buat WO Baru</button>
@@ -1548,24 +1542,6 @@ export default function WorkOrders() {
                     </span>
 
                     {/* Tombol aksi status berurutan */}
-                    {hasPermission('wo:edit') && wo.status === 'Pengecekan' && !wo.continuedToWoId && (
-                      <>
-                        <button
-                          onClick={() => handleOpenDiagnosis(wo)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-                          title="Pelanggan setuju → mulai pengerjaan"
-                        >
-                          Hasil Diagnosa
-                        </button>
-                        <button
-                          onClick={() => requestStatusChange(wo, 'Closed')}
-                          className="inline-flex items-center rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
-                          title="Pelanggan tidak menyetujui estimasi"
-                        >
-                          Lost Sales
-                        </button>
-                      </>
-                    )}
                     {hasPermission('wo:edit') && wo.status === 'Pending' && !wo.continuedToWoId && (
                       isPendingExpired(wo) ? (
                         <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white">Buat WO Baru dari Data Ini</button>
@@ -1861,7 +1837,10 @@ export default function WorkOrders() {
             </div>
             <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
               {hasPermission('wo:edit') && detailWO.status === 'Pengecekan' && !detailWO.continuedToWoId && (
-                <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
+                <>
+                  <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
+                  <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Lost Sales</button>
+                </>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Pending' && !detailWO.continuedToWoId && !isPendingExpired(detailWO) && (
                 <button onClick={() => { const target = detailWO; setDetailWO(null); void resumeDiagnosis(target); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Lanjutkan Diagnosa</button>
