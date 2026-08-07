@@ -200,8 +200,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Set branch based on permission
     const roles = isDemoMode ? demoData.roles : data.roles;
     const role = roles.find((r) => r.id === user!.roleId);
-    const startsAll = role?.permissions.includes('all_branches') ?? false;
-    const branch = startsAll ? 'ALL' : user.branchId;
+    const startsAll = Boolean(user.isOwner || role?.permissions.includes('all_branches'));
+    const assignedBranches = Array.from(new Set([
+      user.branchId,
+      ...(user.branchIds || []),
+    ].filter((branchId): branchId is string => Boolean(branchId && branchId !== 'ALL' && branchId !== 'undefined'))));
+    const branch = startsAll ? 'ALL' : (assignedBranches[0] || 'ALL');
     setCurrentBranchId(branch);
     return user;
   };
@@ -243,11 +247,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!currentUser) return false;
     if (currentUser.isOwner) return true;
     const role = data.roles.find((r) => r.id === currentUser.roleId);
-    if (!role) return false;
     // Kompatibilitas role Teknisi lama yang dibuat sebelum izin operasional
     // mobile ditambahkan. Role baru sudah membawa izin ini dari data awal.
-    const isTechnicianRole = role.code.toUpperCase() === 'TKN'
-      || ['teknisi', 'technician'].includes(role.name.trim().toLowerCase());
+    const normalizedRoleName = (role?.name || currentUser.roleName || '').trim().toLowerCase();
+    const isTechnicianRole = role?.code?.toUpperCase() === 'TKN'
+      || normalizedRoleName.includes('teknisi')
+      || normalizedRoleName.includes('technician');
     const technicianBaseline: Permission[] = [
       'ai:view',
       'wo:view', 'wo:create',
@@ -256,8 +261,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       'item:view',
     ];
     if (isTechnicianRole && technicianBaseline.includes(perm)) return true;
-    return role.permissions.includes(perm);
+    return role?.permissions.includes(perm) ?? false;
   };
+
+  // Pulihkan pilihan cabang yang kosong/usang (misalnya sesi lama menyimpan
+  // nilai "undefined"). User non-owner otomatis diarahkan ke cabang pertama
+  // yang memang diberikan kepadanya, tanpa memperluas hak cabang.
+  useEffect(() => {
+    if (!currentUser || data.branches.length === 0) return;
+    const loadedUser = data.users.find(user => user.id === currentUser.id);
+    const assignedBranchIds = Array.from(new Set([
+      loadedUser?.branchId,
+      ...(loadedUser?.branchIds || []),
+      currentUser.branchId,
+      ...(currentUser.branchIds || []),
+    ].filter((branchId): branchId is string => Boolean(
+      branchId && branchId !== 'ALL' && branchId !== 'undefined'
+        && data.branches.some(branch => branch.id === branchId && branch.isActive)
+    ))));
+    const canUseAllBranches = currentUser.isOwner || hasPermission('all_branches');
+    if (!canUseAllBranches && assignedBranchIds.length > 0 && !assignedBranchIds.includes(currentBranchId)) {
+      setCurrentBranchId(assignedBranchIds[0]);
+    }
+  }, [currentUser?.id, currentBranchId, data.branches, data.roles, data.users]);
 
   const updateSettings = async (settings: AppSettings) => {
     if (isDemoMode) {

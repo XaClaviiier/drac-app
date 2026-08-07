@@ -485,7 +485,7 @@ function getUserPermissions(PDO $pdo, array $user): array {
     // role Teknisi baru, tanpa membuka invoice, laporan, atau pengaturan.
     $roleCode = strtoupper(trim((string)($role['code'] ?? '')));
     $roleName = strtolower(trim((string)($role['name'] ?? '')));
-    if ($roleCode === 'TKN' || in_array($roleName, ['teknisi', 'technician'], true)) {
+    if ($roleCode === 'TKN' || str_contains($roleName, 'teknisi') || str_contains($roleName, 'technician')) {
         $permissions = array_merge($permissions, [
             'ai:view',
             'wo:view', 'wo:create',

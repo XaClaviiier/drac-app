@@ -7,6 +7,8 @@ export default function MobileDashboard(){
   const {data,currentUser,currentBranchId,setCurrentBranchId,hasPermission,logout}=useApp();
   const navigate=useNavigate(); const [branchesOpen,setBranchesOpen]=useState(false); const [userOpen,setUserOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false); const [addOpen,setAddOpen]=useState(false);
   const isAll=currentBranchId==='ALL'; const activeBranch=data.branches.find(b=>b.id===currentBranchId);
+  const assignedBranchIds=Array.from(new Set([currentUser?.branchId,...(currentUser?.branchIds||[])].filter(Boolean)));
+  const hasAssignedBranch=Boolean(currentUser?.isOwner||hasPermission('all_branches')||assignedBranchIds.length);
   const filter=<T extends {branchId:string}>(items:T[])=>items.filter(i=>isAll||i.branchId===currentBranchId);
   const dateNow=new Date(); const today=`${dateNow.getFullYear()}-${String(dateNow.getMonth()+1).padStart(2,'0')}-${String(dateNow.getDate()).padStart(2,'0')}`; const invoices=filter(data.invoices); const workOrders=filter(data.workOrders);
   const todayInvoices=invoices.filter(i=>i.date===today);
@@ -34,7 +36,7 @@ export default function MobileDashboard(){
     <div className="relative mx-auto max-w-md px-4 pb-6 pt-[max(18px,env(safe-area-inset-top))]">
       <header className="relative z-20 flex items-center gap-3">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/20"><Wrench className="h-7 w-7"/></div>
-        <div className="min-w-0 flex-1"><h1 className="truncate text-lg font-extrabold">DOKTER AC MOBIL</h1><button onClick={()=>setBranchesOpen(!branchesOpen)} className="mt-0.5 flex max-w-full items-center gap-1.5 text-sm text-sky-300"><span className="truncate">{isAll?'Semua Cabang':activeBranch?.name.replace('CABANG ','')}</span><ChevronDown className="h-4 w-4"/></button></div>
+        <div className="min-w-0 flex-1"><h1 className="truncate text-lg font-extrabold">DOKTER AC MOBIL</h1><button onClick={()=>setBranchesOpen(!branchesOpen)} className="mt-0.5 flex max-w-full items-center gap-1.5 text-sm text-sky-300"><span className="truncate">{!hasAssignedBranch?'Cabang belum diberikan':isAll?'Semua Cabang':activeBranch?.name.replace('CABANG ','') || 'Pilih Cabang'}</span><ChevronDown className="h-4 w-4"/></button></div>
         <button className="relative rounded-xl p-2 text-slate-200"><Bell/><span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500"/></button>
         <button onClick={()=>{setUserOpen(v=>!v);setBranchesOpen(false)}} className="relative flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-purple-700 font-bold">{currentUser?.name?.[0]}<span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#031a35] bg-emerald-400"/></button>
         {userOpen&&<div className="absolute right-0 top-14 w-64 overflow-hidden rounded-2xl border border-white/10 bg-[#0b294a] text-left shadow-2xl">
