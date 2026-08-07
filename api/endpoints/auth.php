@@ -101,6 +101,7 @@ writeLoginAudit($pdo,$user['id'],$username,'login_success','Login berhasil');
 unset($user['password']);
 $user['roleName'] = $user['role_name'];
 $user['roleId'] = $user['role_id'];
+$user['permissions'] = getUserPermissions($pdo, $user);
 $user['branchName'] = $user['branch_name'];
 $user['branchId'] = $user['branch_id'];
 $user['branchIds'] = getUserBranchIds($pdo, $user['id']);

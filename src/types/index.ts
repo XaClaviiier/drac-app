@@ -257,6 +257,8 @@ export interface User {
   password: string;
   roleId: string;
   roleName: string;
+  /** Izin efektif dari server, termasuk baseline role kompatibilitas lama. */
+  permissions?: Permission[];
   branchId: string;
   branchName: string;
   branchIds?: string[];

@@ -128,6 +128,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (res.success && res.data) {
+      const access = res.data.currentAccess;
+      if (access && Array.isArray(access.permissions)) {
+        setCurrentUser((previous) => {
+          if (!previous) return previous;
+          const synchronizedUser: User = {
+            ...previous,
+            permissions: access.permissions as Permission[],
+            branchId: access.branchId || previous.branchId,
+            branchIds: Array.isArray(access.branchIds)
+              ? access.branchIds.map(String)
+              : previous.branchIds,
+          };
+          localStorage.setItem('currentUser', JSON.stringify(synchronizedUser));
+          return synchronizedUser;
+        });
+      }
       setData({
         vehicles: (res.data.vehicles || []).map((vehicle: any) => ({
           ...vehicle,
@@ -200,7 +216,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Set branch based on permission
     const roles = isDemoMode ? demoData.roles : data.roles;
     const role = roles.find((r) => r.id === user!.roleId);
-    const startsAll = Boolean(user.isOwner || role?.permissions.includes('all_branches'));
+    const startsAll = Boolean(
+      user.isOwner
+      || user.permissions?.includes('all_branches')
+      || role?.permissions.includes('all_branches'),
+    );
     const assignedBranches = Array.from(new Set([
       user.branchId,
       ...(user.branchIds || []),
@@ -246,6 +266,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const hasPermission = (perm: Permission): boolean => {
     if (!currentUser) return false;
     if (currentUser.isOwner) return true;
+    // Izin efektif dari server adalah sumber utama. Nilai ini juga berisi
+    // baseline kompatibilitas role lama dan otomatis diperbarui saat refresh.
+    if (currentUser.permissions?.includes(perm)) return true;
     const role = data.roles.find((r) => r.id === currentUser.roleId);
     // Kompatibilitas role Teknisi lama yang dibuat sebelum izin operasional
     // mobile ditambahkan. Role baru sudah membawa izin ini dari data awal.

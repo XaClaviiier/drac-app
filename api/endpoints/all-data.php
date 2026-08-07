@@ -20,6 +20,13 @@ try {
     $canUseReceipts = authenticatedUserHasPermission($pdo, $actor, 'receipt:view');
     $canUsePurchases = authenticatedUserHasPermission($pdo, $actor, 'purchase:view');
     $data = [];
+    // Selalu kirim akses efektif user aktif. Frontend memakai nilai ini untuk
+    // menyegarkan sesi lama ketika role atau hak cabang diubah oleh owner.
+    $data['currentAccess'] = [
+        'permissions' => getUserPermissions($pdo, $actor),
+        'branchId' => (string)($actor['branch_id'] ?? ''),
+        'branchIds' => $allowedBranchIds,
+    ];
 
     // Migrasi ringan agar field master barang baru langsung tersedia setelah deploy.
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS receipt_description VARCHAR(255) NULL AFTER description");
