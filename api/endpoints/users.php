@@ -17,9 +17,24 @@ function mapUserRow(PDO $pdo, array $row): array {
 }
 
 function saveUserBranches(PDO $pdo, string $userId, array $branchIds): void {
-    $pdo->prepare("DELETE FROM user_branch_access WHERE user_id = ?")->execute([$userId]);
-    $insert = $pdo->prepare("INSERT IGNORE INTO user_branch_access (user_id, branch_id) VALUES (?, ?)");
-    foreach (array_unique(array_filter($branchIds)) as $branchId) $insert->execute([$userId, $branchId]);
+    $branchIds = array_values(array_unique(array_filter(array_map('strval', $branchIds))));
+    if (!$branchIds) respondError('Pilih minimal satu cabang', 422);
+    $placeholders = implode(',', array_fill(0, count($branchIds), '?'));
+    $validStmt = $pdo->prepare("SELECT id FROM branches WHERE is_active=1 AND id IN ($placeholders)");
+    $validStmt->execute($branchIds);
+    $validIds = array_map('strval', array_column($validStmt->fetchAll(), 'id'));
+    if (count($validIds) !== count($branchIds)) respondError('Ada cabang yang tidak valid atau nonaktif', 422);
+
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("DELETE FROM user_branch_access WHERE user_id = ?")->execute([$userId]);
+        $insert = $pdo->prepare("INSERT INTO user_branch_access (user_id, branch_id) VALUES (?, ?)");
+        foreach ($validIds as $branchId) $insert->execute([$userId, $branchId]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
 }
 
 if ($action === 'password' && $method === 'PUT') {
@@ -58,6 +73,7 @@ switch ($method) {
         $d = getInput();
         $userId = $d['id'] ?? generateId();
         $branchIds = $d['branchIds'] ?? [$d['branchId']];
+        if (!empty($d['branchId']) && !in_array($d['branchId'], $branchIds, true)) $branchIds[] = $d['branchId'];
         if (!$branchIds) respondError('Pilih minimal satu cabang', 422);
         $stmt = $pdo->prepare("INSERT INTO users (id,username,name,email,password,role_id,branch_id,is_active) VALUES (?,?,?,?,?,?,?,?)");
         $stmt->execute([$userId,$d['username'],$d['name'],$d['email']??'',password_hash($d['password'], PASSWORD_DEFAULT),$d['roleId'],$d['branchId']??$branchIds[0],$d['isActive']??1]);
@@ -74,6 +90,7 @@ switch ($method) {
         $existing = $stmt->fetch();
         if (!$existing) respondError('User tidak ditemukan', 404);
         $branchIds = $d['branchIds'] ?? [$d['branchId']];
+        if (!empty($d['branchId']) && !in_array($d['branchId'], $branchIds, true)) $branchIds[] = $d['branchId'];
         if (!empty($existing['is_owner'])) {
             $branchIds = array_column($pdo->query("SELECT id FROM branches WHERE is_active=1")->fetchAll(), 'id');
             $d['isActive'] = true;

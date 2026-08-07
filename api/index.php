@@ -45,8 +45,13 @@ if ($requestUser && isset($permissionByResource[$resource])) {
     }
 }
 
-if ($requestUser && in_array($resource, ['settings', 'ai-settings'], true)) {
+if ($requestUser && $resource === 'settings') {
     requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'settings:view' : 'settings:edit');
+}
+if ($requestUser && $resource === 'ai-settings') {
+    // Status/model AI diperlukan oleh semua pemakai Asisten AI. API key tetap
+    // tidak pernah dikirim dan perubahan konfigurasi hanya untuk pengelola.
+    requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'ai:view' : 'settings:edit');
 }
 if ($requestUser && $resource === 'ai-chat') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'ai:view');

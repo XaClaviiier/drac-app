@@ -7,8 +7,11 @@ export default function MobileDashboard(){
   const {data,currentUser,currentBranchId,setCurrentBranchId,hasPermission,logout}=useApp();
   const navigate=useNavigate(); const [branchesOpen,setBranchesOpen]=useState(false); const [userOpen,setUserOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false); const [addOpen,setAddOpen]=useState(false);
   const isAll=currentBranchId==='ALL'; const activeBranch=data.branches.find(b=>b.id===currentBranchId);
-  const assignedBranchIds=Array.from(new Set([currentUser?.branchId,...(currentUser?.branchIds||[])].filter(Boolean)));
-  const hasAssignedBranch=Boolean(currentUser?.isOwner||hasPermission('all_branches')||assignedBranchIds.length);
+  // /all-data hanya mengirim cabang yang memang boleh diakses user aktif.
+  // Jangan filter ulang memakai localStorage/sesi lama karena perubahan akses
+  // oleh Owner harus langsung terlihat tanpa menunggu sesi baru.
+  const accessibleBranches=data.branches.filter(b=>b.isActive);
+  const hasAssignedBranch=Boolean(accessibleBranches.length);
   const filter=<T extends {branchId:string}>(items:T[])=>items.filter(i=>isAll||i.branchId===currentBranchId);
   const dateNow=new Date(); const today=`${dateNow.getFullYear()}-${String(dateNow.getMonth()+1).padStart(2,'0')}-${String(dateNow.getDate()).padStart(2,'0')}`; const invoices=filter(data.invoices); const workOrders=filter(data.workOrders);
   const todayInvoices=invoices.filter(i=>i.date===today);
@@ -46,7 +49,7 @@ export default function MobileDashboard(){
         </div>}
       </header>
       {userOpen&&<button aria-label="Tutup menu akun" onClick={()=>setUserOpen(false)} className="fixed inset-0 z-10 cursor-default"/>}
-      {branchesOpen&&<div className="mt-3 rounded-2xl border border-white/10 bg-[#0b294a] p-2 shadow-xl">{hasPermission('all_branches')&&<button onClick={()=>{setCurrentBranchId('ALL');setBranchesOpen(false)}} className={`w-full rounded-xl px-3 py-2 text-left text-sm ${isAll?'bg-sky-500 font-semibold':'text-slate-200'}`}>Semua Cabang</button>}{data.branches.filter(b=>b.isActive&&(currentUser?.isOwner||currentUser?.branchIds?.includes(b.id)||b.id===currentUser?.branchId)).map(b=><button key={b.id} onClick={()=>{setCurrentBranchId(b.id);setBranchesOpen(false)}} className={`mt-1 w-full rounded-xl px-3 py-2 text-left text-sm ${currentBranchId===b.id?'bg-sky-500 font-semibold':'text-slate-200'}`}>{b.name}</button>)}</div>}
+      {branchesOpen&&<div className="mt-3 rounded-2xl border border-white/10 bg-[#0b294a] p-2 shadow-xl">{hasPermission('all_branches')&&<button onClick={()=>{setCurrentBranchId('ALL');setBranchesOpen(false)}} className={`w-full rounded-xl px-3 py-2 text-left text-sm ${isAll?'bg-sky-500 font-semibold':'text-slate-200'}`}>Semua Cabang</button>}{accessibleBranches.map(b=><button key={b.id} onClick={()=>{setCurrentBranchId(b.id);setBranchesOpen(false)}} className={`mt-1 w-full rounded-xl px-3 py-2 text-left text-sm ${currentBranchId===b.id?'bg-sky-500 font-semibold':'text-slate-200'}`}>{b.name}</button>)}</div>}
       <section className="mt-5 grid grid-cols-4 divide-x divide-white/10 rounded-3xl border border-white/10 bg-white/[.07] p-3">
         {[[orderNew,'Order Baru'],[orderProcess,'Dalam Proses'],[orderDone,'Selesai'],[todayInvoices.length,'Faktur Hari Ini']].map(([v,l])=><div key={String(l)} className="px-1 text-center"><p className="text-lg font-bold">{v}</p><p className="mt-1 text-[10px] leading-tight text-slate-300">{l}</p></div>)}
       </section>

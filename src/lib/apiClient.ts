@@ -48,7 +48,9 @@ async function request<T = any>(
     }
 
     const data = await response.json();
-    if (response.status === 401 && !path.includes('/login')) {
+    const isSessionError = response.status === 401
+      && /sesi\s+(login|berakhir)|sesi.*(tidak valid|kedaluwarsa)/i.test(String(data?.message || ''));
+    if (isSessionError && !path.includes('/login')) {
       localStorage.removeItem('currentUser');
       localStorage.removeItem('apiToken');
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') window.location.assign('/login');

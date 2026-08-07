@@ -122,7 +122,7 @@ export default function UsersAndRoles() {
     setShowBranchModal(true);
   };
 
-  const saveUser = (e: React.FormEvent) => {
+  const saveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const role = data.roles.find((r) => r.id === userForm.roleId);
     const branch = data.branches.find((b) => b.id === userForm.branchId);
@@ -141,9 +141,13 @@ export default function UsersAndRoles() {
       createdAt: editingUser?.createdAt || localDateKey(),
       lastLogin: editingUser?.lastLogin,
     };
-    if (editingUser) updateUser(editingUser.id, payload);
-    else addUser(payload);
-    setShowUserModal(false);
+    try {
+      if (editingUser) await updateUser(editingUser.id, payload);
+      else await addUser(payload);
+      setShowUserModal(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Hak akses pengguna gagal disimpan');
+    }
   };
 
   const saveRole = (e: React.FormEvent) => {

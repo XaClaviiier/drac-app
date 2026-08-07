@@ -199,6 +199,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (res.success && res.data) {
       user = res.data as User;
+      // Pasang identitas dan izin efektif sebelum memuat data. Ini mencegah
+      // halaman berizin (mis. AI) sempat menganggap user tidak punya akses.
+      setCurrentUser(user);
+      localStorage.setItem('currentUser', JSON.stringify(user));
       await refreshData();
     } else if (allowDemoMode) {
       // Fallback: cek dari demo data (untuk preview local)
@@ -211,8 +215,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     if (!user) return null;
-    setCurrentUser(user);
-    localStorage.setItem('currentUser', JSON.stringify(user));
+    if (isDemoMode) {
+      setCurrentUser(user);
+      localStorage.setItem('currentUser', JSON.stringify(user));
+    }
     // Set branch based on permission
     const roles = isDemoMode ? demoData.roles : data.roles;
     const role = roles.find((r) => r.id === user!.roleId);

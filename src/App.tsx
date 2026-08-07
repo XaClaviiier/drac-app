@@ -39,7 +39,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function RequirePermission({ permission, children }: { permission: Permission; children: React.ReactNode }) {
-  const { hasPermission } = useApp();
+  const { hasPermission, isLoading } = useApp();
+  // Saat halaman dibuka langsung/di-refresh, tunggu izin efektif dari server
+  // agar sesi lama tidak dilempar ke Dashboard sebelum sinkronisasi selesai.
+  if (isLoading) return <div className="min-h-[40vh]" />;
   if (!hasPermission(permission)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }

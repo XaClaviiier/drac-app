@@ -36,7 +36,9 @@ curl_close($ch);
 if ($body === false) respondError('Tidak dapat menghubungi Groq', 502, $curlError);
 $decoded = json_decode($body, true);
 if ($status < 200 || $status >= 300) {
-    respondError($decoded['error']['message'] ?? 'Groq menolak permintaan', $status >= 400 && $status < 500 ? $status : 502);
+    // Jangan teruskan HTTP 401 dari Groq. Di frontend, 401 khusus berarti sesi
+    // aplikasi kedaluwarsa dan akan mengeluarkan user dari aplikasi.
+    respondError($decoded['error']['message'] ?? 'Groq menolak permintaan', $status === 429 ? 429 : 502);
 }
 
 // Pertahankan format respons Groq agar frontend tidak pernah perlu mengetahui key.
