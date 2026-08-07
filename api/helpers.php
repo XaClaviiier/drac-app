@@ -472,10 +472,30 @@ function requireAuthenticatedUser(PDO $pdo): array {
 
 function getUserPermissions(PDO $pdo, array $user): array {
     if (!empty($user['is_owner'])) return ['*'];
-    $stmt = $pdo->prepare("SELECT permissions FROM roles WHERE id = ? AND is_active = 1 LIMIT 1");
+    $stmt = $pdo->prepare("SELECT code, name, permissions FROM roles WHERE id = ? AND is_active = 1 LIMIT 1");
     $stmt->execute([$user['role_id'] ?? '']);
-    $permissions = json_decode((string)($stmt->fetchColumn() ?: '[]'), true);
-    return is_array($permissions) ? array_values(array_unique(array_map('strval', $permissions))) : [];
+    $role = $stmt->fetch();
+    if (!$role) return [];
+
+    $permissions = json_decode((string)($role['permissions'] ?? '[]'), true);
+    $permissions = is_array($permissions) ? array_map('strval', $permissions) : [];
+
+    // Role Teknisi dari instalasi lama belum selalu memiliki izin mobile
+    // untuk registrasi WO. Berikan baseline operasional yang sama seperti
+    // role Teknisi baru, tanpa membuka invoice, laporan, atau pengaturan.
+    $roleCode = strtoupper(trim((string)($role['code'] ?? '')));
+    $roleName = strtolower(trim((string)($role['name'] ?? '')));
+    if ($roleCode === 'TKN' || in_array($roleName, ['teknisi', 'technician'], true)) {
+        $permissions = array_merge($permissions, [
+            'ai:view',
+            'wo:view', 'wo:create',
+            'customer:view', 'customer:create',
+            'vehicle:view', 'vehicle:create',
+            'item:view',
+        ]);
+    }
+
+    return array_values(array_unique($permissions));
 }
 
 function authenticatedUserHasPermission(PDO $pdo, array $user, string $permission): bool {

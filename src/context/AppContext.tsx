@@ -244,9 +244,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (currentUser.isOwner) return true;
     const role = data.roles.find((r) => r.id === currentUser.roleId);
     if (!role) return false;
-    // Kompatibilitas role Teknisi lama sebelum izin khusus AI ditambahkan.
-    // Setelah role disimpan ulang, ai:view akan tersimpan sebagai izin biasa.
-    if (perm === 'ai:view' && role.code === 'TKN') return true;
+    // Kompatibilitas role Teknisi lama yang dibuat sebelum izin operasional
+    // mobile ditambahkan. Role baru sudah membawa izin ini dari data awal.
+    const isTechnicianRole = role.code.toUpperCase() === 'TKN'
+      || ['teknisi', 'technician'].includes(role.name.trim().toLowerCase());
+    const technicianBaseline: Permission[] = [
+      'ai:view',
+      'wo:view', 'wo:create',
+      'customer:view', 'customer:create',
+      'vehicle:view', 'vehicle:create',
+      'item:view',
+    ];
+    if (isTechnicianRole && technicianBaseline.includes(perm)) return true;
     return role.permissions.includes(perm);
   };
 
