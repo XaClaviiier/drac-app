@@ -549,7 +549,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (from === to) return false;
     const forward: Record<WOStatus, WOStatus[]> = {
       Pengecekan: ['Proses', 'Pending', 'Selesai', 'Closed'],
-      Pending: ['Proses', 'Closed'],
+      // Pending dapat dibuka kembali ke tahap Diagnosa selama belum kedaluwarsa.
+      Pending: ['Pengecekan', 'Proses', 'Closed'],
       Proses: ['Selesai', 'Closed'],
       Selesai: ['Invoiced'],
       Invoiced: [],

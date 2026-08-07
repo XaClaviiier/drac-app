@@ -201,7 +201,8 @@ switch ($method) {
             $nextStatus = (string)($d['status'] ?? $currentStatus);
             $allowedTransitions = [
                 'Pengecekan' => ['Pengecekan', 'Pending', 'Proses', 'Selesai', 'Closed'],
-                'Pending' => ['Pending', 'Proses', 'Closed'],
+                // Pending boleh dilanjutkan kembali ke Diagnosa/Pengecekan.
+                'Pending' => ['Pending', 'Pengecekan', 'Proses', 'Closed'],
                 'Proses' => ['Proses', 'Selesai', 'Closed'],
                 'Selesai' => ['Selesai'],
                 'Closed' => ['Closed'],

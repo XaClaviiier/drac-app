@@ -807,6 +807,44 @@ export default function WorkOrders() {
     setInvoiceBackdateReason('');
   };
 
+  const openActiveWorkOrder = async (wo: WorkOrder) => {
+    setActiveWoConflict(null);
+    const sameBranch = wo.branchId === resolveBranchId();
+
+    if (!sameBranch) {
+      setDetailWO(wo);
+      return;
+    }
+
+    if (wo.status === 'Pengecekan') {
+      handleOpenDiagnosis(wo);
+      return;
+    }
+    if (wo.status === 'Pending') {
+      await resumeDiagnosis(wo);
+      return;
+    }
+    if (wo.status === 'Proses') {
+      handleOpenModal(wo);
+      return;
+    }
+    if (wo.status === 'Selesai' && hasPermission('invoice:create') && !wo.invoiceId) {
+      handleOpenInvoiceModal(wo);
+      return;
+    }
+
+    setDetailWO(wo);
+  };
+
+  const activeWorkOrderActionLabel = (wo: WorkOrder, sameBranch: boolean) => {
+    if (!sameBranch) return 'Buka WO (Read-only, cabang lain)';
+    if (wo.status === 'Pengecekan') return 'Lanjutkan Diagnosa';
+    if (wo.status === 'Pending') return 'Lanjutkan Diagnosa dari Pending';
+    if (wo.status === 'Proses') return 'Buka Pekerjaan';
+    if (wo.status === 'Selesai' && hasPermission('invoice:create') && !wo.invoiceId) return 'Buat Faktur';
+    return 'Lihat WO Ini';
+  };
+
   // Cabang aktif user saat ini (untuk melanjutkan pekerjaan)
   const activeBranchId = currentBranchId === 'ALL'
     ? (currentUser?.branchId || 'BR-001')
@@ -1711,6 +1749,9 @@ export default function WorkOrders() {
               {hasPermission('wo:edit') && detailWO.status === 'Pengecekan' && !detailWO.continuedToWoId && (
                 <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
               )}
+              {hasPermission('wo:edit') && detailWO.status === 'Pending' && !detailWO.continuedToWoId && !isPendingExpired(detailWO) && (
+                <button onClick={() => { const target = detailWO; setDetailWO(null); void resumeDiagnosis(target); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Lanjutkan Diagnosa</button>
+              )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
                 <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
               )}
@@ -2369,10 +2410,10 @@ export default function WorkOrders() {
                 </p>
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={() => { const target = conflict; setActiveWoConflict(null); handleOpenModal(target); }}
+                    onClick={() => void openActiveWorkOrder(conflict)}
                     className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                   >
-                    {sameBranch ? 'Buka & Lanjutkan WO Ini' : 'Buka WO (Read-only, cabang lain)'}
+                    {activeWorkOrderActionLabel(conflict, sameBranch)}
                   </button>
                   {!sameBranch && (
                     <button
