@@ -109,7 +109,7 @@ $user['isActive'] = (bool)$user['is_active'];
 $user['isOwner'] = (bool)($user['is_owner'] ?? false);
 $user['isProtected'] = (bool)($user['is_protected'] ?? false);
 $user['apiToken'] = $token;
-$user['sessionExpiresAt'] = $expiresAt->format('Y-m-d H:i:s');
+$user['sessionExpiresAt'] = $expiresAt->format(DateTimeInterface::ATOM);
 $user['idleTimeoutMinutes'] = empty($user['is_owner']) ? $idleTimeoutMinutes : 0;
 
 respondSuccess($user, 'Login berhasil');

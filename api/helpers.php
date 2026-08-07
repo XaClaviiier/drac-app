@@ -453,13 +453,23 @@ function requireAuthenticatedUser(PDO $pdo): array {
     if (!$user) respondError('Sesi login tidak valid atau kedaluwarsa', 401);
     if (empty($user['is_owner'])) {
         $idleStmt=$pdo->prepare("
-            SELECT r.idle_timeout_minutes,s.last_activity
+            SELECT
+                COALESCE(r.idle_timeout_minutes, 30) AS idle_timeout_minutes,
+                CASE
+                    WHEN s.last_activity IS NOT NULL
+                     AND COALESCE(r.idle_timeout_minutes, 30) > 0
+                     AND TIMESTAMPDIFF(SECOND, s.last_activity, NOW()) >= COALESCE(r.idle_timeout_minutes, 30) * 60
+                    THEN 1 ELSE 0
+                END AS idle_expired
             FROM api_sessions s LEFT JOIN user_login_rules r ON r.user_id=s.user_id COLLATE utf8mb4_unicode_ci
             WHERE s.token_hash=?
         ");
         $idleStmt->execute([hash('sha256',$token)]);$idle=$idleStmt->fetch();
         $minutes=(int)($idle['idle_timeout_minutes']??30);
-        if($minutes>0&&!empty($idle['last_activity'])&&strtotime($idle['last_activity'])<time()-($minutes*60)){
+        // Bandingkan waktu sepenuhnya di MySQL. Membandingkan DATETIME MySQL
+        // dengan time() PHP dapat langsung mengeluarkan user saat zona waktu
+        // server database berbeda dengan zona waktu PHP.
+        if($minutes>0&&!empty($idle['idle_expired'])){
             $pdo->prepare("UPDATE api_sessions SET revoked_at=NOW() WHERE token_hash=?")->execute([hash('sha256',$token)]);
             writeLoginAudit($pdo,$user['id'],$user['username'],'session_revoked','Otomatis logout karena tidak aktif');
             respondError('Sesi berakhir karena tidak ada aktivitas',401);

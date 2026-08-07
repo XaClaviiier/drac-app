@@ -247,6 +247,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!currentUser?.sessionExpiresAt) return;
     const expires = new Date(currentUser.sessionExpiresAt.replace(' ', 'T')).getTime();
+    // Jangan menganggap format tanggal yang tidak dikenali browser sebagai
+    // sesi kedaluwarsa. Backend baru mengirim ISO-8601 dengan zona waktu.
+    if (!Number.isFinite(expires)) return;
     const delay = expires - Date.now();
     if (delay <= 0) { logout(); return; }
     const timer = window.setTimeout(() => logout(), Math.min(delay, 2147483647));
