@@ -211,7 +211,9 @@ switch ($method) {
                 'Pending' => ['Pending', 'Pengecekan', 'Proses', 'Closed'],
                 'Proses' => ['Proses', 'Selesai', 'Closed'],
                 'Selesai' => ['Selesai'],
-                'Closed' => ['Closed'],
+                // Closed ditampilkan sebagai Lost Sales. Dapat dipulihkan bila
+                // pelanggan menyetujui masalah yang sama.
+                'Closed' => ['Closed', 'Proses'],
             ];
             if (!isset($allowedTransitions[$currentStatus]) || !in_array($nextStatus, $allowedTransitions[$currentStatus], true)) {
                 throw new InvalidArgumentException("Perubahan status {$currentStatus} ke {$nextStatus} tidak diizinkan.");
@@ -225,7 +227,7 @@ switch ($method) {
                 throw new InvalidArgumentException('Alasan Pending wajib diisi.');
             }
             if ($nextStatus === 'Closed' && trim((string)($d['cancelReason'] ?? '')) === '') {
-                throw new InvalidArgumentException('Alasan pembatalan wajib diisi.');
+                throw new InvalidArgumentException('Alasan Lost Sales wajib diisi.');
             }
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
@@ -365,7 +367,8 @@ switch ($method) {
 
             // WO selesai boleh dihapus setelah seluruh pembayaran dan faktur terkait
             // sudah dihapus. Pemeriksaan relasi faktur dilakukan di atas.
-            $deletableStatuses = ['Pengecekan', 'Pending', 'Selesai', 'Closed'];
+            // Lost Sales adalah histori konversi penjualan dan tidak boleh dihapus.
+            $deletableStatuses = ['Pengecekan', 'Pending', 'Selesai'];
             if (!in_array((string)$wo['status'], $deletableStatuses, true)) {
                 throw new DomainException("WO berstatus {$wo['status']} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.");
             }

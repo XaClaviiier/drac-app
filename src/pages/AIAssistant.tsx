@@ -35,6 +35,7 @@ interface RegistrationDraft {
 }
 
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+const woStatusLabel = (status: WorkOrder['status']) => status === 'Closed' ? 'Lost Sales' : status;
 const localDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
@@ -327,7 +328,7 @@ export default function AIAssistant() {
       lines.push(
         '',
         `⚠️ **WO aktif ditemukan: ${activeWO.woNumber}**`,
-        `Status: **${activeWO.status}** · Cabang: ${cabangName(activeWO.branchId)}`,
+        `Status: **${woStatusLabel(activeWO.status)}** · Cabang: ${cabangName(activeWO.branchId)}`,
         `Keluhan: ${activeWO.description || '-'}`,
         '',
         '**Apakah WO ini mau dilanjutkan?** Gunakan tombol **Lanjutkan WO Aktif**. Jangan membuat WO baru selama WO ini masih aktif.',
@@ -335,8 +336,8 @@ export default function AIAssistant() {
     } else if (latestClosedWO) {
       lines.push(
         '',
-        `ℹ️ WO terakhir **${latestClosedWO.woNumber}** sudah **Closed**.`,
-        'Jika pelanggan kembali, gunakan **Buat WO Lanjutan (Lanjut Kembali)**. Sistem akan membuat nomor WO baru dan tetap menghubungkannya dengan WO lama.',
+        `ℹ️ WO terakhir **${latestClosedWO.woNumber}** berstatus **Lost Sales**.`,
+        'Jika pelanggan kembali, buka detail WO lalu pilih **Tindak Lanjut**. Masalah sama memakai WO lama; masalah berbeda membuat WO baru.',
       );
     }
 
@@ -356,7 +357,7 @@ export default function AIAssistant() {
         `   Cabang: ${cabangName(wo.branchId)}`,
         `   Keluhan: ${wo.description || '-'}`,
         `   Layanan: ${services}`,
-        `   Status: **${wo.status}**`,
+        `   Status: **${woStatusLabel(wo.status)}**`,
         `   Total: ${fmt(wo.total)}${wo.invoiceNumber ? ` · Faktur ${wo.invoiceNumber}` : ''}`,
       );
     });
@@ -556,7 +557,7 @@ export default function AIAssistant() {
         ))
         .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
       const rows = filtered.slice(start, start + pageSize).map((wo, index) =>
-        `${start + index + 1}. **${wo.woNumber}** — ${wo.date}\n   ${wo.customerName} · ${wo.plateNumber} · ${wo.status} · ${fmt(wo.total)} · ${cabangName(wo.branchId)}`
+        `${start + index + 1}. **${wo.woNumber}** — ${wo.date}\n   ${wo.customerName} · ${wo.plateNumber} · ${woStatusLabel(wo.status)} · ${fmt(wo.total)} · ${cabangName(wo.branchId)}`
       );
       return finish('Daftar Order Kerja', rows, filtered.length, 'list wo');
     }

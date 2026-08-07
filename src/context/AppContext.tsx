@@ -33,7 +33,11 @@ interface AppContextType {
   addWorkOrder: (wo: WorkOrder) => Promise<void>;
   updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
-  continueWorkOrder: (sourceWoId: string, targetBranchId: string) => Promise<WorkOrder | null>;
+  continueWorkOrder: (
+    sourceWoId: string,
+    targetBranchId: string,
+    options?: { resetJob?: boolean }
+  ) => Promise<WorkOrder | null>;
   /** Cari WO aktif (belum Invoiced/Closed dan belum dilanjutkan) untuk plat nomor tertentu. */
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
@@ -554,7 +558,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       Proses: ['Selesai', 'Closed'],
       Selesai: ['Invoiced'],
       Invoiced: [],
-      Closed: [],
+      // Lost Sales dapat dipulihkan bila pelanggan menyetujui masalah yang sama.
+      Closed: ['Proses'],
     };
     return forward[from]?.includes(to) ?? false;
   };
@@ -614,7 +619,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? pendingDeadline
         : wo.pendingUntil,
       pendingReason: nextStatus === 'Pending' ? reason?.trim() : wo.pendingReason,
-      approvedAt: (wo.status === 'Pengecekan' || wo.status === 'Pending') && nextStatus === 'Proses'
+      approvedAt: (wo.status === 'Pengecekan' || wo.status === 'Pending' || wo.status === 'Closed') && nextStatus === 'Proses'
         ? localDateKey()
         : wo.approvedAt,
       estimateTotal: wo.status === 'Pengecekan' && nextStatus === 'Proses' && !wo.estimateTotal
@@ -626,7 +631,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   };
 
-  const continueWorkOrder = async (sourceWoId: string, targetBranchId: string): Promise<WorkOrder | null> => {
+  const continueWorkOrder = async (
+    sourceWoId: string,
+    targetBranchId: string,
+    options?: { resetJob?: boolean }
+  ): Promise<WorkOrder | null> => {
     const src = data.workOrders.find(w => w.id === sourceWoId);
     if (!src) return null;
     const srcBranch = data.branches.find(b => b.id === src.branchId);
@@ -636,6 +645,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const today = localDateKey();
     const newWoNumber = generateDocumentNumber('workOrder', targetBranchId);
     const newId = Date.now().toString();
+
+    const resetJob = options?.resetJob === true;
+    const copiedServices = resetJob
+      ? []
+      : src.services.map((s, i) => {
+          const currentItem = data.items.find(item => item.id === s.itemId);
+          return { ...s, id: `${newId}-${i}`, price: currentItem?.sellingPrice ?? s.price };
+        });
+    const copiedTotal = resetJob
+      ? 0
+      : src.services.reduce((sum, service) => {
+          const currentItem = data.items.find(item => item.id === service.itemId);
+          return sum + (currentItem?.sellingPrice ?? service.price) * service.qty;
+        }, 0);
 
     const newWo: WorkOrder = {
       id: newId,
@@ -647,19 +670,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vehicleRefId: src.vehicleRefId,
       plateNumber: src.plateNumber,
       vehicleInfo: src.vehicleInfo,
-      description: src.description,
-      findings: src.findings,
-      services: src.services.map((s, i) => {
-        const currentItem = data.items.find(item => item.id === s.itemId);
-        return { ...s, id: `${newId}-${i}`, price: currentItem?.sellingPrice ?? s.price };
-      }),
-      total: src.services.reduce((sum, service) => {
-        const currentItem = data.items.find(item => item.id === service.itemId);
-        return sum + (currentItem?.sellingPrice ?? service.price) * service.qty;
-      }, 0),
+      description: resetJob ? '' : src.description,
+      findings: resetJob ? undefined : src.findings,
+      diagnosisTemperature: resetJob ? undefined : src.diagnosisTemperature,
+      diagnosisLp: resetJob ? undefined : src.diagnosisLp,
+      diagnosisHp: resetJob ? undefined : src.diagnosisHp,
+      finalTemperature: undefined,
+      finalLp: undefined,
+      finalHp: undefined,
+      services: copiedServices,
+      total: copiedTotal,
       estimateTotal: undefined,
       status: ['Pending', 'Closed'].includes(src.status) ? 'Pengecekan' : 'Proses',
-      notes: `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,
+      notes: resetJob
+        ? `Masalah berbeda. Referensi data pelanggan dan kendaraan dari ${src.woNumber} (${srcBranch?.name || '-'}).`
+        : `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,
       branchId: targetBranchId,
       continuedFromWoId: src.id,
       continuedFromWoNumber: src.woNumber,

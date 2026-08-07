@@ -19,8 +19,9 @@ const statusTone: Record<WOStatus, string> = {
   Proses: 'bg-blue-100 text-blue-800',
   Selesai: 'bg-emerald-100 text-emerald-800',
   Invoiced: 'bg-purple-100 text-purple-800',
-  Closed: 'bg-gray-200 text-gray-700',
+  Closed: 'bg-rose-100 text-rose-800',
 };
+const statusLabel = (status: WOStatus) => status === 'Closed' ? 'Lost Sales' : status;
 
 type ReportRow = WorkOrder & { invoice?: SalesInvoice; branchName: string; customerPhone: string };
 
@@ -72,6 +73,7 @@ export default function WorkOrderReport() {
       active: rows.filter(wo => ['Pengecekan', 'Pending', 'Proses'].includes(wo.status)).length,
       completed: rows.filter(wo => ['Selesai', 'Invoiced'].includes(wo.status)).length,
       cancelled: rows.filter(wo => wo.status === 'Closed').length,
+      recovered: rows.filter(wo => (wo.statusLog || []).some(log => log.from === 'Closed' && log.to === 'Proses')).length,
     };
   }, [rows]);
 
@@ -98,7 +100,7 @@ export default function WorkOrderReport() {
     const header = ['No. WO', 'Tanggal', 'Cabang', 'Pelanggan', 'Telepon', 'Plat', 'Kendaraan', 'Keluhan', 'Layanan/Barang', 'Status', 'Estimasi WO', 'No. Invoice', 'Nilai Invoice', 'Pembayaran', 'Pembuat'];
     const csvRows = rows.map(wo => [
       wo.woNumber, wo.date, wo.branchName, wo.customerName, wo.customerPhone, wo.plateNumber, wo.vehicleInfo,
-      wo.description || '', wo.services.map(item => `${item.name} x${item.qty}`).join('; '), wo.status,
+      wo.description || '', wo.services.map(item => `${item.name} x${item.qty}`).join('; '), statusLabel(wo.status),
       wo.estimateTotal ?? wo.total, wo.invoice?.invoiceNumber || '', wo.invoice?.total || 0, wo.invoice?.payment || 0,
       wo.createdByName || '',
     ].map(csvCell).join(','));
@@ -113,7 +115,7 @@ export default function WorkOrderReport() {
   const printReport = () => {
     const popup = window.open('', '_blank', 'width=1200,height=800');
     if (!popup) return;
-    const body = rows.map(wo => `<tr><td><b>${wo.woNumber}</b><br><small>${dateLabel(wo.date)}</small></td><td>${wo.branchName}</td><td><b>${wo.customerName}</b><br><small>${wo.customerPhone || '-'}</small></td><td><b>${wo.plateNumber}</b><br><small>${wo.vehicleInfo}</small></td><td>${wo.services.map(item => `${item.name} x${item.qty}`).join('<br>') || '-'}</td><td>${wo.status}</td><td class="num">${rupiah(wo.estimateTotal ?? wo.total)}</td><td>${wo.invoice?.invoiceNumber || '-'}<br><small>${wo.invoice ? rupiah(wo.invoice.total) : ''}</small></td><td>${wo.createdByName || '-'}</td></tr>`).join('');
+    const body = rows.map(wo => `<tr><td><b>${wo.woNumber}</b><br><small>${dateLabel(wo.date)}</small></td><td>${wo.branchName}</td><td><b>${wo.customerName}</b><br><small>${wo.customerPhone || '-'}</small></td><td><b>${wo.plateNumber}</b><br><small>${wo.vehicleInfo}</small></td><td>${wo.services.map(item => `${item.name} x${item.qty}`).join('<br>') || '-'}</td><td>${statusLabel(wo.status)}</td><td class="num">${rupiah(wo.estimateTotal ?? wo.total)}</td><td>${wo.invoice?.invoiceNumber || '-'}<br><small>${wo.invoice ? rupiah(wo.invoice.total) : ''}</small></td><td>${wo.createdByName || '-'}</td></tr>`).join('');
     popup.document.write(`<!doctype html><html><head><title>Laporan WO</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#172033}h1{font-size:22px;margin:0 0 4px}.meta{font-size:12px;color:#667085;margin-bottom:15px}.summary{display:flex;gap:12px;margin-bottom:15px}.box{border:1px solid #d0d5dd;padding:8px 12px;border-radius:6px;font-size:12px}.box b{display:block;font-size:16px;margin-top:3px}table{width:100%;border-collapse:collapse;font-size:9px}th{background:#1e40af;color:white;padding:7px;text-align:left}td{padding:6px;border:1px solid #d0d5dd;vertical-align:top}small{color:#667085}.num{text-align:right;white-space:nowrap}@media print{body{margin:7mm}@page{size:landscape}}</style></head><body><h1>DOKTER AC MOBIL — Laporan Work Order</h1><div class="meta">Periode ${dateLabel(dateFrom)} s.d. ${dateLabel(dateTo)} · Dicetak ${new Date().toLocaleString('id-ID')} · ${rows.length} WO</div><div class="summary"><div class="box">Estimasi WO<b>${rupiah(metrics.estimate)}</b></div><div class="box">Nilai Invoice<b>${rupiah(metrics.invoiced)}</b></div><div class="box">Pembayaran<b>${rupiah(metrics.received)}</b></div></div><table><thead><tr><th>WO / Tanggal</th><th>Cabang</th><th>Pelanggan</th><th>Kendaraan</th><th>Layanan</th><th>Status</th><th>Estimasi</th><th>Invoice</th><th>Pembuat</th></tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);
     popup.document.close();
   };
@@ -135,9 +137,10 @@ export default function WorkOrderReport() {
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white px-2 py-2 shadow-sm">
         <div className="flex min-w-max gap-2">
           <button type="button" onClick={() => setStatus('')} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${!status ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>Semua <b className="ml-1">{scopedRows.length}</b></button>
-          {statusCounts.map(item => <button key={item.status} type="button" onClick={() => setStatus(item.status)} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${status === item.status ? statusTone[item.status] + ' border-current' : 'border-gray-200 bg-white text-gray-600'}`}>{item.status} <b className="ml-1">{item.count}</b></button>)}
+          {statusCounts.map(item => <button key={item.status} type="button" onClick={() => setStatus(item.status)} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${status === item.status ? statusTone[item.status] + ' border-current' : 'border-gray-200 bg-white text-gray-600'}`}>{statusLabel(item.status)} <b className="ml-1">{item.count}</b></button>)}
           <span className="ml-auto inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Selesai {metrics.completed}</span>
-          <span className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-700"><XCircle className="h-3.5 w-3.5" /> Closed {metrics.cancelled}</span>
+          <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-3 text-xs font-semibold text-rose-700"><XCircle className="h-3.5 w-3.5" /> Lost Sales {metrics.cancelled}</span>
+          <span className="inline-flex items-center gap-1 rounded-lg bg-cyan-50 px-3 text-xs font-semibold text-cyan-700"><CheckCircle2 className="h-3.5 w-3.5" /> Recovered {metrics.recovered}</span>
         </div>
       </div>
 
@@ -157,7 +160,7 @@ export default function WorkOrderReport() {
         <div className="max-h-[calc(100vh-390px)] min-h-56 overflow-auto">
           <table className="w-full min-w-[1450px] text-sm">
             <thead className="sticky top-0 z-10 bg-blue-800 text-left text-xs uppercase text-white"><tr><th className="px-3 py-2.5">No. WO / Tanggal</th><th className="px-3 py-2.5">Cabang</th><th className="px-3 py-2.5">Pelanggan</th><th className="px-3 py-2.5">Kendaraan</th><th className="px-3 py-2.5">Layanan / Barang</th><th className="px-3 py-2.5">Dibuat Oleh</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5 text-right">Estimasi WO</th><th className="px-3 py-2.5">Invoice</th><th className="px-3 py-2.5 text-right">Bayar</th></tr></thead>
-            <tbody className="divide-y divide-gray-100">{rows.map(wo => <tr key={wo.id} className="hover:bg-blue-50/40"><td className="px-3 py-2.5"><p className="font-semibold text-blue-700">{wo.woNumber}</p><p className="text-xs text-gray-500">{dateLabel(wo.date)}</p></td><td className="px-3 py-2.5">{wo.branchName}</td><td className="px-3 py-2.5"><p className="font-medium">{wo.customerName}</p><p className="text-xs text-gray-500">{wo.customerPhone || '-'}</p></td><td className="px-3 py-2.5"><p className="font-medium">{wo.plateNumber}</p><p className="max-w-52 truncate text-xs text-gray-500" title={wo.vehicleInfo}>{wo.vehicleInfo}</p></td><td className="px-3 py-2.5"><p className="max-w-72 truncate font-medium" title={wo.services.map(item => item.name).join(', ')}>{wo.services.map(item => item.name).join(', ') || '-'}</p><p className="text-xs text-gray-500">{wo.services.length} item</p></td><td className="px-3 py-2.5">{wo.createdByName || '-'}</td><td className="px-3 py-2.5"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone[wo.status]}`}>{wo.status}</span></td><td className="px-3 py-2.5 text-right font-semibold">{rupiah(wo.estimateTotal ?? wo.total)}</td><td className="px-3 py-2.5">{wo.invoice ? <><p className="font-semibold text-emerald-700">{wo.invoice.invoiceNumber}</p><p className="text-xs text-gray-500">{rupiah(wo.invoice.total)}</p></> : <span className="text-gray-400">Belum dibuat</span>}</td><td className="px-3 py-2.5 text-right font-semibold">{wo.invoice ? rupiah(wo.invoice.payment) : '-'}</td></tr>)}</tbody>
+            <tbody className="divide-y divide-gray-100">{rows.map(wo => <tr key={wo.id} className="hover:bg-blue-50/40"><td className="px-3 py-2.5"><p className="font-semibold text-blue-700">{wo.woNumber}</p><p className="text-xs text-gray-500">{dateLabel(wo.date)}</p></td><td className="px-3 py-2.5">{wo.branchName}</td><td className="px-3 py-2.5"><p className="font-medium">{wo.customerName}</p><p className="text-xs text-gray-500">{wo.customerPhone || '-'}</p></td><td className="px-3 py-2.5"><p className="font-medium">{wo.plateNumber}</p><p className="max-w-52 truncate text-xs text-gray-500" title={wo.vehicleInfo}>{wo.vehicleInfo}</p></td><td className="px-3 py-2.5"><p className="max-w-72 truncate font-medium" title={wo.services.map(item => item.name).join(', ')}>{wo.services.map(item => item.name).join(', ') || '-'}</p><p className="text-xs text-gray-500">{wo.services.length} item</p></td><td className="px-3 py-2.5">{wo.createdByName || '-'}</td><td className="px-3 py-2.5"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone[wo.status]}`}>{statusLabel(wo.status)}</span></td><td className="px-3 py-2.5 text-right font-semibold">{rupiah(wo.estimateTotal ?? wo.total)}</td><td className="px-3 py-2.5">{wo.invoice ? <><p className="font-semibold text-emerald-700">{wo.invoice.invoiceNumber}</p><p className="text-xs text-gray-500">{rupiah(wo.invoice.total)}</p></> : <span className="text-gray-400">Belum dibuat</span>}</td><td className="px-3 py-2.5 text-right font-semibold">{wo.invoice ? rupiah(wo.invoice.payment) : '-'}</td></tr>)}</tbody>
           </table>
         </div>
         {!rows.length && <div className="px-4 py-14 text-center text-sm text-gray-500">Tidak ada data WO sesuai filter.</div>}
