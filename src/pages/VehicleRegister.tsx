@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Car, X, Save, Database, Power, ArrowDownAZ, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Car, X, Save, Database, Power, ArrowDownAZ, ChevronUp, ChevronDown, Eye, Clock3, GitBranch } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Vehicle } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -11,10 +11,24 @@ type CatalogModel = { id: string; name: string; isActive: boolean; brandId: stri
 type CatalogBrand = { id: string; name: string; isActive: boolean; sortOrder: number; models: CatalogModel[] };
 type CatalogColor = { id: string; name: string; isActive: boolean; sortOrder: number };
 
+const formatAuditTime = (value?: string) => {
+  if (!value) return '-';
+  const parsed = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(parsed);
+};
+
+const formatBusinessDate = (value?: string) => {
+  if (!value) return '-';
+  const parsed = new Date(`${value.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(parsed);
+};
+
 export default function VehicleRegister() {
   const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission, currentUser } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [detailVehicle, setDetailVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
   const [filterModel, setFilterModel] = useState('');
@@ -216,6 +230,43 @@ export default function VehicleRegister() {
     }
   };
 
+  const detailWorkOrders = detailVehicle
+    ? data.workOrders
+        .filter(wo => wo.vehicleRefId === detailVehicle.id || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === detailVehicle.plateNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())
+        .sort((left, right) => left.date.localeCompare(right.date) || (left.createdAt || '').localeCompare(right.createdAt || ''))
+    : [];
+  const firstWorkOrder = detailWorkOrders[0];
+  const vehicleTimeline = detailVehicle ? [
+    {
+      at: detailVehicle.createdAt || `${detailVehicle.registrationDate}T00:00:00`,
+      title: 'Kendaraan diregister',
+      description: `Tanggal transaksi ${formatBusinessDate(detailVehicle.registrationDate)} · ${data.branches.find(branch => branch.id === detailVehicle.firstSeenBranchId)?.name || 'Cabang tidak tercatat'}`,
+      tone: 'bg-blue-600',
+    },
+    ...detailWorkOrders.flatMap(wo => {
+      const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name || wo.branchId;
+      const events = [{
+        at: wo.createdAt || `${wo.date}T00:00:00`,
+        title: `WO dibuat · ${wo.woNumber}`,
+        description: `Tanggal transaksi ${formatBusinessDate(wo.date)} · ${branchName} · Input ${wo.createdByName || '-'}`,
+        tone: 'bg-emerald-600',
+      }];
+      (wo.statusLog || []).filter(log => log.from !== log.to).forEach(log => events.push({
+        at: log.at,
+        title: `${log.from} → ${log.to}`,
+        description: `${wo.woNumber} · Oleh ${log.byUserName || '-'}${log.reason ? ` · ${log.reason}` : ''}`,
+        tone: 'bg-amber-500',
+      }));
+      if (wo.continuedToWoId) events.push({
+        at: wo.continuedAt || data.workOrders.find(item => item.id === wo.continuedToWoId)?.createdAt || wo.updatedAt || wo.date,
+        title: `Dilanjutkan ke ${wo.continuedToWoNumber || 'WO baru'}`,
+        description: `${wo.continuedToBranchName || data.branches.find(branch => branch.id === wo.continuedBranchId)?.name || '-'} · Oleh ${wo.continuedByName || '-'}`,
+        tone: 'bg-violet-600',
+      });
+      return events;
+    }),
+  ].sort((left, right) => left.at.localeCompare(right.at)) : [];
+
   return (
     <div className="space-y-3">
       {/* Toolbar */}
@@ -274,7 +325,7 @@ export default function VehicleRegister() {
             <tbody className="divide-y divide-gray-200">
               {filteredVehicles.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                     <Car className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p className="text-lg font-medium">Tidak ada data kendaraan</p>
                     <p className="text-sm">Klik "Tambah Kendaraan" untuk menambahkan data baru</p>
@@ -309,6 +360,13 @@ export default function VehicleRegister() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setDetailVehicle(vehicle)}
+                          className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="Lihat riwayat"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                         {hasPermission('vehicle:edit') && (
                           <button
                             onClick={() => handleOpenModal(vehicle)}
@@ -339,6 +397,41 @@ export default function VehicleRegister() {
           Menampilkan {filteredVehicles.length} dari {data.vehicles.length} kendaraan
         </div>
       </div>
+
+      {detailVehicle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Riwayat Kendaraan · {detailVehicle.plateNumber}</h3>
+                <p className="text-sm text-gray-500">{detailVehicle.brand} {detailVehicle.model} {detailVehicle.year || ''} · {detailVehicle.color}</p>
+              </div>
+              <button onClick={() => setDetailVehicle(null)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="overflow-y-auto p-6">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3"><p className="text-xs uppercase text-gray-500">Tanggal register</p><p className="mt-1 font-semibold text-gray-900">{formatBusinessDate(detailVehicle.registrationDate)}</p></div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3"><p className="text-xs uppercase text-gray-500">Waktu input server</p><p className="mt-1 font-semibold text-gray-900">{formatAuditTime(detailVehicle.createdAt)}</p></div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3"><p className="text-xs uppercase text-gray-500">WO pertama</p><p className="mt-1 font-semibold text-gray-900">{firstWorkOrder ? `${firstWorkOrder.woNumber} · ${formatBusinessDate(firstWorkOrder.date)}` : 'Belum ada WO'}</p></div>
+              </div>
+              <div className="mt-5 rounded-xl border border-gray-200 p-4">
+                <div className="mb-4 flex items-center gap-2"><Clock3 className="h-5 w-5 text-blue-600" /><h4 className="font-bold text-gray-900">Timeline kendaraan dan WO</h4></div>
+                <div className="relative ml-2 border-l-2 border-gray-200 pl-6">
+                  {vehicleTimeline.map((event, index) => (
+                    <div key={`${event.at}-${event.title}-${index}`} className="relative pb-5 last:pb-0">
+                      <span className={`absolute -left-[31px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${event.tone}`} />
+                      <div className="flex items-start gap-2">
+                        {event.title.startsWith('Dilanjutkan') && <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />}
+                        <div><p className="font-semibold text-gray-900">{event.title}</p><p className="text-sm text-gray-600">{event.description}</p><p className="mt-1 text-xs text-gray-400">Waktu aktual: {formatAuditTime(event.at)}</p></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Master Merek, Tipe, dan Warna */}
       {masterOpen && canManageCatalog && (

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -28,6 +28,17 @@ const DEFAULT_PENDING_REASONS = [
 ];
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
+const formatAuditTime = (value?: string) => {
+  if (!value) return '-';
+  const parsed = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(parsed);
+};
+const formatBusinessDate = (value?: string) => {
+  if (!value) return '-';
+  const parsed = new Date(`${value.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(parsed);
+};
 
 type WorkOrderColumnKey = 'number' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'createdBy' | 'actions';
 const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
@@ -928,6 +939,37 @@ export default function WorkOrders() {
     return vehicle?.phone || '—';
   };
 
+  const workOrderAuditTimeline = (wo: WorkOrder) => {
+    const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name || wo.branchId;
+    const events: Array<{ at: string; title: string; description: string; tone: string; continuation?: boolean }> = [{
+      at: wo.createdAt || `${wo.date}T00:00:00`,
+      title: 'WO diregister',
+      description: `Tanggal transaksi ${formatBusinessDate(wo.date)} · ${branchName} · Input ${wo.createdByName || '-'}`,
+      tone: 'bg-blue-600',
+    }];
+    if (wo.continuedFromWoId) events.push({
+      at: wo.createdAt || `${wo.date}T00:00:00`,
+      title: `Lanjutan dari ${wo.continuedFromWoNumber || 'WO sebelumnya'}`,
+      description: `Asal ${wo.continuedFromBranchName || '-'}`,
+      tone: 'bg-violet-600',
+      continuation: true,
+    });
+    (wo.statusLog || []).filter(log => log.from !== log.to).forEach(log => events.push({
+      at: log.at,
+      title: `${statusLabel(log.from)} → ${statusLabel(log.to)}`,
+      description: `Oleh ${log.byUserName || '-'}${log.reason ? ` · ${log.reason}` : ''}`,
+      tone: 'bg-amber-500',
+    }));
+    if (wo.continuedToWoId) events.push({
+      at: wo.continuedAt || data.workOrders.find(item => item.id === wo.continuedToWoId)?.createdAt || wo.updatedAt || wo.date,
+      title: `Dilanjutkan ke ${wo.continuedToWoNumber || 'WO baru'}`,
+      description: `${wo.continuedToBranchName || data.branches.find(branch => branch.id === wo.continuedBranchId)?.name || '-'} · Oleh ${wo.continuedByName || '-'}`,
+      tone: 'bg-violet-600',
+      continuation: true,
+    });
+    return events.sort((left, right) => left.at.localeCompare(right.at));
+  };
+
   const formatShareDate = (date: string) => {
     const [year, month, day] = date.split('-');
     return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : date;
@@ -1723,6 +1765,14 @@ export default function WorkOrders() {
                   <p className="text-xs text-gray-500">Kendaraan</p>
                   <p className="mt-1 text-sm text-gray-900">{detailWO.vehicleInfo}</p>
                 </div>
+                <div>
+                  <p className="text-xs text-gray-500">Tanggal transaksi WO</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">{formatBusinessDate(detailWO.date)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Waktu input server</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">{formatAuditTime(detailWO.createdAt)}</p>
+                </div>
               </div>
               <div>
                 <h4 className="mb-2 font-semibold text-gray-900">Layanan ({detailWO.services.length})</h4>
@@ -1744,6 +1794,20 @@ export default function WorkOrders() {
               )}
               {detailWO.description && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><strong>Keluhan/Keterangan:</strong><br />{detailWO.description}</div>}
               {detailWO.notes && <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700"><strong>Catatan:</strong><br />{detailWO.notes}</div>}
+              <div className="rounded-xl border border-gray-200 p-4">
+                <div className="mb-4 flex items-center gap-2"><Clock3 className="h-5 w-5 text-blue-600" /><h4 className="font-semibold text-gray-900">Timeline WO</h4></div>
+                <div className="relative ml-2 border-l-2 border-gray-200 pl-6">
+                  {workOrderAuditTimeline(detailWO).map((event, index) => (
+                    <div key={`${event.at}-${event.title}-${index}`} className="relative pb-5 last:pb-0">
+                      <span className={`absolute -left-[31px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${event.tone}`} />
+                      <div className="flex items-start gap-2">
+                        {event.continuation && <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />}
+                        <div><p className="font-semibold text-gray-900">{event.title}</p><p className="text-sm text-gray-600">{event.description}</p><p className="mt-1 text-xs text-gray-400">{formatAuditTime(event.at)}</p></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
               {hasPermission('wo:edit') && detailWO.status === 'Pengecekan' && !detailWO.continuedToWoId && (

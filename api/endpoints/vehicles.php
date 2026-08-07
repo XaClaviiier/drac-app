@@ -8,6 +8,8 @@ switch ($method) {
             $r['customerId']         = $r['customer_code'] ?: $r['customer_id'];
             $r['customerName']       = $r['customer_name'];
             $r['registrationDate']   = $r['registration_date'];
+            $r['createdAt']          = $r['created_at'] ?? null;
+            $r['updatedAt']          = $r['updated_at'] ?? null;
             $r['branchId']           = $r['branch_id'];
             $r['firstSeenBranchId']  = $r['first_seen_branch_id'] ?? $r['branch_id'];
         }

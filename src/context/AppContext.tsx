@@ -672,6 +672,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       continuedToWoId: newId,
       continuedToWoNumber: newWoNumber,
       continuedToBranchName: tgtBranch.name,
+      continuedAt: new Date().toISOString(),
+      continuedBy: currentUser?.id,
+      continuedByName: currentUser?.name,
+      continuedBranchId: targetBranchId,
       notes: `${src.notes || ''}\n[${today}] Dilanjutkan di ${newWoNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
     });
 

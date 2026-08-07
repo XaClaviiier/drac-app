@@ -117,6 +117,8 @@ try {
         $r['customerId']        = $r['customer_code'] ?: $r['customer_id'];
         $r['customerName']      = $r['customer_name'];
         $r['registrationDate']  = $r['registration_date'];
+        $r['createdAt']         = $r['created_at'] ?? null;
+        $r['updatedAt']         = $r['updated_at'] ?? null;
         $r['branchId']          = $r['branch_id'];
         $r['firstSeenBranchId'] = $r['first_seen_branch_id'] ?? $r['branch_id'];
     }
@@ -250,6 +252,12 @@ try {
         $r['continuedToWoId']         = $r['continued_to_wo_id'] ?? null;
         $r['continuedToWoNumber']     = $r['continued_to_wo_number'] ?? null;
         $r['continuedToBranchName']   = $r['continued_to_branch_name'] ?? null;
+        $r['continuedAt']             = $r['continued_at'] ?? null;
+        $r['continuedBy']             = $r['continued_by'] ?? null;
+        $r['continuedByName']         = $r['continued_by_name'] ?? null;
+        $r['continuedBranchId']       = $r['continued_branch_id'] ?? null;
+        $r['createdAt']               = $r['created_at'] ?? null;
+        $r['updatedAt']               = $r['updated_at'] ?? null;
         $r['services']                = $servicesByWO[$r['id']] ?? [];
     }
     $data['workOrders'] = $canUseWorkOrders ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];

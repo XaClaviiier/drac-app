@@ -13,6 +13,9 @@ export interface Vehicle {
   phone: string;
   address: string;
   registrationDate: string;
+  /** Waktu sebenarnya data dimasukkan ke server (berbeda dari tanggal registrasi mundur). */
+  createdAt?: string;
+  updatedAt?: string;
   notes: string;
   branchId: string;
   /** Cabang tempat kendaraan pertama kali diinput */
@@ -69,6 +72,9 @@ export interface WorkOrder {
   id: string;
   woNumber: string;
   date: string;
+  /** Waktu sebenarnya WO dibuat di server. */
+  createdAt?: string;
+  updatedAt?: string;
   backdateReason?: string;
   customerRefId?: string;
   customerId: string;
@@ -110,6 +116,11 @@ export interface WorkOrder {
   continuedToWoId?: string;
   continuedToWoNumber?: string;
   continuedToBranchName?: string;
+  /** Audit saat WO ini dilanjutkan menjadi WO lain. */
+  continuedAt?: string;
+  continuedBy?: string;
+  continuedByName?: string;
+  continuedBranchId?: string;
 }
 
 export interface WorkOrderService {

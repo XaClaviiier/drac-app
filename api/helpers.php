@@ -99,10 +99,34 @@ function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $exclud
 
 function ensureApiSupportTables(PDO $pdo): void {
     $workOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM work_orders")->fetchAll(), 'Field');
+    $continuationAuditColumns = ['continued_at', 'continued_by', 'continued_by_name', 'continued_branch_id'];
+    $needsContinuationBackfill = count(array_intersect($continuationAuditColumns, $workOrderColumns)) !== count($continuationAuditColumns);
     if (!in_array('created_by', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by VARCHAR(64) NULL AFTER branch_id");
     if (!in_array('created_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by_name VARCHAR(150) NULL AFTER created_by");
     if (!in_array('technician_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_id VARCHAR(64) NULL AFTER created_by_name");
     if (!in_array('technician_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_name VARCHAR(150) NULL AFTER technician_id");
+    if (!in_array('continued_at', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_at DATETIME NULL AFTER continued_to_branch_name");
+    if (!in_array('continued_by', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_by VARCHAR(64) NULL AFTER continued_at");
+    if (!in_array('continued_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_by_name VARCHAR(150) NULL AFTER continued_by");
+    if (!in_array('continued_branch_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_branch_id VARCHAR(20) NULL AFTER continued_by_name");
+    if ($needsContinuationBackfill) {
+        try {
+            $pdo->exec("
+                UPDATE work_orders source_wo
+                JOIN work_orders target_wo
+                  ON CONVERT(target_wo.id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                   = CONVERT(source_wo.continued_to_wo_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                SET source_wo.continued_at = COALESCE(source_wo.continued_at, target_wo.created_at),
+                    source_wo.continued_by = COALESCE(source_wo.continued_by, target_wo.created_by),
+                    source_wo.continued_by_name = COALESCE(source_wo.continued_by_name, target_wo.created_by_name),
+                    source_wo.continued_branch_id = COALESCE(source_wo.continued_branch_id, target_wo.branch_id)
+                WHERE source_wo.continued_to_wo_id IS NOT NULL
+            ");
+        } catch (Throwable $e) {
+            // Audit untuk WO baru tetap berjalan; kegagalan backfill data lama
+            // tidak boleh membuat seluruh aplikasi gagal dibuka.
+        }
+    }
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS document_sequences (
             document_type ENUM('work_order','sales_invoice') NOT NULL,

@@ -74,6 +74,12 @@ switch ($method) {
             $r['continuedToWoId']         = $r['continued_to_wo_id'] ?? null;
             $r['continuedToWoNumber']     = $r['continued_to_wo_number'] ?? null;
             $r['continuedToBranchName']   = $r['continued_to_branch_name'] ?? null;
+            $r['continuedAt']             = $r['continued_at'] ?? null;
+            $r['continuedBy']             = $r['continued_by'] ?? null;
+            $r['continuedByName']         = $r['continued_by_name'] ?? null;
+            $r['continuedBranchId']       = $r['continued_branch_id'] ?? null;
+            $r['createdAt']               = $r['created_at'] ?? null;
+            $r['updatedAt']               = $r['updated_at'] ?? null;
 
             $stmt = $pdo->prepare("SELECT * FROM work_order_services WHERE wo_id = ?");
             $stmt->execute([$r['id']]);
@@ -186,7 +192,7 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
-            $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log FROM work_orders WHERE id=? FOR UPDATE");
+            $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
             if (!$currentWorkOrder) {
@@ -251,6 +257,14 @@ switch ($method) {
                     'reason' => $statusReason ?: null,
                 ];
             }
+            $continuedToWoId = ($d['continuedToWoId'] ?? '') ?: null;
+            $isNewContinuation = empty($currentWorkOrder['continued_to_wo_id']) && $continuedToWoId !== null;
+            $continuedAt = $isNewContinuation ? date('Y-m-d H:i:s') : ($currentWorkOrder['continued_at'] ?? null);
+            $continuedBy = $isNewContinuation ? ($actor['id'] ?? null) : ($currentWorkOrder['continued_by'] ?? null);
+            $continuedByName = $isNewContinuation ? ($actor['name'] ?? 'System') : ($currentWorkOrder['continued_by_name'] ?? null);
+            $continuedBranchId = $isNewContinuation
+                ? (($d['continuedBranchId'] ?? '') ?: null)
+                : ($currentWorkOrder['continued_branch_id'] ?? null);
             $stmt = $pdo->prepare("
                 UPDATE work_orders SET
                     wo_number=?, date=?, backdate_reason=?,
@@ -262,7 +276,8 @@ switch ($method) {
                     status=?, cancel_reason=?, status_log=?, notes=?, branch_id=?, technician_id=?, technician_name=?,
                     invoice_id=?, invoice_number=?,
                     continued_from_wo_id=?, continued_from_wo_number=?, continued_from_branch_name=?,
-                    continued_to_wo_id=?, continued_to_wo_number=?, continued_to_branch_name=?
+                    continued_to_wo_id=?, continued_to_wo_number=?, continued_to_branch_name=?,
+                    continued_at=?, continued_by=?, continued_by_name=?, continued_branch_id=?
                 WHERE id=?
             ");
             $stmt->execute([
@@ -282,7 +297,8 @@ switch ($method) {
                 ($d['technicianId'] ?? '') ?: null, ($d['technicianName'] ?? '') ?: null,
                 $currentWorkOrder['invoice_id'], $currentWorkOrder['invoice_number'],
                 $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
-                $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
+                $continuedToWoId, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
+                $continuedAt, $continuedBy, $continuedByName, $continuedBranchId,
                 $id
             ]);
 
@@ -367,7 +383,11 @@ switch ($method) {
                 UPDATE work_orders
                 SET continued_to_wo_id=NULL,
                     continued_to_wo_number=NULL,
-                    continued_to_branch_name=NULL
+                    continued_to_branch_name=NULL,
+                    continued_at=NULL,
+                    continued_by=NULL,
+                    continued_by_name=NULL,
+                    continued_branch_id=NULL
                 WHERE continued_to_wo_id=?
             ")->execute([$id]);
 
