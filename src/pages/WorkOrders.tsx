@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { WorkOrder, WorkOrderService } from '../types';
+import type { Customer, Vehicle, WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { localDateKey } from '../lib/date';
@@ -415,10 +415,35 @@ export default function WorkOrders() {
     }));
   };
 
+  // Refresh API setelah simpan berjalan asinkron. Gunakan objek hasil simpan
+  // supaya pelanggan baru langsung terpilih tanpa menutup alur WO di HP.
+  const handleNewCustomerCreated = (customer: Customer) => {
+    setFormData((prev) => ({
+      ...prev,
+      customerRefId: customer.id,
+      customerId: customer.customerCode,
+      customerName: customer.name,
+      vehicleRefId: '',
+      plateNumber: '',
+      vehicleInfo: '',
+    }));
+  };
+
   const handleVehicleSelect = (vehicleId: string) => {
     const vehicle = data.vehicles.find((item) => item.id === vehicleId);
     if (!vehicle) return;
 
+    setFormData((prev) => ({
+      ...prev,
+      vehicleRefId: vehicle.id,
+      plateNumber: vehicle.plateNumber,
+      vehicleInfo: `${vehicle.brand} ${vehicle.model}${vehicle.year ? ` ${vehicle.year}` : ''} - ${vehicle.color}`,
+    }));
+  };
+
+  // Pilih kendaraan baru dari objek yang baru disimpan. Daftar kendaraan pada
+  // render lama belum tentu sudah berisi ID tersebut ketika callback dijalankan.
+  const handleNewVehicleCreated = (vehicle: Vehicle) => {
     setFormData((prev) => ({
       ...prev,
       vehicleRefId: vehicle.id,
@@ -1746,11 +1771,15 @@ export default function WorkOrders() {
                     >
                       <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                     </button>}
-                    {wo.status === 'Closed' && (
-                      <button type="button" onClick={() => setDetailWO(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail Lost Sales">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDetailWO(wo)}
+                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700"
+                      title={wo.status === 'Closed' ? 'Lihat detail Lost Sales' : 'Lihat detail WO'}
+                      aria-label={`Lihat detail ${wo.woNumber}`}
+                    >
+                      <Eye className="h-5 w-5" />
+                    </button>
                     {hasPermission('wo:edit') && wo.status !== 'Closed' && wo.status !== 'Invoiced' && (
                       <button
                         onClick={() => handleOpenModal(wo)}
@@ -2075,7 +2104,11 @@ export default function WorkOrders() {
                     <User className="h-4 w-4 text-blue-600" />
                     Data Pelanggan <span className="text-red-500">*</span>
                   </label>
-                  <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} />
+                  <CustomerPicker
+                    value={formData.customerRefId}
+                    onChange={handleCustomerSelect}
+                    onNewCustomerCreated={handleNewCustomerCreated}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2110,6 +2143,7 @@ export default function WorkOrders() {
                     customer={selectedCustomer}
                     value={formData.vehicleRefId}
                     onChange={handleVehicleSelect}
+                    onNewVehicleCreated={handleNewVehicleCreated}
                   />
                 </div>
 
@@ -2238,8 +2272,7 @@ export default function WorkOrders() {
                                 key={item.id}
                                 type="button"
                                 disabled={added}
-                                onPointerDown={(event) => {
-                                  event.preventDefault();
+                                onClick={() => {
                                   if (added) return;
                                   handleUseItem(item.id);
                                   setServiceSearch('');
