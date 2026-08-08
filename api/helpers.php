@@ -455,6 +455,7 @@ function ensureApiSupportTables(PDO $pdo): void {
         }
     }
     runProductionIntegrityRepair20260808($pdo);
+    runProductionIntegrityRepair20260808StatusRestore($pdo);
 }
 
 function getBearerToken(): string {
@@ -933,6 +934,68 @@ function runProductionIntegrityRepair20260808(PDO $pdo): void {
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('Production integrity repair 20260808 failed: ' . $e->getMessage());
+    }
+}
+
+/** Pulihkan dua status WO yang terdampak aksi referensial saat faktur salah dibersihkan. */
+function runProductionIntegrityRepair20260808StatusRestore(PDO $pdo): void {
+    $repairKey = 'repair_20260808_wo_invoice_integrity_v2';
+    try {
+        $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+        $check->execute([$repairKey]);
+        if ((int)$check->fetchColumn() > 0) return;
+
+        $pdo->beginTransaction();
+        $snapshotStmt = $pdo->prepare("INSERT INTO data_repair_snapshots
+            (repair_key,entity_type,entity_id,snapshot_json) VALUES(?,?,?,?)");
+
+        // WO ini mempunyai satu faktur sah dan lunas. Kembalikan tautan dua arahnya.
+        $invoicedWoStmt = $pdo->prepare("SELECT * FROM work_orders WHERE wo_number=? FOR UPDATE");
+        $invoicedWoStmt->execute(['WO-D260801005']);
+        $invoicedWo = $invoicedWoStmt->fetch();
+        if ($invoicedWo && (string)$invoicedWo['status'] !== 'Invoiced') {
+            $invoiceStmt = $pdo->prepare("SELECT * FROM sales_invoices WHERE wo_id=? ORDER BY id FOR UPDATE");
+            $invoiceStmt->execute([(string)$invoicedWo['id']]);
+            $linkedInvoices = $invoiceStmt->fetchAll();
+            if (count($linkedInvoices) === 1
+                && (float)$linkedInvoices[0]['total'] > 0
+                && (float)$linkedInvoices[0]['payment'] >= (float)$linkedInvoices[0]['total']) {
+                $snapshotStmt->execute([
+                    $repairKey,
+                    'work_order_before_valid_invoice_relink',
+                    (string)$invoicedWo['id'],
+                    json_encode($invoicedWo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+                $pdo->prepare("UPDATE work_orders SET status='Invoiced',invoice_id=?,invoice_number=? WHERE id=?")
+                    ->execute([(string)$linkedInvoices[0]['id'], (string)$linkedInvoices[0]['invoice_number'], (string)$invoicedWo['id']]);
+            }
+        }
+
+        // Faktur nol yang salah pada WO ini sudah dihapus; status terakhir yang
+        // tercatat sah di status_log adalah Pending dengan alasan "Tanya Istri".
+        $pendingWoStmt = $pdo->prepare("SELECT * FROM work_orders WHERE wo_number=? FOR UPDATE");
+        $pendingWoStmt->execute(['WO-C260728001']);
+        $pendingWo = $pendingWoStmt->fetch();
+        if ($pendingWo && (string)$pendingWo['status'] !== 'Pending') {
+            $invoiceCountStmt = $pdo->prepare('SELECT COUNT(*) FROM sales_invoices WHERE wo_id=?');
+            $invoiceCountStmt->execute([(string)$pendingWo['id']]);
+            if ((int)$invoiceCountStmt->fetchColumn() === 0 && !empty($pendingWo['pending_reason'])) {
+                $snapshotStmt->execute([
+                    $repairKey,
+                    'work_order_before_pending_restore',
+                    (string)$pendingWo['id'],
+                    json_encode($pendingWo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+                $pdo->prepare("UPDATE work_orders SET status='Pending',invoice_id=NULL,invoice_number=NULL WHERE id=?")
+                    ->execute([(string)$pendingWo['id']]);
+            }
+        }
+
+        $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$repairKey]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Production integrity status restore 20260808 failed: ' . $e->getMessage());
     }
 }
 
