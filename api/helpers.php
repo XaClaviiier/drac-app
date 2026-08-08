@@ -454,6 +454,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             $pdo->exec("ALTER TABLE sales_invoices ADD payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai' AFTER payment");
         }
     }
+    runProductionIntegrityRepair20260808($pdo);
 }
 
 function getBearerToken(): string {
@@ -788,6 +789,151 @@ function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $item
         WHERE i.id = ? AND i.branch_id = ?
     ");
     $sync->execute([$itemId, $branchId]);
+}
+
+/**
+ * Perbaikan satu-kali untuk inkonsistensi relasi WO, faktur, dan pembayaran
+ * yang ditemukan pada audit produksi 8 Agustus 2026.
+ *
+ * Semua baris yang diubah disalin dahulu ke data_repair_snapshots. Migrasi
+ * sengaja tidak membuat ulang status_log lama karena waktu/aktor historisnya
+ * tidak dapat dipastikan tanpa mengarang data audit.
+ */
+function runProductionIntegrityRepair20260808(PDO $pdo): void {
+    $repairKey = 'repair_20260808_wo_invoice_integrity_v1';
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
+            migration_key VARCHAR(100) PRIMARY KEY,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS data_repair_snapshots (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            repair_key VARCHAR(100) NOT NULL,
+            entity_type VARCHAR(60) NOT NULL,
+            entity_id VARCHAR(100) NOT NULL,
+            snapshot_json LONGTEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_repair_snapshot_key (repair_key),
+            INDEX idx_repair_snapshot_entity (entity_type, entity_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+        $check->execute([$repairKey]);
+        if ((int)$check->fetchColumn() > 0) return;
+        if (!$pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()) return;
+
+        $pdo->beginTransaction();
+        $snapshotStmt = $pdo->prepare("INSERT INTO data_repair_snapshots
+            (repair_key,entity_type,entity_id,snapshot_json) VALUES(?,?,?,?)");
+        $snapshot = static function (string $type, string $id, array $row) use ($snapshotStmt, $repairKey): void {
+            $json = json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($json === false) throw new RuntimeException('Gagal membuat snapshot perbaikan data.');
+            $snapshotStmt->execute([$repairKey, $type, $id, $json]);
+        };
+
+        $deleteInvoice = static function (array $invoice, string $reason) use ($pdo, $snapshot): void {
+            $invoiceId = (string)$invoice['id'];
+            $snapshot('sales_invoice:' . $reason, $invoiceId, $invoice);
+
+            $paymentStmt = $pdo->prepare('SELECT * FROM customer_payments WHERE invoice_id=? ORDER BY id FOR UPDATE');
+            $paymentStmt->execute([$invoiceId]);
+            foreach ($paymentStmt->fetchAll() as $payment) {
+                $snapshot('customer_payment:' . $reason, (string)$payment['id'], $payment);
+            }
+
+            $detailStmt = $pdo->prepare('SELECT * FROM sales_invoice_items WHERE invoice_id=? ORDER BY id FOR UPDATE');
+            $detailStmt->execute([$invoiceId]);
+            $details = $detailStmt->fetchAll();
+            foreach ($details as $detail) {
+                $detailId = isset($detail['id']) ? (string)$detail['id'] : $invoiceId . ':' . (string)($detail['item_id'] ?? '');
+                $snapshot('sales_invoice_item:' . $reason, $detailId, $detail);
+                $itemId = (string)($detail['item_id'] ?? '');
+                if ($itemId === '') continue;
+                $itemStmt = $pdo->prepare('SELECT type FROM items WHERE id=?');
+                $itemStmt->execute([$itemId]);
+                if ((string)$itemStmt->fetchColumn() !== 'Persediaan') continue;
+
+                $branchId = (string)($invoice['branch_id'] ?? '');
+                $stockStmt = $pdo->prepare('SELECT * FROM branch_item_stocks WHERE branch_id=? AND item_id=? FOR UPDATE');
+                $stockStmt->execute([$branchId, $itemId]);
+                $stockRow = $stockStmt->fetch();
+                if ($stockRow) $snapshot('branch_item_stock_before_restore', $branchId . ':' . $itemId . ':' . $invoiceId, $stockRow);
+                adjustBranchStockAllowNegative($pdo, $branchId, $itemId, (int)$detail['qty']);
+            }
+
+            $pdo->prepare('DELETE FROM customer_payments WHERE invoice_id=?')->execute([$invoiceId]);
+            $pdo->prepare('DELETE FROM sales_invoice_items WHERE invoice_id=?')->execute([$invoiceId]);
+            $pdo->prepare('DELETE FROM sales_invoices WHERE id=?')->execute([$invoiceId]);
+        };
+
+        $workOrders = $pdo->query('SELECT * FROM work_orders FOR UPDATE')->fetchAll();
+        $woById = [];
+        $woByNumber = [];
+        foreach ($workOrders as $wo) {
+            $woById[(string)$wo['id']] = $wo;
+            $woByNumber[(string)$wo['wo_number']] = $wo;
+        }
+
+        $invoices = $pdo->query('SELECT * FROM sales_invoices ORDER BY created_at,id FOR UPDATE')->fetchAll();
+        $invoicesByWo = [];
+        foreach ($invoices as $invoice) {
+            $woId = trim((string)($invoice['wo_id'] ?? ''));
+            if ($woId !== '') $invoicesByWo[$woId][] = $invoice;
+        }
+
+        // Hapus hanya duplikat jika WO secara eksplisit menunjuk faktur yang dipertahankan.
+        foreach ($invoicesByWo as $woId => $linkedInvoices) {
+            if (count($linkedInvoices) < 2 || !isset($woById[$woId])) continue;
+            $keepId = (string)($woById[$woId]['invoice_id'] ?? '');
+            $knownIds = array_map(static fn(array $row): string => (string)$row['id'], $linkedInvoices);
+            if ($keepId === '' || !in_array($keepId, $knownIds, true)) continue;
+            foreach ($linkedInvoices as $invoice) {
+                if ((string)$invoice['id'] !== $keepId) $deleteInvoice($invoice, 'duplicate');
+            }
+        }
+
+        // Muat ulang setelah duplikat dibersihkan.
+        $remainingInvoices = $pdo->query('SELECT * FROM sales_invoices ORDER BY created_at,id FOR UPDATE')->fetchAll();
+        foreach ($remainingInvoices as $invoice) {
+            $woId = trim((string)($invoice['wo_id'] ?? ''));
+            $invoiceId = (string)$invoice['id'];
+            $paymentCountStmt = $pdo->prepare('SELECT COUNT(*) FROM customer_payments WHERE invoice_id=?');
+            $paymentCountStmt->execute([$invoiceId]);
+            $isEmptyFinancialDocument = (float)$invoice['total'] == 0.0
+                && (float)$invoice['payment'] == 0.0
+                && (int)$paymentCountStmt->fetchColumn() === 0;
+            if (!$isEmptyFinancialDocument || $woId === '') continue;
+
+            if (!isset($woById[$woId])) {
+                $deleteInvoice($invoice, 'orphan_zero');
+                continue;
+            }
+            $wo = $woById[$woId];
+            if ((string)$wo['status'] !== 'Invoiced') {
+                $snapshot('work_order_before_invoice_unlink', $woId, $wo);
+                $deleteInvoice($invoice, 'non_invoiced_zero');
+                $pdo->prepare("UPDATE work_orders SET invoice_id=NULL,invoice_number=NULL WHERE id=?")
+                    ->execute([$woId]);
+            }
+        }
+
+        // Empat nilai ini terbukti tidak sama dengan total detail layanan pada audit.
+        $estimateNumbers = ['WO-D260801003','WO-C260730001','WO-C260730002','WO-C260609001'];
+        $estimateUpdate = $pdo->prepare('UPDATE work_orders SET estimate_total=total WHERE id=?');
+        foreach ($estimateNumbers as $woNumber) {
+            if (!isset($woByNumber[$woNumber])) continue;
+            $wo = $woByNumber[$woNumber];
+            if ((float)$wo['estimate_total'] == (float)$wo['total']) continue;
+            $snapshot('work_order_before_estimate_normalization', (string)$wo['id'], $wo);
+            $estimateUpdate->execute([(string)$wo['id']]);
+        }
+
+        $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$repairKey]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Production integrity repair 20260808 failed: ' . $e->getMessage());
+    }
 }
 
 function branchCashSummary(PDO $pdo, ?array $actor = null): array {
