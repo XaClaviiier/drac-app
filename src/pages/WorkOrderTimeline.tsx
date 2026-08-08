@@ -115,6 +115,7 @@ export default function WorkOrderTimeline() {
   })), [dayRows, invoicesByWo, clock]);
 
   const currentStage = (wo: WorkOrder) => stageForStatus(wo.status, wo.pendingReason || wo.cancelReason || '');
+  const selectedStage = selected ? currentStage(selected) : null;
   const stageCounts = useMemo(() => rowsWithSegments.reduce((result, row) => {
     const key = currentStage(row.wo);
     result[key] = (result[key] || 0) + 1;
@@ -284,9 +285,21 @@ export default function WorkOrderTimeline() {
             onClick={() => navigate(`/workorders?${selectedReadOnly ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)}
             className="rounded-lg border px-4 py-2 text-sm font-semibold text-gray-600"
           >{selectedReadOnly ? 'Lihat WO' : 'Buka WO'}</button>
-          {hasPermission('wo:edit') && selected.status === 'Pengecekan' && <><button disabled={actionBusy} onClick={() => setWaiting('approval')} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white">Tunggu Persetujuan</button><button disabled={actionBusy} onClick={() => setWaiting('parts')} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white">Tunggu Parts</button><button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button><button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button></>}
-          {hasPermission('wo:edit') && selected.status === 'Pending' && <><button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button><button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button></>}
-          {hasPermission('wo:edit') && selected.status === 'Proses' && <button disabled={actionBusy} onClick={() => void moveStatus('Selesai')} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white"><Check className="mr-1 inline h-4 w-4"/>Selesai</button>}
+          {hasPermission('wo:edit') && selected.status === 'Pengecekan' && <>
+            <button disabled={actionBusy} onClick={() => setWaiting('approval')} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white">Tunggu Persetujuan</button>
+            <button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button>
+            <button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button>
+          </>}
+          {hasPermission('wo:edit') && selected.status === 'Pending' && <>
+            <button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
+              {selectedStage === 'parts' ? 'Parts Tersedia · Dikerjakan' : 'Setuju · Dikerjakan'}
+            </button>
+            <button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button>
+          </>}
+          {hasPermission('wo:edit') && selected.status === 'Proses' && <>
+            <button disabled={actionBusy} onClick={() => setWaiting('parts')} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white">Tunggu Parts</button>
+            <button disabled={actionBusy} onClick={() => void moveStatus('Selesai')} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white"><Check className="mr-1 inline h-4 w-4"/>Selesai</button>
+          </>}
           {hasPermission('invoice:create') && selected.status === 'Selesai' && !selectedInvoice && <button onClick={() => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`)} className="rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white"><FileText className="mr-1 inline h-4 w-4"/>Buat Faktur</button>}
           {hasPermission('payment:create') && selectedInvoice && selectedInvoice.status !== 'Lunas' && <button onClick={() => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`)} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white"><Banknote className="mr-1 inline h-4 w-4"/>Pembayaran</button>}
           {selectedInvoice?.status === 'Lunas' && <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
