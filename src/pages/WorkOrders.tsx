@@ -1982,7 +1982,10 @@ export default function WorkOrders() {
                 <button onClick={() => { const target = detailWO; setDetailWO(null); void resumeDiagnosis(target); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Lanjutkan Diagnosa</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
-                <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
+                <>
+                  <button onClick={() => { handleOpenModal(detailWO, true); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Tambah/Edit Layanan</button>
+                  <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
+                </>
               )}
               {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
@@ -1990,7 +1993,7 @@ export default function WorkOrders() {
               {hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.continuedToWoId && (
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
               )}
-              {hasPermission('wo:edit') && detailWO.status !== 'Closed' && detailWO.status !== 'Invoiced' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
+              {hasPermission('wo:edit') && !['Closed', 'Invoiced', 'Proses'].includes(detailWO.status) && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
               {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai'].includes(detailWO.status) && !detailWO.invoiceId && (
                 <button onClick={() => { setDetailWO(null); void handleDelete(detailWO); }} className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Hapus WO</button>
               )}
