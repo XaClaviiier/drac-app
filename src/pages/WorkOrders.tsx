@@ -203,7 +203,7 @@ export default function WorkOrders() {
     notes: '',
     technicianId: '',
     technicianName: '',
-    status: 'Pengecekan' as WorkOrder['status'],
+    status: 'Register' as WorkOrder['status'],
   });
 
   useEffect(() => {
@@ -547,7 +547,7 @@ export default function WorkOrders() {
       notes: '',
       technicianId: '',
       technicianName: '',
-      status: 'Pengecekan',
+      status: 'Register',
     });
     setShowServiceForm(true);
     setServiceSearch('');
@@ -785,6 +785,10 @@ export default function WorkOrders() {
       window.alert('Tambahkan minimal 1 layanan/barang sebelum menyimpan.');
       return;
     }
+    if ((diagnosisMode || serviceEditMode) && totalServices <= 0) {
+      window.alert('Total estimasi harus lebih dari Rp0. Isi harga minimal satu layanan/barang sebelum menyimpan diagnosa.');
+      return;
+    }
 
     // Aturan: satu mobil hanya boleh punya satu WO aktif dalam satu waktu.
     if (!editingWO) {
@@ -860,7 +864,7 @@ export default function WorkOrders() {
           ...formData,
           backdateReason: woBackdateReason.trim() || undefined,
           total: totalServices,
-          estimateTotal: formData.status === 'Pengecekan' ? totalServices : undefined,
+          estimateTotal: totalServices > 0 ? totalServices : undefined,
           branchId: targetBranch,
         });
         const bName = data.branches.find(b => b.id === targetBranch)?.name || targetBranch;
@@ -878,7 +882,7 @@ export default function WorkOrders() {
       window.alert(`WO tidak dapat dihapus karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}. Hapus pembayaran dan faktur terlebih dahulu.`);
       return;
     }
-    if (!['Pengecekan', 'Pending', 'Selesai'].includes(wo.status)) {
+    if (!['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(wo.status)) {
       window.alert(`WO berstatus ${wo.status} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`);
       return;
     }
@@ -941,7 +945,7 @@ export default function WorkOrders() {
       return;
     }
 
-    if (wo.status === 'Pengecekan') {
+    if (wo.status === 'Register' || wo.status === 'Pengecekan') {
       handleOpenDiagnosis(wo);
       return;
     }
@@ -963,6 +967,7 @@ export default function WorkOrders() {
 
   const activeWorkOrderActionLabel = (wo: WorkOrder, sameBranch: boolean) => {
     if (!sameBranch) return 'Buka WO (Read-only, cabang lain)';
+    if (wo.status === 'Register') return 'Mulai Diagnosa';
     if (wo.status === 'Pengecekan') return 'Lanjutkan Diagnosa';
     if (wo.status === 'Pending') return 'Lanjutkan Diagnosa dari Pending';
     if (wo.status === 'Proses') return 'Buka Pekerjaan';
@@ -1019,6 +1024,7 @@ export default function WorkOrders() {
   };
 
   const statusColors: Record<string, string> = {
+    Register: 'bg-slate-100 text-slate-700',
     Pengecekan: 'bg-amber-100 text-amber-800',
     Pending: 'bg-orange-100 text-orange-800',
     Proses: 'bg-blue-100 text-blue-800',
@@ -1026,7 +1032,7 @@ export default function WorkOrders() {
     Invoiced: 'bg-purple-100 text-purple-800',
     Closed: 'bg-rose-100 text-rose-800',
   };
-  const statusLabel = (status: WorkOrder['status']) => status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Pending — Menunggu Keputusan' : status === 'Proses' ? 'Dikerjakan' : status === 'Closed' ? 'Lost Sales' : status;
+  const statusLabel = (status: WorkOrder['status']) => status === 'Register' ? 'Register' : status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Pending — Menunggu Keputusan' : status === 'Proses' ? 'Dikerjakan' : status === 'Closed' ? 'Lost Sales' : status;
   const diagnosisMeasurementLabel = (wo: WorkOrder) => [
     wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
     wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
@@ -1307,6 +1313,7 @@ export default function WorkOrders() {
           )}
           <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 lg:w-44">
             <option value="">Semua Status</option>
+            <option value="Register">Register</option>
             <option value="Pengecekan">Diagnosa</option>
             <option value="Pending">Diagnosa Pending</option>
             <option value="Proses">Dikerjakan</option>
@@ -1585,7 +1592,7 @@ export default function WorkOrders() {
                             Selesai
                           </button>
                         )}
-                        {hasPermission('invoice:create') && wo.status === 'Selesai' && !wo.invoiceId && (
+                        {hasPermission('invoice:create') && wo.status === 'Selesai' && !wo.invoiceId && wo.total > 0 && (
                           <button onClick={() => handleOpenInvoiceModal(wo)} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
                             Faktur
                           </button>
@@ -1598,7 +1605,7 @@ export default function WorkOrders() {
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                        {hasPermission('wo:delete') && ['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
                           <button onClick={() => void handleDelete(wo)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1684,6 +1691,7 @@ export default function WorkOrders() {
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${statusColors[wo.status]}`}
                       title={`Status saat ini: ${wo.status}`}
                     >
+                      {wo.status === 'Register' && '0.'}
                       {wo.status === 'Pengecekan' && '1.'}
                       {wo.status === 'Pending' && '2.'}
                       {wo.status === 'Proses' && '3.'}
@@ -1723,7 +1731,7 @@ export default function WorkOrders() {
                         <FileText className="w-4 h-4" />
                         {wo.invoiceNumber}
                       </span>
-                    ) : wo.status === 'Selesai' ? (
+                    ) : wo.status === 'Selesai' && wo.total > 0 ? (
                       hasPermission('invoice:create') && (
                         <button
                           onClick={() => handleOpenInvoiceModal(wo)}
@@ -1734,13 +1742,13 @@ export default function WorkOrders() {
                           Buat Faktur
                         </button>
                       )
-                    ) : (wo.status === 'Pengecekan' || wo.status === 'Proses') ? (
+                    ) : (wo.status === 'Register' || wo.status === 'Pengecekan' || wo.status === 'Proses' || (wo.status === 'Selesai' && wo.total <= 0)) ? (
                       <span
                         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500"
                         title="Tombol faktur tersedia setelah status WO menjadi Selesai"
                       >
                         <Receipt className="h-3.5 w-3.5" />
-                        Selesaikan WO untuk membuat faktur
+                        {wo.status === 'Selesai' && wo.total <= 0 ? 'Lengkapi layanan & harga' : 'Selesaikan WO untuk membuat faktur'}
                       </span>
                     ) : null}
                     {hasPermission('wo:create')
@@ -1789,7 +1797,7 @@ export default function WorkOrders() {
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
-                    {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                    {hasPermission('wo:delete') && ['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
                       <button
                         onClick={() => void handleDelete(wo)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
@@ -1972,9 +1980,9 @@ export default function WorkOrders() {
               </div>
             </div>
             <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6 sm:py-4">
-              {hasPermission('wo:edit') && detailWO.status === 'Pengecekan' && !detailWO.continuedToWoId && (
+              {hasPermission('wo:edit') && ['Register', 'Pengecekan'].includes(detailWO.status) && !detailWO.continuedToWoId && (
                 <>
-                  <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
+                  <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{detailWO.status === 'Register' ? 'Mulai Diagnosa' : 'Hasil Diagnosa'}</button>
                   <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Lost Sales</button>
                 </>
               )}
@@ -1987,14 +1995,14 @@ export default function WorkOrders() {
                   <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
                 </>
               )}
-              {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
+              {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && detailWO.total > 0 && (
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.continuedToWoId && (
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
               )}
               {hasPermission('wo:edit') && !['Closed', 'Invoiced', 'Proses'].includes(detailWO.status) && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
-              {hasPermission('wo:delete') && ['Pengecekan', 'Pending', 'Selesai'].includes(detailWO.status) && !detailWO.invoiceId && (
+              {hasPermission('wo:delete') && ['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(detailWO.status) && !detailWO.invoiceId && (
                 <button onClick={() => { setDetailWO(null); void handleDelete(detailWO); }} className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Hapus WO</button>
               )}
               <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>

@@ -130,6 +130,7 @@ switch ($method) {
             $r['finalHp']                 = isset($r['final_hp']) ? (float)$r['final_hp'] : null;
             $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
             $r['approvedAt']              = $r['approved_at'] ?? null;
+            $r['approvedServices']        = isset($r['approved_services_json']) && $r['approved_services_json'] ? json_decode($r['approved_services_json'], true) : [];
             $r['pendingAt']               = $r['pending_at'] ?? null;
             $r['pendingUntil']            = $r['pending_until'] ?? null;
             $r['pendingReason']           = $r['pending_reason'] ?? null;
@@ -193,17 +194,35 @@ switch ($method) {
                 throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
             }
             $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $d['date'] ?? null);
+            $initialStatus = !empty($normalizedServices['services']) && $normalizedServices['total'] > 0
+                ? 'Pengecekan'
+                : 'Register';
+            $statusLog = [[
+                'from' => 'Register',
+                'to' => 'Register',
+                'at' => date('c'),
+                'byUserId' => $actor['id'] ?? '-',
+                'byUserName' => $actor['name'] ?? 'System',
+                'reason' => 'WO diregister',
+            ]];
+            if ($initialStatus === 'Pengecekan') {
+                $statusLog[] = [
+                    'from' => 'Register', 'to' => 'Pengecekan', 'at' => date('c'),
+                    'byUserId' => $actor['id'] ?? '-', 'byUserName' => $actor['name'] ?? 'System',
+                    'reason' => 'Layanan dan estimasi awal telah diisi.',
+                ];
+            }
             $stmt = $pdo->prepare("
                 INSERT INTO work_orders (
                     id, wo_number, date, backdate_reason,
                     customer_ref_id, customer_id, customer_name,
                     vehicle_ref_id, plate_number, vehicle_info,
                     description, findings, diagnosis_temperature, diagnosis_lp, diagnosis_hp, final_temperature, final_lp, final_hp,
-                    total, estimate_total, approved_at, pending_at, pending_until, pending_reason,
+                    total, estimate_total, approved_at, approved_services_json, pending_at, pending_until, pending_reason,
                     status, cancel_reason, status_log, notes, branch_id, created_by, created_by_name, technician_id, technician_name,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $woId, $woNumber, $transactionDate, $backdateReason ?: null,
@@ -213,17 +232,11 @@ switch ($method) {
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
                 $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,
-                $normalizedServices['total'], $normalizedServices['total'], $d['approvedAt'] ?? null,
+                $normalizedServices['total'], $normalizedServices['total'], null, null,
                 $d['pendingAt'] ?? null, $d['pendingUntil'] ?? null, $d['pendingReason'] ?? null,
-                'Pengecekan',
+                $initialStatus,
                 null,
-                json_encode([[
-                    'from' => 'Pengecekan',
-                    'to' => 'Pengecekan',
-                    'at' => date('c'),
-                    'byUserId' => $actor['id'] ?? '-',
-                    'byUserName' => $actor['name'] ?? 'System',
-                ]]),
+                json_encode($statusLog),
                 $d['notes'] ?? '', $branchId, $actor['id'] ?? null, $actor['name'] ?? null,
                 ($d['technicianId'] ?? '') ?: null, ($d['technicianName'] ?? '') ?: null,
                 $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
@@ -259,7 +272,7 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
-            $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
+            $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
             if (!$currentWorkOrder) {
@@ -273,11 +286,12 @@ switch ($method) {
             $currentStatus = (string)$currentWorkOrder['status'];
             $nextStatus = (string)($d['status'] ?? $currentStatus);
             $allowedTransitions = [
+                'Register' => ['Register', 'Pengecekan', 'Closed'],
                 'Pengecekan' => ['Pengecekan', 'Pending', 'Proses', 'Closed'],
                 // Pending boleh dilanjutkan kembali ke Diagnosa/Pengecekan.
                 'Pending' => ['Pending', 'Pengecekan', 'Proses', 'Closed'],
-                // Setelah pekerjaan dimulai, status hanya boleh maju ke Selesai.
-                'Proses' => ['Proses', 'Selesai'],
+                // Pending dari Proses dipakai untuk kondisi menunggu parts.
+                'Proses' => ['Proses', 'Pending', 'Selesai'],
                 'Selesai' => ['Selesai'],
                 // Closed ditampilkan sebagai Lost Sales. Dapat dipulihkan bila
                 // pelanggan menyetujui masalah yang sama.
@@ -285,6 +299,21 @@ switch ($method) {
             ];
             if (!isset($allowedTransitions[$currentStatus]) || !in_array($nextStatus, $allowedTransitions[$currentStatus], true)) {
                 throw new InvalidArgumentException("Perubahan status {$currentStatus} ke {$nextStatus} tidak diizinkan.");
+            }
+            $hasPositiveEstimate = !empty($normalizedServices['services']) && $normalizedServices['total'] > 0;
+            // Register berubah otomatis ke Diagnosa hanya setelah layanan dan
+            // estimasi bernilai positif tersedia. Diagnosa kosong kembali ke Register.
+            if ($currentStatus === 'Register' && in_array($nextStatus, ['Register', 'Pengecekan'], true)) {
+                $nextStatus = $hasPositiveEstimate ? 'Pengecekan' : 'Register';
+            } elseif ($currentStatus === 'Pengecekan' && $nextStatus === 'Pengecekan' && !$hasPositiveEstimate) {
+                $nextStatus = 'Register';
+            }
+            if (in_array($nextStatus, ['Proses', 'Selesai'], true) && !$hasPositiveEstimate) {
+                throw new InvalidArgumentException(
+                    $nextStatus === 'Proses'
+                        ? 'Persetujuan tidak dapat diproses. Tambahkan minimal satu layanan dan pastikan total estimasi lebih dari Rp0.'
+                        : 'WO tidak dapat diselesaikan. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0.'
+                );
             }
             // Validasi WO aktif hanya diperlukan bila kendaraan benar-benar diganti.
             // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
@@ -327,6 +356,14 @@ switch ($method) {
                     'reason' => $statusReason ?: null,
                 ];
             }
+            $isApproval = $nextStatus === 'Proses' && in_array($currentStatus, ['Pengecekan', 'Pending', 'Closed'], true);
+            $approvedAt = $isApproval ? date('Y-m-d') : ($currentWorkOrder['approved_at'] ?? null);
+            $approvedServicesJson = $isApproval
+                ? json_encode($normalizedServices['services'])
+                : ($currentWorkOrder['approved_services_json'] ?? null);
+            $estimateTotal = $isApproval
+                ? $normalizedServices['total']
+                : ($currentWorkOrder['estimate_total'] ?? $normalizedServices['total']);
             $continuedToWoId = ($d['continuedToWoId'] ?? '') ?: null;
             $isNewContinuation = empty($currentWorkOrder['continued_to_wo_id']) && $continuedToWoId !== null;
             $continuedAt = $isNewContinuation ? date('Y-m-d H:i:s') : ($currentWorkOrder['continued_at'] ?? null);
@@ -341,7 +378,7 @@ switch ($method) {
                     customer_ref_id=?, customer_id=?, customer_name=?,
                     vehicle_ref_id=?, plate_number=?, vehicle_info=?,
                     description=?, findings=?, diagnosis_temperature=?, diagnosis_lp=?, diagnosis_hp=?, final_temperature=?, final_lp=?, final_hp=?,
-                    total=?, estimate_total=?, approved_at=?,
+                    total=?, estimate_total=?, approved_at=?, approved_services_json=?,
                     pending_at=?, pending_until=?, pending_reason=?,
                     status=?, cancel_reason=?, status_log=?, notes=?, branch_id=?, technician_id=?, technician_name=?,
                     invoice_id=?, invoice_number=?,
@@ -358,7 +395,7 @@ switch ($method) {
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
                 $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,
-                $normalizedServices['total'], $normalizedServices['total'], $d['approvedAt'] ?? null,
+                $normalizedServices['total'], $estimateTotal, $approvedAt, $approvedServicesJson,
                 $d['pendingAt'] ?? null, $d['pendingUntil'] ?? null, $d['pendingReason'] ?? null,
                 $nextStatus,
                 $d['cancelReason'] ?? null,
@@ -436,7 +473,7 @@ switch ($method) {
             // WO selesai boleh dihapus setelah seluruh pembayaran dan faktur terkait
             // sudah dihapus. Pemeriksaan relasi faktur dilakukan di atas.
             // Lost Sales adalah histori konversi penjualan dan tidak boleh dihapus.
-            $deletableStatuses = ['Pengecekan', 'Pending', 'Selesai'];
+            $deletableStatuses = ['Register', 'Pengecekan', 'Pending', 'Selesai'];
             if (!in_array((string)$wo['status'], $deletableStatuses, true)) {
                 throw new DomainException("WO berstatus {$wo['status']} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.");
             }

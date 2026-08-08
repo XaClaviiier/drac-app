@@ -40,10 +40,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function RequirePermission({ permission, children }: { permission: Permission; children: React.ReactNode }) {
-  const { hasPermission, isLoading } = useApp();
-  // Saat halaman dibuka langsung/di-refresh, tunggu izin efektif dari server
-  // agar sesi lama tidak dilempar ke Dashboard sebelum sinkronisasi selesai.
-  if (isLoading) return <div className="min-h-[40vh]" />;
+  const { hasPermission, hasLoadedData } = useApp();
+  // Hanya loading pertama yang boleh menahan halaman. Refresh CRUD berjalan di
+  // latar belakang supaya editor aktif (mis. New WO) tidak di-unmount dan reset.
+  if (!hasLoadedData) return <div className="min-h-[40vh]" />;
   if (!hasPermission(permission)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }

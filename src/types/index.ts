@@ -59,7 +59,7 @@ export interface SalesInvoice {
   updatedAt?: string;
 }
 
-export type WOStatus = 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Invoiced' | 'Closed';
+export type WOStatus = 'Register' | 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Invoiced' | 'Closed';
 
 export interface WOStatusLog {
   from: WOStatus;
@@ -95,6 +95,7 @@ export interface WorkOrder {
   services: WorkOrderService[];
   total: number;
   estimateTotal?: number;     // estimasi saat pengecekan (dikunci saat masuk Proses)
+  approvedServices?: WorkOrderService[]; // snapshot layanan/harga yang disetujui pelanggan
   approvedAt?: string;        // tanggal pelanggan menyetujui estimasi
   pendingAt?: string;
   pendingUntil?: string;

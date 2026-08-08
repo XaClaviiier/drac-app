@@ -83,7 +83,7 @@ function resolveCustomerVehicle(PDO $pdo, string $customerRefId, string $vehicle
 function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $excludeWoId = null): void {
     $sql = "SELECT wo_number FROM work_orders
             WHERE vehicle_ref_id = ?
-              AND (status IN ('Pengecekan', 'Proses', 'Selesai')
+              AND (status IN ('Register', 'Pengecekan', 'Proses', 'Selesai')
                    OR (status = 'Pending' AND (pending_until IS NULL OR pending_until > NOW())))";
     $params = [$vehicleRefId];
     if ($excludeWoId !== null) {
@@ -109,6 +109,23 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('continued_by', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_by VARCHAR(64) NULL AFTER continued_at");
     if (!in_array('continued_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_by_name VARCHAR(150) NULL AFTER continued_by");
     if (!in_array('continued_branch_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_branch_id VARCHAR(20) NULL AFTER continued_by_name");
+    if (!in_array('approved_services_json', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD approved_services_json LONGTEXT NULL AFTER approved_at");
+    $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
+    if ($statusColumn && (
+        stripos((string)$statusColumn['Type'], "'Register'") === false
+        || stripos((string)$statusColumn['Type'], "'Pending'") === false
+        || stripos((string)$statusColumn['Type'], "'Invoiced'") === false
+        || stripos((string)$statusColumn['Type'], "'Closed'") === false
+        || stripos((string)$statusColumn['Type'], "'Dibayar'") !== false
+        || stripos((string)$statusColumn['Type'], "'Batal'") !== false
+    )) {
+        // Tahap pertama tetap menerima nilai status lama agar migrasi tidak
+        // mengosongkan enum sebelum seluruh nilai lama dikonversi.
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Dibayar','Invoiced','Batal','Closed') DEFAULT 'Register'");
+        $pdo->exec("UPDATE work_orders SET status='Invoiced' WHERE status='Dibayar'");
+        $pdo->exec("UPDATE work_orders SET status='Closed' WHERE status='Batal'");
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Invoiced','Closed') DEFAULT 'Register'");
+    }
     if ($needsContinuationBackfill) {
         try {
             $pdo->exec("

@@ -8,10 +8,11 @@ import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WorkOrder, WOStatus } from '../types';
 import { localDateKey } from '../lib/date';
 
-type StageKey = 'diagnosis' | 'approval' | 'parts' | 'working' | 'done' | 'lost';
+type StageKey = 'register' | 'diagnosis' | 'approval' | 'parts' | 'working' | 'done' | 'lost';
 type Segment = { key: StageKey; label: string; start: Date; end: Date; duration: number };
 
 const STAGES: Record<StageKey, { label: string; short: string; bar: string; soft: string; text: string; icon: typeof Wrench }> = {
+  register: { label: 'Register', short: 'Register', bar: 'bg-slate-500', soft: 'border-slate-300 bg-slate-50', text: 'text-slate-700', icon: FileText },
   diagnosis: { label: 'Diagnosa', short: 'Diagnosa', bar: 'bg-orange-500', soft: 'border-orange-300 bg-orange-50', text: 'text-orange-700', icon: Stethoscope },
   approval: { label: 'Tunggu Persetujuan', short: 'Persetujuan', bar: 'bg-amber-400', soft: 'border-amber-300 bg-amber-50', text: 'text-amber-700', icon: UserRound },
   parts: { label: 'Tunggu Parts', short: 'Parts', bar: 'bg-violet-500', soft: 'border-violet-300 bg-violet-50', text: 'text-violet-700', icon: Package },
@@ -39,6 +40,7 @@ function durationLabel(milliseconds: number) {
 }
 
 function stageForStatus(status: WOStatus, reason = ''): StageKey {
+  if (status === 'Register') return 'register';
   if (status === 'Pengecekan') return 'diagnosis';
   if (status === 'Pending') return /part|spare|stok|komponen/i.test(reason) ? 'parts' : 'approval';
   if (status === 'Proses') return 'working';
@@ -48,7 +50,7 @@ function stageForStatus(status: WOStatus, reason = ''): StageKey {
 
 function buildSegments(wo: WorkOrder, invoice: SalesInvoice | undefined, now: Date): Segment[] {
   const logs = [...(wo.statusLog || [])].sort((a, b) => parseDateTime(a.at, wo.date).getTime() - parseDateTime(b.at, wo.date).getTime());
-  let status: WOStatus = 'Pengecekan';
+  let status: WOStatus = logs[0]?.from || (wo.status === 'Register' ? 'Register' : 'Pengecekan');
   let reason = '';
   let cursor = parseDateTime(wo.createdAt, wo.date);
   const segments: Segment[] = [];
@@ -289,6 +291,10 @@ export default function WorkOrderTimeline() {
             onClick={() => navigate(`/workorders?${selectedReadOnly ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)}
             className="rounded-lg border px-4 py-2 text-sm font-semibold text-gray-600"
           >{selectedReadOnly ? 'Lihat WO' : 'Buka WO'}</button>
+          {hasPermission('wo:edit') && selected.status === 'Register' && <>
+            <button onClick={() => navigate(`/workorders?edit=${encodeURIComponent(selected.id)}`)} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white">Mulai Diagnosa</button>
+            <button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button>
+          </>}
           {hasPermission('wo:edit') && selected.status === 'Pengecekan' && <>
             <button disabled={actionBusy} onClick={() => setWaiting('approval')} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white">Tunggu Persetujuan</button>
             <button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button>
@@ -304,7 +310,9 @@ export default function WorkOrderTimeline() {
             <button disabled={actionBusy} onClick={() => setWaiting('parts')} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white">Tunggu Parts</button>
             <button disabled={actionBusy} onClick={() => void moveStatus('Selesai')} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white"><Check className="mr-1 inline h-4 w-4"/>Selesai</button>
           </>}
-          {hasPermission('invoice:create') && selected.status === 'Selesai' && !selectedInvoice && <button onClick={() => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`)} className="rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white"><FileText className="mr-1 inline h-4 w-4"/>Buat Faktur</button>}
+          {hasPermission('invoice:create') && selected.status === 'Selesai' && !selectedInvoice && (selected.total > 0
+            ? <button onClick={() => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`)} className="rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white"><FileText className="mr-1 inline h-4 w-4"/>Buat Faktur</button>
+            : <button disabled title="Isi layanan dan harga lebih dari Rp0" className="cursor-not-allowed rounded-lg bg-gray-200 px-5 py-2 text-sm font-semibold text-gray-500">Lengkapi layanan & harga</button>)}
           {hasPermission('payment:create') && selectedInvoice && selectedInvoice.status !== 'Lunas' && <button onClick={() => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`)} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white"><Banknote className="mr-1 inline h-4 w-4"/>Pembayaran</button>}
           {selectedInvoice?.status === 'Lunas' && <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
           </div>

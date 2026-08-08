@@ -7,13 +7,14 @@ import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WOStatus, WorkOrder } from '../types';
 import { localDateKey } from '../lib/date';
 
-const statuses: Array<WOStatus | ''> = ['', 'Pengecekan', 'Pending', 'Proses', 'Selesai', 'Invoiced', 'Closed'];
+const statuses: Array<WOStatus | ''> = ['', 'Register', 'Pengecekan', 'Pending', 'Proses', 'Selesai', 'Invoiced', 'Closed'];
 const rupiah = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const dateLabel = (value: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('id-ID') : '-';
 const today = () => localDateKey();
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 const statusTone: Record<WOStatus, string> = {
+  Register: 'bg-slate-100 text-slate-800',
   Pengecekan: 'bg-amber-100 text-amber-800',
   Pending: 'bg-orange-100 text-orange-800',
   Proses: 'bg-blue-100 text-blue-800',

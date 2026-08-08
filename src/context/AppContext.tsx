@@ -16,6 +16,8 @@ interface AppContextType {
   logout: () => void;
   hasPermission: (perm: Permission) => boolean;
   isLoading: boolean;
+  /** Data awal sudah selesai dimuat. Refresh CRUD berikutnya tidak boleh melepas halaman aktif. */
+  hasLoadedData: boolean;
   isDemoMode: boolean;
   refreshData: () => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
@@ -100,6 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem('currentBranchId') || 'ALL';
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
 
   const setCurrentBranchId = (id: string) => {
     setCurrentBranchIdState(id);
@@ -187,7 +190,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIsDemoMode(false);
       failSystemProcess(processId, 'Gagal mengambil data dari server');
     }
-    if (requestId === refreshRequestId.current) setIsLoading(false);
+    if (requestId === refreshRequestId.current) {
+      setHasLoadedData(true);
+      setIsLoading(false);
+    }
   };
 
   // Load data on startup
@@ -552,11 +558,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isStatusTransitionAllowed = (from: WOStatus, to: WOStatus): boolean => {
     if (from === to) return false;
     const forward: Record<WOStatus, WOStatus[]> = {
+      Register: ['Pengecekan', 'Closed'],
       Pengecekan: ['Proses', 'Pending', 'Closed'],
       // Pending dapat dibuka kembali ke tahap Diagnosa selama belum kedaluwarsa.
       Pending: ['Pengecekan', 'Proses', 'Closed'],
       // Setelah pekerjaan dimulai, WO hanya boleh diselesaikan.
-      Proses: ['Selesai'],
+      Proses: ['Pending', 'Selesai'],
       Selesai: ['Invoiced'],
       Invoiced: [],
       // Lost Sales dapat dipulihkan bila pelanggan menyetujui masalah yang sama.
@@ -584,6 +591,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (wo.status === 'Selesai' && nextStatus === 'Invoiced' && !wo.invoiceId) {
       return { ok: false, message: 'Status Invoiced hanya diberikan otomatis setelah faktur dibuat.' };
+    }
+
+    const positiveTotal = wo.services.reduce((sum, service) => sum + Number(service.price || 0) * Number(service.qty || 0), 0);
+    if (['Proses', 'Selesai'].includes(nextStatus) && (!wo.services.length || positiveTotal <= 0)) {
+      return {
+        ok: false,
+        message: nextStatus === 'Proses'
+          ? 'Belum dapat disetujui. Tambahkan minimal satu layanan dan pastikan total estimasi lebih dari Rp0.'
+          : 'WO belum dapat diselesaikan. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0.',
+      };
     }
 
     // Pending dan Lost Sales wajib punya alasan.
@@ -621,8 +638,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       approvedAt: (wo.status === 'Pengecekan' || wo.status === 'Pending' || wo.status === 'Closed') && nextStatus === 'Proses'
         ? localDateKey()
         : wo.approvedAt,
-      estimateTotal: wo.status === 'Pengecekan' && nextStatus === 'Proses' && !wo.estimateTotal
-        ? wo.total
+      approvedServices: (wo.status === 'Pengecekan' || wo.status === 'Pending' || wo.status === 'Closed') && nextStatus === 'Proses'
+        ? wo.services.map(service => ({ ...service }))
+        : wo.approvedServices,
+      estimateTotal: (wo.status === 'Pengecekan' || wo.status === 'Pending' || wo.status === 'Closed') && nextStatus === 'Proses'
+        ? positiveTotal
         : wo.estimateTotal,
     };
 
@@ -680,7 +700,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       services: copiedServices,
       total: copiedTotal,
       estimateTotal: undefined,
-      status: ['Pending', 'Closed'].includes(src.status) ? 'Pengecekan' : 'Proses',
+      status: resetJob ? 'Register' : (src.status === 'Closed' && copiedTotal > 0 ? 'Proses' : (copiedTotal > 0 ? 'Pengecekan' : 'Register')),
       notes: resetJob
         ? `Masalah berbeda. Referensi data pelanggan dan kendaraan dari ${src.woNumber} (${srcBranch?.name || '-'}).`
         : `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,
@@ -943,7 +963,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         data, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId,
-        login, logout, hasPermission, isLoading, isDemoMode, refreshData,
+        login, logout, hasPermission, isLoading, hasLoadedData, isDemoMode, refreshData,
         updateSettings, generateDocumentNumber,
         addVehicle, updateVehicle, deleteVehicle,
         addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,

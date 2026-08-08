@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2, MapPin, Hash, ShieldCheck, Bot, Save, KeyRound,
-  CheckCircle2, AlertTriangle,
+  CheckCircle2, AlertTriangle, BookOpenCheck, ClipboardCheck, Wrench, FileText, WalletCards,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 
-type Tab = 'company' | 'branches' | 'documents' | 'security' | 'ai';
+type Tab = 'company' | 'branches' | 'documents' | 'security' | 'ai' | 'guide';
 
 const tabs = [
   { id: 'company' as const, label: 'Profil Perusahaan', icon: Building2 },
@@ -15,6 +15,7 @@ const tabs = [
   { id: 'documents' as const, label: 'Nomor Dokumen', icon: Hash },
   { id: 'security' as const, label: 'Keamanan', icon: ShieldCheck },
   { id: 'ai' as const, label: 'Integrasi AI', icon: Bot },
+  { id: 'guide' as const, label: 'Panduan Sistem', icon: BookOpenCheck },
 ];
 
 const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
@@ -150,7 +151,7 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        <section className="grid items-start gap-3 pt-0.5 lg:grid-cols-[minmax(0,1fr)_120px]">
+        <section className={`grid items-start gap-3 pt-0.5 ${tab === 'guide' ? '' : 'lg:grid-cols-[minmax(0,1fr)_120px]'}`}>
           {tab === 'company' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Profil Perusahaan" description="Informasi yang tampil pada dokumen dan laporan." />
@@ -276,15 +277,17 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
-            <Save className="h-12 w-12" />
-          </button>
+          {tab === 'guide' && <SystemGuide />}
 
-          <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
+          {tab !== 'guide' && <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+            <Save className="h-12 w-12" />
+          </button>}
+
+          {tab !== 'guide' && <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
             <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <Save className="h-4 w-4" /> {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>
-          </div>
+          </div>}
         </section>
       </div>
     </div>
@@ -333,5 +336,49 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
     <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-gray-200 p-3 text-sm font-medium text-gray-700">
       {label}<input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-blue-600" />
     </label>
+  );
+}
+
+function SystemGuide() {
+  const flow = [
+    { title: '1. Register', text: 'Pilih pelanggan dan kendaraan, lalu isi keluhan. Layanan belum wajib dan nilai Rp0 masih diperbolehkan.', icon: ClipboardCheck, tone: 'border-slate-200 bg-slate-50 text-slate-700' },
+    { title: '2. Diagnosa', text: 'Tambahkan minimal satu layanan/barang. Total estimasi wajib lebih dari Rp0 agar WO masuk tahap Diagnosa.', icon: Wrench, tone: 'border-orange-200 bg-orange-50 text-orange-700' },
+    { title: '3. Dikerjakan', text: 'Tombol Setuju · Dikerjakan berarti pelanggan menyetujui layanan dan harga. Sistem menyimpan snapshot estimasi yang disetujui.', icon: CheckCircle2, tone: 'border-blue-200 bg-blue-50 text-blue-700' },
+    { title: '4. Selesai & Faktur', text: 'Pekerjaan boleh ditambah saat proses. Setelah selesai, faktur berisi rincian final dan nilainya tidak boleh Rp0.', icon: FileText, tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+    { title: '5. Pembayaran', text: 'Pembayaran masuk ke akun kas/bank cabang. Pembayaran tunai yang belum disetor dipantau melalui menu Setoran.', icon: WalletCards, tone: 'border-violet-200 bg-violet-50 text-violet-700' },
+  ];
+  const rules = [
+    ['Cabang transaksi', 'Saat posisi Semua Cabang, pembuatan transaksi diblokir sampai cabang dipilih secara jelas.'],
+    ['Persetujuan pelanggan', 'Setuju hanya dapat dipilih bila ada layanan dan total estimasi lebih dari Rp0. Daftar serta harga yang disetujui disimpan sebagai histori audit.'],
+    ['Perubahan pekerjaan', 'Tambahan pekerjaan setelah persetujuan diperbolehkan. Estimasi awal tetap tersimpan; rincian invoice menjadi pekerjaan/barang final.'],
+    ['Lost Sales', 'Gunakan bila pelanggan tidak melanjutkan. Masalah yang sama dapat dilanjutkan dari WO lama; masalah berbeda harus dibuatkan WO baru.'],
+    ['Stok', 'WO hanya mencatat estimasi dan tidak memotong stok. Stok baru berkurang ketika invoice final dibuat.'],
+    ['Invoice & pembayaran', 'Invoice dari WO mengunci pelanggan dan kendaraan. Menghapus pembayaran membuat invoice terutang lagi; menghapus invoice mengembalikan WO ke Selesai.'],
+    ['Pelanggan & kendaraan', 'Satu pelanggan dapat memiliki beberapa kendaraan. Pemilik aktif kendaraan dapat diganti tanpa menghapus histori WO sebelumnya.'],
+    ['Akses pengguna', 'Owner memiliki akses penuh dan tidak dapat dihapus. Role, cabang, jam login, tanggal mundur, dan akses AI mengikuti hak pengguna.'],
+  ];
+  return (
+    <div className="space-y-4 rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-3 border-b border-gray-100 pb-4">
+        <span className="rounded-xl bg-blue-100 p-3 text-blue-700"><BookOpenCheck className="h-7 w-7" /></span>
+        <div><h2 className="text-xl font-bold text-gray-900">Panduan Sistem & Aturan Operasional</h2><p className="mt-1 text-sm text-gray-500">Ringkasan aturan yang disepakati untuk menjaga alur servis, stok, cabang, dan keuangan tetap konsisten.</p></div>
+      </div>
+      <section>
+        <h3 className="mb-3 font-bold text-gray-900">Alur Servis Job</h3>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {flow.map(step => { const Icon = step.icon; return <div key={step.title} className={`rounded-xl border p-3 ${step.tone}`}><Icon className="mb-2 h-5 w-5"/><h4 className="font-bold">{step.title}</h4><p className="mt-1 text-xs leading-5 text-gray-600">{step.text}</p></div>; })}
+        </div>
+      </section>
+      <section className="rounded-xl border border-gray-200">
+        <h3 className="border-b border-gray-200 bg-gray-50 px-4 py-3 font-bold text-gray-900">Aturan Utama</h3>
+        <div className="divide-y divide-gray-100">
+          {rules.map(([title, text]) => <div key={title} className="grid gap-1 px-4 py-3 md:grid-cols-[190px_1fr]"><b className="text-sm text-gray-800">{title}</b><p className="text-sm leading-6 text-gray-600">{text}</p></div>)}
+        </div>
+      </section>
+      <section className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><h3 className="font-bold text-cyan-900">Perintah Asisten AI</h3><p className="mt-2 text-sm leading-6 text-cyan-800"><b>reg</b> untuk registrasi WO, <b>cek</b> untuk mencari pelanggan/kendaraan dan histori, <b>list</b> untuk menampilkan daftar, serta <b>reginv</b> untuk transaksi cepat bagi pengguna yang memiliki izin khusus tanggal mundur.</p></div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h3 className="font-bold text-amber-900">Catatan Kontrol</h3><p className="mt-2 text-sm leading-6 text-amber-800">Tanggal masa depan dilarang. Input tanggal mundur memerlukan izin akun dan alasan bila pengaturannya aktif. Semua perubahan status, invoice, dan pembayaran dicatat dalam timeline/audit.</p></div>
+      </section>
+    </div>
   );
 }

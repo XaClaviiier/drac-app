@@ -42,13 +42,29 @@ try {
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_temperature DECIMAL(6,2) NULL AFTER diagnosis_hp");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_lp DECIMAL(8,2) NULL AFTER final_temperature");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_hp DECIMAL(8,2) NULL AFTER final_lp");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS approved_services_json LONGTEXT NULL AFTER approved_at");
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
-    if ($statusColumn && (stripos((string)$statusColumn['Type'], "'Pending'") === false || stripos((string)$statusColumn['Type'], "'Invoiced'") === false || stripos((string)$statusColumn['Type'], "'Closed'") === false || stripos((string)$statusColumn['Type'], "'Dibayar'") !== false || stripos((string)$statusColumn['Type'], "'Batal'") !== false)) {
+    if ($statusColumn && (stripos((string)$statusColumn['Type'], "'Register'") === false || stripos((string)$statusColumn['Type'], "'Pending'") === false || stripos((string)$statusColumn['Type'], "'Invoiced'") === false || stripos((string)$statusColumn['Type'], "'Closed'") === false || stripos((string)$statusColumn['Type'], "'Dibayar'") !== false || stripos((string)$statusColumn['Type'], "'Batal'") !== false)) {
         // Dua tahap menjaga data lama tetap valid saat status lama diganti.
-        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Pengecekan','Pending','Proses','Selesai','Dibayar','Invoiced','Batal','Closed') DEFAULT 'Pengecekan'");
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Dibayar','Invoiced','Batal','Closed') DEFAULT 'Register'");
         $pdo->exec("UPDATE work_orders SET status='Invoiced' WHERE status='Dibayar'");
         $pdo->exec("UPDATE work_orders SET status='Closed' WHERE status='Batal'");
-        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Pengecekan','Pending','Proses','Selesai','Invoiced','Closed') DEFAULT 'Pengecekan'");
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Invoiced','Closed') DEFAULT 'Register'");
+    }
+    // Koreksi data tidak valid dari alur lama: WO tanpa layanan dan tanpa nilai
+    // belum boleh berstatus Diagnosa/Dikerjakan/Selesai. Saat ini kondisi ini
+    // hanya mengenai data yang belum difakturkan.
+    $invalidRows = $pdo->query("SELECT w.id,w.status,w.status_log FROM work_orders w LEFT JOIN work_order_services s ON s.wo_id=w.id WHERE w.invoice_id IS NULL AND w.total<=0 AND w.status IN ('Pengecekan','Pending','Proses','Selesai') GROUP BY w.id,w.status,w.status_log HAVING COUNT(s.id)=0")->fetchAll();
+    $repairInvalid = $pdo->prepare("UPDATE work_orders SET status='Register',approved_at=NULL,approved_services_json=NULL,estimate_total=0,status_log=? WHERE id=?");
+    foreach ($invalidRows as $invalidRow) {
+        $statusLog = json_decode((string)($invalidRow['status_log'] ?? '[]'), true);
+        if (!is_array($statusLog)) $statusLog = [];
+        $statusLog[] = [
+            'from' => (string)$invalidRow['status'], 'to' => 'Register', 'at' => date('c'),
+            'byUserId' => 'system', 'byUserName' => 'System',
+            'reason' => 'Koreksi otomatis: WO belum memiliki layanan dengan estimasi bernilai positif.',
+        ];
+        $repairInvalid->execute([json_encode($statusLog), $invalidRow['id']]);
     }
     $pdo->exec("UPDATE work_orders SET pending_until=DATE_ADD(pending_at, INTERVAL 10 DAY) WHERE status='Pending' AND pending_at IS NOT NULL AND (pending_until IS NULL OR pending_until > DATE_ADD(pending_at, INTERVAL 10 DAY))");
     $pdo->exec("UPDATE work_orders SET status='Closed', cancel_reason=COALESCE(NULLIF(cancel_reason,''), 'Tidak ada keputusan selama 10 hari') WHERE status='Pending' AND pending_until IS NOT NULL AND pending_until <= NOW()");
@@ -241,6 +257,7 @@ try {
         $r['finalHp']                 = isset($r['final_hp']) ? (float)$r['final_hp'] : null;
         $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
         $r['approvedAt']              = $r['approved_at'] ?? null;
+        $r['approvedServices']        = isset($r['approved_services_json']) && $r['approved_services_json'] ? json_decode($r['approved_services_json'], true) : [];
         $r['pendingAt']               = $r['pending_at'] ?? null;
         $r['pendingUntil']            = $r['pending_until'] ?? null;
         $r['pendingReason']           = $r['pending_reason'] ?? null;
