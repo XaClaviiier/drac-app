@@ -185,19 +185,8 @@ export default function WorkOrderTimeline() {
           <p className="text-sm text-gray-500">Pemantauan proses servis dan durasi setiap tahap secara real-time.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {hasPermission('wo:create') && <button type="button" onClick={() => navigate('/workorders?new=1')} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4"/>New WO</button>}
-          <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-semibold text-emerald-700"><FileText className="h-4 w-4"/>Faktur {invoicedCount}/{rowsWithSegments.length}</span>
-          <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700"><Banknote className="h-4 w-4"/>Lunas {paidCount}/{invoicedCount}</span>
-          <button type="button" onClick={() => void refreshData()} className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"><RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}/>Refresh</button>
-          <label className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-medium text-gray-700"><CalendarDays className="h-4 w-4"/><input type="date" value={date} max={localDateKey()} onChange={event => { setDate(event.target.value); setSelectedId(''); }} className="bg-transparent outline-none"/></label>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs shadow-sm">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <label className={`relative inline-flex h-10 min-w-[235px] items-center gap-2 rounded-lg border px-3 font-semibold transition-colors ${stageFilter ? 'border-blue-400 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700'}`}>
+          <label className={`relative inline-flex h-10 min-w-[210px] items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors ${stageFilter ? 'border-blue-400 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700'}`}>
             <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${stageFilter ? 'animate-pulse bg-blue-600' : 'bg-gray-300'}`}/>
-            <span className="whitespace-nowrap">{stageFilter ? 'Filter aktif' : 'Status'}</span>
             <select
               aria-label="Filter status WO"
               value={stageFilter || ''}
@@ -205,7 +194,7 @@ export default function WorkOrderTimeline() {
                 setStageFilter((event.target.value || null) as StageKey | null);
                 setSelectedId('');
               }}
-              className="min-w-0 flex-1 cursor-pointer bg-transparent py-2 pr-1 font-semibold outline-none"
+              className="min-w-0 flex-1 cursor-pointer bg-transparent py-2 font-semibold outline-none"
             >
               <option value="">Semua Status ({rowsWithSegments.length})</option>
               {(Object.keys(STAGES) as StageKey[]).map(key => (
@@ -213,16 +202,18 @@ export default function WorkOrderTimeline() {
               ))}
             </select>
           </label>
-          <div className="hidden flex-wrap gap-x-4 gap-y-2 xl:flex">
-          {(Object.keys(STAGES) as StageKey[]).map(key => <span key={key} className="inline-flex items-center gap-1.5 text-gray-600"><i className={`h-3 w-3 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}</span>)}
-          </div>
-        </div>
-        <div className="relative">
+          {hasPermission('wo:create') && <button type="button" onClick={() => navigate('/workorders?new=1')} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4"/>New WO</button>}
+          <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-semibold text-emerald-700"><FileText className="h-4 w-4"/>Faktur {invoicedCount}/{rowsWithSegments.length}</span>
+          <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700"><Banknote className="h-4 w-4"/>Lunas {paidCount}/{invoicedCount}</span>
+          <button type="button" onClick={() => void refreshData()} className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"><RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}/>Refresh</button>
+          <label className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-medium text-gray-700"><CalendarDays className="h-4 w-4"/><input type="date" value={date} max={localDateKey()} onChange={event => { setDate(event.target.value); setSelectedId(''); }} className="bg-transparent outline-none"/></label>
+          <div className="relative">
           <button type="button" onClick={() => setShowSettings(current => !current)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 font-semibold text-gray-600"><Settings2 className="h-4 w-4"/>Pengaturan Tampilan</button>
           {showSettings && <div className="absolute right-0 z-30 mt-2 w-56 rounded-xl border bg-white p-3 shadow-xl">
             <label className="flex items-center justify-between gap-3 py-2 text-sm"><span>Tampilkan WO selesai</span><input type="checkbox" checked={showCompleted} onChange={event => setShowCompleted(event.target.checked)}/></label>
             <label className="flex items-center justify-between gap-3 py-2 text-sm"><span>Tampilkan Lost Sales</span><input type="checkbox" checked={showLost} onChange={event => setShowLost(event.target.checked)}/></label>
           </div>}
+          </div>
         </div>
       </div>
 
@@ -284,7 +275,15 @@ export default function WorkOrderTimeline() {
             <div className="flex gap-2 overflow-x-auto pb-2">{selectedStages.map(stage => { const config = STAGES[stage.key]; const Icon = config.icon; return <div key={stage.key} className={`min-w-[135px] flex-1 rounded-xl border p-3 text-center ${config.soft}`}><div className={`flex items-center justify-center gap-1 text-xs font-semibold ${config.text}`}><Icon className="h-4 w-4"/>{config.short}</div><b className="mt-2 block text-xl text-gray-900">{durationLabel(stage.duration)}</b><small className="text-[10px] text-gray-500">{stage.start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}–{stage.end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</small></div>; })}</div>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-3">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+          <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
+            {(Object.keys(STAGES) as StageKey[]).map(key => (
+              <span key={key} className="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-500">
+                <i className={`h-2.5 w-2.5 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
           <button
             type="button"
             onClick={() => navigate(`/workorders?${selectedReadOnly ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)}
@@ -308,6 +307,7 @@ export default function WorkOrderTimeline() {
           {hasPermission('invoice:create') && selected.status === 'Selesai' && !selectedInvoice && <button onClick={() => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`)} className="rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white"><FileText className="mr-1 inline h-4 w-4"/>Buat Faktur</button>}
           {hasPermission('payment:create') && selectedInvoice && selectedInvoice.status !== 'Lunas' && <button onClick={() => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`)} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white"><Banknote className="mr-1 inline h-4 w-4"/>Pembayaran</button>}
           {selectedInvoice?.status === 'Lunas' && <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
+          </div>
         </div>
       </section>}
 
