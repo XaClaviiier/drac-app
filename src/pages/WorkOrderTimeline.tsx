@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity, Banknote, CalendarDays, Check, CheckCircle2, ChevronRight,
-  FileText, Package, RefreshCw, Settings2, Stethoscope, UserRound, Wrench, XCircle,
+  FileText, Package, Plus, RefreshCw, Settings2, Stethoscope, UserRound, Wrench, XCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WorkOrder, WOStatus } from '../types';
@@ -129,6 +129,7 @@ export default function WorkOrderTimeline() {
   const selectedRow = visibleRows.find(row => row.wo.id === selectedId) || visibleRows[0];
   const selected = selectedRow?.wo;
   const selectedInvoice = selectedRow?.invoice;
+  const selectedReadOnly = Boolean(selectedInvoice || selected?.invoiceId || selected?.status === 'Invoiced' || selected?.status === 'Closed');
   const selectedStages = useMemo(() => {
     if (!selectedRow) return [];
     const totals = new Map<StageKey, { duration: number; start: Date; end: Date }>();
@@ -184,6 +185,7 @@ export default function WorkOrderTimeline() {
           <p className="text-sm text-gray-500">Pemantauan proses servis dan durasi setiap tahap secara real-time.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {hasPermission('wo:create') && <button type="button" onClick={() => navigate('/workorders?new=1')} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4"/>New WO</button>}
           <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-semibold text-emerald-700"><FileText className="h-4 w-4"/>Faktur {invoicedCount}/{rowsWithSegments.length}</span>
           <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700"><Banknote className="h-4 w-4"/>Lunas {paidCount}/{invoicedCount}</span>
           <button type="button" onClick={() => void refreshData()} className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"><RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}/>Refresh</button>
@@ -277,7 +279,11 @@ export default function WorkOrderTimeline() {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-3">
-          <button type="button" onClick={() => navigate('/workorders')} className="rounded-lg border px-4 py-2 text-sm font-semibold text-gray-600">Buka WO</button>
+          <button
+            type="button"
+            onClick={() => navigate(`/workorders?${selectedReadOnly ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)}
+            className="rounded-lg border px-4 py-2 text-sm font-semibold text-gray-600"
+          >{selectedReadOnly ? 'Lihat WO' : 'Buka WO'}</button>
           {hasPermission('wo:edit') && selected.status === 'Pengecekan' && <><button disabled={actionBusy} onClick={() => setWaiting('approval')} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white">Tunggu Persetujuan</button><button disabled={actionBusy} onClick={() => setWaiting('parts')} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white">Tunggu Parts</button><button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button><button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button></>}
           {hasPermission('wo:edit') && selected.status === 'Pending' && <><button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button><button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button></>}
           {hasPermission('wo:edit') && selected.status === 'Proses' && <button disabled={actionBusy} onClick={() => void moveStatus('Selesai')} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white"><Check className="mr-1 inline h-4 w-4"/>Selesai</button>}

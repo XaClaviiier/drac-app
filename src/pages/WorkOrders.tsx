@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { WorkOrder, WorkOrderService } from '../types';
@@ -64,6 +65,7 @@ type WorkOrderFinancialTimeline = {
 const EMPTY_FINANCIAL_TIMELINE: WorkOrderFinancialTimeline = { woId: '', invoice: null, payments: [], paymentAudits: [], canViewPayments: false };
 
 export default function WorkOrders() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     data,
     addWorkOrder, updateWorkOrder, deleteWorkOrder,
@@ -73,6 +75,7 @@ export default function WorkOrders() {
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
+  const [serviceEditMode, setServiceEditMode] = useState(false);
   const diagnosisSubmitAction = useRef<'save' | 'invoice'>('save');
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
@@ -528,8 +531,9 @@ export default function WorkOrders() {
     setWoBackdateReason('');
   };
 
-  const handleOpenModal = (wo?: WorkOrder) => {
+  const handleOpenModal = (wo?: WorkOrder, servicesOnly = false) => {
     setDiagnosisMode(false);
+    setServiceEditMode(Boolean(wo && servicesOnly));
     if (wo) {
       setEditingWO(wo);
       const matchedVehicle = data.vehicles.find(
@@ -568,7 +572,52 @@ export default function WorkOrders() {
   const handleOpenDiagnosis = (wo: WorkOrder) => {
     handleOpenModal(wo);
     setDiagnosisMode(true);
+    setServiceEditMode(false);
   };
+
+  const requestedNewWO = searchParams.get('new');
+  const requestedEditWO = searchParams.get('edit');
+  const requestedViewWO = searchParams.get('view');
+
+  // Aksi dari WO Timeline selalu membawa ID WO agar baris yang dipilih itulah
+  // yang dibuka. WO yang sudah difakturkan hanya boleh dilihat (read-only).
+  useEffect(() => {
+    if (!requestedNewWO && !requestedEditWO && !requestedViewWO) return;
+    if ((requestedEditWO || requestedViewWO) && isLoading && data.workOrders.length === 0) return;
+
+    if (requestedNewWO === '1') {
+      setSearchParams({}, { replace: true });
+      if (!hasPermission('wo:create')) {
+        window.alert('Anda tidak memiliki hak membuat WO.');
+        return;
+      }
+      if (currentBranchId === 'ALL') {
+        window.alert('Pilih cabang aktif terlebih dahulu sebelum membuat WO baru.');
+        return;
+      }
+      handleOpenModal();
+      return;
+    }
+
+    const targetId = requestedEditWO || requestedViewWO || '';
+    const targetWO = data.workOrders.find(wo => wo.id === targetId);
+    setSearchParams({}, { replace: true });
+    if (!targetWO) {
+      window.alert('WO yang dipilih tidak ditemukan atau tidak dapat diakses.');
+      return;
+    }
+
+    const lockedByInvoice = Boolean(targetWO.invoiceId || targetWO.status === 'Invoiced');
+    if (requestedViewWO || lockedByInvoice || !hasPermission('wo:edit')) {
+      setDetailWO(targetWO);
+      if (lockedByInvoice && requestedEditWO) {
+        window.alert(`WO ${targetWO.woNumber} sudah memiliki faktur dan dibuka dalam mode lihat.`);
+      }
+      return;
+    }
+
+    handleOpenModal(targetWO, true);
+  }, [requestedNewWO, requestedEditWO, requestedViewWO, isLoading, data.workOrders]);
 
   const resumeDiagnosis = async (wo: WorkOrder) => {
     const result = await changeWorkOrderStatus(wo.id, 'Pengecekan');
@@ -582,6 +631,7 @@ export default function WorkOrders() {
   const handleCloseModal = () => {
     setShowModal(false);
     setDiagnosisMode(false);
+    setServiceEditMode(false);
     resetForm();
   };
 
@@ -688,6 +738,11 @@ export default function WorkOrders() {
     const shouldCreateInvoice = diagnosisMode && diagnosisSubmitAction.current === 'invoice';
     diagnosisSubmitAction.current = 'save';
 
+    if (editingWO?.invoiceId || editingWO?.status === 'Invoiced') {
+      window.alert(`WO ${editingWO.woNumber} sudah difakturkan dan tidak dapat diubah.`);
+      return;
+    }
+
     // Validasi wajib
     if (!formData.customerRefId) {
       setSuccessMsg('');
@@ -698,7 +753,7 @@ export default function WorkOrders() {
       window.alert('Kendaraan wajib dipilih dari data kendaraan.');
       return;
     }
-    if (diagnosisMode && formData.services.length === 0) {
+    if ((diagnosisMode || serviceEditMode) && formData.services.length === 0) {
       window.alert('Tambahkan minimal 1 layanan/barang sebelum menyimpan.');
       return;
     }
@@ -763,6 +818,7 @@ export default function WorkOrders() {
           } : {}),
         };
         await updateWorkOrder(editingWO.id, savedWorkOrder);
+        if (serviceEditMode) await refreshData();
         setSuccessMsg(diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
         if (shouldCreateInvoice) {
           handleCloseModal();
@@ -1077,7 +1133,7 @@ export default function WorkOrders() {
   };
 
   const openNewRegistration = () => {
-    if (showModal && !diagnosisMode && !editingWO) return;
+    if (showModal && !diagnosisMode && !serviceEditMode && !editingWO) return;
     if (currentBranchId === 'ALL') {
       window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat registrasi WO.');
       return;
@@ -1154,6 +1210,11 @@ export default function WorkOrders() {
             className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white"
           >
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+          </button>
+        ) : showModal && serviceEditMode && editingWO ? (
+          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+            EDIT PEKERJAAN {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && editingWO ? (
@@ -1946,9 +2007,9 @@ export default function WorkOrders() {
             <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? 'Edit Registrasi WO' : 'Register Baru'}
+                  {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : serviceEditMode && editingWO ? `EDIT PEKERJAAN ${editingWO.woNumber}` : editingWO ? 'Edit Registrasi WO' : 'Register Baru'}
                 </h3>
-                <p className="text-sm text-gray-500">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : 'Registrasi kendaraan masuk tanpa estimasi layanan'}</p>
+                <p className="text-sm text-gray-500">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : serviceEditMode ? 'Tambah atau ubah layanan sebelum dibuatkan faktur' : 'Registrasi kendaraan masuk tanpa estimasi layanan'}</p>
               </div>
               <button
                 onClick={handleCloseModal}
@@ -1972,13 +2033,18 @@ export default function WorkOrders() {
                   </div>
                 </div>
               )}
-              {diagnosisMode && editingWO ? (
+              {(diagnosisMode || serviceEditMode) && editingWO ? (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
+                  <div className="relative grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Keluhan awal</span><strong>{editingWO.description || '-'}</strong></div>
+                    {serviceEditMode && (
+                      <button type="button" onClick={() => setServiceEditMode(false)} className="absolute right-3 top-3 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                        Edit Data Registrasi
+                      </button>
+                    )}
                   </div>
                   <label className="block text-sm font-medium text-gray-700">
                     Teknisi penanggung jawab <span className="text-red-500">*</span>
@@ -2101,11 +2167,11 @@ export default function WorkOrders() {
               </div>
               </>}
 
-              {diagnosisMode && <>
+              {(diagnosisMode || serviceEditMode) && <>
               {/* Services hanya diisi pada tahap diagnosa, bukan saat registrasi */}
               <div>
                 <div className="mb-3">
-                  <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Layanan Service AC'}</label>
+                  <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Pekerjaan / Layanan WO'}</label>
                 </div>
 
                 {showServiceForm && (
