@@ -1891,12 +1891,12 @@ export default function WorkOrders() {
         )}
       </div>
 
-      {/* Desktop Detail Drawer */}
+      {/* Detail WO: layar penuh di HP, drawer dari kanan di desktop */}
       {detailWO && (
-        <div className="fixed inset-0 z-50 hidden lg:block" role="dialog" aria-modal="true">
-          <button type="button" aria-label="Tutup detail" onClick={() => setDetailWO(null)} className="absolute inset-0 bg-gray-950/35" />
-          <aside className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-white shadow-2xl">
-            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5">
+        <div className="fixed inset-0 z-50 block" role="dialog" aria-modal="true">
+          <button type="button" aria-label="Tutup detail" onClick={() => setDetailWO(null)} className="absolute inset-0 hidden bg-gray-950/35 lg:block" />
+          <aside className="absolute inset-0 flex w-full flex-col bg-white shadow-2xl lg:inset-y-0 lg:left-auto lg:right-0 lg:max-w-xl">
+            <div className="flex flex-shrink-0 items-start justify-between border-b border-gray-200 px-4 py-4 sm:px-6 sm:py-5">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Detail Order Kerja</p>
                 <h3 className="mt-1 font-mono text-xl font-bold text-gray-900">{detailWO.woNumber}</h3>
@@ -1904,7 +1904,7 @@ export default function WorkOrders() {
               </div>
               <button onClick={() => setDetailWO(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>
             </div>
-            <div className="flex-1 space-y-5 overflow-y-auto p-6">
+            <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
                 <span className="text-xl font-bold text-blue-700">Rp {detailWO.total.toLocaleString('id-ID')}</span>
@@ -1971,7 +1971,7 @@ export default function WorkOrders() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
+            <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6 sm:py-4">
               {hasPermission('wo:edit') && detailWO.status === 'Pengecekan' && !detailWO.continuedToWoId && (
                 <>
                   <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Hasil Diagnosa</button>
