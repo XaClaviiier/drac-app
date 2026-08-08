@@ -8,6 +8,7 @@ $normalizeSalesInvoiceItems = static function (PDO $pdo, array $items): array {
         else{$code=trim((string)($line['code']??''));$name=trim((string)($line['name']??''));$description=trim((string)($line['description']??''));$isStockItem=false;if($name==='')throw new InvalidArgumentException('Nama baris faktur manual wajib diisi');}
         $subtotal=$qty*$price;$total+=$subtotal;$result[]=compact('itemId','code','name','description','price','qty','subtotal','isStockItem');
     }
+    if($total<=0)throw new InvalidArgumentException('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
     return ['items'=>$result,'total'=>$total];
 };
 

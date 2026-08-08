@@ -721,6 +721,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const today = invoiceDate || localDateKey();
     const finalItems = (invoiceItems || wo.services).map((item, index) => ({ ...item, id: `${Date.now()}-${index}` }));
     const invoiceTotal = finalItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+    if (invoiceTotal <= 0) {
+      throw new Error('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
+    }
     const status: SalesInvoice['status'] = payment >= invoiceTotal ? 'Lunas' : 'Belum Lunas';
     const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
     let invoiceNumber = generateDocumentNumber('invoice', wo.branchId);

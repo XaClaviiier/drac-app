@@ -221,6 +221,10 @@ export default function SalesInvoice() {
       return;
     }
     const finalTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+    if (finalTotal <= 0) {
+      window.alert('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
+      return;
+    }
     const finalForm = {
       ...formData,
       total: finalTotal,
