@@ -115,7 +115,6 @@ export default function WorkOrderTimeline() {
   })), [dayRows, invoicesByWo, clock]);
 
   const currentStage = (wo: WorkOrder) => stageForStatus(wo.status, wo.pendingReason || wo.cancelReason || '');
-  const selectedStage = selected ? currentStage(selected) : null;
   const stageCounts = useMemo(() => rowsWithSegments.reduce((result, row) => {
     const key = currentStage(row.wo);
     result[key] = (result[key] || 0) + 1;
@@ -129,6 +128,7 @@ export default function WorkOrderTimeline() {
 
   const selectedRow = visibleRows.find(row => row.wo.id === selectedId) || visibleRows[0];
   const selected = selectedRow?.wo;
+  const selectedStage = selected ? currentStage(selected) : null;
   const selectedInvoice = selectedRow?.invoice;
   const selectedReadOnly = Boolean(selectedInvoice || selected?.invoiceId || selected?.status === 'Invoiced' || selected?.status === 'Closed');
   const selectedStages = useMemo(() => {
