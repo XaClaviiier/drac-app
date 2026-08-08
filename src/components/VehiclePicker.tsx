@@ -5,16 +5,6 @@ import type { Vehicle, Customer } from '../types';
 import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
 import { localDateKey } from '../lib/date';
 
-/** Tunggu vehicle dengan id tertentu muncul di data, lalu callback. */
-function useWaitForVehicle(targetId: string | null, onFound: (v: Vehicle) => void) {
-  const { data } = useApp();
-  useEffect(() => {
-    if (!targetId) return;
-    const found = data.vehicles.find(v => v.id === targetId);
-    if (found) onFound(found);
-  }, [data.vehicles, targetId, onFound]);
-}
-
 interface VehiclePickerProps {
   customer: Customer | null;
   value: string;
@@ -36,17 +26,8 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     year: 0,
     color: '',
   });
-  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-
-  // Setelah addVehicle, tunggu data.vehicles terupdate lalu panggil onChange
-  useWaitForVehicle(pendingSelectId, useCallback((found: Vehicle) => {
-    onChange(found.id);
-    setInputText(found.plateNumber);
-    if (onNewVehicleCreated) onNewVehicleCreated(found);
-    setPendingSelectId(null);
-  }, [onChange, onNewVehicleCreated]));
 
   // Kendaraan milik pelanggan yang dipilih
   const customerVehicles = useMemo(() => {
@@ -132,7 +113,9 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     setShowNewForm(false);
   }, [onChange]);
 
-  const handleCreateNew = async () => {
+  const handleCreateNew = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault();
+    event?.stopPropagation();
     if (!customer) return;
     const plate = normalizePlate(newVehicle.plateNumber);
     if (!plate || !newVehicle.brand || !newVehicle.model || !newVehicle.color) {
@@ -168,8 +151,10 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
 
     try {
       await addVehicle(vehicle);
-      setPendingSelectId(newId);
-      setInputText(plate);
+      // Tetap berada di editor WO dan langsung gunakan kendaraan yang baru dibuat.
+      onChange(vehicle.id);
+      setInputText(vehicle.plateNumber);
+      onNewVehicleCreated?.(vehicle);
       setShowNewForm(false);
       setOpen(false);
       setNewVehicle({ plateNumber: '', brand: '', model: '', year: 0, color: '' });

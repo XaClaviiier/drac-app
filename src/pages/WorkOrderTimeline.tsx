@@ -171,7 +171,6 @@ export default function WorkOrderTimeline() {
     void moveStatus('Closed', reason.trim());
   };
 
-  const currentStageCards: StageKey[] = ['diagnosis', 'approval', 'parts', 'working', 'done'];
   const timelineHours = Array.from({ length: AXIS_END_HOUR - AXIS_START_HOUR + 1 }, (_, index) => AXIS_START_HOUR + index);
   const totalSelectedDuration = selectedRow?.segments.reduce((sum, segment) => sum + segment.duration, 0) || 0;
 
@@ -194,23 +193,29 @@ export default function WorkOrderTimeline() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {currentStageCards.map((key, index) => {
-          const config = STAGES[key];
-          const Icon = config.icon;
-          const active = stageFilter === key;
-          return <div key={key} className="contents">
-            <button type="button" onClick={() => setStageFilter(active ? null : key)} className={`flex min-w-[170px] flex-1 items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${config.soft} ${active ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:-translate-y-0.5 hover:shadow-sm'}`}>
-              <Icon className={`h-6 w-6 ${config.text}`}/><span className="min-w-0"><b className={`block truncate text-sm ${config.text}`}>{config.label}</b><small className="text-gray-500">{stageCounts[key] || 0} WO</small></span>
-            </button>
-            {index < currentStageCards.length - 1 && <ChevronRight className="h-5 w-5 flex-shrink-0 text-gray-400"/>}
-          </div>;
-        })}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs shadow-sm">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <label className={`relative inline-flex h-10 min-w-[235px] items-center gap-2 rounded-lg border px-3 font-semibold transition-colors ${stageFilter ? 'border-blue-400 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700'}`}>
+            <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${stageFilter ? 'animate-pulse bg-blue-600' : 'bg-gray-300'}`}/>
+            <span className="whitespace-nowrap">{stageFilter ? 'Filter aktif' : 'Status'}</span>
+            <select
+              aria-label="Filter status WO"
+              value={stageFilter || ''}
+              onChange={event => {
+                setStageFilter((event.target.value || null) as StageKey | null);
+                setSelectedId('');
+              }}
+              className="min-w-0 flex-1 cursor-pointer bg-transparent py-2 pr-1 font-semibold outline-none"
+            >
+              <option value="">Semua Status ({rowsWithSegments.length})</option>
+              {(Object.keys(STAGES) as StageKey[]).map(key => (
+                <option key={key} value={key}>{STAGES[key].label} ({stageCounts[key] || 0})</option>
+              ))}
+            </select>
+          </label>
+          <div className="hidden flex-wrap gap-x-4 gap-y-2 xl:flex">
           {(Object.keys(STAGES) as StageKey[]).map(key => <span key={key} className="inline-flex items-center gap-1.5 text-gray-600"><i className={`h-3 w-3 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}</span>)}
+          </div>
         </div>
         <div className="relative">
           <button type="button" onClick={() => setShowSettings(current => !current)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 font-semibold text-gray-600"><Settings2 className="h-4 w-4"/>Pengaturan Tampilan</button>

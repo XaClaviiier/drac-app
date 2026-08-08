@@ -10,36 +10,14 @@ interface CustomerPickerProps {
   onNewCustomerCreated?: (customer: Customer) => void;
 }
 
-/**
- * Tunggu customer dengan id tertentu muncul di data, lalu callback.
- * Dipakai setelah addCustomer agar onChange dipanggil setelah state update.
- */
-function useWaitForCustomer(targetId: string | null, onFound: (c: Customer) => void) {
-  const { data } = useApp();
-  useEffect(() => {
-    if (!targetId) return;
-    const found = data.customers.find(c => c.id === targetId);
-    if (found) onFound(found);
-  }, [data.customers, targetId, onFound]);
-}
-
 export default function CustomerPicker({ value, onChange, onNewCustomerCreated }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
   const [open, setOpen] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', address: '' });
-  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-
-  // Setelah addCustomer, tunggu data.customers terupdate lalu panggil onChange
-  useWaitForCustomer(pendingSelectId, useCallback((found: Customer) => {
-    onChange(found.id);
-    setInputText(found.name);
-    if (onNewCustomerCreated) onNewCustomerCreated(found);
-    setPendingSelectId(null);
-  }, [onChange, onNewCustomerCreated]));
 
   const selectedCustomer = data.customers.find((c) => c.id === value);
 
@@ -108,7 +86,9 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
     }
   };
 
-  const handleCreateNew = async () => {
+  const handleCreateNew = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault();
+    event?.stopPropagation();
     const name = newCustomer.name.trim().toUpperCase();
     const phone = newCustomer.phone.trim();
     if (!name || !phone) {
@@ -127,7 +107,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
     const today = localDateKey();
 
     try {
-      await addCustomer({
+      const created = await addCustomer({
         id: newId,
         name,
         phone,
@@ -136,8 +116,11 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
         createdAt: today,
         branchId: resolveBranchId(),
       });
-      setPendingSelectId(newId);
-      setInputText(name);
+      // Pilih langsung hasil simpan. Jangan menunggu render/refresh berikutnya karena
+      // di HP hal itu sempat membuat editor WO terlihat tertutup lebih dulu.
+      onChange(created.id);
+      setInputText(created.name);
+      onNewCustomerCreated?.(created);
       setShowNewForm(false);
       setOpen(false);
       setNewCustomer({ name: '', phone: '', address: '' });

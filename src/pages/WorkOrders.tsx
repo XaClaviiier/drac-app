@@ -735,6 +735,9 @@ export default function WorkOrders() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Pengaman untuk komponen tambah pelanggan/kendaraan yang berada di dalam
+    // form WO. Submit dari kontrol anak tidak boleh menutup/menyimpan form induk.
+    if (e.target !== e.currentTarget) return;
     const shouldCreateInvoice = diagnosisMode && diagnosisSubmitAction.current === 'invoice';
     diagnosisSubmitAction.current = 'save';
 
