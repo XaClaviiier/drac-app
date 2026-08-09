@@ -301,11 +301,20 @@ export default function VehicleRegister() {
             <option value="">Semua Tipe</option>
             {[...new Set(data.vehicles.filter(v => !filterBrand || v.brand === filterBrand).map(v => v.model))].sort().map(model => <option key={model} value={model}>{model}</option>)}
           </select>
-          {canManageCatalog && (
-            <button onClick={() => { setMasterOpen(true); void loadCatalog(); }} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2.5 font-medium text-blue-700 hover:bg-blue-50">
-              <Database className="h-5 w-5" /> Master Kendaraan
-            </button>
-          )}
+          <button
+            onClick={() => {
+              if (!canManageCatalog) {
+                window.alert('Master merek dan tipe hanya dapat diedit oleh Owner atau Administrator. Silakan masuk menggunakan akun yang berwenang.');
+                return;
+              }
+              setMasterOpen(true);
+              void loadCatalog();
+            }}
+            title={canManageCatalog ? 'Kelola merek, tipe, dan warna kendaraan' : 'Khusus Owner atau Administrator'}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-lg border bg-white px-4 py-2.5 font-medium ${canManageCatalog ? 'border-blue-300 text-blue-700 hover:bg-blue-50' : 'border-gray-300 text-gray-500'}`}
+          >
+            <Database className="h-5 w-5" /> Master Kendaraan{!canManageCatalog && ' 🔒'}
+          </button>
           {hasPermission('vehicle:create') && (
             <button onClick={() => handleOpenModal()} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
               <Plus className="h-5 w-5" /> Tambah Kendaraan
