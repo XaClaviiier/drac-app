@@ -588,6 +588,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : 'WO belum dapat diselesaikan. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0.',
       };
     }
+    if (nextStatus === 'Selesai') {
+      const hasDiagnosisMeasurements = [wo.diagnosisTemperature, wo.diagnosisLp, wo.diagnosisHp]
+        .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
+      const hasFinalMeasurements = [wo.finalTemperature, wo.finalLp, wo.finalHp]
+        .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
+      const hasCompletionNote = Boolean(wo.findings?.trim() || wo.notes?.trim());
+      if (!hasDiagnosisMeasurements && !hasFinalMeasurements && !hasCompletionNote) {
+        return {
+          ok: false,
+          message: 'WO belum dapat diselesaikan. Isi Suhu, LP, dan HP secara lengkap atau tuliskan catatan hasil pekerjaan.',
+        };
+      }
+    }
 
     // Lost Sales wajib punya alasan.
     const needsReason = nextStatus === 'Closed';

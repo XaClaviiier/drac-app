@@ -780,6 +780,15 @@ export default function WorkOrders() {
       window.alert('Total estimasi harus lebih dari Rp0. Isi harga minimal satu layanan/barang sebelum menyimpan diagnosa.');
       return;
     }
+    if (shouldCreateInvoice) {
+      const hasCompleteMeasurements = [formData.diagnosisTemperature, formData.diagnosisLp, formData.diagnosisHp]
+        .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
+      const hasCompletionNote = Boolean(formData.findings.trim() || formData.notes.trim());
+      if (!hasCompleteMeasurements && !hasCompletionNote) {
+        window.alert('Pekerjaan belum dapat diselesaikan. Isi Suhu, LP, dan HP secara lengkap atau tuliskan catatan hasil pekerjaan.');
+        return;
+      }
+    }
 
     // Aturan: satu mobil hanya boleh punya satu WO aktif dalam satu waktu.
     if (!editingWO) {
@@ -810,7 +819,7 @@ export default function WorkOrders() {
     const woNumber = generateDocumentNumber('workOrder', targetBranch, new Date(`${formData.date}T12:00:00`));
 
     if (shouldCreateInvoice && !window.confirm(
-      'Simpan diagnosa dan langsung buat invoice? Status WO akan menjadi Selesai tanpa melalui tahap Dikerjakan.'
+      'Tandai pekerjaan selesai dan buka Faktur/Pembayaran sekarang?'
     )) {
       return;
     }
@@ -825,27 +834,66 @@ export default function WorkOrders() {
           estimateTotal: diagnosisMode || editingWO.status === 'Register'
             ? totalServices
             : editingWO.estimateTotal,
-          ...(shouldCreateInvoice ? {
-            status: 'Selesai' as const,
-            statusLog: [
-              ...(editingWO.statusLog || []),
-              {
-                from: editingWO.status,
-                to: 'Selesai' as const,
-                at: new Date().toISOString(),
-                byUserId: currentUser?.id || '-',
-                byUserName: currentUser?.name || 'System',
-                reason: 'Diagnosa disimpan dan dilanjutkan langsung ke invoice.',
-              },
-            ],
-          } : {}),
         };
-        await updateWorkOrder(editingWO.id, savedWorkOrder);
+        let finalWorkOrder = savedWorkOrder;
+        if (shouldCreateInvoice) {
+          const actor = {
+            byUserId: currentUser?.id || '-',
+            byUserName: currentUser?.name || 'System',
+          };
+          if (editingWO.status === 'Register') {
+            const processWorkOrder: WorkOrder = {
+              ...savedWorkOrder,
+              status: 'Proses',
+              statusLog: [
+                ...(editingWO.statusLog || []),
+                {
+                  from: 'Register',
+                  to: 'Proses',
+                  at: new Date().toISOString(),
+                  ...actor,
+                  reason: 'Estimasi disetujui dan pekerjaan dikerjakan.',
+                },
+              ],
+            };
+            await updateWorkOrder(editingWO.id, processWorkOrder);
+            finalWorkOrder = {
+              ...processWorkOrder,
+              status: 'Selesai',
+              statusLog: [
+                ...(processWorkOrder.statusLog || []),
+                {
+                  from: 'Proses',
+                  to: 'Selesai',
+                  at: new Date().toISOString(),
+                  ...actor,
+                  reason: 'Pekerjaan selesai dan dilanjutkan ke penagihan.',
+                },
+              ],
+            };
+          } else {
+            finalWorkOrder = {
+              ...savedWorkOrder,
+              status: 'Selesai',
+              statusLog: [
+                ...(editingWO.statusLog || []),
+                {
+                  from: editingWO.status,
+                  to: 'Selesai',
+                  at: new Date().toISOString(),
+                  ...actor,
+                  reason: 'Pekerjaan selesai dan dilanjutkan ke penagihan.',
+                },
+              ],
+            };
+          }
+        }
+        await updateWorkOrder(editingWO.id, finalWorkOrder);
         if (serviceEditMode) await refreshData();
         setSuccessMsg(diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
         if (shouldCreateInvoice) {
           handleCloseModal();
-          handleOpenInvoiceModal(savedWorkOrder);
+          handleOpenInvoiceModal(finalWorkOrder);
           return;
         }
       } else {
@@ -2647,8 +2695,8 @@ export default function WorkOrders() {
                     onClick={() => { diagnosisSubmitAction.current = 'invoice'; }}
                     className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-green-600/20 transition-colors hover:bg-green-700"
                   >
-                    <Receipt className="h-4 w-4" />
-                    Buat Invoice
+                    <CheckCircle2 className="h-4 w-4" />
+                    Selesai &amp; Tagihkan
                   </button>
                 )}
               </div>

@@ -300,6 +300,22 @@ switch ($method) {
                         : 'WO tidak dapat diselesaikan. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0.'
                 );
             }
+            if ($nextStatus === 'Selesai') {
+                $hasMeasurementSet = static function (array $keys) use ($d): bool {
+                    foreach ($keys as $key) {
+                        if (!array_key_exists($key, $d) || $d[$key] === null || $d[$key] === '' || !is_numeric($d[$key])) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+                $hasDiagnosisMeasurements = $hasMeasurementSet(['diagnosisTemperature', 'diagnosisLp', 'diagnosisHp']);
+                $hasFinalMeasurements = $hasMeasurementSet(['finalTemperature', 'finalLp', 'finalHp']);
+                $hasCompletionNote = trim((string)($d['findings'] ?? '')) !== '' || trim((string)($d['notes'] ?? '')) !== '';
+                if (!$hasDiagnosisMeasurements && !$hasFinalMeasurements && !$hasCompletionNote) {
+                    throw new InvalidArgumentException('WO belum dapat diselesaikan. Isi Suhu, LP, dan HP secara lengkap atau tuliskan catatan hasil pekerjaan.');
+                }
+            }
             // Validasi WO aktif hanya diperlukan bila kendaraan benar-benar diganti.
             // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
             if ((string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id']) {
