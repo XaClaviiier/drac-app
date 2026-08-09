@@ -109,6 +109,8 @@ CREATE TABLE IF NOT EXISTS `vehicles` (
   `plate_number` VARCHAR(20) NOT NULL,
   `brand` VARCHAR(50),
   `model` VARCHAR(50),
+  `brand_id` VARCHAR(64),
+  `model_id` VARCHAR(64),
   `year` INT,
   `color` VARCHAR(30),
   `customer_id` VARCHAR(20),

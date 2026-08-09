@@ -97,6 +97,9 @@ function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $exclud
 }
 
 function ensureApiSupportTables(PDO $pdo): void {
+    $vehicleColumns = array_column($pdo->query("SHOW COLUMNS FROM vehicles")->fetchAll(), 'Field');
+    if (!in_array('brand_id', $vehicleColumns, true)) $pdo->exec("ALTER TABLE vehicles ADD brand_id VARCHAR(64) NULL AFTER model");
+    if (!in_array('model_id', $vehicleColumns, true)) $pdo->exec("ALTER TABLE vehicles ADD model_id VARCHAR(64) NULL AFTER brand_id");
     $workOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM work_orders")->fetchAll(), 'Field');
     $continuationAuditColumns = ['continued_at', 'continued_by', 'continued_by_name', 'continued_branch_id'];
     $needsContinuationBackfill = count(array_intersect($continuationAuditColumns, $workOrderColumns)) !== count($continuationAuditColumns);

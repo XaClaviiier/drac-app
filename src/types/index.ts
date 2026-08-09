@@ -3,6 +3,8 @@ export interface Vehicle {
   plateNumber: string;
   brand: string;
   model: string;
+  brandId?: string;
+  modelId?: string;
   year: number;
   color: string;
   /** Relasi internal ke customers.id */

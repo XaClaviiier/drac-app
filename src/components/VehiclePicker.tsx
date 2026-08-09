@@ -4,6 +4,10 @@ import { useApp } from '../context/AppContext';
 import type { Vehicle, Customer } from '../types';
 import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
 import { localDateKey } from '../lib/date';
+import { api } from '../lib/apiClient';
+
+type QuickCatalogModel = { id: string; name: string; isActive: boolean };
+type QuickCatalogBrand = { id: string; name: string; isActive: boolean; models: QuickCatalogModel[] };
 
 interface VehiclePickerProps {
   customer: Customer | null;
@@ -19,6 +23,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   const [inputText, setInputText] = useState('');
   const [open, setOpen] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [catalogBrands, setCatalogBrands] = useState<QuickCatalogBrand[]>([]);
   const [newVehicle, setNewVehicle] = useState({
     plateNumber: '',
     brand: '',
@@ -28,6 +33,15 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void api.get<{ brands: QuickCatalogBrand[] }>('vehicle-catalog').then(response => {
+      if (response.success && response.data?.brands) setCatalogBrands(response.data.brands);
+    });
+  }, []);
+
+  const activeBrands = catalogBrands.length ? catalogBrands.filter(brand => brand.isActive) : vehicleBrands.map(name => ({ id: name, name, isActive: true, models: (vehicleModels[name] || []).map(model => ({ id: model, name: model, isActive: true })) }));
+  const activeModels = (activeBrands.find(brand => brand.name === newVehicle.brand)?.models || []).filter(model => model.isActive);
 
   // Kendaraan milik pelanggan yang dipilih
   const customerVehicles = useMemo(() => {
@@ -122,6 +136,12 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       window.alert('Nomor plat, merek, model, dan warna wajib diisi.');
       return;
     }
+    const catalogBrand = activeBrands.find(brand => brand.name === newVehicle.brand);
+    const catalogModel = activeModels.find(model => model.name === newVehicle.model);
+    if (!catalogBrand || !catalogModel) {
+      window.alert('Pilih merek dan tipe dari Master Kendaraan. Master dapat ditambah melalui modul Register Kendaraan.');
+      return;
+    }
     // Validasi plat belum terdaftar
     const dup = data.vehicles.find(v => normalizePlate(v.plateNumber) === plate);
     if (dup) {
@@ -136,6 +156,8 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       plateNumber: plate,
       brand: newVehicle.brand,
       model: newVehicle.model,
+      brandId: catalogBrand.id,
+      modelId: catalogModel.id,
       year: newVehicle.year || 0,
       color: newVehicle.color,
       customerRefId: customer.id,
@@ -322,28 +344,23 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
 
               {/* Merek + Model */}
               <div className="grid grid-cols-2 gap-2">
-                <input
-                  list="quick-vehicle-brand-options"
+                <select
                   value={newVehicle.brand}
                   onChange={(e) => setNewVehicle({ ...newVehicle, brand: e.target.value, model: '' })}
-                  placeholder="Merek *"
                   className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
-                />
-                <datalist id="quick-vehicle-brand-options">
-                  {vehicleBrands.map((brand) => <option key={brand} value={brand} />)}
-                </datalist>
-                <input
-                  list="quick-vehicle-model-options"
-                  type="text"
-                  placeholder={newVehicle.brand ? 'Model *' : 'Pilih merek dahulu'}
+                >
+                  <option value="">Merek *</option>
+                  {activeBrands.map((brand) => <option key={brand.id} value={brand.name}>{brand.name}</option>)}
+                </select>
+                <select
                   value={newVehicle.model}
                   onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })}
                   disabled={!newVehicle.brand}
-                  className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                />
-                <datalist id="quick-vehicle-model-options">
-                  {(vehicleModels[newVehicle.brand] || []).map((model) => <option key={model} value={model} />)}
-                </datalist>
+                  className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
+                >
+                  <option value="">{newVehicle.brand ? 'Tipe/model *' : 'Pilih merek dahulu'}</option>
+                  {activeModels.map((model) => <option key={model.id} value={model.name}>{model.name}</option>)}
+                </select>
               </div>
 
               {/* Warna + Tahun */}

@@ -66,6 +66,19 @@ foreach (['Hitam','Putih','Silver','Abu-abu','Merah','Biru','Cokelat','Hijau','K
     $colorInsert->execute(['VC-' . substr(sha1(strtolower($colorName)), 0, 16), $colorName]);
 }
 
+// Hubungkan data lama hanya jika pasangan merek dan tipe cocok persis
+// tanpa membedakan kapital. Ejaan yang meragukan tetap dibiarkan untuk
+// diverifikasi manusia melalui editor kendaraan.
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS brand_id VARCHAR(64) NULL AFTER model");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS model_id VARCHAR(64) NULL AFTER brand_id");
+$pdo->exec("
+    UPDATE vehicles v
+    JOIN vehicle_brands b ON LOWER(TRIM(b.name))=LOWER(TRIM(v.brand))
+    JOIN vehicle_models m ON m.brand_id=b.id AND LOWER(TRIM(m.name))=LOWER(TRIM(v.model))
+    SET v.brand_id=b.id,v.model_id=m.id,v.brand=b.name,v.model=m.name
+    WHERE v.brand_id IS NULL OR v.model_id IS NULL OR v.brand<>b.name OR v.model<>m.name
+");
+
 function requireVehicleCatalogManager(PDO $pdo): array {
     $user = requireAuthenticatedUser($pdo);
     if (!empty($user['is_owner'])) return $user;
@@ -126,8 +139,26 @@ switch ($method) {
         if ($name === '') respondError('Nama wajib diisi', 422);
         $table = $entity === 'brand' ? 'vehicle_brands' : ($entity === 'model' ? 'vehicle_models' : ($entity === 'color' ? 'vehicle_colors' : ''));
         if ($table === '') respondError('Jenis master tidak valid', 422);
-        try { $pdo->prepare("UPDATE {$table} SET name=?,is_active=? WHERE id=?")->execute([$name,$active,$id]); }
-        catch (PDOException $e) { respondError('Nama sudah digunakan', 409); }
+        try {
+            $oldStmt = $pdo->prepare("SELECT name" . ($entity === 'model' ? ",brand_id" : "") . " FROM {$table} WHERE id=?");
+            $oldStmt->execute([$id]);
+            $old = $oldStmt->fetch();
+            if (!$old) respondError('Master kendaraan tidak ditemukan', 404);
+            $pdo->beginTransaction();
+            $pdo->prepare("UPDATE {$table} SET name=?,is_active=? WHERE id=?")->execute([$name,$active,$id]);
+            if ($entity === 'brand') {
+                $pdo->prepare("UPDATE vehicles SET brand=?,brand_id=? WHERE brand_id=? OR LOWER(TRIM(brand))=LOWER(TRIM(?))")
+                    ->execute([$name,$id,$id,$old['name']]);
+            } elseif ($entity === 'model') {
+                $pdo->prepare("UPDATE vehicles SET model=?,model_id=? WHERE (model_id=? OR LOWER(TRIM(model))=LOWER(TRIM(?))) AND (brand_id=? OR LOWER(TRIM(brand))=(SELECT LOWER(TRIM(name)) FROM vehicle_brands WHERE id=?))")
+                    ->execute([$name,$id,$id,$old['name'],$old['brand_id'],$old['brand_id']]);
+            }
+            $pdo->commit();
+        }
+        catch (PDOException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            respondError('Nama sudah digunakan', 409);
+        }
         respondSuccess(null, 'Master kendaraan diperbarui');
         break;
 

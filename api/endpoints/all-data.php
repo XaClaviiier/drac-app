@@ -32,6 +32,11 @@ try {
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS receipt_description VARCHAR(255) NULL AFTER description");
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) NULL AFTER receipt_description");
     try { $pdo->exec("ALTER TABLE items ADD UNIQUE INDEX IF NOT EXISTS uq_items_barcode (barcode)"); } catch (Throwable $e) {}
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS brand_id VARCHAR(64) NULL AFTER model");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS model_id VARCHAR(64) NULL AFTER brand_id");
+    if ($pdo->query("SHOW TABLES LIKE 'vehicle_brands'")->fetch() && $pdo->query("SHOW TABLES LIKE 'vehicle_models'")->fetch()) {
+        $pdo->exec("UPDATE vehicles v JOIN vehicle_brands b ON LOWER(TRIM(b.name))=LOWER(TRIM(v.brand)) JOIN vehicle_models m ON m.brand_id=b.id AND LOWER(TRIM(m.name))=LOWER(TRIM(v.model)) SET v.brand_id=b.id,v.model_id=m.id,v.brand=b.name,v.model=m.name WHERE v.brand_id IS NULL OR v.model_id IS NULL OR v.brand<>b.name OR v.model<>m.name");
+    }
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER date");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS transaction_time TIME NOT NULL DEFAULT '00:00:00' AFTER date");
     $pdo->exec("UPDATE work_orders SET transaction_time=TIME(created_at) WHERE transaction_time='00:00:00' AND created_at IS NOT NULL");
@@ -141,6 +146,8 @@ try {
     $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
     foreach ($rows as &$r) {
         $r['plateNumber']       = $r['plate_number'];
+        $r['brandId']           = $r['brand_id'] ?? null;
+        $r['modelId']           = $r['model_id'] ?? null;
         $r['customerRefId']     = $r['customer_id'];
         $r['customerId']        = $r['customer_code'] ?: $r['customer_id'];
         $r['customerName']      = $r['customer_name'];

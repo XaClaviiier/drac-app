@@ -56,16 +56,27 @@ try {
         if (normalizeVehiclePlate((string)$row['plate_number']) === $plate) { $vehicle = $row; break; }
     }
     if (!$vehicle) {
-        $info = preg_split('/[\s-]+/', trim((string)($d['vehicleInfo'] ?? '')), -1, PREG_SPLIT_NO_EMPTY);
-        $year = 0;
-        foreach ($info as $part) if (preg_match('/^(19|20)\d{2}$/', $part)) $year = (int)$part;
-        if (count($info) < 3 || !$year) throw new InvalidArgumentException('Data kendaraan wajib berformat Merek Model Tahun Warna.');
+        $info = preg_split('/\s+/', trim((string)($d['vehicleInfo'] ?? '')), -1, PREG_SPLIT_NO_EMPTY);
+        $year = 0; $yearIndex = -1;
+        foreach ($info as $index => $part) if (preg_match('/^(19|20)\d{2}$/', $part)) { $year = (int)$part; $yearIndex = $index; break; }
+        if (count($info) < 4 || $yearIndex < 2) throw new InvalidArgumentException('Data kendaraan wajib berformat Merek Model Tahun Warna.');
+        $brandInput = $info[0];
+        $modelInput = implode(' ', array_slice($info, 1, $yearIndex - 1));
+        $colorInput = trim(implode(' ', array_slice($info, $yearIndex + 1)), " -\t\n\r\0\x0B");
+        if ($colorInput === '') throw new InvalidArgumentException('Warna kendaraan wajib diisi.');
+        $brandStmt = $pdo->prepare("SELECT id,name FROM vehicle_brands WHERE is_active=1 AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
+        $brandStmt->execute([$brandInput]); $catalogBrand = $brandStmt->fetch();
+        if (!$catalogBrand) throw new InvalidArgumentException('Merek kendaraan tidak tersedia pada Master Kendaraan.');
+        $modelStmt = $pdo->prepare("SELECT id,name FROM vehicle_models WHERE brand_id=? AND is_active=1 AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
+        $modelStmt->execute([$catalogBrand['id'],$modelInput]); $catalogModel = $modelStmt->fetch();
+        if (!$catalogModel) throw new InvalidArgumentException('Tipe kendaraan tidak tersedia untuk merek yang dipilih.');
         $vehicle = [
-            'id' => generateId(), 'plate_number' => $plate, 'brand' => $info[0], 'model' => $info[1],
-            'year' => $year, 'color' => $info[count($info) - 1],
+            'id' => generateId(), 'plate_number' => $plate, 'brand' => $catalogBrand['name'], 'model' => $catalogModel['name'],
+            'brand_id' => $catalogBrand['id'], 'model_id' => $catalogModel['id'],
+            'year' => $year, 'color' => $colorInput,
         ];
-        $stmt = $pdo->prepare('INSERT INTO vehicles(id,plate_number,brand,model,year,color,customer_id,customer_name,customer_code,phone,address,registration_date,notes,branch_id,first_seen_branch_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-        $stmt->execute([$vehicle['id'], $plate, $vehicle['brand'], $vehicle['model'], $year, $vehicle['color'], $customer['id'], $customer['name'], $customer['customer_code'], $customer['phone'], $customer['address'] ?? '', $date, '', $branchId, $branchId]);
+        $stmt = $pdo->prepare('INSERT INTO vehicles(id,plate_number,brand,model,brand_id,model_id,year,color,customer_id,customer_name,customer_code,phone,address,registration_date,notes,branch_id,first_seen_branch_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $stmt->execute([$vehicle['id'], $plate, $vehicle['brand'], $vehicle['model'], $vehicle['brand_id'], $vehicle['model_id'], $year, $vehicle['color'], $customer['id'], $customer['name'], $customer['customer_code'], $customer['phone'], $customer['address'] ?? '', $date, '', $branchId, $branchId]);
     } elseif ((string)$vehicle['customer_id'] !== (string)$customer['id']) {
         $pdo->prepare('UPDATE vehicles SET customer_id=?,customer_name=?,customer_code=?,phone=?,address=? WHERE id=?')->execute([$customer['id'], $customer['name'], $customer['customer_code'], $customer['phone'], $customer['address'] ?? '', $vehicle['id']]);
     }

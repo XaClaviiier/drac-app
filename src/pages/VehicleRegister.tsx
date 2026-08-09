@@ -25,7 +25,7 @@ const formatBusinessDate = (value?: string) => {
 };
 
 export default function VehicleRegister() {
-  const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission, currentUser } = useApp();
+  const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission, currentUser, refreshData } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [detailVehicle, setDetailVehicle] = useState<Vehicle | null>(null);
@@ -65,6 +65,7 @@ export default function VehicleRegister() {
     const response = await api.update('vehicle-catalog', item.id, { entity, name, isActive: item.isActive });
     if (!response.success) { window.alert(response.message || 'Gagal mengubah master kendaraan.'); return; }
     await loadCatalog();
+    await refreshData();
   };
 
   const toggleCatalogItem = async (entity: 'brand' | 'model' | 'color', item: CatalogBrand | CatalogModel | CatalogColor) => {
@@ -186,6 +187,12 @@ export default function VehicleRegister() {
       window.alert('Pilih pelanggan dari data pelanggan terlebih dahulu.');
       return;
     }
+    const selectedBrand = catalog.brands.find(brand => brand.isActive && brand.name === formData.brand);
+    const selectedModel = selectedBrand?.models.find(model => model.isActive && model.name === formData.model);
+    if (catalog.brands.length && (!selectedBrand || !selectedModel)) {
+      window.alert('Pilih merek dan tipe dari Master Kendaraan. Jika belum tersedia, tambahkan melalui tombol Master Kendaraan.');
+      return;
+    }
     const normalizedForm = {
       ...formData,
       plateNumber: normalizedPlate,
@@ -194,6 +201,8 @@ export default function VehicleRegister() {
       customerName: customer.name,
       phone: customer.phone,
       address: customer.address,
+      brandId: selectedBrand?.id,
+      modelId: selectedModel?.id,
     };
 
     if (editingVehicle) {
@@ -518,38 +527,36 @@ export default function VehicleRegister() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Merek <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      list="vehicle-brand-options"
+                    <select
                       required
                       value={formData.brand}
                       onChange={(e) => setFormData({ ...formData, brand: e.target.value, model: '' })}
-                      placeholder="Pilih atau ketik merek"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                    <datalist id="vehicle-brand-options">
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      <option value="">Pilih merek</option>
+                      {formData.brand && !catalogBrandNames.includes(formData.brand) && <option value={formData.brand}>{formData.brand} — perlu verifikasi</option>}
                       {catalogBrandNames.map((brand) => (
                         <option key={brand} value={brand}>{brand}</option>
                       ))}
-                    </datalist>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Model <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      list="vehicle-model-options"
+                    <select
                       required
                       value={formData.model}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      placeholder={formData.brand ? 'Pilih atau ketik tipe/model' : 'Pilih merek dahulu'}
                       disabled={!formData.brand}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100"
-                    />
-                    <datalist id="vehicle-model-options">
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 bg-white"
+                    >
+                      <option value="">{formData.brand ? 'Pilih tipe/model' : 'Pilih merek dahulu'}</option>
+                      {formData.model && !catalogModelNames.includes(formData.model) && <option value={formData.model}>{formData.model} — perlu verifikasi</option>}
                       {catalogModelNames.map(model => (
                         <option key={model} value={model}>{model}</option>
                       ))}
-                    </datalist>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
