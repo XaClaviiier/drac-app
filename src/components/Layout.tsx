@@ -148,8 +148,13 @@ export default function Layout() {
   const currentBranch = isAll ? null : data.branches.find((b) => b.id === currentBranchId);
   const refreshRunning = systemProcesses.some(task => task.label === 'Refresh Data' && task.status === 'running');
   const recentProcessSuccess = systemProcesses.some(task => task.status === 'success' && task.finishedAt && processClock - new Date(task.finishedAt).getTime() < 2000);
+  const canUseSupplier = Boolean(currentUser?.isOwner || currentUser?.roleName?.trim().toLowerCase() === 'administrator');
+  const canAccessDesktopItem = (item: DesktopMenuItem) =>
+    (!item.perm || hasPermission(item.perm)) && (item.path !== '/suppliers' || canUseSupplier);
 
-  const visibleNavItems = navItems.filter((item) => hasPermission(item.perm));
+  const visibleNavItems = navItems.filter((item) => hasPermission(item.perm) && (item.path !== '/suppliers' || canUseSupplier));
+  // Supplier dikelola dari desktop saja; jangan tampilkan pada menu HP.
+  const mobileVisibleNavItems = visibleNavItems.filter((item) => item.path !== '/suppliers');
 
   const getPageTitle = () => {
     return pageTitles[location.pathname]
@@ -224,7 +229,7 @@ export default function Layout() {
           )}
           {desktopGroups.map(group => {
             const Icon = group.icon;
-            const accessibleItems = group.items.filter(item => !item.perm || hasPermission(item.perm));
+            const accessibleItems = group.items.filter(canAccessDesktopItem);
             if (accessibleItems.length === 0) return null;
             const groupPaths = accessibleItems.flatMap(item => item.path ? [item.path] : []);
             const isActive = desktopMenuOpen ? desktopMenuOpen === group.id : groupPaths.includes(location.pathname);
@@ -255,7 +260,7 @@ export default function Layout() {
       {desktopMenuOpen && (() => {
         const group = desktopGroups.find(item => item.id === desktopMenuOpen);
         if (!group) return null;
-        const items = group.items.filter(item => !item.perm || hasPermission(item.perm));
+        const items = group.items.filter(canAccessDesktopItem);
         const tones: Record<DesktopMenuItem['tone'], string> = {
           green: 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100',
           blue: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100',
@@ -537,7 +542,7 @@ export default function Layout() {
             {/* Menu grid — kartu bulat penuh layar */}
             <div className="flex-1 overflow-y-auto px-4 pb-4">
               <div className="grid grid-cols-3 gap-3">
-                {visibleNavItems.map((item, idx) => {
+                {mobileVisibleNavItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.path;
                   return (

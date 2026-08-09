@@ -24,6 +24,19 @@ if ($resource !== 'login') {
     $requestUser = requireAuthenticatedUser($pdo);
 }
 
+// Master Supplier hanya boleh dikelola Owner atau role Administrator.
+// Permission biasa tetap diperiksa setelah pembatasan role ini.
+if ($requestUser && $resource === 'suppliers' && empty($requestUser['is_owner'])) {
+    $roleStmt = $pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');
+    $roleStmt->execute([$requestUser['role_id'] ?? '']);
+    $supplierRole = $roleStmt->fetch();
+    $roleCode = strtoupper(trim((string)($supplierRole['code'] ?? '')));
+    $roleName = strtolower(trim((string)($supplierRole['name'] ?? '')));
+    if ($roleCode !== 'ADM' && $roleName !== 'administrator') {
+        respondError('Menu Supplier hanya tersedia untuk Owner dan Administrator', 403);
+    }
+}
+
 // Hak akses dasar per modul dan metode HTTP. Endpoint dengan alur khusus
 // (pembayaran, AI, sesi) melakukan pemeriksaan tambahan di dalam endpoint.
 $permissionByResource = [

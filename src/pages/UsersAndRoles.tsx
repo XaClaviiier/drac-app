@@ -152,7 +152,11 @@ export default function UsersAndRoles() {
 
   const saveRole = (e: React.FormEvent) => {
     e.preventDefault();
-    const payload: Role = { id: editingRole?.id || Date.now().toString(), ...roleForm };
+    const isAdministratorRole = roleForm.code.trim().toUpperCase() === 'ADM' || roleForm.name.trim().toLowerCase() === 'administrator';
+    const permissions = isAdministratorRole
+      ? roleForm.permissions
+      : roleForm.permissions.filter(permission => !permission.startsWith('supplier:'));
+    const payload: Role = { id: editingRole?.id || Date.now().toString(), ...roleForm, permissions };
     if (editingRole) updateRole(editingRole.id, payload);
     else addRole(payload);
     setShowRoleModal(false);
@@ -198,6 +202,8 @@ export default function UsersAndRoles() {
   const canEdit = hasPermission('user:edit');
   const canDelete = hasPermission('user:delete');
   const displayedPermissionModules = permissionModules.filter((module) => {
+    const isAdministratorRole = roleForm.code.trim().toUpperCase() === 'ADM' || roleForm.name.trim().toLowerCase() === 'administrator';
+    if (module.id === 'supplier' && !isAdministratorRole) return false;
     const query = permissionSearch.trim().toLowerCase();
     if (!query) return true;
     return module.name.toLowerCase().includes(query)
