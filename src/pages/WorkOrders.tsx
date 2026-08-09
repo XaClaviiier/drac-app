@@ -296,6 +296,13 @@ export default function WorkOrders() {
   // Item pengecekan gratis lama tetap tersimpan untuk histori, tetapi tidak lagi
   // ditawarkan pada transaksi baru.
   const availableServiceItems = data.items.filter((item) => item.isActive && !isLegacyFreeInspection(item));
+  const isPackageHeaderService = (service: WorkOrderService) => (
+    service.name.startsWith('[PAKET]')
+    || data.items.some(item => item.id === service.itemId && item.type === 'Group')
+  );
+  const isPackageMemberService = (service: WorkOrderService) => (
+    service.name.startsWith('   -') || /^Isi dari paket:/i.test(service.description || '')
+  );
 
   // Quick-add Item modal state
   const [showQuickAddItem, setShowQuickAddItem] = useState(false);
@@ -671,20 +678,37 @@ export default function WorkOrders() {
       const targetIndex = prev.services.findIndex(service => service.id === id);
       if (targetIndex < 0) return prev;
       const target = prev.services[targetIndex];
-      if (!target.name.startsWith('[PAKET]')) {
+      if (!isPackageHeaderService(target)) {
         return { ...prev, services: prev.services.filter(service => service.id !== id) };
       }
       let endIndex = targetIndex + 1;
-      while (endIndex < prev.services.length && prev.services[endIndex].name.startsWith('   -')) endIndex += 1;
+      while (endIndex < prev.services.length && isPackageMemberService(prev.services[endIndex])) endIndex += 1;
       return { ...prev, services: prev.services.filter((_, index) => index < targetIndex || index >= endIndex) };
     });
   };
 
   const handleUpdateService = (id: string, field: 'price' | 'qty' | 'description', value: number | string) => {
-    setFormData(prev => ({
-      ...prev,
-      services: prev.services.map(s => s.id === id ? { ...s, [field]: value } : s),
-    }));
+    setFormData(prev => {
+      const targetIndex = prev.services.findIndex(service => service.id === id);
+      if (targetIndex < 0) return prev;
+      const target = prev.services[targetIndex];
+      const nextValue = field === 'qty' ? Math.max(1, Number(value) || 1) : value;
+      const oldPackageQty = Math.max(1, Number(target.qty) || 1);
+      const services = prev.services.map((service, index) => {
+        if (index === targetIndex) return { ...service, [field]: nextValue };
+        if (field !== 'qty' || !isPackageHeaderService(target) || index <= targetIndex) return service;
+        let belongsToPackage = true;
+        for (let cursor = targetIndex + 1; cursor <= index; cursor += 1) {
+          if (!isPackageMemberService(prev.services[cursor])) {
+            belongsToPackage = false;
+            break;
+          }
+        }
+        if (!belongsToPackage) return service;
+        return { ...service, qty: Math.max(1, Math.round(service.qty * Number(nextValue) / oldPackageQty)) };
+      });
+      return { ...prev, services };
+    });
   };
 
   const getDuplicateServices = (itemId: string) => {
@@ -2534,47 +2558,62 @@ export default function WorkOrders() {
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {formData.services.map((service, index) => {
-                          const isGroupHeader = service.name.startsWith('[PAKET]');
-                          const isGroupMember = service.name.startsWith('   -');
+                          const isGroupHeader = isPackageHeaderService(service);
+                          const isGroupMember = isPackageMemberService(service);
+                          if (isGroupMember) return null;
+                          const packageMembers = isGroupHeader
+                            ? formData.services.slice(index + 1).filter((candidate, memberIndex, following) => (
+                                isPackageMemberService(candidate)
+                                && following.slice(0, memberIndex).every(isPackageMemberService)
+                              ))
+                            : [];
+                          const visibleIndex = formData.services.slice(0, index).filter(candidate => !isPackageMemberService(candidate)).length + 1;
                           return (
-                            <tr key={service.id} className={isGroupHeader ? 'bg-purple-50' : isGroupMember ? 'bg-slate-50' : 'hover:bg-blue-50/40'}>
-                              <td className="px-3 py-2 text-center text-xs text-gray-400">{index + 1}</td>
-                              <td className={`px-3 py-2 ${isGroupMember ? 'pl-8' : ''}`}>
+                            <tr key={service.id} className={isGroupHeader ? 'bg-purple-50' : 'hover:bg-blue-50/40'}>
+                              <td className="px-3 py-2 text-center text-xs text-gray-400">{visibleIndex}</td>
+                              <td className="px-3 py-2">
                                 <div className="flex items-start gap-2">
                                   <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center gap-1.5">
                                       <p className={`font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>{service.name}</p>
                                       {isGroupHeader && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">Harga Paket</span>}
-                                      {isGroupMember && <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">Komponen</span>}
                                     </div>
                                     {service.code && <p className="font-mono text-[10px] text-gray-400">{service.code}</p>}
-                                    {!isGroupMember && (
-                                      <input
-                                        type="text"
-                                        value={service.description || ''}
-                                        onChange={(e) => handleUpdateService(service.id, 'description', e.target.value)}
-                                        placeholder="Keterangan (opsional)"
-                                        className="mt-1 w-full border-b border-dashed border-gray-200 bg-transparent py-0.5 text-xs text-gray-500 outline-none focus:border-blue-500"
-                                      />
+                                    <input
+                                      type="text"
+                                      value={service.description || ''}
+                                      onChange={(e) => handleUpdateService(service.id, 'description', e.target.value)}
+                                      placeholder="Keterangan (opsional)"
+                                      className="mt-1 w-full border-b border-dashed border-gray-200 bg-transparent py-0.5 text-xs text-gray-500 outline-none focus:border-blue-500"
+                                    />
+                                    {packageMembers.length > 0 && (
+                                      <div className="mt-1.5 border-l-2 border-purple-200 pl-2 text-[11px] text-slate-600">
+                                        <span className="mr-2 font-semibold text-purple-600">Isi paket:</span>
+                                        <span className="inline-flex flex-wrap gap-x-3 gap-y-0.5">
+                                          {packageMembers.map(member => (
+                                            <span key={member.id} className="inline-flex min-w-0 items-center gap-1">
+                                              <span className="text-purple-400">•</span>
+                                              <span>{member.name.replace(/^\s*-\s*/, '')}</span>
+                                              {member.code && <span className="font-mono text-[9px] text-slate-400">{member.code}</span>}
+                                            </span>
+                                          ))}
+                                        </span>
+                                      </div>
                                     )}
                                   </div>
                                 </div>
                               </td>
                               <td className="px-3 py-2">
-                                {isGroupMember ? (
-                                  <span className="block text-center text-sm font-medium text-gray-600">Qty {service.qty}</span>
-                                ) : (
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={service.qty}
-                                    onChange={(e) => handleUpdateService(service.id, 'qty', parseInt(e.target.value) || 1)}
-                                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-center font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                  />
-                                )}
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={service.qty}
+                                  onChange={(e) => handleUpdateService(service.id, 'qty', parseInt(e.target.value) || 1)}
+                                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-center font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
                               </td>
                               <td className="px-3 py-2">
-                                {!isGroupMember && <div className="relative">
+                                <div className="relative">
                                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
                                   <input
                                     type="number"
@@ -2583,15 +2622,15 @@ export default function WorkOrders() {
                                     onChange={(e) => handleUpdateService(service.id, 'price', parseInt(e.target.value) || 0)}
                                     className={`w-full rounded-lg border px-7 py-1.5 text-right outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isGroupHeader ? 'border-purple-300 bg-purple-50 font-bold text-purple-700' : service.price === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-300 bg-white'}`}
                                   />
-                                </div>}
+                                </div>
                               </td>
                               <td className={`px-3 py-2 text-right font-bold whitespace-nowrap ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>
-                                {!isGroupMember && <>Rp {(service.price * service.qty).toLocaleString('id-ID')}</>}
+                                Rp {(service.price * service.qty).toLocaleString('id-ID')}
                               </td>
                               <td className="px-3 py-2 text-center">
-                                {!isGroupMember && <button type="button" onClick={() => handleRemoveService(service.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-100" title="Hapus">
+                                <button type="button" onClick={() => handleRemoveService(service.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-100" title="Hapus">
                                   <Trash2 className="h-4 w-4" />
-                                </button>}
+                                </button>
                               </td>
                             </tr>
                           );

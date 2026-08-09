@@ -52,6 +52,43 @@ export default function SalesInvoice() {
     status: 'Lunas' as 'Lunas' | 'Belum Lunas',
   });
 
+  type InvoiceItem = NonNullable<SalesInvoice['items']>[number];
+  const isPackageHeaderItem = (item: InvoiceItem) => (
+    item.name.startsWith('[PAKET]')
+    || data.items.some(master => master.id === item.itemId && master.type === 'Group')
+  );
+  const isPackageMemberItem = (item: InvoiceItem) => (
+    item.name.startsWith('   -') || /^Isi dari paket:/i.test(item.description || '')
+  );
+  const packageMembersAfter = (items: InvoiceItem[], index: number) => {
+    const members: InvoiceItem[] = [];
+    for (let cursor = index + 1; cursor < items.length && isPackageMemberItem(items[cursor]); cursor += 1) {
+      members.push(items[cursor]);
+    }
+    return members;
+  };
+  const updateInvoiceItems = (items: InvoiceItem[], id: string, field: 'qty' | 'price', value: number) => {
+    const targetIndex = items.findIndex(item => item.id === id);
+    if (targetIndex < 0) return items;
+    const target = items[targetIndex];
+    const nextValue = Math.max(field === 'qty' ? 1 : 0, value);
+    const oldPackageQty = Math.max(1, target.qty || 1);
+    return items.map((item, index) => {
+      if (index === targetIndex) return { ...item, [field]: nextValue };
+      if (field !== 'qty' || !isPackageHeaderItem(target) || index <= targetIndex) return item;
+      if (!items.slice(targetIndex + 1, index + 1).every(isPackageMemberItem)) return item;
+      return { ...item, qty: Math.max(1, Math.round(item.qty * nextValue / oldPackageQty)) };
+    });
+  };
+  const removeInvoiceItem = (items: InvoiceItem[], id: string) => {
+    const targetIndex = items.findIndex(item => item.id === id);
+    if (targetIndex < 0) return items;
+    if (!isPackageHeaderItem(items[targetIndex])) return items.filter(item => item.id !== id);
+    let endIndex = targetIndex + 1;
+    while (endIndex < items.length && isPackageMemberItem(items[endIndex])) endIndex += 1;
+    return items.filter((_, index) => index < targetIndex || index >= endIndex);
+  };
+
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
   const formItemsTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
@@ -120,8 +157,18 @@ export default function SalesInvoice() {
   const invoiceShareText = (invoice: SalesInvoice) => {
     const branch = data.branches.find(item => item.id === invoice.branchId)?.name.replace('CABANG ', '') || '-';
     const items = invoice.items || [];
+    const compactLines: string[] = [];
+    let visibleIndex = 0;
+    items.forEach((item, index) => {
+      if (isPackageMemberItem(item)) return;
+      visibleIndex += 1;
+      compactLines.push(`${visibleIndex}. ${item.description || item.name} x${item.qty} — Rp ${(item.price * item.qty).toLocaleString('id-ID')}`);
+      packageMembersAfter(items, index).forEach(member => {
+        compactLines.push(`   • ${member.name.replace(/^\s*-\s*/, '')}`);
+      });
+    });
     const itemLines = items.length
-      ? items.map((item, index) => `${index + 1}. ${item.description || item.name} x${item.qty} — Rp ${(item.price * item.qty).toLocaleString('id-ID')}`).join('\n')
+      ? compactLines.join('\n')
       : `1. ${invoice.description || 'Faktur penjualan'} — Rp ${invoice.total.toLocaleString('id-ID')}`;
     return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoice.status}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
   };
@@ -342,12 +389,24 @@ export default function SalesInvoice() {
   };
 
   const updateFormItem = (id: string, field: 'qty' | 'price', value: number) => {
-    setFormItems((current) => current.map((item) => item.id === id ? { ...item, [field]: Math.max(field === 'qty' ? 1 : 0, value) } : item));
+    setFormItems((current) => updateInvoiceItems(current, id, field, value));
   };
 
   const updateWODraftItem = (id: string, field: 'qty' | 'price', value: number) => {
     setWoDraftItems((current) => {
-      const next = current.map((item) => item.id === id ? { ...item, [field]: Math.max(field === 'qty' ? 1 : 0, value) } : item);
+      const next = updateInvoiceItems(current, id, field, value);
+      setWoPayment(next.reduce((sum, item) => sum + item.price * item.qty, 0));
+      return next;
+    });
+  };
+
+  const removeFormItem = (id: string) => {
+    setFormItems(current => removeInvoiceItem(current, id));
+  };
+
+  const removeWODraftItem = (id: string) => {
+    setWoDraftItems(current => {
+      const next = removeInvoiceItem(current, id);
       setWoPayment(next.reduce((sum, item) => sum + item.price * item.qty, 0));
       return next;
     });
@@ -698,14 +757,22 @@ export default function SalesInvoice() {
                   <button type="button" disabled={!formItemToAdd} onClick={addFormItem} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
                 </div>
                 <div className="max-h-56 space-y-2 overflow-y-auto">
-                  {formItems.map((item) => (
-                    <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_64px_110px_32px] items-center gap-2 rounded-lg border bg-white p-2 text-sm">
-                      <div className="min-w-0"><p className="truncate font-medium">{item.name}</p><p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa'} · {item.description}</p></div>
-                      <input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(e) => updateFormItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
-                      <input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(e) => updateFormItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
-                      <button type="button" onClick={() => setFormItems((current) => current.filter((entry) => entry.id !== item.id))} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  ))}
+                  {formItems.map((item, index) => {
+                    if (isPackageMemberItem(item)) return null;
+                    const members = isPackageHeaderItem(item) ? packageMembersAfter(formItems, index) : [];
+                    return (
+                      <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_64px_110px_32px] items-center gap-2 rounded-lg border p-2 text-sm ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{item.name}</p>
+                          <p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa'} · {item.description}</p>
+                          {members.length > 0 && <p className="mt-1 text-[10px] text-purple-700"><strong>Isi paket:</strong> {members.map(member => member.name.replace(/^\s*-\s*/, '')).join(' • ')}</p>}
+                        </div>
+                        <input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(e) => updateFormItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
+                        <input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(e) => updateFormItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
+                        <button type="button" onClick={() => removeFormItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    );
+                  })}
                   {formItems.length === 0 && <p className="py-4 text-center text-xs text-gray-500">Belum ada barang atau jasa.</p>}
                 </div>
               </div>
@@ -936,14 +1003,22 @@ export default function SalesInvoice() {
                         <button type="button" disabled={!woItemToAdd} onClick={addWODraftItem} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
                       </div>
                       <div className="max-h-56 space-y-2 overflow-y-auto">
-                        {woDraftItems.map((item) => (
-                          <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_64px_110px_32px] items-center gap-2 rounded-lg border bg-white p-2 text-sm">
-                            <div className="min-w-0"><p className="truncate font-medium text-gray-800">{item.name}</p><p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa tambahan'} · {item.description}</p></div>
-                            <input aria-label={`Jumlah ${item.name}`} type="number" min="1" value={item.qty} onChange={(e) => updateWODraftItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
-                            <input aria-label={`Harga ${item.name}`} type="number" min="0" value={item.price} onChange={(e) => updateWODraftItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
-                            <button type="button" onClick={() => setWoDraftItems((current) => current.filter((entry) => entry.id !== item.id))} className="rounded p-1 text-red-600 hover:bg-red-50" title="Hapus dari invoice"><Trash2 className="h-4 w-4" /></button>
-                          </div>
-                        ))}
+                        {woDraftItems.map((item, index) => {
+                          if (isPackageMemberItem(item)) return null;
+                          const members = isPackageHeaderItem(item) ? packageMembersAfter(woDraftItems, index) : [];
+                          return (
+                            <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_64px_110px_32px] items-center gap-2 rounded-lg border p-2 text-sm ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-gray-800">{item.name}</p>
+                                <p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa tambahan'} · {item.description}</p>
+                                {members.length > 0 && <p className="mt-1 text-[10px] text-purple-700"><strong>Isi paket:</strong> {members.map(member => member.name.replace(/^\s*-\s*/, '')).join(' • ')}</p>}
+                              </div>
+                              <input aria-label={`Jumlah ${item.name}`} type="number" min="1" value={item.qty} onChange={(e) => updateWODraftItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
+                              <input aria-label={`Harga ${item.name}`} type="number" min="0" value={item.price} onChange={(e) => updateWODraftItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
+                              <button type="button" onClick={() => removeWODraftItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50" title="Hapus dari invoice"><Trash2 className="h-4 w-4" /></button>
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="flex justify-between border-t pt-3 text-sm font-bold"><span>Total Invoice</span><span>Rp {woDraftTotal.toLocaleString('id-ID')}</span></div>
                       <div className="pt-3 border-t border-gray-200">
