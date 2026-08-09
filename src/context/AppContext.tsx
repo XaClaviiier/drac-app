@@ -248,6 +248,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     void api.logout();
+    const sessionUserId = currentUser?.id || currentUser?.username;
+    if (sessionUserId) sessionStorage.removeItem(`dokterac_ai_session_${sessionUserId}`);
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('apiToken');

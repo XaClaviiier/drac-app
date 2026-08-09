@@ -45,6 +45,15 @@ interface VehicleHistorySummary {
   }>;
 }
 
+interface AISessionSnapshot {
+  messages: ChatMsg[];
+  input: string;
+  pendingAction: any;
+  pendingBranchId: string;
+  registrationDraft: RegistrationDraft | null;
+  showBranchChooser: boolean;
+}
+
 interface RegistrationDraft {
   mode: 'wo' | 'reginv';
   step: 'plate' | 'customerName' | 'phone' | 'vehicle' | 'complaint';
@@ -55,6 +64,25 @@ interface RegistrationDraft {
 }
 
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+const aiSessionStorageKey = (userId: string) => `dokterac_ai_session_${userId}`;
+const readAISession = (key: string): AISessionSnapshot | null => {
+  try {
+    const saved = sessionStorage.getItem(key);
+    if (!saved) return null;
+    const parsed = JSON.parse(saved) as Partial<AISessionSnapshot>;
+    return {
+      messages: Array.isArray(parsed.messages) ? parsed.messages : [],
+      input: typeof parsed.input === 'string' ? parsed.input : '',
+      pendingAction: parsed.pendingAction || null,
+      pendingBranchId: typeof parsed.pendingBranchId === 'string' ? parsed.pendingBranchId : '',
+      registrationDraft: parsed.registrationDraft || null,
+      showBranchChooser: Boolean(parsed.showBranchChooser),
+    };
+  } catch {
+    sessionStorage.removeItem(key);
+    return null;
+  }
+};
 const woStatusLabel = (status: WorkOrder['status']) => status === 'Closed' ? 'Lost Sales' : status;
 const localDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -92,21 +120,24 @@ export default function AIAssistant() {
     hasPermission, refreshData,
   } = useApp();
 
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [input, setInput] = useState('');
+  const aiSessionUserId = currentUser?.id || currentUser?.username || 'anonymous';
+  const aiSessionKey = aiSessionStorageKey(aiSessionUserId);
+  const [restoredAISession] = useState<AISessionSnapshot | null>(() => readAISession(aiSessionKey));
+  const [messages, setMessages] = useState<ChatMsg[]>(() => restoredAISession?.messages || []);
+  const [input, setInput] = useState(() => restoredAISession?.input || '');
   const [busy, setBusy] = useState(false);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('apiToken') || '');
   const [model, setModel] = useState(GROQ_MODELS[0].id);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showBranchChooser, setShowBranchChooser] = useState(() => currentBranchId === 'ALL');
+  const [showBranchChooser, setShowBranchChooser] = useState(() => restoredAISession?.showBranchChooser ?? (currentBranchId === 'ALL'));
   const [showStarterMenu, setShowStarterMenu] = useState(false);
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const [pendingAction, setPendingAction] = useState<any>(null);
-  const [pendingBranchId, setPendingBranchId] = useState('');
-  const [registrationDraft, setRegistrationDraft] = useState<RegistrationDraft | null>(null);
+  const [pendingAction, setPendingAction] = useState<any>(() => restoredAISession?.pendingAction || null);
+  const [pendingBranchId, setPendingBranchId] = useState(() => restoredAISession?.pendingBranchId || '');
+  const [registrationDraft, setRegistrationDraft] = useState<RegistrationDraft | null>(() => restoredAISession?.registrationDraft || null);
   const commandHistoryKey = `dokterac_ai_history_${currentUser?.id || currentUser?.username || 'default'}`;
   const [commandHistory, setCommandHistory] = useState<string[]>(() => {
     try {
@@ -162,6 +193,28 @@ export default function AIAssistant() {
   useEffect(() => {
     if (currentBranchId === 'ALL') setShowBranchChooser(true);
   }, [currentBranchId]);
+
+  useEffect(() => {
+    const snapshot: AISessionSnapshot = {
+      messages,
+      input,
+      pendingAction,
+      pendingBranchId,
+      registrationDraft,
+      showBranchChooser,
+    };
+    try {
+      sessionStorage.setItem(aiSessionKey, JSON.stringify(snapshot));
+    } catch {
+      // Jika batas penyimpanan browser tercapai, pertahankan 50 pesan terakhir.
+      try {
+        sessionStorage.setItem(aiSessionKey, JSON.stringify({
+          ...snapshot,
+          messages: messages.slice(-50),
+        }));
+      } catch { /* Browser menolak penyimpanan sesi; chat tetap berjalan di memori. */ }
+    }
+  }, [aiSessionKey, messages, input, pendingAction, pendingBranchId, registrationDraft, showBranchChooser]);
 
   useEffect(() => {
     const field = inputRef.current;
@@ -423,6 +476,20 @@ export default function AIAssistant() {
       fuzzySearch = candidates.length > 0;
     }
     return { candidates, fuzzySearch };
+  };
+
+  const startNewChat = () => {
+    sessionStorage.removeItem(aiSessionKey);
+    setMessages([]);
+    setInput('');
+    setPendingAction(null);
+    setPendingBranchId('');
+    setRegistrationDraft(null);
+    setShowStarterMenu(false);
+    setShowCommandHistory(false);
+    setHistoryIndex(-1);
+    setHistoryDraft('');
+    setShowBranchChooser(currentBranchId === 'ALL');
   };
 
   const formatHistoryDate = (value: string) => {
@@ -1173,9 +1240,7 @@ ${buildSmartContext(userMsgText)}`;
     const lowerContent = content.toLowerCase();
 
     if (lowerContent === 'clear') {
-      setMessages([]);
-      setInput('');
-      setHistoryIndex(-1);
+      startNewChat();
       return;
     }
     if (lowerContent === 'history') {
@@ -1643,6 +1708,17 @@ ${buildSmartContext(userMsgText)}`;
               <button type="button" onClick={() => { window.location.href = '/settings'; }} className="hidden h-7 items-center gap-1 rounded-lg border border-slate-600 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-300 hover:border-cyan-500 lg:flex" title="Pengaturan AI">
                 <KeyRound className="h-3.5 w-3.5" /> Pengaturan
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (messages.length === 0 || window.confirm('Mulai chat baru? Percakapan saat ini akan dihapus.')) startNewChat();
+                }}
+                className="flex h-7 items-center gap-1 rounded-lg border border-slate-600 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-300 hover:border-cyan-500 hover:text-cyan-200"
+                title="Mulai chat baru"
+                aria-label="Mulai chat baru"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Chat Baru</span>
+              </button>
               <button type="button" onClick={() => setShowStarterMenu(value => !value)} className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${showStarterMenu ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200' : 'border-slate-600 bg-slate-900/60 text-slate-300 hover:border-cyan-500'}`} title="Menu perintah" aria-label="Buka menu perintah">
                 <Grid2X2 className="h-4 w-4" />
               </button>
@@ -1946,7 +2022,7 @@ ${buildSmartContext(userMsgText)}`;
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return; }
                   if (e.key === 'Escape') { e.preventDefault(); setInput(''); setHistoryIndex(-1); return; }
-                  if (e.key.toLowerCase() === 'l' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setMessages([]); return; }
+                  if (e.key.toLowerCase() === 'l' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startNewChat(); return; }
                   if (e.key === 'Tab') {
                     const typed = input.trim().toLowerCase();
                     const completion = ['cek', 'list', 'reg wo'].find((command) => typed && command.startsWith(typed));
