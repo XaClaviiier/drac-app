@@ -21,7 +21,7 @@ interface ChatMsg {
   error?: boolean;
   time: string;
   action?: { type: string; payload: any };
-  actions?: Array<{ label: string; type: 'command' | 'create_wo_vehicle' | 'open_workorders'; value?: string }>;
+  actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'create_wo_vehicle' | 'open_workorders'; value?: string }>;
   shareText?: string;
 }
 
@@ -373,12 +373,7 @@ export default function AIAssistant() {
     return lines.join('\n');
   };
 
-  const buildCustomerLookupReply = (userText: string): string | null => {
-    const lower = userText.toLowerCase();
-    const isLookupIntent = /(cek|cari|data|pelanggan|customer|pemilik|kendaraan milik|riwayat|servis|service)/i.test(lower);
-    const isCreateIntent = /(buat|tambah|bikin|create)\s+(wo|order|pelanggan|customer)/i.test(lower);
-    if (!isLookupIntent || isCreateIntent) return null;
-
+  const findCustomerMatches = (userText: string) => {
     const compactInput = userText.replace(/[^a-z0-9]/gi, '').toLowerCase();
     const queryWords = lookupTerms(userText);
     let candidates = data.customers.filter((customer) => {
@@ -413,20 +408,29 @@ export default function AIAssistant() {
         .map(({ customer }) => customer);
       fuzzySearch = candidates.length > 0;
     }
+    return { candidates, fuzzySearch };
+  };
+
+  const buildCustomerLookupReply = (userText: string, lookupResult = findCustomerMatches(userText)): string | null => {
+    const lower = userText.toLowerCase();
+    const isLookupIntent = /(cek|cari|data|pelanggan|customer|pemilik|kendaraan milik|riwayat|servis|service)/i.test(lower);
+    const isCreateIntent = /(buat|tambah|bikin|create)\s+(wo|order|pelanggan|customer)/i.test(lower);
+    if (!isLookupIntent || isCreateIntent) return null;
+    const { candidates, fuzzySearch } = lookupResult;
 
     if (candidates.length === 0) return null;
     if (candidates.length > 1 || fuzzySearch) {
       const choices = candidates.slice(0, 8).map((customer, index) => {
-        const vehicleCount = data.vehicles.filter((vehicle) =>
+        const plates = data.vehicles.filter((vehicle) =>
           vehicle.customerRefId === customer.id
           || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
-        ).length;
-        return `${index + 1}. **${customer.name}** — ${customer.customerCode} · ${customer.phone || 'tanpa telepon'} · ${vehicleCount} kendaraan`;
+        ).map(vehicle => vehicle.plateNumber);
+        return `${index + 1}. **${customer.name}** — ${customer.customerCode}\n   ${customer.phone || 'tanpa telepon'}\n   Kendaraan: ${plates.length ? plates.join(', ') : 'Belum ada kendaraan'}`;
       });
       return [
         fuzzySearch
           ? `Tidak ditemukan nama persis. Apakah yang dimaksud salah satu dari **${candidates.length} pelanggan** berikut?`
-          : `Ditemukan **${candidates.length} pelanggan** yang mirip. Pilih dengan mengetik kode pelanggan atau nomor telepon:`,
+          : `Ditemukan **${candidates.length} pelanggan** yang mirip. Pilih nomor plat kendaraan:`,
         '',
         ...choices,
       ].join('\n');
@@ -1159,16 +1163,19 @@ ${buildSmartContext(userMsgText)}`;
 
     const listReply = buildListReply(content);
     const vehicleHistoryReply = listReply ? null : buildVehicleHistoryReply(content);
-    const customerLookupReply = listReply || vehicleHistoryReply ? null : buildCustomerLookupReply(content);
+    const customerLookupMatch = listReply || vehicleHistoryReply ? null : findCustomerMatches(content);
+    const customerLookupReply = customerLookupMatch ? buildCustomerLookupReply(content, customerLookupMatch) : null;
     const localLookupReply = listReply || vehicleHistoryReply || customerLookupReply;
     if (localLookupReply) {
       const compactContent = normalizePlate(content);
       const exactVehicle = vehicleHistoryReply
         ? data.vehicles.find(vehicle => compactContent.includes(normalizePlate(vehicle.plateNumber)))
         : undefined;
-      const customerTerms = lookupTerms(content);
-      const exactCustomer = customerLookupReply
-        ? data.customers.find(customer => customerTerms.length > 0 && customerTerms.every(term => customer.name.toLowerCase().includes(term) || customer.customerCode.toLowerCase().includes(term) || customer.phone.includes(term)))
+      const ambiguousCustomers = customerLookupMatch && (customerLookupMatch.candidates.length > 1 || customerLookupMatch.fuzzySearch)
+        ? customerLookupMatch.candidates
+        : [];
+      const exactCustomer = customerLookupReply && customerLookupMatch?.candidates.length === 1 && !customerLookupMatch.fuzzySearch
+        ? customerLookupMatch.candidates[0]
         : undefined;
       const exactWO = data.workOrders.find(wo => compactContent.includes(normalizePlate(wo.woNumber)));
       const actions: ChatMsg['actions'] = [];
@@ -1188,11 +1195,19 @@ ${buildSmartContext(userMsgText)}`;
         }
         const owner = data.customers.find(customer => customer.id === exactVehicle.customerRefId || customer.customerCode === exactVehicle.customerId);
         if (owner) actions.push({ label: 'Data Pemilik', type: 'command', value: `cek ${owner.customerCode}` });
+      } else if (ambiguousCustomers.length > 0) {
+        ambiguousCustomers.slice(0, 8).forEach(customer => {
+          data.vehicles
+            .filter(vehicle => vehicle.customerRefId === customer.id || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode))
+            .forEach(vehicle => actions.push({ label: vehicle.plateNumber, type: 'select_vehicle', value: vehicle.plateNumber }));
+        });
       } else if (exactCustomer) {
         const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === exactCustomer.id || vehicle.customerId === exactCustomer.customerCode);
-        if (vehicles[0]) actions.push({ label: 'Cek Kendaraan', type: 'command', value: `cek ${vehicles[0].plateNumber}` });
-        actions.push({ label: 'Riwayat WO', type: 'command', value: `cek riwayat ${exactCustomer.customerCode}` });
-        if (hasPermission('wo:create')) actions.push({ label: 'Buat WO', type: 'command', value: 'reg wo' });
+        vehicles.forEach(vehicle => actions.push({ label: vehicle.plateNumber, type: 'select_vehicle', value: vehicle.plateNumber }));
+        if (vehicles.length === 0) {
+          actions.push({ label: 'Riwayat WO', type: 'command', value: `cek riwayat ${exactCustomer.customerCode}` });
+          if (hasPermission('wo:create')) actions.push({ label: 'Buat WO', type: 'command', value: 'reg wo' });
+        }
       } else if (exactWO) {
         actions.push({ label: 'Buka Daftar WO', type: 'open_workorders' });
       }
@@ -1200,7 +1215,7 @@ ${buildSmartContext(userMsgText)}`;
       setMessages(history => [
         ...history,
         { role: 'user', content, time: now() },
-        { role: 'assistant', content: localLookupReply, time: now(), actions: actions.slice(0, 3) },
+        { role: 'assistant', content: localLookupReply, time: now(), actions: actions.slice(0, 12) },
       ]);
       return;
     }
@@ -1274,6 +1289,10 @@ ${buildSmartContext(userMsgText)}`;
   };
 
   const handleMessageAction = (action: NonNullable<ChatMsg['actions']>[number]) => {
+    if (action.type === 'select_vehicle' && action.value) {
+      void send(`cek ${action.value}`);
+      return;
+    }
     if (action.type === 'command' && action.value) {
       void send(action.value);
       return;
@@ -1568,11 +1587,20 @@ ${buildSmartContext(userMsgText)}`;
                   />
                   {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {msg.actions.map((action, actionIndex) => (
-                        <button key={`${action.label}-${actionIndex}`} type="button" onClick={() => handleMessageAction(action)} className="rounded-lg border border-cyan-500/50 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20">
-                          {action.label}
-                        </button>
-                      ))}
+                      {msg.actions.map((action, actionIndex) => {
+                        const isVehicleChoice = action.type === 'select_vehicle';
+                        return (
+                          <button
+                            key={`${action.label}-${actionIndex}`}
+                            type="button"
+                            onClick={() => handleMessageAction(action)}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${isVehicleChoice ? 'border-blue-300 bg-blue-600 text-white shadow-sm hover:bg-blue-500' : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'}`}
+                          >
+                            {isVehicleChoice && <Car className="h-3.5 w-3.5" />}
+                            {action.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                   {msg.role === 'assistant' && msg.shareText && (
