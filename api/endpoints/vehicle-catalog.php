@@ -79,13 +79,19 @@ $pdo->exec("
     WHERE v.brand_id IS NULL OR v.model_id IS NULL OR v.brand<>b.name OR v.model<>m.name
 ");
 
-function requireVehicleCatalogManager(PDO $pdo): array {
+function requireVehicleCatalogEditor(PDO $pdo): array {
     $user = requireAuthenticatedUser($pdo);
-    if (!empty($user['is_owner'])) return $user;
+    if (!empty($user['is_owner'])
+        || authenticatedUserHasPermission($pdo, $user, 'vehicle:create')
+        || authenticatedUserHasPermission($pdo, $user, 'vehicle:edit')) return $user;
+    respondError('Anda tidak memiliki hak mengubah master kendaraan', 403);
+}
+
+function requireVehicleCatalogDeactivator(PDO $pdo, array $user): void {
+    if (!empty($user['is_owner']) || authenticatedUserHasPermission($pdo, $user, 'vehicle:delete')) return;
     $stmt = $pdo->prepare("SELECT name FROM roles WHERE id = ?");
     $stmt->execute([$user['role_id'] ?? '']);
-    if (strtolower((string)$stmt->fetchColumn()) !== 'administrator') respondError('Hanya Owner atau Administrator yang dapat mengubah master kendaraan', 403);
-    return $user;
+    if (strtolower((string)$stmt->fetchColumn()) !== 'administrator') respondError('Hanya Owner atau Administrator yang dapat menonaktifkan master kendaraan', 403);
 }
 
 switch ($method) {
@@ -94,17 +100,29 @@ switch ($method) {
         $brands = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_brands ORDER BY sort_order,name")->fetchAll();
         $models = $pdo->query("SELECT id,brand_id AS brandId,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_models ORDER BY sort_order,name")->fetchAll();
         $colors = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_colors ORDER BY sort_order,name")->fetchAll();
+        $vehicleRows = $pdo->query("SELECT brand_id,model_id,brand,model FROM vehicles")->fetchAll();
+        $brandUsage = []; $modelUsage = [];
+        foreach ($vehicleRows as $vehicleRow) {
+            $brandKey = (string)($vehicleRow['brand_id'] ?: 'name:' . strtolower(trim((string)$vehicleRow['brand'])));
+            $modelKey = (string)($vehicleRow['model_id'] ?: 'name:' . strtolower(trim((string)$vehicleRow['brand'])) . '|' . strtolower(trim((string)$vehicleRow['model'])));
+            $brandUsage[$brandKey] = ($brandUsage[$brandKey] ?? 0) + 1;
+            $modelUsage[$modelKey] = ($modelUsage[$modelKey] ?? 0) + 1;
+        }
         foreach ($brands as &$brand) {
             $brand['isActive'] = (bool)$brand['isActive'];
+            $brand['usageCount'] = (int)($brandUsage[$brand['id']] ?? $brandUsage['name:' . strtolower(trim((string)$brand['name']))] ?? 0);
             $brand['models'] = array_values(array_filter($models, fn($model) => $model['brandId'] === $brand['id']));
-            foreach ($brand['models'] as &$model) $model['isActive'] = (bool)$model['isActive'];
+            foreach ($brand['models'] as &$model) {
+                $model['isActive'] = (bool)$model['isActive'];
+                $model['usageCount'] = (int)($modelUsage[$model['id']] ?? $modelUsage['name:' . strtolower(trim((string)$brand['name'])) . '|' . strtolower(trim((string)$model['name']))] ?? 0);
+            }
         }
         foreach ($colors as &$color) $color['isActive'] = (bool)$color['isActive'];
         respondSuccess(['brands'=>$brands, 'colors'=>$colors]);
         break;
 
     case 'POST':
-        requireVehicleCatalogManager($pdo);
+        requireVehicleCatalogEditor($pdo);
         $d = getInput(); $entity = $d['entity'] ?? ''; $name = trim((string)($d['name'] ?? ''));
         if ($name === '') respondError('Nama wajib diisi', 422);
         try {
@@ -117,7 +135,7 @@ switch ($method) {
         break;
 
     case 'PUT':
-        requireVehicleCatalogManager($pdo);
+        $catalogUser = requireVehicleCatalogEditor($pdo);
         if (!$id) respondError('ID required');
         $d = getInput(); $entity = $d['entity'] ?? '';
         if (($d['action'] ?? '') === 'reorder') {
@@ -140,10 +158,11 @@ switch ($method) {
         $table = $entity === 'brand' ? 'vehicle_brands' : ($entity === 'model' ? 'vehicle_models' : ($entity === 'color' ? 'vehicle_colors' : ''));
         if ($table === '') respondError('Jenis master tidak valid', 422);
         try {
-            $oldStmt = $pdo->prepare("SELECT name" . ($entity === 'model' ? ",brand_id" : "") . " FROM {$table} WHERE id=?");
+            $oldStmt = $pdo->prepare("SELECT name,is_active" . ($entity === 'model' ? ",brand_id" : "") . " FROM {$table} WHERE id=?");
             $oldStmt->execute([$id]);
             $old = $oldStmt->fetch();
             if (!$old) respondError('Master kendaraan tidak ditemukan', 404);
+            if ((int)$old['is_active'] !== $active) requireVehicleCatalogDeactivator($pdo, $catalogUser);
             $pdo->beginTransaction();
             $pdo->prepare("UPDATE {$table} SET name=?,is_active=? WHERE id=?")->execute([$name,$active,$id]);
             if ($entity === 'brand') {

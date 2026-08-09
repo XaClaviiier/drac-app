@@ -41,7 +41,7 @@ if ($requestUser && $resource === 'suppliers' && empty($requestUser['is_owner'])
 // (pembayaran, AI, sesi) melakukan pemeriksaan tambahan di dalam endpoint.
 $permissionByResource = [
     'branches' => 'branch', 'roles' => 'role', 'users' => 'user',
-    'customers' => 'customer', 'vehicles' => 'vehicle', 'vehicle-catalog' => 'vehicle',
+    'customers' => 'customer', 'vehicles' => 'vehicle',
     'suppliers' => 'supplier', 'items' => 'item',
     'item-categories' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item',
     'work-orders' => 'wo', 'sales-invoices' => 'invoice',
