@@ -23,6 +23,26 @@ interface ChatMsg {
   action?: { type: string; payload: any };
   actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'create_wo_vehicle' | 'open_workorders' | 'open_workorder' | 'open_invoice'; value?: string }>;
   shareText?: string;
+  vehicleSummary?: VehicleHistorySummary;
+}
+
+interface VehicleHistorySummary {
+  plateNumber: string;
+  vehicleName: string;
+  color: string;
+  ownerName: string;
+  ownerPhone: string;
+  entries: Array<{
+    woNumber: string;
+    date: string;
+    branchName: string;
+    status: string;
+    total: number;
+    complaint: string;
+    serviceLines: string[];
+    componentCount: number;
+    invoiceNumber?: string;
+  }>;
 }
 
 interface RegistrationDraft {
@@ -411,7 +431,17 @@ export default function AIAssistant() {
     return parsed.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const compactServiceNames = (services: WorkOrderService[]) => {
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return '-';
+    if (digits.length <= 4) return digits;
+    return [digits.slice(0, 4), digits.slice(4, 8), digits.slice(8)].filter(Boolean).join(' ');
+  };
+
+  const displayBranchName = (branchId: string) =>
+    cabangName(branchId).replace(/^CABANG\s+/i, '').trim().toLocaleUpperCase('id-ID');
+
+  const serviceSummary = (services: WorkOrderService[]) => {
     const packageMemberCounts = new Map<string, number>();
     services.forEach((service) => {
       const packageName = service.description?.match(/^Isi dari paket:\s*(.+)$/i)?.[1]?.trim();
@@ -422,15 +452,70 @@ export default function AIAssistant() {
 
     const roots = services
       .filter((service) => !/^Isi dari paket:/i.test(service.description || ''))
-      .map((service) => {
-        const name = service.name.replace(/^\[PAKET\]\s*/i, '').trim();
-        const componentCount = packageMemberCounts.get(name.toUpperCase()) || 0;
-        return componentCount > 0 ? `${name} (+${componentCount} komponen paket)` : name;
-      });
+      .map((service) => service.name.replace(/^\[PAKET\]\s*/i, '').trim())
+      .filter(Boolean);
+    const componentCount = roots.reduce(
+      (total, name) => total + (packageMemberCounts.get(name.toUpperCase()) || 0),
+      0,
+    );
 
-    if (roots.length === 0) return 'Belum ada layanan';
-    const shown = roots.slice(0, 3);
-    return `${shown.join(', ')}${roots.length > shown.length ? `, +${roots.length - shown.length} layanan lain` : ''}`;
+    return {
+      lines: roots.length > 0 ? roots.slice(0, 3) : ['Belum ada layanan'],
+      componentCount,
+      remainingCount: Math.max(0, roots.length - 3),
+    };
+  };
+
+  const compactServiceNames = (services: WorkOrderService[]) => {
+    const summary = serviceSummary(services);
+    const componentLabel = summary.componentCount > 0 ? ` (+${summary.componentCount} komponen paket)` : '';
+    const remainingLabel = summary.remainingCount > 0 ? `, +${summary.remainingCount} layanan lain` : '';
+    return `${summary.lines.join(', ')}${componentLabel}${remainingLabel}`;
+  };
+
+  const buildVehicleSummary = (vehicle: typeof data.vehicles[number], showAll = false): VehicleHistorySummary => {
+    const customer = data.customers.find((item) =>
+      item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId
+    );
+    const canSeeAllBranches = hasPermission('all_branches');
+    const allowedBranchIds = new Set(
+      canSeeAllBranches
+        ? data.branches.filter((branch) => branch.isActive).map((branch) => branch.id)
+        : (currentUser?.branchIds?.length ? currentUser.branchIds : [currentUser?.branchId].filter(Boolean) as string[])
+    );
+    const workOrders = data.workOrders
+      .filter((wo) =>
+        ((wo.vehicleRefId && wo.vehicleRefId === vehicle.id)
+          || normalizePlate(wo.plateNumber) === normalizePlate(vehicle.plateNumber))
+        && allowedBranchIds.has(wo.branchId)
+      )
+      .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
+
+    return {
+      plateNumber: vehicle.plateNumber,
+      vehicleName: [vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ') || '-',
+      color: vehicle.color || '-',
+      ownerName: customer?.name || vehicle.customerName || '-',
+      ownerPhone: formatPhone(customer?.phone || vehicle.phone || ''),
+      entries: (showAll ? workOrders : workOrders.slice(0, 3)).map((wo) => {
+        const services = serviceSummary(wo.services);
+        const invoice = data.invoices.find((item) => item.id === wo.invoiceId || item.woId === wo.id);
+        return {
+          woNumber: wo.woNumber,
+          date: formatHistoryDate(wo.date),
+          branchName: displayBranchName(wo.branchId),
+          status: woStatusLabel(wo.status),
+          total: wo.total,
+          complaint: wo.description || '-',
+          serviceLines: [
+            ...services.lines,
+            ...(services.remainingCount > 0 ? [`+${services.remainingCount} layanan lain`] : []),
+          ],
+          componentCount: services.componentCount,
+          invoiceNumber: wo.invoiceNumber || invoice?.invoiceNumber,
+        };
+      }),
+    };
   };
 
   const buildCustomerLookupReply = (userText: string, lookupResult = findCustomerMatches(userText)): string | null => {
@@ -1220,11 +1305,11 @@ ${buildSmartContext(userMsgText)}`;
         if (activeWO) {
           actions.push({ label: `Buka WO Aktif ${activeWO.woNumber}`, type: 'open_workorder', value: activeWO.id });
         } else if (hasPermission('wo:create')) {
-          actions.push({ label: '+ Buat WO Baru', type: 'create_wo_vehicle', value: exactVehicle.id });
+          actions.push({ label: '+ Buat WO', type: 'create_wo_vehicle', value: exactVehicle.id });
         }
         if (latestWO && latestWO.id !== activeWO?.id) {
           actions.push({
-            label: latestWO.status === 'Closed' ? 'Buka Lost Sales' : 'Buka WO Terakhir',
+            label: latestWO.status === 'Closed' ? 'Buka Lost Sales' : 'Buka WO',
             type: 'open_workorder',
             value: latestWO.id,
           });
@@ -1255,7 +1340,15 @@ ${buildSmartContext(userMsgText)}`;
       setMessages(history => [
         ...history,
         { role: 'user', content, time: now() },
-        { role: 'assistant', content: localLookupReply, time: now(), actions: actions.slice(0, 12) },
+        {
+          role: 'assistant',
+          content: localLookupReply,
+          time: now(),
+          actions: actions.slice(0, 12),
+          vehicleSummary: exactVehicle
+            ? buildVehicleSummary(exactVehicle, /(semua|seluruh|lengkap)/i.test(content))
+            : undefined,
+        },
       ]);
       return;
     }
@@ -1624,15 +1717,92 @@ ${buildSmartContext(userMsgText)}`;
                     <Bot className="h-5 w-5 text-white" />
                   </div>
                 )}
-                <div className="max-w-[80%]">
+                <div className={msg.vehicleSummary ? 'max-w-[92%] md:max-w-[80%]' : 'max-w-[80%]'}>
                   <div
                     className={`rounded-2xl px-3 py-2 text-sm leading-snug shadow-md ${
                       msg.role === 'user' ? 'rounded-br-sm bg-blue-600 text-white'
                       : msg.error ? 'rounded-bl-sm border border-red-500/40 bg-red-950/60 text-red-200'
                       : 'rounded-bl-sm border-l-2 border-cyan-400 bg-slate-800 text-slate-200'
                     }`}
-                    dangerouslySetInnerHTML={{ __html: render(msg.content) }}
-                  />
+                  >
+                    {msg.vehicleSummary ? (
+                      <div className="min-w-0">
+                        <div className="flex items-start gap-2">
+                          <Car className="mt-0.5 h-4 w-4 flex-shrink-0 text-cyan-300" />
+                          <div className="min-w-0">
+                            <p className="font-bold tracking-wide text-white">{msg.vehicleSummary.plateNumber}</p>
+                            <p className="text-xs text-slate-300">
+                              {msg.vehicleSummary.vehicleName} <span className="text-slate-500">•</span> {msg.vehicleSummary.color}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 text-xs">
+                          <Users className="h-4 w-4 flex-shrink-0 text-violet-300" />
+                          <span className="font-bold text-white">{msg.vehicleSummary.ownerName}</span>
+                          <span className="text-slate-500">•</span>
+                          <span className="text-slate-300">{msg.vehicleSummary.ownerPhone}</span>
+                        </div>
+
+                        <div className="my-3 border-t border-slate-700" />
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Servis terakhir</p>
+
+                        {msg.vehicleSummary.entries.length === 0 ? (
+                          <p className="text-xs text-slate-400">Belum ada riwayat servis yang dapat diakses.</p>
+                        ) : msg.vehicleSummary.entries.map((entry, entryIndex) => {
+                          const normalizedStatus = entry.status.toLowerCase();
+                          const statusClass = normalizedStatus === 'selesai' || normalizedStatus === 'dibayar'
+                            ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
+                            : normalizedStatus === 'lost sales'
+                              ? 'border-red-400/30 bg-red-500/15 text-red-300'
+                              : normalizedStatus === 'proses'
+                                ? 'border-blue-400/30 bg-blue-500/15 text-blue-300'
+                                : 'border-amber-400/30 bg-amber-500/15 text-amber-300';
+                          return (
+                            <div key={entry.woNumber} className={entryIndex > 0 ? 'mt-3 border-t border-slate-700 pt-3' : ''}>
+                              <div className="flex items-start justify-between gap-3">
+                                <span className="font-bold text-white">{entry.woNumber}</span>
+                                <span className="flex-shrink-0 text-[11px] text-slate-400">{entry.date}</span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] font-semibold text-slate-300">{entry.branchName}</span>
+                                <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${statusClass}`}>
+                                  {entry.status}
+                                </span>
+                              </div>
+                              {entry.invoiceNumber && (
+                                <p className="mt-1.5 text-[11px] text-slate-400">
+                                  Faktur: <span className="font-bold text-cyan-300">{entry.invoiceNumber}</span>
+                                </p>
+                              )}
+                              <div className="mt-2 grid gap-2 text-xs">
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Keluhan</p>
+                                  <p className="text-slate-200">{entry.complaint}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Layanan</p>
+                                  {entry.serviceLines.map((line, lineIndex) => (
+                                    <p key={`${line}-${lineIndex}`} className={lineIndex > 0 && line.startsWith('+') ? 'text-[11px] text-slate-400' : 'text-slate-200'}>
+                                      {line}
+                                    </p>
+                                  ))}
+                                  {entry.componentCount > 0 && (
+                                    <p className="text-[11px] text-slate-400">+{entry.componentCount} komponen paket</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between border-t border-slate-700 pt-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Total layanan</span>
+                                <span className="font-bold text-white">{fmt(entry.total)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div dangerouslySetInnerHTML={{ __html: render(msg.content) }} />
+                    )}
+                  </div>
                   {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {msg.actions.map((action, actionIndex) => {
@@ -1643,11 +1813,11 @@ ${buildSmartContext(userMsgText)}`;
                         const actionClass = isVehicleChoice
                           ? 'border-blue-300 bg-blue-600 text-white shadow-sm hover:bg-blue-500'
                           : isCreateWO
-                            ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30'
+                            ? 'border-emerald-400 bg-emerald-500 text-white shadow-sm hover:bg-emerald-400'
                             : isInvoice
-                              ? 'border-green-400/70 bg-green-500/20 text-green-100 hover:bg-green-500/30'
+                              ? 'border-green-400/60 bg-transparent text-green-200 hover:bg-green-500/15'
                               : isOpenWO
-                                ? 'border-blue-400/70 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30'
+                                ? 'border-blue-400/60 bg-transparent text-blue-200 hover:bg-blue-500/15'
                                 : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20';
                         return (
                           <button
