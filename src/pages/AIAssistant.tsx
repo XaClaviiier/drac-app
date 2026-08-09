@@ -101,8 +101,13 @@ export default function AIAssistant() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const isLegacyFreeInspection = (item: typeof data.items[number]) => {
+    const label = `${item.code} ${item.name} ${item.receiptDescription || ''}`.toUpperCase();
+    return item.sellingPrice <= 0 && (/PENGECEKAN\s+GRATIS/.test(label) || /(^|\s)CEK[\s-]*AC($|\s)/.test(label));
+  };
+
   const servicesFromCodes = (text: string, allowInventory = false) => {
-    const allowedItems = data.items.filter(item => item.isActive && (allowInventory || item.type !== 'Persediaan'));
+    const allowedItems = data.items.filter(item => item.isActive && !isLegacyFreeInspection(item) && (allowInventory || item.type !== 'Persediaan'));
     const byCode = new Map(allowedItems.map(item => [item.code.trim().toUpperCase(), item]));
     const found = new Map<string, { name: string; price: number; qty: number }>();
 
@@ -685,9 +690,7 @@ export default function AIAssistant() {
       plateNumber: registrationDraft.plateNumber,
       vehicleInfo: registrationDraft.vehicleInfo,
       description: value,
-      services: codedServices.length > 0
-        ? codedServices
-        : [{ name: 'CEK AC', price: 0, qty: 1 }],
+      services: codedServices,
       paymentMethod,
     };
     let parsedDate: ReturnType<typeof parseCompactTransactionDate>;
@@ -703,7 +706,7 @@ export default function AIAssistant() {
     if (isRegInv) {
       return `Data REGINV sudah lengkap.\n\n- Pelanggan: **${action.customerName}**\n- Plat: **${action.plateNumber}**\n- Metode: **${paymentMethod}**\n- Item: **${codedServices.map(item => `${item.name} ×${item.qty}`).join(', ')}**\n\nPilih cabang lalu konfirmasi. Sistem akan membuat nomor WO, invoice, dan pembayaran yang berbeda.`;
     }
-    return `Data registrasi sudah lengkap.\n\n- Pelanggan: **${action.customerName}**\n- Telepon: ${action.phone}\n- Plat: **${action.plateNumber}**\n- Kendaraan: ${action.vehicleInfo}\n- Keluhan: ${action.description}\n- Layanan awal: **CEK AC (gratis)**\n\nPilih cabang lalu tekan **Konfirmasi & Buat WO**.`;
+    return `Data registrasi sudah lengkap.\n\n- Pelanggan: **${action.customerName}**\n- Telepon: ${action.phone}\n- Plat: **${action.plateNumber}**\n- Kendaraan: ${action.vehicleInfo}\n- Keluhan: ${action.description}\n- Layanan awal: **${codedServices.length > 0 ? codedServices.map(item => item.name).join(', ') : 'Belum ada (status Register)'}**\n\nPilih cabang lalu tekan **Konfirmasi & Buat WO**.`;
   };
 
   const buildSmartContext = (userMsgText: string): string => {
@@ -820,9 +823,9 @@ export default function AIAssistant() {
   const buildSystemPrompt = (userMsgText: string) => {
     // Ambil daftar layanan cepat dari master untuk referensi harga nyata
     const quickServices = data.items
-      .filter(i => i.isActive && i.isQuickService && i.type !== 'Group')
+      .filter(i => i.isActive && i.isQuickService && i.type !== 'Group' && i.sellingPrice > 0 && !isLegacyFreeInspection(i))
       .slice(0, 10)
-      .map(i => `${i.code} = ${i.name} (${i.type}) harga ${i.sellingPrice === 0 ? 'GRATIS Rp 0' : `Rp ${i.sellingPrice.toLocaleString('id-ID')}`}`)
+      .map(i => `${i.code} = ${i.name} (${i.type}) harga Rp ${i.sellingPrice.toLocaleString('id-ID')}`)
       .join(', ');
 
     return `Kamu adalah "ASISTEN DOKTER AC" — asisten AI bengkel AC mobil "Dokter AC Mobil" (Perintis, Cakalang, Mamuju).
@@ -847,17 +850,15 @@ Format tanggal singkat yang boleh dipakai user:
 - "2/3/26" berarti 2 Maret 2026.
 Jika ada tanggal, masukkan sebagai field "date" format YYYY-MM-DD pada JSON. Jika user tidak menulis tanggal, jangan kirim field "date".
 
-Kalau user minta buat WO tanpa menyebut layanan, OTOMATIS tambahkan default:
-  {"name":"CEK AC","price":0,"qty":1}
-Ini adalah pengecekan gratis. Jangan tanya layanan kalau sudah ada keluhan yang jelas.
+Kalau user minta buat WO tanpa menyebut layanan, buat WO tanpa item layanan. WO tetap berstatus Register sampai layanan berharga lebih dari Rp 0 ditambahkan.
 
 Kalau user MENYEBUT layanan atau KODE layanan (misalnya "flushing", "SV-0102"):
 - Cari kode atau nama PERSIS di LAYANAN CEPAT berikut: ${quickServices || 'tidak ada data layanan'}
-- Kalau tidak ada, gunakan nama yang user sebut & harga 0 (tanyakan ke user untuk konfirmasi harga).
+- Kalau tidak ada, jangan membuat layanan dengan harga Rp 0. Minta user memilih kode layanan yang terdaftar.
 
 Setelah ada plat, pelanggan, dan keluhan — LANGSUNG keluarkan JSON tanpa bertanya lebih lanjut:
 \`\`\`json
-{"action":"create_wo","date":"YYYY-MM-DD","customerName":"NAMA_PERSIS","phone":"08xx","plateNumber":"PLAT_PERSIS","vehicleInfo":"Merek Model Tahun - Warna","description":"keluhan","services":[{"name":"KODE_ATAU_NAMA_LAYANAN","price":0,"qty":1}]}
+{"action":"create_wo","date":"YYYY-MM-DD","customerName":"NAMA_PERSIS","phone":"08xx","plateNumber":"PLAT_PERSIS","vehicleInfo":"Merek Model Tahun - Warna","description":"keluhan","services":[]}
 \`\`\`
 
 Kalau plat/pelanggan tidak ditemukan di data, sertakan nama/plat yang user sebut apa adanya.
@@ -945,7 +946,10 @@ ${buildSmartContext(userMsgText)}`;
     }
 
     // 3. Layanan — gunakan nama persis dari master jika cocok
-    const rawServices: any[] = a.services?.length > 0 ? a.services : [{ name: 'CEK AC', price: 0, qty: 1 }];
+    const rawServices: any[] = Array.isArray(a.services) ? a.services.filter((service: any) => {
+      const label = String(service?.name || '').toUpperCase();
+      return !(Number(service?.price || 0) <= 0 && (/PENGECEKAN\s+GRATIS/.test(label) || /(^|\s)CEK[\s-]*AC($|\s)/.test(label)));
+    }) : [];
     const services: WorkOrderService[] = rawServices.map((s: any, idx: number) => {
       const sNameUp = String(s.name || '').toUpperCase().trim();
       // Cari di master: cocok nama persis, partial, atau kode

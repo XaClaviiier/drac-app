@@ -289,7 +289,13 @@ export default function WorkOrders() {
   const [serviceSearchFocused, setServiceSearchFocused] = useState(false);
   const [isServiceSearching, setIsServiceSearching] = useState(false);
   const [showQuickServices, setShowQuickServices] = useState(() => localStorage.getItem('dokterac_wo_quick_services') === 'open');
-  const availableServiceItems = data.items.filter((item) => item.isActive);
+  const isLegacyFreeInspection = (item: typeof data.items[number]) => {
+    const label = `${item.code} ${item.name} ${item.receiptDescription || ''}`.toUpperCase();
+    return item.sellingPrice <= 0 && (/PENGECEKAN\s+GRATIS/.test(label) || /(^|\s)CEK[\s-]*AC($|\s)/.test(label));
+  };
+  // Item pengecekan gratis lama tetap tersimpan untuk histori, tetapi tidak lagi
+  // ditawarkan pada transaksi baru.
+  const availableServiceItems = data.items.filter((item) => item.isActive && !isLegacyFreeInspection(item));
 
   // Quick-add Item modal state
   const [showQuickAddItem, setShowQuickAddItem] = useState(false);
@@ -2601,37 +2607,12 @@ export default function WorkOrders() {
                     </table>
                   </div>
                 ) : (
-                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center space-y-3">
-                    <div>
-                      <Wrench className="w-8 h-8 mx-auto mb-1 text-amber-400" />
-                      <p className="text-sm text-amber-700 font-medium">Belum ada layanan</p>
-                      <p className="text-xs text-amber-600 mt-0.5">
-                        Klik tombol di bawah untuk mulai dengan pengecekan gratis,
-                        atau tambah layanan manual.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const defaultService = {
-                          id: `svc-cek-${Date.now()}`,
-                          itemId: undefined,
-                          code: 'CEK-AC',
-                          name: 'CEK AC - PENGECEKAN GRATIS',
-                          description: 'Pengecekan kondisi AC kendaraan',
-                          price: 0,
-                          qty: 1,
-                        };
-                        setFormData(prev => ({
-                          ...prev,
-                          services: [defaultService],
-                        }));
-                      }}
-                      className="inline-flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      + Mulai dengan Pengecekan Gratis (Rp 0)
-                    </button>
+                  <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center">
+                    <Wrench className="mx-auto mb-1.5 h-7 w-7 text-gray-400" />
+                    <p className="text-sm font-medium text-gray-700">Belum ada layanan</p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      Cari dan pilih layanan atau tambahkan layanan baru.
+                    </p>
                   </div>
                 )}
               </div>
