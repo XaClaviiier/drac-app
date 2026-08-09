@@ -98,8 +98,6 @@ switch ($method) {
             respondSuccess($payload);
         }
         $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
-        $pdo->exec("UPDATE work_orders SET pending_until=DATE_ADD(pending_at, INTERVAL 10 DAY) WHERE status='Pending' AND pending_at IS NOT NULL AND (pending_until IS NULL OR pending_until > DATE_ADD(pending_at, INTERVAL 10 DAY))");
-        $pdo->exec("UPDATE work_orders SET status='Closed', cancel_reason=COALESCE(NULLIF(cancel_reason,''), 'Tidak ada keputusan selama 10 hari') WHERE status='Pending' AND pending_until IS NOT NULL AND pending_until <= NOW()");
         $rows = array_values(array_filter(
             $pdo->query("SELECT * FROM work_orders ORDER BY date DESC, wo_number DESC")->fetchAll(),
             fn($row) => isset($allowedBranchMap[(string)$row['branch_id']])
@@ -194,9 +192,9 @@ switch ($method) {
                 throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
             }
             $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $d['date'] ?? null);
-            $initialStatus = !empty($normalizedServices['services']) && $normalizedServices['total'] > 0
-                ? 'Pengecekan'
-                : 'Register';
+            // Diagnosa/estimasi adalah aktivitas di dalam tahap Register, bukan
+            // status operasional tersendiri. WO baru selalu dimulai dari Register.
+            $initialStatus = 'Register';
             $statusLog = [[
                 'from' => 'Register',
                 'to' => 'Register',
@@ -205,13 +203,6 @@ switch ($method) {
                 'byUserName' => $actor['name'] ?? 'System',
                 'reason' => 'WO diregister',
             ]];
-            if ($initialStatus === 'Pengecekan') {
-                $statusLog[] = [
-                    'from' => 'Register', 'to' => 'Pengecekan', 'at' => date('c'),
-                    'byUserId' => $actor['id'] ?? '-', 'byUserName' => $actor['name'] ?? 'System',
-                    'reason' => 'Layanan dan estimasi awal telah diisi.',
-                ];
-            }
             $stmt = $pdo->prepare("
                 INSERT INTO work_orders (
                     id, wo_number, date, backdate_reason,
@@ -280,34 +271,28 @@ switch ($method) {
             }
             $actor = $requestUser ?? requireAuthenticatedUser($pdo);
             requireAccessibleBranch($pdo, $actor, (string)$currentWorkOrder['branch_id']);
-            if ((string)$currentWorkOrder['status'] === 'Invoiced' || !empty($currentWorkOrder['invoice_id'])) {
+            if (!empty($currentWorkOrder['invoice_id'])) {
                 throw new DomainException('WO yang sudah difakturkan tidak dapat diedit. Ubah rincian pada faktur atau hapus faktur terlebih dahulu.');
             }
-            $currentStatus = (string)$currentWorkOrder['status'];
-            $nextStatus = (string)($d['status'] ?? $currentStatus);
+            $legacyStatusMap = [
+                'Pengecekan' => 'Register',
+                'Pending' => 'Register',
+                'Invoiced' => 'Selesai',
+            ];
+            $storedStatus = (string)$currentWorkOrder['status'];
+            $currentStatus = $legacyStatusMap[$storedStatus] ?? $storedStatus;
+            $requestedStatus = (string)($d['status'] ?? $currentStatus);
+            $nextStatus = $legacyStatusMap[$requestedStatus] ?? $requestedStatus;
             $allowedTransitions = [
-                'Register' => ['Register', 'Pengecekan', 'Closed'],
-                'Pengecekan' => ['Pengecekan', 'Pending', 'Proses', 'Closed'],
-                // Pending boleh dilanjutkan kembali ke Diagnosa/Pengecekan.
-                'Pending' => ['Pending', 'Pengecekan', 'Proses', 'Closed'],
-                // Pending dari Proses dipakai untuk kondisi menunggu parts.
-                'Proses' => ['Proses', 'Pending', 'Selesai'],
+                'Register' => ['Register', 'Proses', 'Closed'],
+                'Proses' => ['Proses', 'Selesai', 'Closed'],
                 'Selesai' => ['Selesai'],
-                // Closed ditampilkan sebagai Lost Sales. Dapat dipulihkan bila
-                // pelanggan menyetujui masalah yang sama.
                 'Closed' => ['Closed', 'Proses'],
             ];
             if (!isset($allowedTransitions[$currentStatus]) || !in_array($nextStatus, $allowedTransitions[$currentStatus], true)) {
                 throw new InvalidArgumentException("Perubahan status {$currentStatus} ke {$nextStatus} tidak diizinkan.");
             }
             $hasPositiveEstimate = !empty($normalizedServices['services']) && $normalizedServices['total'] > 0;
-            // Register berubah otomatis ke Diagnosa hanya setelah layanan dan
-            // estimasi bernilai positif tersedia. Diagnosa kosong kembali ke Register.
-            if ($currentStatus === 'Register' && in_array($nextStatus, ['Register', 'Pengecekan'], true)) {
-                $nextStatus = $hasPositiveEstimate ? 'Pengecekan' : 'Register';
-            } elseif ($currentStatus === 'Pengecekan' && $nextStatus === 'Pengecekan' && !$hasPositiveEstimate) {
-                $nextStatus = 'Register';
-            }
             if (in_array($nextStatus, ['Proses', 'Selesai'], true) && !$hasPositiveEstimate) {
                 throw new InvalidArgumentException(
                     $nextStatus === 'Proses'
@@ -319,9 +304,6 @@ switch ($method) {
             // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
             if ((string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id']) {
                 assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], (string)$id);
-            }
-            if ($nextStatus === 'Pending' && trim((string)($d['pendingReason'] ?? '')) === '') {
-                throw new InvalidArgumentException('Alasan Pending wajib diisi.');
             }
             if ($nextStatus === 'Closed' && trim((string)($d['cancelReason'] ?? '')) === '') {
                 throw new InvalidArgumentException('Alasan Lost Sales wajib diisi.');
@@ -344,9 +326,7 @@ switch ($method) {
             $statusLog = json_decode((string)($currentWorkOrder['status_log'] ?? '[]'), true);
             if (!is_array($statusLog)) $statusLog = [];
             if ($nextStatus !== $currentStatus) {
-                $statusReason = $nextStatus === 'Pending'
-                    ? trim((string)($d['pendingReason'] ?? ''))
-                    : ($nextStatus === 'Closed' ? trim((string)($d['cancelReason'] ?? '')) : null);
+                $statusReason = $nextStatus === 'Closed' ? trim((string)($d['cancelReason'] ?? '')) : null;
                 $statusLog[] = [
                     'from' => $currentStatus,
                     'to' => $nextStatus,
@@ -356,7 +336,7 @@ switch ($method) {
                     'reason' => $statusReason ?: null,
                 ];
             }
-            $isApproval = $nextStatus === 'Proses' && in_array($currentStatus, ['Pengecekan', 'Pending', 'Closed'], true);
+            $isApproval = $nextStatus === 'Proses' && in_array($currentStatus, ['Register', 'Closed'], true);
             $approvedAt = $isApproval ? date('Y-m-d') : ($currentWorkOrder['approved_at'] ?? null);
             $approvedServicesJson = $isApproval
                 ? json_encode($normalizedServices['services'])
@@ -473,7 +453,7 @@ switch ($method) {
             // WO selesai boleh dihapus setelah seluruh pembayaran dan faktur terkait
             // sudah dihapus. Pemeriksaan relasi faktur dilakukan di atas.
             // Lost Sales adalah histori konversi penjualan dan tidak boleh dihapus.
-            $deletableStatuses = ['Register', 'Pengecekan', 'Pending', 'Selesai'];
+            $deletableStatuses = ['Register', 'Selesai'];
             if (!in_array((string)$wo['status'], $deletableStatuses, true)) {
                 throw new DomainException("WO berstatus {$wo['status']} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.");
             }

@@ -342,9 +342,9 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 function SystemGuide() {
   const flow = [
     { title: '1. Register', text: 'Pilih pelanggan dan kendaraan, lalu isi keluhan. Layanan belum wajib dan nilai Rp0 masih diperbolehkan.', icon: ClipboardCheck, tone: 'border-slate-200 bg-slate-50 text-slate-700' },
-    { title: '2. Diagnosa', text: 'Tambahkan minimal satu layanan/barang. Total estimasi wajib lebih dari Rp0 agar WO masuk tahap Diagnosa.', icon: Wrench, tone: 'border-orange-200 bg-orange-50 text-orange-700' },
+    { title: '2. Tambah Layanan', text: 'Diagnosa dilakukan di dalam status Register. Tambahkan minimal satu layanan/barang dan total estimasi lebih dari Rp0.', icon: Wrench, tone: 'border-orange-200 bg-orange-50 text-orange-700' },
     { title: '3. Dikerjakan', text: 'Tombol Setuju · Dikerjakan berarti pelanggan menyetujui layanan dan harga. Sistem menyimpan snapshot estimasi yang disetujui.', icon: CheckCircle2, tone: 'border-blue-200 bg-blue-50 text-blue-700' },
-    { title: '4. Selesai & Faktur', text: 'Pekerjaan boleh ditambah saat proses. Setelah selesai, faktur berisi rincian final dan nilainya tidak boleh Rp0.', icon: FileText, tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+    { title: '4. Selesai & Faktur', text: 'Pekerjaan boleh ditambah saat Dikerjakan. Setelah selesai, status WO tetap Selesai; faktur ditampilkan sebagai indikator administrasi terpisah.', icon: FileText, tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
     { title: '5. Pembayaran', text: 'Pembayaran masuk ke akun kas/bank cabang. Pembayaran tunai yang belum disetor dipantau melalui menu Setoran.', icon: WalletCards, tone: 'border-violet-200 bg-violet-50 text-violet-700' },
   ];
   const rules = [
@@ -353,7 +353,8 @@ function SystemGuide() {
     ['Perubahan pekerjaan', 'Tambahan pekerjaan setelah persetujuan diperbolehkan. Estimasi awal tetap tersimpan; rincian invoice menjadi pekerjaan/barang final.'],
     ['Lost Sales', 'Gunakan bila pelanggan tidak melanjutkan. Masalah yang sama dapat dilanjutkan dari WO lama; masalah berbeda harus dibuatkan WO baru.'],
     ['Stok', 'WO hanya mencatat estimasi dan tidak memotong stok. Stok baru berkurang ketika invoice final dibuat.'],
-    ['Invoice & pembayaran', 'Invoice dari WO mengunci pelanggan dan kendaraan. Menghapus pembayaran membuat invoice terutang lagi; menghapus invoice mengembalikan WO ke Selesai.'],
+    ['Status WO', 'Status operasional hanya Register, Dikerjakan, Selesai, dan Lost Sales. Invoice serta pembayaran adalah indikator administrasi terpisah, bukan status WO.'],
+    ['Invoice & pembayaran', 'Invoice dari WO mengunci pelanggan dan kendaraan. Menghapus pembayaran membuat invoice terutang lagi; menghapus invoice tetap menyisakan WO pada status Selesai.'],
     ['Pelanggan & kendaraan', 'Satu pelanggan dapat memiliki beberapa kendaraan. Pemilik aktif kendaraan dapat diganti tanpa menghapus histori WO sebelumnya.'],
     ['Akses pengguna', 'Owner memiliki akses penuh dan tidak dapat dihapus. Role, cabang, jam login, tanggal mundur, dan akses AI mengikuti hak pengguna.'],
   ];

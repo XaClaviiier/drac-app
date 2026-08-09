@@ -59,11 +59,12 @@ export interface SalesInvoice {
   updatedAt?: string;
 }
 
-export type WOStatus = 'Register' | 'Pengecekan' | 'Pending' | 'Proses' | 'Selesai' | 'Invoiced' | 'Closed';
+export type WOStatus = 'Register' | 'Proses' | 'Selesai' | 'Closed';
+export type LegacyWOStatus = 'Pengecekan' | 'Pending' | 'Dibayar' | 'Invoiced' | 'Batal';
 
 export interface WOStatusLog {
-  from: WOStatus;
-  to: WOStatus;
+  from: WOStatus | LegacyWOStatus;
+  to: WOStatus | LegacyWOStatus;
   at: string;              // ISO datetime
   byUserId: string;
   byUserName: string;

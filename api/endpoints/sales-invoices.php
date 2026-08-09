@@ -76,7 +76,7 @@ switch ($method) {
                 $wo = $woStmt->fetch();
                 if (!$wo) throw new Exception('WO tidak ditemukan');
                 $actor=$requestUser??requireAuthenticatedUser($pdo);requireAccessibleBranch($pdo,$actor,(string)$wo['branch_id']);
-                if (!empty($wo['invoice_id']) || $wo['status'] === 'Invoiced') {
+                if (!empty($wo['invoice_id'])) {
                     throw new Exception('WO sudah memiliki faktur');
                 }
                 if ($wo['status'] !== 'Selesai') {
@@ -152,7 +152,7 @@ switch ($method) {
 
                 $updateWo = $pdo->prepare("
                     UPDATE work_orders
-                    SET status = 'Invoiced', invoice_id = ?, invoice_number = ?
+                    SET status = 'Selesai', invoice_id = ?, invoice_number = ?
                     WHERE id = ?
                 ");
                 $updateWo->execute([$invoiceId, $invoiceNumber, $woId]);

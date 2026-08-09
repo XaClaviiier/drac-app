@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WOStatus, WorkOrder } from '../types';
 import { localDateKey } from '../lib/date';
 
-const statuses: Array<WOStatus | ''> = ['', 'Register', 'Pengecekan', 'Pending', 'Proses', 'Selesai', 'Invoiced', 'Closed'];
+const statuses: Array<WOStatus | ''> = ['', 'Register', 'Proses', 'Selesai', 'Closed'];
 const rupiah = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const dateLabel = (value: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('id-ID') : '-';
 const today = () => localDateKey();
@@ -15,14 +15,11 @@ const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}
 
 const statusTone: Record<WOStatus, string> = {
   Register: 'bg-slate-100 text-slate-800',
-  Pengecekan: 'bg-amber-100 text-amber-800',
-  Pending: 'bg-orange-100 text-orange-800',
   Proses: 'bg-blue-100 text-blue-800',
   Selesai: 'bg-emerald-100 text-emerald-800',
-  Invoiced: 'bg-purple-100 text-purple-800',
   Closed: 'bg-rose-100 text-rose-800',
 };
-const statusLabel = (status: WOStatus) => status === 'Closed' ? 'Lost Sales' : status;
+const statusLabel = (status: WOStatus) => status === 'Closed' ? 'Lost Sales' : status === 'Proses' ? 'Dikerjakan' : status;
 
 type ReportRow = WorkOrder & { invoice?: SalesInvoice; branchName: string; customerPhone: string };
 
@@ -71,8 +68,8 @@ export default function WorkOrderReport() {
       estimate: valid.reduce((sum, wo) => sum + Number(wo.estimateTotal ?? wo.total ?? 0), 0),
       invoiced: valid.reduce((sum, wo) => sum + Number(wo.invoice?.total || 0), 0),
       received: valid.reduce((sum, wo) => sum + Number(wo.invoice?.payment || 0), 0),
-      active: rows.filter(wo => ['Pengecekan', 'Pending', 'Proses'].includes(wo.status)).length,
-      completed: rows.filter(wo => ['Selesai', 'Invoiced'].includes(wo.status)).length,
+      active: rows.filter(wo => ['Register', 'Proses'].includes(wo.status)).length,
+      completed: rows.filter(wo => wo.status === 'Selesai').length,
       cancelled: rows.filter(wo => wo.status === 'Closed').length,
       recovered: rows.filter(wo => (wo.statusLog || []).some(log => log.from === 'Closed' && log.to === 'Proses')).length,
     };

@@ -87,12 +87,12 @@ export default function Dashboard() {
   const unsubmitted = visibleDeposits.reduce((sum, row) => sum + Number(row.unsubmitted || 0), 0);
 
   const statusCounts = {
-    diagnosis: visibleWOs.filter(wo => wo.status === 'Pengecekan').length,
-    pending: visibleWOs.filter(wo => wo.status === 'Pending').length,
+    register: visibleWOs.filter(wo => wo.status === 'Register').length,
+    lost: visibleWOs.filter(wo => wo.status === 'Closed').length,
     process: visibleWOs.filter(wo => wo.status === 'Proses').length,
-    completed: visibleWOs.filter(wo => ['Selesai', 'Invoiced'].includes(wo.status)).length,
+    completed: visibleWOs.filter(wo => wo.status === 'Selesai').length,
   };
-  const stalePending = visibleWOs.filter(wo => wo.status === 'Pending' && wo.date < dateKey(addDays(today, -7)));
+  const staleRegister = visibleWOs.filter(wo => wo.status === 'Register' && wo.date < dateKey(addDays(today, -7)));
   const overdueInvoices = visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7);
 
   const branchPerformance = data.branches.filter(branch => branch.isActive && (currentBranchId === 'ALL' || branch.id === currentBranchId)).map(branch => {
@@ -132,8 +132,8 @@ export default function Dashboard() {
           <KpiCard label="Konversi WO → Invoice" value={`${salesRate}%`} note={`${convertedWOs.length} dari ${tenDayWOs.length} WO menjadi invoice`} icon={Gauge} tone={salesRate >= 70 ? 'emerald' : salesRate >= 50 ? 'amber' : 'red'} />
           <KpiCard label="Piutang Pelanggan" value={compactMoney(receivables)} note={`${visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas').length} faktur belum lunas`} icon={WalletCards} tone="amber" />
         </> : <>
-          <KpiCard label="Diagnosa" value={String(statusCounts.diagnosis)} note="Menunggu hasil diagnosa" icon={Wrench} tone="amber" />
-          <KpiCard label="Pending" value={String(statusCounts.pending)} note="Menunggu persetujuan" icon={Clock3} tone="red" />
+          <KpiCard label="Register" value={String(statusCounts.register)} note="Belum mulai dikerjakan" icon={Wrench} tone="amber" />
+          <KpiCard label="Lost Sales" value={String(statusCounts.lost)} note="Tidak dilanjutkan" icon={Clock3} tone="red" />
           <KpiCard label="Dikerjakan" value={String(statusCounts.process)} note="Sedang dalam proses" icon={Gauge} tone="blue" />
           <KpiCard label="Selesai" value={String(statusCounts.completed)} note="Total pekerjaan selesai" icon={CheckCircle2} tone="emerald" />
         </>}
@@ -159,7 +159,7 @@ export default function Dashboard() {
             <ProgressRing value={salesRate} />
             <div className="min-w-0 flex-1 space-y-2">
               <FunnelRow label="WO Masuk" value={tenDayWOs.length} total={tenDayWOs.length} tone="bg-blue-500" />
-              <FunnelRow label="Disetujui" value={tenDayWOs.filter(wo => ['Proses', 'Selesai', 'Invoiced'].includes(wo.status)).length} total={tenDayWOs.length} tone="bg-cyan-500" />
+              <FunnelRow label="Disetujui" value={tenDayWOs.filter(wo => ['Proses', 'Selesai'].includes(wo.status)).length} total={tenDayWOs.length} tone="bg-cyan-500" />
               <FunnelRow label="Menjadi Invoice" value={convertedWOs.length} total={tenDayWOs.length} tone="bg-emerald-500" />
               <FunnelRow label="Lunas" value={convertedWOs.filter(wo => visibleInvoices.some(invoice => (invoice.woId === wo.id || invoice.woNumber === wo.woNumber) && invoice.status === 'Lunas')).length} total={tenDayWOs.length} tone="bg-violet-500" />
             </div>
@@ -177,10 +177,10 @@ export default function Dashboard() {
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between"><div><h2 className="font-bold text-slate-900">Perlu Perhatian</h2><p className="text-xs text-slate-500">Prioritas tindak lanjut hari ini.</p></div><AlertTriangle className="h-5 w-5 text-amber-500" /></div>
           <div className="space-y-2">
-            <AttentionRow to="/workorders" tone="amber" icon={Clock3} title={`${stalePending.length} WO pending lebih dari 7 hari`} detail="Hubungi pelanggan atau tutup WO yang tidak dilanjutkan." />
+            <AttentionRow to="/workorders" tone="amber" icon={Clock3} title={`${staleRegister.length} WO register lebih dari 7 hari`} detail="Periksa kembali WO yang belum mulai dikerjakan." />
             {canViewFinancial && <AttentionRow to="/invoices" tone="red" icon={FileText} title={`${overdueInvoices.length} faktur menunggak lebih dari 7 hari`} detail={`Total piutang ${rupiah(receivables)}`} />}
             {canViewFinancial && <AttentionRow to="/branch-deposits" tone="blue" icon={Banknote} title={`${rupiah(unsubmitted)} tunai belum disetor`} detail="Periksa setoran tunai masing-masing cabang." />}
-            <AttentionRow to="/workorders" tone="emerald" icon={Wrench} title={`${statusCounts.process} kendaraan sedang dikerjakan`} detail={`${statusCounts.diagnosis} diagnosa dan ${statusCounts.pending} menunggu persetujuan.`} />
+            <AttentionRow to="/workorders" tone="emerald" icon={Wrench} title={`${statusCounts.process} kendaraan sedang dikerjakan`} detail={`${statusCounts.register} masih berstatus register.`} />
           </div>
         </div>
       </section>

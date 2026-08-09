@@ -44,17 +44,29 @@ try {
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_hp DECIMAL(8,2) NULL AFTER final_lp");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS approved_services_json LONGTEXT NULL AFTER approved_at");
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
-    if ($statusColumn && (stripos((string)$statusColumn['Type'], "'Register'") === false || stripos((string)$statusColumn['Type'], "'Pending'") === false || stripos((string)$statusColumn['Type'], "'Invoiced'") === false || stripos((string)$statusColumn['Type'], "'Closed'") === false || stripos((string)$statusColumn['Type'], "'Dibayar'") !== false || stripos((string)$statusColumn['Type'], "'Batal'") !== false)) {
-        // Dua tahap menjaga data lama tetap valid saat status lama diganti.
+    if ($statusColumn && (
+        stripos((string)$statusColumn['Type'], "'Register'") === false
+        || stripos((string)$statusColumn['Type'], "'Proses'") === false
+        || stripos((string)$statusColumn['Type'], "'Selesai'") === false
+        || stripos((string)$statusColumn['Type'], "'Closed'") === false
+        || stripos((string)$statusColumn['Type'], "'Pengecekan'") !== false
+        || stripos((string)$statusColumn['Type'], "'Pending'") !== false
+        || stripos((string)$statusColumn['Type'], "'Invoiced'") !== false
+        || stripos((string)$statusColumn['Type'], "'Dibayar'") !== false
+        || stripos((string)$statusColumn['Type'], "'Batal'") !== false
+    )) {
+        // Konversi permanen data lama ke tiga status operasional. Hubungan
+        // faktur/pembayaran tetap dibaca dari invoice_id dan sales_invoices.
         $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Dibayar','Invoiced','Batal','Closed') DEFAULT 'Register'");
-        $pdo->exec("UPDATE work_orders SET status='Invoiced' WHERE status='Dibayar'");
+        $pdo->exec("UPDATE work_orders SET status='Register' WHERE status IN ('Pengecekan','Pending')");
+        $pdo->exec("UPDATE work_orders SET status='Selesai' WHERE status IN ('Dibayar','Invoiced')");
         $pdo->exec("UPDATE work_orders SET status='Closed' WHERE status='Batal'");
-        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Invoiced','Closed') DEFAULT 'Register'");
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Proses','Selesai','Closed') DEFAULT 'Register'");
     }
     // Koreksi data tidak valid dari alur lama: WO tanpa layanan dan tanpa nilai
     // belum boleh berstatus Diagnosa/Dikerjakan/Selesai. Saat ini kondisi ini
     // hanya mengenai data yang belum difakturkan.
-    $invalidRows = $pdo->query("SELECT w.id,w.status,w.status_log FROM work_orders w LEFT JOIN work_order_services s ON s.wo_id=w.id WHERE w.invoice_id IS NULL AND w.total<=0 AND w.status IN ('Pengecekan','Pending','Proses','Selesai') GROUP BY w.id,w.status,w.status_log HAVING COUNT(s.id)=0")->fetchAll();
+    $invalidRows = $pdo->query("SELECT w.id,w.status,w.status_log FROM work_orders w WHERE w.invoice_id IS NULL AND w.total<=0 AND w.status IN ('Proses','Selesai')")->fetchAll();
     $repairInvalid = $pdo->prepare("UPDATE work_orders SET status='Register',approved_at=NULL,approved_services_json=NULL,estimate_total=0,status_log=? WHERE id=?");
     foreach ($invalidRows as $invalidRow) {
         $statusLog = json_decode((string)($invalidRow['status_log'] ?? '[]'), true);
@@ -66,8 +78,6 @@ try {
         ];
         $repairInvalid->execute([json_encode($statusLog), $invalidRow['id']]);
     }
-    $pdo->exec("UPDATE work_orders SET pending_until=DATE_ADD(pending_at, INTERVAL 10 DAY) WHERE status='Pending' AND pending_at IS NOT NULL AND (pending_until IS NULL OR pending_until > DATE_ADD(pending_at, INTERVAL 10 DAY))");
-    $pdo->exec("UPDATE work_orders SET status='Closed', cancel_reason=COALESCE(NULLIF(cancel_reason,''), 'Tidak ada keputusan selama 10 hari') WHERE status='Pending' AND pending_until IS NOT NULL AND pending_until <= NOW()");
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_date DATE NULL AFTER payment");
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER payment_date");
 

@@ -40,7 +40,7 @@ interface AppContextType {
     targetBranchId: string,
     options?: { resetJob?: boolean }
   ) => Promise<WorkOrder | null>;
-  /** Cari WO aktif (belum Invoiced/Closed dan belum dilanjutkan) untuk plat nomor tertentu. */
+  /** Cari WO aktif (Register/Proses dan belum dilanjutkan) untuk plat nomor tertentu. */
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
@@ -548,7 +548,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!clean) return null;
     return data.workOrders.find(wo => {
       if (wo.plateNumber.replace(/\s+/g, '').toUpperCase() !== clean) return false;
-      if (wo.status === 'Invoiced' || wo.status === 'Closed') return false;
+      if (!['Register', 'Proses'].includes(wo.status)) return false;
       if (wo.continuedToWoId) return false; // sudah dilanjutkan di WO lain
       return true;
     }) || null;
@@ -558,15 +558,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isStatusTransitionAllowed = (from: WOStatus, to: WOStatus): boolean => {
     if (from === to) return false;
     const forward: Record<WOStatus, WOStatus[]> = {
-      Register: ['Pengecekan', 'Closed'],
-      Pengecekan: ['Proses', 'Pending', 'Closed'],
-      // Pending dapat dibuka kembali ke tahap Diagnosa selama belum kedaluwarsa.
-      Pending: ['Pengecekan', 'Proses', 'Closed'],
-      // Setelah pekerjaan dimulai, WO hanya boleh diselesaikan.
-      Proses: ['Pending', 'Selesai'],
-      Selesai: ['Invoiced'],
-      Invoiced: [],
-      // Lost Sales dapat dipulihkan bila pelanggan menyetujui masalah yang sama.
+      Register: ['Proses', 'Closed'],
+      Proses: ['Selesai', 'Closed'],
+      Selesai: [],
       Closed: ['Proses'],
     };
     return forward[from]?.includes(to) ?? false;
@@ -584,15 +578,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ok: false, message: `Perubahan status ${wo.status} → ${nextStatus} tidak diizinkan.` };
     }
 
-    // Selesai → Invoiced harus lewat pembuatan faktur, bukan ubah manual.
-    if (wo.status === 'Pending' && nextStatus === 'Proses' && wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now()) {
-      return { ok: false, message: 'Masa Pending sudah lewat 10 hari. Buat WO baru dari data WO lama.' };
-    }
-
-    if (wo.status === 'Selesai' && nextStatus === 'Invoiced' && !wo.invoiceId) {
-      return { ok: false, message: 'Status Invoiced hanya diberikan otomatis setelah faktur dibuat.' };
-    }
-
+    // Faktur dibuat terpisah; status WO tetap Selesai.
     const positiveTotal = wo.services.reduce((sum, service) => sum + Number(service.price || 0) * Number(service.qty || 0), 0);
     if (['Proses', 'Selesai'].includes(nextStatus) && (!wo.services.length || positiveTotal <= 0)) {
       return {
@@ -603,16 +589,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // Pending dan Lost Sales wajib punya alasan.
-    const needsReason = nextStatus === 'Pending'
-      || nextStatus === 'Closed';
+    // Lost Sales wajib punya alasan.
+    const needsReason = nextStatus === 'Closed';
     if (needsReason && !reason?.trim()) {
       return { ok: false, message: 'Alasan wajib diisi untuk perubahan ini.' };
     }
 
     const now = new Date().toISOString();
-    const databaseNow = now.slice(0, 19).replace('T', ' ');
-    const pendingDeadline = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 19).replace('T', ' ');
     const log = [
       ...(wo.statusLog || []),
       {
@@ -630,18 +613,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: nextStatus,
       statusLog: log,
       cancelReason: nextStatus === 'Closed' ? reason?.trim() : wo.cancelReason,
-      pendingAt: nextStatus === 'Pending' ? databaseNow : wo.pendingAt,
-      pendingUntil: nextStatus === 'Pending'
-        ? pendingDeadline
-        : wo.pendingUntil,
-      pendingReason: nextStatus === 'Pending' ? reason?.trim() : wo.pendingReason,
-      approvedAt: (wo.status === 'Pengecekan' || wo.status === 'Pending' || wo.status === 'Closed') && nextStatus === 'Proses'
+      approvedAt: (wo.status === 'Register' || wo.status === 'Closed') && nextStatus === 'Proses'
         ? localDateKey()
         : wo.approvedAt,
-      approvedServices: (wo.status === 'Pengecekan' || wo.status === 'Pending' || wo.status === 'Closed') && nextStatus === 'Proses'
+      approvedServices: (wo.status === 'Register' || wo.status === 'Closed') && nextStatus === 'Proses'
         ? wo.services.map(service => ({ ...service }))
         : wo.approvedServices,
-      estimateTotal: (wo.status === 'Pengecekan' || wo.status === 'Pending' || wo.status === 'Closed') && nextStatus === 'Proses'
+      estimateTotal: (wo.status === 'Register' || wo.status === 'Closed') && nextStatus === 'Proses'
         ? positiveTotal
         : wo.estimateTotal,
     };
@@ -700,7 +678,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       services: copiedServices,
       total: copiedTotal,
       estimateTotal: undefined,
-      status: resetJob ? 'Register' : (src.status === 'Closed' && copiedTotal > 0 ? 'Proses' : (copiedTotal > 0 ? 'Pengecekan' : 'Register')),
+      status: resetJob ? 'Register' : (src.status === 'Closed' && copiedTotal > 0 ? 'Proses' : 'Register'),
       notes: resetJob
         ? `Masalah berbeda. Referensi data pelanggan dan kendaraan dari ${src.woNumber} (${srcBranch?.name || '-'}).`
         : `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,
@@ -778,7 +756,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await addInvoice(newInvoice);
     await updateWorkOrder(woId, {
-      ...wo, status: 'Invoiced', invoiceId: newInvoice.id, invoiceNumber,
+      ...wo, status: 'Selesai', invoiceId: newInvoice.id, invoiceNumber,
     });
     return newInvoice;
   };

@@ -53,8 +53,8 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
     if ($method !== 'Tunai') $method = 'Transfer';
     $pdo->prepare("UPDATE sales_invoices SET payment=?,payment_date=?,payment_method=?,status=? WHERE id=?")
         ->execute([$paid,$latest['date'] ?? null,$method,$status,$invoiceId]);
-    $pdo->prepare("UPDATE work_orders SET status='Invoiced' WHERE invoice_id=?")->execute([$invoiceId]);
-    if (!empty($row['wo_id'])) $pdo->prepare("UPDATE work_orders SET status='Invoiced' WHERE id=?")->execute([$row['wo_id']]);
+    $pdo->prepare("UPDATE work_orders SET status='Selesai' WHERE invoice_id=?")->execute([$invoiceId]);
+    if (!empty($row['wo_id'])) $pdo->prepare("UPDATE work_orders SET status='Selesai' WHERE id=?")->execute([$row['wo_id']]);
 }
 
 function nextCustomerPaymentNumber(PDO $pdo, string $branchId, string $branchCode, string $date): string {

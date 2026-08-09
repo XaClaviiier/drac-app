@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { Customer, Vehicle, WorkOrder, WorkOrderService } from '../types';
+import type { Customer, LegacyWOStatus, Vehicle, WorkOrder, WorkOrderService, WOStatus } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { localDateKey } from '../lib/date';
@@ -632,7 +632,7 @@ export default function WorkOrders() {
       return;
     }
 
-    const lockedByInvoice = Boolean(targetWO.invoiceId || targetWO.status === 'Invoiced');
+    const lockedByInvoice = Boolean(targetWO.invoiceId);
     if (requestedViewWO || lockedByInvoice || !hasPermission('wo:edit')) {
       setDetailWO(targetWO);
       if (lockedByInvoice && requestedEditWO) {
@@ -643,15 +643,6 @@ export default function WorkOrders() {
 
     handleOpenModal(targetWO, true);
   }, [requestedNewWO, requestedEditWO, requestedViewWO, isLoading, data.workOrders]);
-
-  const resumeDiagnosis = async (wo: WorkOrder) => {
-    const result = await changeWorkOrderStatus(wo.id, 'Pengecekan');
-    if (!result.ok) {
-      window.alert(result.message || 'Diagnosa tidak dapat dilanjutkan.');
-      return;
-    }
-    handleOpenDiagnosis({ ...wo, status: 'Pengecekan' });
-  };
 
   const handleCloseModal = () => {
     setShowModal(false);
@@ -766,7 +757,7 @@ export default function WorkOrders() {
     const shouldCreateInvoice = diagnosisMode && diagnosisSubmitAction.current === 'invoice';
     diagnosisSubmitAction.current = 'save';
 
-    if (editingWO?.invoiceId || editingWO?.status === 'Invoiced') {
+    if (editingWO?.invoiceId) {
       window.alert(`WO ${editingWO.woNumber} sudah difakturkan dan tidak dapat diubah.`);
       return;
     }
@@ -831,7 +822,7 @@ export default function WorkOrders() {
           ...formData,
           backdateReason: woBackdateReason.trim() || undefined,
           total: totalServices,
-          estimateTotal: diagnosisMode || ['Pengecekan', 'Pending'].includes(editingWO.status)
+          estimateTotal: diagnosisMode || editingWO.status === 'Register'
             ? totalServices
             : editingWO.estimateTotal,
           ...(shouldCreateInvoice ? {
@@ -882,7 +873,7 @@ export default function WorkOrders() {
       window.alert(`WO tidak dapat dihapus karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}. Hapus pembayaran dan faktur terlebih dahulu.`);
       return;
     }
-    if (!['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(wo.status)) {
+    if (!['Register', 'Selesai'].includes(wo.status)) {
       window.alert(`WO berstatus ${wo.status} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`);
       return;
     }
@@ -945,12 +936,8 @@ export default function WorkOrders() {
       return;
     }
 
-    if (wo.status === 'Register' || wo.status === 'Pengecekan') {
+    if (wo.status === 'Register') {
       handleOpenDiagnosis(wo);
-      return;
-    }
-    if (wo.status === 'Pending') {
-      await resumeDiagnosis(wo);
       return;
     }
     if (wo.status === 'Proses') {
@@ -967,9 +954,7 @@ export default function WorkOrders() {
 
   const activeWorkOrderActionLabel = (wo: WorkOrder, sameBranch: boolean) => {
     if (!sameBranch) return 'Buka WO (Read-only, cabang lain)';
-    if (wo.status === 'Register') return 'Mulai Diagnosa';
-    if (wo.status === 'Pengecekan') return 'Lanjutkan Diagnosa';
-    if (wo.status === 'Pending') return 'Lanjutkan Diagnosa dari Pending';
+    if (wo.status === 'Register') return wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan';
     if (wo.status === 'Proses') return 'Buka Pekerjaan';
     if (wo.status === 'Selesai' && hasPermission('invoice:create') && !wo.invoiceId) return 'Buat Faktur';
     return 'Lihat WO Ini';
@@ -1025,25 +1010,16 @@ export default function WorkOrders() {
 
   const statusColors: Record<string, string> = {
     Register: 'bg-slate-100 text-slate-700',
-    Pengecekan: 'bg-amber-100 text-amber-800',
-    Pending: 'bg-orange-100 text-orange-800',
     Proses: 'bg-blue-100 text-blue-800',
     Selesai: 'bg-green-100 text-green-800',
-    Invoiced: 'bg-purple-100 text-purple-800',
     Closed: 'bg-rose-100 text-rose-800',
   };
-  const statusLabel = (status: WorkOrder['status']) => status === 'Register' ? 'Register' : status === 'Pengecekan' ? 'Diagnosa' : status === 'Pending' ? 'Pending — Menunggu Keputusan' : status === 'Proses' ? 'Dikerjakan' : status === 'Closed' ? 'Lost Sales' : status;
+  const statusLabel = (status: WOStatus | LegacyWOStatus) => status === 'Closed' || status === 'Batal' ? 'Lost Sales' : status === 'Proses' ? 'Dikerjakan' : status === 'Pengecekan' || status === 'Pending' ? 'Register' : status === 'Invoiced' || status === 'Dibayar' ? 'Selesai' : status;
   const diagnosisMeasurementLabel = (wo: WorkOrder) => [
     wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
     wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
     wo.diagnosisHp != null ? `HP ${wo.diagnosisHp} PSI` : '',
   ].filter(Boolean).join(' · ');
-
-  const isPendingExpired = (wo: WorkOrder) =>
-    wo.status === 'Pending' && !!wo.pendingUntil && new Date(wo.pendingUntil).getTime() < Date.now();
-
-  const pendingDaysLeft = (wo: WorkOrder) =>
-    Math.max(0, Math.ceil((new Date(wo.pendingUntil || Date.now()).getTime() - Date.now()) / 86400000));
 
   const customerPhoneForWO = (wo: WorkOrder) => {
     const customer = data.customers.find(item =>
@@ -1173,14 +1149,6 @@ export default function WorkOrders() {
       return;
     }
     handleOpenModal();
-  };
-
-  const createNewFromPending = async (wo: WorkOrder) => {
-    const created = await continueWorkOrder(wo.id, wo.branchId);
-    if (created) {
-      setSuccessMsg(`${created.woNumber} dibuat dari ${wo.woNumber}; pelanggan dan kendaraan sudah terisi.`);
-      setTimeout(() => setSuccessMsg(''), 5000);
-    }
   };
 
   const continueLostSalesSameIssue = async () => {
@@ -1314,11 +1282,9 @@ export default function WorkOrders() {
           <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 lg:w-44">
             <option value="">Semua Status</option>
             <option value="Register">Register</option>
-            <option value="Pengecekan">Diagnosa</option>
-            <option value="Pending">Diagnosa Pending</option>
             <option value="Proses">Dikerjakan</option>
             <option value="Selesai">Selesai</option>
-            <option value="Dibayar">Dibayar</option>
+            <option value="Closed">Lost Sales</option>
           </select>
           <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -1417,12 +1383,10 @@ export default function WorkOrders() {
               className="h-12 flex-shrink-0 rounded-lg border border-gray-300 bg-white px-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 lg:w-[190px]"
             >
               <option value="">Semua Status</option>
-              <option value="Pengecekan">1. Diagnosa</option>
-              <option value="Pending">2. Pending — Menunggu Keputusan</option>
+              <option value="Register">Register</option>
               <option value="Closed">Lost Sales</option>
-              <option value="Proses">3. Dikerjakan</option>
-              <option value="Selesai">4. Selesai</option>
-              <option value="Invoiced">5. Invoiced</option>
+              <option value="Proses">Dikerjakan</option>
+              <option value="Selesai">Selesai</option>
             </select>
 
             <div className="relative hidden flex-shrink-0 lg:block">
@@ -1572,7 +1536,6 @@ export default function WorkOrders() {
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>
                         {statusLabel(wo.status)}
                       </span>
-                      {wo.status === 'Pending' && <span className="mt-1 block max-w-[150px] truncate text-[10px] text-orange-700" title={wo.pendingReason}>{wo.pendingReason || '-'}</span>}
                     </td>}
                     {isColumnVisible('createdBy') && <td className="px-4 py-3">
                       <span className="block max-w-[170px] truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
@@ -1582,10 +1545,8 @@ export default function WorkOrders() {
                     </td>}
                     {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {hasPermission('wo:edit') && wo.status === 'Pending' && !wo.continuedToWoId && (
-                          isPendingExpired(wo)
-                            ? <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-semibold text-white">Buat WO Baru</button>
-                            : <button onClick={() => void resumeDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">Lanjutkan Diagnosa ({pendingDaysLeft(wo)} hari)</button>
+                        {hasPermission('wo:edit') && wo.status === 'Register' && !wo.continuedToWoId && (
+                          <button onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">{wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
                         )}
                         {hasPermission('wo:edit') && wo.status === 'Proses' && (
                           <button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
@@ -1600,12 +1561,12 @@ export default function WorkOrders() {
                         <button onClick={() => setDetailWO(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
                           <Eye className="h-4 w-4" />
                         </button>
-                        {hasPermission('wo:edit') && wo.status !== 'Closed' && wo.status !== 'Invoiced' && (
+                        {hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
                           <button onClick={() => handleOpenModal(wo)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit">
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {hasPermission('wo:delete') && ['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                        {hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
                           <button onClick={() => void handleDelete(wo)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1635,8 +1596,55 @@ export default function WorkOrders() {
         </div>
       )}
 
-      {/* Mobile Work Order Cards */}
-      <div className="space-y-4 lg:hidden">
+      {/* Ringkasan WO mobile: padat, urutan informasi mengikuti alur operasional. */}
+      <div className="space-y-2 px-2 pb-3 lg:hidden">
+        {filteredWOs.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center shadow-sm">
+            <Wrench className="mx-auto mb-2 h-9 w-9 text-gray-300" />
+            <p className="font-semibold text-gray-900">Tidak ada Servis Job</p>
+            <p className="mt-1 text-xs text-gray-500">Ubah filter atau tekan + New untuk registrasi kendaraan masuk.</p>
+          </div>
+        ) : filteredWOs.map(wo => {
+          const serviceNames = wo.services.map(service => service.name);
+          const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name.replace('CABANG ', '');
+          return (
+            <article key={`compact-${wo.id}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <button type="button" onClick={() => setDetailWO(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span>
+                  <span className="whitespace-nowrap text-[11px] text-gray-500">{formatBusinessDate(wo.date)}</span>
+                </div>
+                <p className="mt-1 truncate text-sm font-semibold text-gray-900">{wo.plateNumber} — {wo.vehicleInfo}</p>
+                <p className="mt-0.5 truncate text-xs text-gray-600">{wo.customerName} — {customerPhoneForWO(wo) || '-'}</p>
+                {wo.description && <p className="mt-1 line-clamp-2 text-xs text-gray-600"><span className="font-semibold text-gray-700">Keluhan:</span> {wo.description}</p>}
+                <p className="mt-1 truncate text-xs text-gray-500">
+                  <span className="font-semibold text-gray-700">Layanan:</span>{' '}
+                  {serviceNames.length ? `${serviceNames.slice(0, 2).join(', ')}${serviceNames.length > 2 ? ` +${serviceNames.length - 2}` : ''}` : 'Belum ada layanan'}
+                </p>
+              </button>
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span>
+                {canViewAllBranches && <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>}
+                {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
+                <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
+                {hasPermission('wo:edit') && wo.status === 'Register' && !wo.continuedToWoId && (
+                  <button type="button" onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-semibold text-white">{wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
+                )}
+                {hasPermission('wo:edit') && wo.status === 'Proses' && (
+                  <button type="button" onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-[11px] font-semibold text-white">Selesai</button>
+                )}
+                {hasPermission('invoice:create') && wo.status === 'Selesai' && !wo.invoiceId && wo.total > 0 && (
+                  <button type="button" onClick={() => handleOpenInvoiceModal(wo)} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white">Buat Faktur</button>
+                )}
+                <button type="button" onClick={() => setDetailWO(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Lihat detail ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {/* Layout kartu lama dipertahankan sementara sebagai referensi, tidak dirender. */}
+      <div className="hidden">
         {filteredWOs.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Wrench className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -1692,25 +1700,15 @@ export default function WorkOrders() {
                       title={`Status saat ini: ${wo.status}`}
                     >
                       {wo.status === 'Register' && '0.'}
-                      {wo.status === 'Pengecekan' && '1.'}
-                      {wo.status === 'Pending' && '2.'}
-                      {wo.status === 'Proses' && '3.'}
-                      {wo.status === 'Selesai' && '4.'}
-                      {wo.status === 'Invoiced' && '5.'}
+                      {wo.status === 'Proses' && '1.'}
+                      {wo.status === 'Selesai' && '2.'}
                       {wo.status === 'Closed' && '✕'}
                       <span>{statusLabel(wo.status)}</span>
                     </span>
 
                     {/* Tombol aksi status berurutan */}
-                    {hasPermission('wo:edit') && wo.status === 'Pending' && !wo.continuedToWoId && (
-                      isPendingExpired(wo) ? (
-                        <button onClick={() => createNewFromPending(wo)} className="rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white">Buat WO Baru dari Data Ini</button>
-                      ) : (
-                        <button onClick={() => void resumeDiagnosis(wo)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">Lanjutkan Diagnosa · {pendingDaysLeft(wo)} hari tersisa</button>
-                      )
-                    )}
-                    {wo.status === 'Pending' && (
-                      <span className="text-[11px] text-orange-700">Alasan: {wo.pendingReason || '-'}{isPendingExpired(wo) ? ' · Kedaluwarsa' : ''}</span>
+                    {hasPermission('wo:edit') && wo.status === 'Register' && !wo.continuedToWoId && (
+                      <button onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">{wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
                     )}
                     {hasPermission('wo:edit') && wo.status === 'Proses' && (
                       <button
@@ -1742,7 +1740,7 @@ export default function WorkOrders() {
                           Buat Faktur
                         </button>
                       )
-                    ) : (wo.status === 'Register' || wo.status === 'Pengecekan' || wo.status === 'Proses' || (wo.status === 'Selesai' && wo.total <= 0)) ? (
+                    ) : (wo.status === 'Register' || wo.status === 'Proses' || (wo.status === 'Selesai' && wo.total <= 0)) ? (
                       <span
                         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500"
                         title="Tombol faktur tersedia setelah status WO menjadi Selesai"
@@ -1752,7 +1750,7 @@ export default function WorkOrders() {
                       </span>
                     ) : null}
                     {hasPermission('wo:create')
-                      && wo.status === 'Pengecekan'
+                      && wo.status === 'Register'
                       && !wo.continuedToWoId
                       && wo.branchId !== activeBranchId && (
                       <button
@@ -1788,7 +1786,7 @@ export default function WorkOrders() {
                     >
                       <Eye className="h-5 w-5" />
                     </button>
-                    {hasPermission('wo:edit') && wo.status !== 'Closed' && wo.status !== 'Invoiced' && (
+                    {hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
                       <button
                         onClick={() => handleOpenModal(wo)}
                         className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
@@ -1797,7 +1795,7 @@ export default function WorkOrders() {
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
-                    {hasPermission('wo:delete') && ['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                    {hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
                       <button
                         onClick={() => void handleDelete(wo)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
@@ -1865,12 +1863,11 @@ export default function WorkOrders() {
                   </div>
                 )}
 
-                {wo.status === 'Pengecekan' && !wo.continuedToWoId && (
+                {wo.status === 'Register' && !wo.continuedToWoId && (
                   <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                     <CalendarClock className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
                     <p className="text-xs text-amber-800">
-                      <strong>Pengecekan gratis</strong> — estimasi Rp {wo.total.toLocaleString('id-ID')}.
-                      Menunggu persetujuan pelanggan sebelum lanjut ke Proses.
+                      <strong>Register</strong> — tambahkan layanan dan harga sebelum pekerjaan disetujui.
                     </p>
                   </div>
                 )}
@@ -1980,14 +1977,12 @@ export default function WorkOrders() {
               </div>
             </div>
             <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6 sm:py-4">
-              {hasPermission('wo:edit') && ['Register', 'Pengecekan'].includes(detailWO.status) && !detailWO.continuedToWoId && (
+              {hasPermission('wo:edit') && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
                 <>
-                  <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{detailWO.status === 'Register' ? 'Mulai Diagnosa' : 'Hasil Diagnosa'}</button>
+                  <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{detailWO.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
+                  {detailWO.services.length > 0 && detailWO.total > 0 && <button onClick={() => { requestStatusChange(detailWO, 'Proses'); setDetailWO(null); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Setuju · Dikerjakan</button>}
                   <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Lost Sales</button>
                 </>
-              )}
-              {hasPermission('wo:edit') && detailWO.status === 'Pending' && !detailWO.continuedToWoId && !isPendingExpired(detailWO) && (
-                <button onClick={() => { const target = detailWO; setDetailWO(null); void resumeDiagnosis(target); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Lanjutkan Diagnosa</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
                 <>
@@ -2001,8 +1996,8 @@ export default function WorkOrders() {
               {hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.continuedToWoId && (
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
               )}
-              {hasPermission('wo:edit') && !['Closed', 'Invoiced', 'Proses'].includes(detailWO.status) && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
-              {hasPermission('wo:delete') && ['Register', 'Pengecekan', 'Pending', 'Selesai'].includes(detailWO.status) && !detailWO.invoiceId && (
+              {hasPermission('wo:edit') && detailWO.status === 'Register' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
+              {hasPermission('wo:delete') && ['Register', 'Selesai'].includes(detailWO.status) && !detailWO.invoiceId && (
                 <button onClick={() => { setDetailWO(null); void handleDelete(detailWO); }} className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Hapus WO</button>
               )}
               <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
@@ -2722,8 +2717,7 @@ export default function WorkOrders() {
       {/* ===== Konfirmasi ubah status WO ===== */}
       {statusDialog && (() => {
         const { wo, next } = statusDialog;
-        const needsReason = next === 'Pending'
-          || next === 'Closed';
+        const needsReason = next === 'Closed';
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
@@ -2750,24 +2744,12 @@ export default function WorkOrders() {
                   <div>
                     <div className="mb-1 flex items-center justify-between">
                       <label className="block text-xs font-semibold text-gray-700">Alasan <span className="text-red-500">*</span></label>
-                      {next === 'Pending' && hasPermission('settings:edit') && (
-                        <button type="button" onClick={() => { setPendingTemplateDraft(data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS); setShowPendingTemplateEditor(true); }} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800">
-                          <Edit className="h-3 w-3" /> Kelola Template
-                        </button>
-                      )}
                     </div>
-                    {next === 'Pending' && (
-                      <div className="mb-2 grid grid-cols-2 gap-2">
-                        {(data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS).filter(template => template.isActive).map(template => (
-                          <button key={template.id} type="button" onClick={() => setStatusReason(template.label.toLowerCase() === 'lainnya' ? '' : template.label)} className={`rounded-lg border px-2 py-2 text-xs font-semibold ${statusReason === template.label ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-300 text-gray-600'}`}>{template.label}</button>
-                        ))}
-                      </div>
-                    )}
                     <textarea
                       value={statusReason}
                       onChange={(e) => setStatusReason(e.target.value)}
                       rows={3}
-                      placeholder={next === 'Pending' ? 'Contoh: pikir-pikir dulu atau diskusi dengan keluarga' : next === 'Closed' ? 'Contoh: tidak menyetujui estimasi atau belum ada anggaran' : 'Contoh: perlu tambah sparepart'}
+                      placeholder={next === 'Closed' ? 'Contoh: tidak menyetujui estimasi atau belum ada anggaran' : 'Tambahkan keterangan'}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                     />
                   </div>

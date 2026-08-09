@@ -83,8 +83,7 @@ function resolveCustomerVehicle(PDO $pdo, string $customerRefId, string $vehicle
 function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $excludeWoId = null): void {
     $sql = "SELECT wo_number FROM work_orders
             WHERE vehicle_ref_id = ?
-              AND (status IN ('Register', 'Pengecekan', 'Proses', 'Selesai')
-                   OR (status = 'Pending' AND (pending_until IS NULL OR pending_until > NOW())))";
+              AND status IN ('Register', 'Proses')";
     $params = [$vehicleRefId];
     if ($excludeWoId !== null) {
         $sql .= " AND id <> ?";
@@ -113,18 +112,22 @@ function ensureApiSupportTables(PDO $pdo): void {
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
     if ($statusColumn && (
         stripos((string)$statusColumn['Type'], "'Register'") === false
-        || stripos((string)$statusColumn['Type'], "'Pending'") === false
-        || stripos((string)$statusColumn['Type'], "'Invoiced'") === false
+        || stripos((string)$statusColumn['Type'], "'Proses'") === false
+        || stripos((string)$statusColumn['Type'], "'Selesai'") === false
         || stripos((string)$statusColumn['Type'], "'Closed'") === false
+        || stripos((string)$statusColumn['Type'], "'Pengecekan'") !== false
+        || stripos((string)$statusColumn['Type'], "'Pending'") !== false
+        || stripos((string)$statusColumn['Type'], "'Invoiced'") !== false
         || stripos((string)$statusColumn['Type'], "'Dibayar'") !== false
         || stripos((string)$statusColumn['Type'], "'Batal'") !== false
     )) {
         // Tahap pertama tetap menerima nilai status lama agar migrasi tidak
         // mengosongkan enum sebelum seluruh nilai lama dikonversi.
         $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Dibayar','Invoiced','Batal','Closed') DEFAULT 'Register'");
-        $pdo->exec("UPDATE work_orders SET status='Invoiced' WHERE status='Dibayar'");
+        $pdo->exec("UPDATE work_orders SET status='Register' WHERE status IN ('Pengecekan','Pending')");
+        $pdo->exec("UPDATE work_orders SET status='Selesai' WHERE status IN ('Dibayar','Invoiced')");
         $pdo->exec("UPDATE work_orders SET status='Closed' WHERE status='Batal'");
-        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Pengecekan','Pending','Proses','Selesai','Invoiced','Closed') DEFAULT 'Register'");
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Proses','Selesai','Closed') DEFAULT 'Register'");
     }
     if ($needsContinuationBackfill) {
         try {
@@ -927,7 +930,7 @@ function runProductionIntegrityRepair20260808(PDO $pdo): void {
                 continue;
             }
             $wo = $woById[$woId];
-            if ((string)$wo['status'] !== 'Invoiced') {
+            if ((string)($wo['invoice_id'] ?? '') !== $invoiceId) {
                 $snapshot('work_order_before_invoice_unlink', $woId, $wo);
                 $deleteInvoice($invoice, 'non_invoiced_zero');
                 $pdo->prepare("UPDATE work_orders SET invoice_id=NULL,invoice_number=NULL WHERE id=?")
@@ -970,7 +973,7 @@ function runProductionIntegrityRepair20260808StatusRestore(PDO $pdo): void {
         $invoicedWoStmt = $pdo->prepare("SELECT * FROM work_orders WHERE wo_number=? FOR UPDATE");
         $invoicedWoStmt->execute(['WO-D260801005']);
         $invoicedWo = $invoicedWoStmt->fetch();
-        if ($invoicedWo && (string)$invoicedWo['status'] !== 'Invoiced') {
+        if ($invoicedWo && ((string)($invoicedWo['invoice_id'] ?? '') === '' || (string)$invoicedWo['status'] !== 'Selesai')) {
             $invoiceStmt = $pdo->prepare("SELECT * FROM sales_invoices WHERE wo_id=? ORDER BY id FOR UPDATE");
             $invoiceStmt->execute([(string)$invoicedWo['id']]);
             $linkedInvoices = $invoiceStmt->fetchAll();
@@ -983,17 +986,17 @@ function runProductionIntegrityRepair20260808StatusRestore(PDO $pdo): void {
                     (string)$invoicedWo['id'],
                     json_encode($invoicedWo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ]);
-                $pdo->prepare("UPDATE work_orders SET status='Invoiced',invoice_id=?,invoice_number=? WHERE id=?")
+                $pdo->prepare("UPDATE work_orders SET status='Selesai',invoice_id=?,invoice_number=? WHERE id=?")
                     ->execute([(string)$linkedInvoices[0]['id'], (string)$linkedInvoices[0]['invoice_number'], (string)$invoicedWo['id']]);
             }
         }
 
-        // Faktur nol yang salah pada WO ini sudah dihapus; status terakhir yang
-        // tercatat sah di status_log adalah Pending dengan alasan "Tanya Istri".
+        // Faktur nol yang salah pada WO ini sudah dihapus. Dalam alur ringkas,
+        // keputusan yang belum berlanjut dikembalikan ke Register.
         $pendingWoStmt = $pdo->prepare("SELECT * FROM work_orders WHERE wo_number=? FOR UPDATE");
         $pendingWoStmt->execute(['WO-C260728001']);
         $pendingWo = $pendingWoStmt->fetch();
-        if ($pendingWo && (string)$pendingWo['status'] !== 'Pending') {
+        if ($pendingWo && (string)$pendingWo['status'] !== 'Register') {
             $invoiceCountStmt = $pdo->prepare('SELECT COUNT(*) FROM sales_invoices WHERE wo_id=?');
             $invoiceCountStmt->execute([(string)$pendingWo['id']]);
             if ((int)$invoiceCountStmt->fetchColumn() === 0 && !empty($pendingWo['pending_reason'])) {
@@ -1003,7 +1006,7 @@ function runProductionIntegrityRepair20260808StatusRestore(PDO $pdo): void {
                     (string)$pendingWo['id'],
                     json_encode($pendingWo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ]);
-                $pdo->prepare("UPDATE work_orders SET status='Pending',invoice_id=NULL,invoice_number=NULL WHERE id=?")
+                $pdo->prepare("UPDATE work_orders SET status='Register',invoice_id=NULL,invoice_number=NULL WHERE id=?")
                     ->execute([(string)$pendingWo['id']]);
             }
         }

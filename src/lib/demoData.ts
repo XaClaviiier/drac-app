@@ -135,7 +135,7 @@ export const demoData: AppData = {
         { id: '5', name: 'Isi Freon R134a', description: 'Estimasi', price: 150000, qty: 2 },
         { id: '6', name: 'Jasa Pemasangan', description: 'Estimasi', price: 400000, qty: 1 },
       ],
-      total: 2350000, status: 'Pengecekan',
+      total: 2350000, status: 'Register',
       notes: 'Pelanggan minta waktu untuk pertimbangkan. Follow up 3 hari lagi.',
       branchId: 'BR-002',
     },

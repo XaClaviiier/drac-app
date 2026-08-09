@@ -306,7 +306,7 @@ export default function AIAssistant() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
     const visibleWOs = allVehicleWOs.filter((wo) => allowedBranchIds.has(wo.branchId));
     const activeWO = visibleWOs.find((wo) =>
-      ['Pengecekan', 'Pending', 'Proses', 'Selesai'].includes(wo.status) && !wo.continuedToWoId
+      ['Register', 'Proses'].includes(wo.status) && !wo.continuedToWoId
     );
     const latestClosedWO = visibleWOs.find((wo) => wo.status === 'Closed' && !wo.continuedToWoId);
     const showAll = /(semua|seluruh|lengkap)/i.test(lower);
@@ -988,7 +988,7 @@ ${buildSmartContext(userMsgText)}`;
       services,
       total,
       estimateTotal: total,
-      status: 'Pengecekan',
+      status: 'Register',
       notes: `Dibuat via Asisten AI oleh ${currentUser?.name}`,
       branchId,
     };
@@ -1173,7 +1173,7 @@ ${buildSmartContext(userMsgText)}`;
         const vehicleWOs = data.workOrders
           .filter(wo => (wo.vehicleRefId && wo.vehicleRefId === exactVehicle.id) || normalizePlate(wo.plateNumber) === normalizePlate(exactVehicle.plateNumber))
           .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
-        const activeWO = vehicleWOs.find(wo => ['Pengecekan', 'Pending', 'Proses', 'Selesai'].includes(wo.status) && !wo.continuedToWoId);
+        const activeWO = vehicleWOs.find(wo => ['Register', 'Proses'].includes(wo.status) && !wo.continuedToWoId);
         const latestClosedWO = vehicleWOs.find(wo => wo.status === 'Closed' && !wo.continuedToWoId);
         if (activeWO && hasPermission('wo:edit')) {
           actions.push({ label: `Lanjutkan WO Aktif ${activeWO.woNumber}`, type: 'open_workorders' });
@@ -1322,7 +1322,7 @@ ${buildSmartContext(userMsgText)}`;
         role: 'assistant',
         time: now(),
         shareText,
-        content: `✅ **Order Kerja berhasil dibuat!**\n\n- Nomor: **${r.woNumber}**\n- Pelanggan: **${r.customerName}**\n- Kendaraan: **${r.plateNumber}**\n- Layanan: **${r.servicesCount} item**\n- Estimasi: **${fmt(r.total)}**\n- Cabang: **${r.branchName}**\n- Status: **Pengecekan** (gratis, menunggu persetujuan pelanggan)\n\nBuka menu Order Kerja untuk melanjutkan.`,
+        content: `✅ **Order Kerja berhasil dibuat!**\n\n- Nomor: **${r.woNumber}**\n- Pelanggan: **${r.customerName}**\n- Kendaraan: **${r.plateNumber}**\n- Layanan: **${r.servicesCount} item**\n- Estimasi: **${fmt(r.total)}**\n- Cabang: **${r.branchName}**\n- Status: **Register**\n\nBuka menu Servis Job untuk menambah layanan atau mulai dikerjakan.`,
       }]);
     } catch (e: any) {
       setMessages(h => [...h, { role: 'assistant', content: `⚠️ Gagal membuat WO: ${e.message}`, error: true, time: now() }]);
@@ -1387,7 +1387,7 @@ ${buildSmartContext(userMsgText)}`;
     { label: 'Cek Kendaraan', icon: Car, command: 'cek ', direct: false, tone: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
     { label: 'Cek Pelanggan', icon: Users, command: 'cek nama ', direct: false, tone: 'border-violet-500/30 bg-violet-500/10 text-violet-300' },
     { label: 'WO Hari Ini', icon: Wrench, command: 'list wo hari ini', direct: true, tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
-    { label: 'WO Pending', icon: History, command: 'list wo pending', direct: true, tone: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
+    { label: 'WO Register', icon: History, command: 'list wo register', direct: true, tone: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
     { label: 'Stok Menipis', icon: Package, command: 'Barang apa saja yang stoknya menipis?', direct: true, tone: 'border-orange-500/30 bg-orange-500/10 text-orange-300' },
   ];
 

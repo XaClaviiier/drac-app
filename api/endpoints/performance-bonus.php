@@ -27,7 +27,7 @@ function buildBonusCalculation(PDO $pdo, string $period, string $branchId, float
         $attendance = $pdo->prepare("SELECT SUM(status='Hadir') attendance_days,SUM(status='Alpha') absence_days,COALESCE(SUM(late_minutes),0) late_minutes FROM technician_attendance WHERE user_id=? AND branch_id=? AND attendance_date BETWEEN ? AND ?");
         $attendance->execute([$userId,$branchId,$start,$end]);
         $metrics = $attendance->fetch() ?: [];
-        $wo = $pdo->prepare("SELECT COUNT(*) completed_work_orders FROM work_orders WHERE technician_id=? AND branch_id=? AND date BETWEEN ? AND ? AND status IN ('Selesai','Invoiced')");
+        $wo = $pdo->prepare("SELECT COUNT(*) completed_work_orders FROM work_orders WHERE technician_id=? AND branch_id=? AND date BETWEEN ? AND ? AND status='Selesai'");
         $wo->execute([$userId,$branchId,$start,$end]);
         $metrics['completed_work_orders'] = (float)$wo->fetchColumn();
         $revenue = $pdo->prepare("SELECT COALESCE(SUM(p.amount),0) FROM customer_payments p JOIN sales_invoices i ON i.id COLLATE utf8mb4_unicode_ci=p.invoice_id COLLATE utf8mb4_unicode_ci JOIN work_orders w ON w.id COLLATE utf8mb4_unicode_ci=i.wo_id COLLATE utf8mb4_unicode_ci WHERE w.technician_id=? AND p.branch_id=? AND p.date BETWEEN ? AND ?");
@@ -79,7 +79,7 @@ function performancePayload(PDO $pdo, string $period, string $branchId, array $a
     foreach($runRows as &$run){$run['branchId']=$run['branch_id'];$run['branchName']=$run['branch_name'];$run['bonusPool']=(float)$run['bonus_pool'];$run['totalPoints']=(float)$run['total_points'];$run['totalBonus']=(float)$run['total_bonus'];$run['createdByName']=$run['created_by_name'];$run['snapshot']=json_decode($run['snapshot_json'],true);unset($run['snapshot_json']);}unset($run);
 
     $daily=[];
-    $wo=$pdo->prepare("SELECT date,COUNT(*) vehicles,SUM(status IN ('Selesai','Invoiced')) completed,COALESCE(SUM(total),0) wo_value FROM work_orders WHERE date BETWEEN ? AND ? AND (?='ALL' OR branch_id=?) GROUP BY date");$wo->execute([$start,$end,$branchId,$branchId]);
+    $wo=$pdo->prepare("SELECT date,COUNT(*) vehicles,SUM(status='Selesai') completed,COALESCE(SUM(total),0) wo_value FROM work_orders WHERE date BETWEEN ? AND ? AND (?='ALL' OR branch_id=?) GROUP BY date");$wo->execute([$start,$end,$branchId,$branchId]);
     $emptyDay=fn($date)=>['date'=>$date,'vehicles'=>0,'completed'=>0,'woValue'=>0,'invoiceValue'=>0,'paid'=>0,'cashReceived'=>0,'deposited'=>0,'unsubmittedDaily'=>0,'technicians'=>[]];
     foreach($wo->fetchAll() as $row){$daily[$row['date']]=$emptyDay($row['date']);$daily[$row['date']]['vehicles']=(int)$row['vehicles'];$daily[$row['date']]['completed']=(int)$row['completed'];$daily[$row['date']]['woValue']=(float)$row['wo_value'];}
     $invoice=$pdo->prepare("SELECT date,COALESCE(SUM(total),0) invoice_value FROM sales_invoices WHERE date BETWEEN ? AND ? AND (?='ALL' OR branch_id=?) GROUP BY date");$invoice->execute([$start,$end,$branchId,$branchId]);foreach($invoice->fetchAll() as $row){$daily[$row['date']]=$daily[$row['date']]??$emptyDay($row['date']);$daily[$row['date']]['invoiceValue']=(float)$row['invoice_value'];}

@@ -15,7 +15,7 @@ export default function MobileDashboard(){
   const filter=<T extends {branchId:string}>(items:T[])=>items.filter(i=>isAll||i.branchId===currentBranchId);
   const dateNow=new Date(); const today=`${dateNow.getFullYear()}-${String(dateNow.getMonth()+1).padStart(2,'0')}-${String(dateNow.getDate()).padStart(2,'0')}`; const invoices=filter(data.invoices); const workOrders=filter(data.workOrders);
   const todayInvoices=invoices.filter(i=>i.date===today);
-  const orderNew=workOrders.filter(w=>w.status==='Pengecekan').length; const orderProcess=workOrders.filter(w=>w.status==='Proses').length; const orderDone=workOrders.filter(w=>w.status==='Selesai').length;
+  const orderNew=workOrders.filter(w=>w.status==='Register').length; const orderProcess=workOrders.filter(w=>w.status==='Proses').length; const orderDone=workOrders.filter(w=>w.status==='Selesai').length;
   const lowStock=data.items.filter(i=>i.type==='Persediaan'&&i.stock<=0).length;
   const goTransaction=(path:string)=>{if(isAll){setBranchesOpen(true);alert('Pilih cabang terlebih dahulu untuk membuat transaksi.');return}navigate(path)};
   const menus=[
