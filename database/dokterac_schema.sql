@@ -224,6 +224,7 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   `id` VARCHAR(20) NOT NULL,
   `wo_number` VARCHAR(30) NOT NULL,
   `date` DATE NOT NULL,
+  `transaction_time` TIME NOT NULL DEFAULT '00:00:00',
   `backdate_reason` VARCHAR(255),
   `customer_ref_id` VARCHAR(20),
   `customer_id` VARCHAR(50),

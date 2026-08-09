@@ -33,6 +33,8 @@ try {
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) NULL AFTER receipt_description");
     try { $pdo->exec("ALTER TABLE items ADD UNIQUE INDEX IF NOT EXISTS uq_items_barcode (barcode)"); } catch (Throwable $e) {}
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER date");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS transaction_time TIME NOT NULL DEFAULT '00:00:00' AFTER date");
+    $pdo->exec("UPDATE work_orders SET transaction_time=TIME(created_at) WHERE transaction_time='00:00:00' AND created_at IS NOT NULL");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_at DATETIME NULL AFTER approved_at");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_until DATETIME NULL AFTER pending_at");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_reason VARCHAR(255) NULL AFTER pending_until");
@@ -249,6 +251,7 @@ try {
         $r['vehicleRefId'] = $r['vehicle_ref_id'];
         $r['plateNumber'] = $r['plate_number'];
         $r['vehicleInfo'] = $r['vehicle_info'];
+        $r['transactionTime'] = isset($r['transaction_time']) ? substr((string)$r['transaction_time'], 0, 5) : null;
         $r['branchId'] = $r['branch_id'];
         $r['createdBy'] = $r['created_by'] ?? null;
         $r['createdByName'] = $r['created_by_name'] ?? null;

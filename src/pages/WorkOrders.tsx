@@ -30,6 +30,8 @@ const DEFAULT_PENDING_REASONS = [
 ];
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
+const localTimeKey = (date = new Date()) =>
+  `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 const formatAuditTime = (value?: string) => {
   if (!value) return '-';
   const parsed = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
@@ -185,6 +187,7 @@ export default function WorkOrders() {
 
   const [formData, setFormData] = useState({
     date: localDateKey(),
+    transactionTime: localTimeKey(),
     customerRefId: '',
     customerId: '',
     customerName: '',
@@ -542,6 +545,7 @@ export default function WorkOrders() {
   const resetForm = () => {
     setFormData({
       date: localDateKey(),
+      transactionTime: localTimeKey(),
       customerRefId: '',
       customerId: '',
       customerName: '',
@@ -579,6 +583,7 @@ export default function WorkOrders() {
       );
       setFormData({
         date: wo.date,
+        transactionTime: wo.transactionTime?.slice(0, 5) || (wo.createdAt ? localTimeKey(new Date(wo.createdAt.replace(' ', 'T'))) : localTimeKey()),
         customerRefId: wo.customerRefId || '',
         customerId: wo.customerId,
         customerName: wo.customerName,
@@ -831,14 +836,25 @@ export default function WorkOrders() {
 
     const today = localDateKey();
     const transactionDateChanged = editingWO ? formData.date !== editingWO.date : true;
+    const transactionTimeChanged = editingWO
+      ? formData.transactionTime !== (editingWO.transactionTime?.slice(0, 5) || formData.transactionTime)
+      : false;
     if (formData.date > today) {
       window.alert('Tanggal WO tidak boleh melewati hari ini.');
+      return;
+    }
+    if (`${formData.date}T${formData.transactionTime}` > `${today}T${localTimeKey()}`) {
+      window.alert('Tanggal dan waktu WO tidak boleh melewati waktu sekarang.');
       return;
     }
     // Mengubah harga/layanan pada WO lama bukan transaksi tanggal mundur baru.
     // Izin dan alasan hanya diminta ketika tanggal benar-benar diubah, atau saat membuat WO baru.
     if (transactionDateChanged && formData.date < today && !hasPermission('wo:backdate')) {
       window.alert('Anda tidak memiliki hak akses tanggal mundur.');
+      return;
+    }
+    if (transactionTimeChanged && !hasPermission('wo:backdate')) {
+      window.alert('Anda tidak memiliki hak mengubah waktu WO.');
       return;
     }
     if (transactionDateChanged && data.settings.security.requireBackdateReason !== false && formData.date < today && !woBackdateReason.trim()) {
@@ -1586,7 +1602,7 @@ export default function WorkOrders() {
                       <button type="button" onClick={() => setDetailWO(wo)} className="text-left">
                         <span className="block font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span>
                         <span className="mt-0.5 block text-xs text-gray-500">
-                          {wo.date}
+                          {wo.date}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
                           {canViewAllBranches && (isAllBranchDropdown || !activeBranchOnly) && (
                             <> · {data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '')}</>
                           )}
@@ -1690,7 +1706,9 @@ export default function WorkOrders() {
               <button type="button" onClick={() => setDetailWO(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
                 <div className="flex items-start justify-between gap-3">
                   <span className="font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span>
-                  <span className="whitespace-nowrap text-[11px] text-gray-500">{formatBusinessDate(wo.date)}</span>
+                  <span className="whitespace-nowrap text-[11px] text-gray-500">
+                    {formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
+                  </span>
                 </div>
                 <p className="mt-1 truncate text-sm font-semibold text-gray-900">{wo.plateNumber} — {wo.vehicleInfo}</p>
                 <p className="mt-0.5 truncate text-xs text-gray-600">{wo.customerName} — {customerPhoneForWO(wo) || '-'}</p>
@@ -2196,19 +2214,34 @@ export default function WorkOrders() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tanggal <span className="text-red-500">*</span>
+                    Tanggal & Waktu <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
-                    required
-                    max={localDateKey()}
-                    disabled={!woDateUnlocked}
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                  <button type="button" onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(v => !v) : window.alert('Anda tidak memiliki hak Ubah Tanggal WO.')} className="mt-1 text-xs font-semibold text-blue-600">
-                    {woDateUnlocked ? 'Kunci ke hari ini' : 'Buka tanggal mundur'}
+                  <div className="grid grid-cols-[minmax(0,1fr)_130px] gap-2">
+                    <input
+                      type="date"
+                      required
+                      max={localDateKey()}
+                      disabled={!woDateUnlocked}
+                      value={formData.date}
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <input
+                      type="time"
+                      required
+                      disabled={!woDateUnlocked}
+                      value={formData.transactionTime}
+                      onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                      aria-label="Waktu WO"
+                    />
+                  </div>
+                  <button type="button" onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(v => {
+                    const next = !v;
+                    if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
+                    return next;
+                  }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')} className="mt-1 text-xs font-semibold text-blue-600">
+                    {woDateUnlocked ? 'Kunci ke tanggal & waktu sekarang' : 'Buka tanggal/waktu mundur'}
                   </button>
                 </div>
               </div>

@@ -100,6 +100,10 @@ function ensureApiSupportTables(PDO $pdo): void {
     $workOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM work_orders")->fetchAll(), 'Field');
     $continuationAuditColumns = ['continued_at', 'continued_by', 'continued_by_name', 'continued_branch_id'];
     $needsContinuationBackfill = count(array_intersect($continuationAuditColumns, $workOrderColumns)) !== count($continuationAuditColumns);
+    if (!in_array('transaction_time', $workOrderColumns, true)) {
+        $pdo->exec("ALTER TABLE work_orders ADD transaction_time TIME NOT NULL DEFAULT '00:00:00' AFTER date");
+        $pdo->exec("UPDATE work_orders SET transaction_time=TIME(created_at) WHERE transaction_time='00:00:00' AND created_at IS NOT NULL");
+    }
     if (!in_array('created_by', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by VARCHAR(64) NULL AFTER branch_id");
     if (!in_array('created_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by_name VARCHAR(150) NULL AFTER created_by");
     if (!in_array('technician_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_id VARCHAR(64) NULL AFTER created_by_name");

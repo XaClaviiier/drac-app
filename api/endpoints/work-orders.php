@@ -110,6 +110,7 @@ switch ($method) {
             $r['vehicleRefId']            = $r['vehicle_ref_id'];
             $r['plateNumber']             = $r['plate_number'];
             $r['vehicleInfo']             = $r['vehicle_info'];
+            $r['transactionTime']         = isset($r['transaction_time']) ? substr((string)$r['transaction_time'], 0, 5) : null;
             $r['branchId']                = $r['branch_id'];
             $r['createdBy']               = $r['created_by'] ?? null;
             $r['createdByName']           = $r['created_by_name'] ?? null;
@@ -181,9 +182,16 @@ switch ($method) {
             );
             assertNoActiveWorkOrder($pdo, (string)$vehicle['id']);
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
+            $transactionTime = substr((string)($d['transactionTime'] ?? date('H:i')), 0, 5);
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
+            if (!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/', $transactionTime)) {
+                throw new InvalidArgumentException('Waktu WO tidak valid.');
+            }
             if ($transactionDate > date('Y-m-d')) {
                 throw new InvalidArgumentException('Tanggal WO tidak boleh melewati hari ini.');
+            }
+            if ($transactionDate . ' ' . $transactionTime > date('Y-m-d H:i')) {
+                throw new InvalidArgumentException('Tanggal dan waktu WO tidak boleh melewati waktu sekarang.');
             }
             if ($transactionDate < date('Y-m-d')) {
                 requireUserPermission($pdo, 'wo:backdate');
@@ -205,7 +213,7 @@ switch ($method) {
             ]];
             $stmt = $pdo->prepare("
                 INSERT INTO work_orders (
-                    id, wo_number, date, backdate_reason,
+                    id, wo_number, date, transaction_time, backdate_reason,
                     customer_ref_id, customer_id, customer_name,
                     vehicle_ref_id, plate_number, vehicle_info,
                     description, findings, diagnosis_temperature, diagnosis_lp, diagnosis_hp, final_temperature, final_lp, final_hp,
@@ -213,10 +221,10 @@ switch ($method) {
                     status, cancel_reason, status_log, notes, branch_id, created_by, created_by_name, technician_id, technician_name,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
-                $woId, $woNumber, $transactionDate, $backdateReason ?: null,
+                $woId, $woNumber, $transactionDate, $transactionTime, $backdateReason ?: null,
                 $customer['id'], $customer['customer_code'], $customer['name'],
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
@@ -263,7 +271,7 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
-            $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
+            $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,transaction_time,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
             if (!$currentWorkOrder) {
@@ -325,12 +333,23 @@ switch ($method) {
                 throw new InvalidArgumentException('Alasan Lost Sales wajib diisi.');
             }
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
+            $transactionTime = substr((string)($d['transactionTime'] ?? $currentWorkOrder['transaction_time'] ?? date('H:i')), 0, 5);
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
             $dateChanged = $transactionDate !== (string)$currentWorkOrder['date'];
+            $timeChanged = $transactionTime !== substr((string)($currentWorkOrder['transaction_time'] ?? ''), 0, 5);
+            if (!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/', $transactionTime)) {
+                throw new InvalidArgumentException('Waktu WO tidak valid.');
+            }
             if ($transactionDate > date('Y-m-d')) {
                 throw new InvalidArgumentException('Tanggal WO tidak boleh melewati hari ini.');
             }
+            if ($transactionDate . ' ' . $transactionTime > date('Y-m-d H:i')) {
+                throw new InvalidArgumentException('Tanggal dan waktu WO tidak boleh melewati waktu sekarang.');
+            }
             if ($dateChanged && $transactionDate < date('Y-m-d')) {
+                requireUserPermission($pdo, 'wo:backdate');
+            }
+            if ($timeChanged) {
                 requireUserPermission($pdo, 'wo:backdate');
             }
             if (isBackdateReasonRequired($pdo) && $dateChanged && $transactionDate < date('Y-m-d') && $backdateReason === '') {
@@ -370,7 +389,7 @@ switch ($method) {
                 : ($currentWorkOrder['continued_branch_id'] ?? null);
             $stmt = $pdo->prepare("
                 UPDATE work_orders SET
-                    wo_number=?, date=?, backdate_reason=?,
+                    wo_number=?, date=?, transaction_time=?, backdate_reason=?,
                     customer_ref_id=?, customer_id=?, customer_name=?,
                     vehicle_ref_id=?, plate_number=?, vehicle_info=?,
                     description=?, findings=?, diagnosis_temperature=?, diagnosis_lp=?, diagnosis_hp=?, final_temperature=?, final_lp=?, final_hp=?,
@@ -384,7 +403,7 @@ switch ($method) {
                 WHERE id=?
             ");
             $stmt->execute([
-                $currentWorkOrder['wo_number'], $transactionDate, $backdateReason ?: null,
+                $currentWorkOrder['wo_number'], $transactionDate, $transactionTime, $backdateReason ?: null,
                 $customer['id'], $customer['customer_code'], $customer['name'],
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),

@@ -75,6 +75,8 @@ export interface WorkOrder {
   id: string;
   woNumber: string;
   date: string;
+  /** Waktu transaksi operasional yang dipilih pada form (HH:mm). */
+  transactionTime?: string;
   /** Waktu sebenarnya WO dibuat di server. */
   createdAt?: string;
   updatedAt?: string;
