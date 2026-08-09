@@ -63,6 +63,10 @@ interface RegistrationDraft {
   vehicleInfo: string;
 }
 
+type AIVehicleCatalogModel = { id: string; name: string; isActive: boolean; usageCount?: number };
+type AIVehicleCatalogBrand = { id: string; name: string; isActive: boolean; usageCount?: number; models: AIVehicleCatalogModel[] };
+type AIVehicleCatalog = { brands: AIVehicleCatalogBrand[] };
+
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 const aiSessionStorageKey = (userId: string) => `dokterac_ai_session_${userId}`;
 const readAISession = (key: string): AISessionSnapshot | null => {
@@ -1281,6 +1285,101 @@ ${buildSmartContext(userMsgText)}`;
 
     rememberCommand(content);
 
+    // Percakapan master kendaraan diproses lokal agar pemeriksaan dan
+    // penambahan tidak bergantung pada model AI atau berisiko mengarang data.
+    const isVehicleCatalogIntent = /\b(merek|brand|tipe\s+(?:mobil|kendaraan)|type\s+(?:mobil|kendaraan)|master\s+kendaraan)\b/i.test(content)
+      || /\b(?:cek|list|daftar|tambah|konfirmasi tambah)\s+(?:tipe|model)\b/i.test(content);
+    if (isVehicleCatalogIntent) {
+      setInput('');
+      setBusy(true);
+      try {
+        const catalogResponse = await api.get<AIVehicleCatalog>('vehicle-catalog');
+        if (!catalogResponse.success || !catalogResponse.data) throw new Error(catalogResponse.message || 'Master kendaraan tidak dapat dibaca.');
+        const brands = catalogResponse.data.brands;
+        const findBrand = (name: string) => brands.find(brand => brand.name.localeCompare(name.trim(), 'id', { sensitivity: 'base' }) === 0);
+        const reply = (message: string, actions?: ChatMsg['actions']) => {
+          setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: message, actions, time: now() }]);
+        };
+
+        const confirmBrand = content.match(/^konfirmasi\s+tambah\s+merek\s+(.+)$/i);
+        const confirmModel = content.match(/^konfirmasi\s+tambah\s+(?:tipe|model)\s+(.+?)\s+(?:untuk|pada)\s+(?:merek\s+)?(.+)$/i);
+        if (confirmBrand) {
+          const brandName = confirmBrand[1].trim();
+          if (!hasPermission('vehicle:create') && !hasPermission('vehicle:edit')) throw new Error('Akun ini tidak memiliki hak menambah master kendaraan.');
+          const existing = findBrand(brandName);
+          if (existing) reply(`Merek **${existing.name}** sudah tersedia${existing.isActive ? '' : ', tetapi sedang nonaktif'}.`);
+          else {
+            const created = await api.create('vehicle-catalog', { entity: 'brand', name: brandName });
+            if (!created.success) throw new Error(created.message || 'Gagal menambahkan merek.');
+            reply(`Merek **${brandName}** berhasil ditambahkan ke Master Kendaraan.`);
+          }
+          return;
+        }
+        if (confirmModel) {
+          const modelName = confirmModel[1].trim();
+          const brandName = confirmModel[2].trim();
+          if (!hasPermission('vehicle:create') && !hasPermission('vehicle:edit')) throw new Error('Akun ini tidak memiliki hak menambah master kendaraan.');
+          const brand = findBrand(brandName);
+          if (!brand) {
+            reply(`Merek **${brandName}** belum tersedia. Tambahkan mereknya terlebih dahulu.`, [{ label: `Tambah merek ${brandName}`, type: 'command', value: `tambah merek ${brandName}` }]);
+            return;
+          }
+          const existing = brand.models.find(model => model.name.localeCompare(modelName, 'id', { sensitivity: 'base' }) === 0);
+          if (existing) reply(`Tipe **${existing.name}** untuk merek **${brand.name}** sudah tersedia.`);
+          else {
+            const created = await api.create('vehicle-catalog', { entity: 'model', name: modelName, brandId: brand.id });
+            if (!created.success) throw new Error(created.message || 'Gagal menambahkan tipe kendaraan.');
+            reply(`Tipe **${modelName}** berhasil ditambahkan pada merek **${brand.name}**.`);
+          }
+          return;
+        }
+
+        const addBrand = content.match(/^tambah\s+merek\s+(.+)$/i);
+        const addModel = content.match(/^tambah\s+(?:tipe|model)\s+(.+?)\s+(?:untuk|pada)\s+(?:merek\s+)?(.+)$/i);
+        if (addBrand) {
+          const brandName = addBrand[1].trim();
+          const existing = findBrand(brandName);
+          reply(existing
+            ? `Merek **${existing.name}** sudah tersedia dengan **${existing.models.length} tipe**.`
+            : `Merek **${brandName}** belum tersedia. Tekan konfirmasi untuk menambahkannya.`,
+          existing ? undefined : [{ label: `Konfirmasi tambah ${brandName}`, type: 'command', value: `konfirmasi tambah merek ${brandName}` }]);
+          return;
+        }
+        if (addModel) {
+          const modelName = addModel[1].trim();
+          const brandName = addModel[2].trim();
+          const brand = findBrand(brandName);
+          if (!brand) reply(`Merek **${brandName}** belum tersedia. Tambahkan mereknya terlebih dahulu.`, [{ label: `Tambah merek ${brandName}`, type: 'command', value: `tambah merek ${brandName}` }]);
+          else {
+            const existing = brand.models.find(model => model.name.localeCompare(modelName, 'id', { sensitivity: 'base' }) === 0);
+            reply(existing
+              ? `Tipe **${existing.name}** sudah tersedia untuk merek **${brand.name}**.`
+              : `Tipe **${modelName}** belum tersedia untuk **${brand.name}**. Tekan konfirmasi untuk menambahkannya.`,
+            existing ? undefined : [{ label: `Konfirmasi tambah ${modelName}`, type: 'command', value: `konfirmasi tambah tipe ${modelName} untuk ${brand.name}` }]);
+          }
+          return;
+        }
+
+        const brandQuery = content.match(/(?:cek|cari|apakah|tipe|model)(?:\s+merek)?\s+(.+?)(?:\s+ada)?[?]?$/i)?.[1]?.trim();
+        const matchedBrand = brandQuery ? findBrand(brandQuery.replace(/^(merek|brand)\s+/i, '').replace(/\s+ada$/i, '')) : undefined;
+        if (matchedBrand) {
+          const models = [...matchedBrand.models].filter(model => model.isActive).sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0) || a.name.localeCompare(b.name, 'id'));
+          reply(`Merek **${matchedBrand.name}** tersedia dan memiliki **${models.length} tipe aktif**.\n\n${models.length ? models.map(model => `- ${model.name} (${model.usageCount || 0} kendaraan)`).join('\n') : '- Belum ada tipe'}`,
+            hasPermission('vehicle:create') || hasPermission('vehicle:edit') ? [{ label: `Tambah tipe untuk ${matchedBrand.name}`, type: 'command', value: `tambah tipe NAMA TIPE untuk ${matchedBrand.name}` }] : undefined);
+          return;
+        }
+
+        const popularBrands = [...brands].filter(brand => brand.isActive).sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0) || a.name.localeCompare(b.name, 'id'));
+        reply(`**Master Merek Kendaraan (${popularBrands.length})**\n\n${popularBrands.slice(0, 25).map(brand => `- ${brand.name} — ${brand.models.filter(model => model.isActive).length} tipe, ${brand.usageCount || 0} kendaraan`).join('\n')}\n\nUntuk mengecek tipe, ketik: **cek merek Toyota**.\nUntuk menambah: **tambah tipe Avanza untuk Toyota**.`);
+        return;
+      } catch (error: any) {
+        setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: `Gagal memproses Master Kendaraan: ${error.message}`, error: true, time: now() }]);
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
+
     const independentCommand = /^(cek|list)\b/i.test(content);
     if (registrationDraft && independentCommand) setRegistrationDraft(null);
 
@@ -1640,6 +1739,7 @@ ${buildSmartContext(userMsgText)}`;
     { label: 'WO Hari Ini', icon: Wrench, command: 'list wo hari ini', direct: true, tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
     { label: 'WO Register', icon: History, command: 'list wo register', direct: true, tone: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
     { label: 'Stok Menipis', icon: Package, command: 'Barang apa saja yang stoknya menipis?', direct: true, tone: 'border-orange-500/30 bg-orange-500/10 text-orange-300' },
+    { label: 'Master Kendaraan', icon: Database, command: 'list merek kendaraan', direct: true, tone: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' },
   ];
 
   const runFrontAction = (command: string, direct: boolean) => {
