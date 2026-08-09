@@ -13,9 +13,10 @@ const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) ||
 
 export default function SalesInvoice() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber, refreshData, isLoading } = useApp();
+  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<SalesInvoice | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDate, setFilterDate] = useState('');
@@ -380,8 +381,36 @@ export default function SalesInvoice() {
     const requestedSearch = searchParams.get('search');
     if (!requestedSearch) return;
     setSearchTerm(requestedSearch);
-    setSearchParams({}, { replace: true });
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      next.delete('search');
+      return next;
+    }, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const requestedInvoiceId = searchParams.get('view');
+    if (!requestedInvoiceId || !hasLoadedData) return;
+
+    const invoice = data.invoices.find(item => item.id === requestedInvoiceId);
+    const canAccessBranch = !!invoice && (
+      hasPermission('all_branches')
+      || currentUser?.branchId === invoice.branchId
+      || currentUser?.branchIds?.includes(invoice.branchId)
+    );
+
+    if (!invoice || !canAccessBranch) {
+      window.alert('Faktur tidak ditemukan atau Anda tidak memiliki akses ke cabang faktur ini.');
+    } else {
+      setViewingInvoice(invoice);
+    }
+
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      next.delete('view');
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams, hasLoadedData, data.invoices, hasPermission, currentUser]);
 
   const addFormItem = () => {
     const item = data.items.find((entry) => entry.id === formItemToAdd);
@@ -588,7 +617,14 @@ export default function SalesInvoice() {
                   <tr key={invoice.id} className="hover:bg-blue-50/50 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{invoice.date}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
-                      {invoice.invoiceNumber}
+                      <button
+                        type="button"
+                        onClick={() => setViewingInvoice(invoice)}
+                        className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                        title="Buka detail faktur"
+                      >
+                        {invoice.invoiceNumber}
+                      </button>
                       {invoice.woNumber && (
                         <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-medium" title={`Dari ${invoice.woNumber}`}>
                           WO
@@ -683,6 +719,87 @@ export default function SalesInvoice() {
           <span>Total: {filteredInvoices.length > 0 ? filteredInvoices.reduce((s, i) => s + i.total, 0).toLocaleString('id-ID') : 0}</span>
         </div>
       </div>
+
+      {/* Detail faktur: dibuka langsung dari Asisten AI atau nomor faktur pada daftar. */}
+      {viewingInvoice && (() => {
+        const invoice = viewingInvoice;
+        const branchName = data.branches.find(branch => branch.id === invoice.branchId)?.name || '-';
+        const customer = data.customers.find(item => item.id === invoice.customerRefId || item.customerCode === invoice.customerId);
+        const remaining = Math.max(0, invoice.total - invoice.payment);
+        const items = invoice.items || [];
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-0 sm:p-4">
+            <section className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-label={`Detail faktur ${invoice.invoiceNumber}`}>
+              <header className="flex items-start justify-between border-b border-gray-200 bg-gradient-to-r from-blue-700 to-blue-900 px-5 py-4 text-white sm:px-6">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-blue-100">Detail Faktur Penjualan</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-bold">{invoice.invoiceNumber}</h2>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${invoice.status === 'Lunas' ? 'bg-emerald-400/20 text-emerald-100' : 'bg-amber-300/20 text-amber-100'}`}>{invoice.status}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-blue-100">{formatShareDate(invoice.date)} - {branchName}</p>
+                </div>
+                <button type="button" onClick={() => setViewingInvoice(null)} className="rounded-lg p-2 text-blue-100 hover:bg-white/15 hover:text-white" aria-label="Tutup detail faktur">
+                  <X className="h-5 w-5" />
+                </button>
+              </header>
+
+              <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
+                <div className="grid gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 sm:grid-cols-2">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Pelanggan</span>
+                    <p className="font-bold text-gray-900">{invoice.customerName}</p>
+                    <p className="text-sm text-gray-600">{customer?.phone || invoice.customerId}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Kendaraan</span>
+                    <p className="font-semibold text-gray-900">{invoice.vehicleInfo || '-'}</p>
+                    {invoice.woNumber && <p className="text-sm font-medium text-orange-700">Referensi {invoice.woNumber}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="font-bold text-gray-900">Rincian Barang &amp; Jasa</h3>
+                    <span className="text-xs text-gray-500">{items.filter(item => !isPackageMemberItem(item)).length} item</span>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border border-gray-200">
+                    {items.length > 0 ? items.map((item, index) => {
+                      if (isPackageMemberItem(item)) return null;
+                      const members = isPackageHeaderItem(item) ? packageMembersAfter(items, index) : [];
+                      return (
+                        <div key={`${item.id}-${index}`} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900">{item.description || item.name}</p>
+                            <p className="text-xs text-gray-500">{item.code || 'Jasa'} - {item.qty} x Rp {item.price.toLocaleString('id-ID')}</p>
+                            {members.length > 0 && <p className="mt-1 text-xs text-purple-700">Isi paket: {members.map(member => member.name.replace(/^\s*-\s*/, '')).join(' - ')}</p>}
+                          </div>
+                          <strong className="whitespace-nowrap text-gray-900">Rp {(item.qty * item.price).toLocaleString('id-ID')}</strong>
+                        </div>
+                      );
+                    }) : (
+                      <div className="px-4 py-6 text-center text-sm text-gray-500">{invoice.description || 'Tidak ada rincian item.'}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="ml-auto w-full space-y-2 rounded-xl bg-gray-50 p-4 sm:max-w-md">
+                  <div className="flex justify-between text-sm"><span className="text-gray-600">Total</span><strong>Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
+                  <div className="flex justify-between text-sm"><span className="text-gray-600">Dibayar ({invoice.paymentMethod || 'Tunai'})</span><strong className="text-emerald-700">Rp {invoice.payment.toLocaleString('id-ID')}</strong></div>
+                  <div className="flex justify-between border-t border-gray-200 pt-2"><span className="font-semibold text-gray-700">Sisa</span><strong className={remaining > 0 ? 'text-amber-700' : 'text-emerald-700'}>Rp {remaining.toLocaleString('id-ID')}</strong></div>
+                </div>
+              </div>
+
+              <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
+                <button type="button" onClick={() => void copyInvoice(invoice)} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Copy className="h-4 w-4" /> Salin</button>
+                <button type="button" onClick={() => shareInvoiceToWhatsApp(invoice)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><MessageCircle className="h-4 w-4" /> WhatsApp</button>
+                {hasPermission('invoice:edit') && <button type="button" onClick={() => { setViewingInvoice(null); handleOpenModal(invoice); }} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"><Edit className="h-4 w-4" /> Edit</button>}
+                <button type="button" onClick={() => setViewingInvoice(null)} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">Tutup</button>
+              </footer>
+            </section>
+          </div>
+        );
+      })()}
 
       {/* Modal */}
       {showModal && (

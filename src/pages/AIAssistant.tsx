@@ -1364,8 +1364,11 @@ ${buildSmartContext(userMsgText)}`;
           .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
         const activeWO = vehicleWOs.find(wo => ['Register', 'Proses'].includes(wo.status) && !wo.continuedToWoId);
         const latestWO = vehicleWOs[0];
-        const latestInvoiceNumber = latestWO?.invoiceNumber
-          || data.invoices.find(invoice => invoice.id === latestWO?.invoiceId || invoice.woId === latestWO?.id)?.invoiceNumber;
+        const latestInvoice = data.invoices.find(invoice => (
+          invoice.id === latestWO?.invoiceId
+          || invoice.woId === latestWO?.id
+          || (!!latestWO?.invoiceNumber && invoice.invoiceNumber === latestWO.invoiceNumber)
+        ));
 
         if (activeWO) {
           actions.push({ label: `Buka WO Aktif ${activeWO.woNumber}`, type: 'open_workorder', value: activeWO.id });
@@ -1379,8 +1382,8 @@ ${buildSmartContext(userMsgText)}`;
             value: latestWO.id,
           });
         }
-        if (latestInvoiceNumber && hasPermission('invoice:view')) {
-          actions.push({ label: 'Lihat Faktur', type: 'open_invoice', value: latestInvoiceNumber });
+        if (latestInvoice && hasPermission('invoice:view')) {
+          actions.push({ label: 'Lihat Faktur', type: 'open_invoice', value: latestInvoice.id });
         }
         if (vehicleWOs.length > 3) {
           actions.push({ label: 'Riwayat Lengkap', type: 'command', value: `riwayat lengkap ${exactVehicle.plateNumber}` });
@@ -1504,7 +1507,7 @@ ${buildSmartContext(userMsgText)}`;
       return;
     }
     if (action.type === 'open_invoice' && action.value) {
-      window.location.href = `/invoices?search=${encodeURIComponent(action.value)}`;
+      window.location.href = `/invoices?view=${encodeURIComponent(action.value)}`;
       return;
     }
     if (action.type === 'create_wo_vehicle' && action.value) {
