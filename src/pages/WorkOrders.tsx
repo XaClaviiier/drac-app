@@ -2136,24 +2136,24 @@ export default function WorkOrders() {
 
       {/* Data Baru / Edit: subtab penuh pada desktop, modal pada mobile */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-3 lg:pb-3 lg:pt-0">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-2xl lg:max-h-none lg:max-w-none lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
-            <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-0 sm:items-center sm:p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-3 lg:pb-3 lg:pt-0">
+          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl lg:block lg:h-auto lg:max-h-none lg:max-w-none lg:overflow-visible lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
+            <div className="z-30 flex flex-shrink-0 items-start justify-between border-b border-gray-200 bg-white px-4 py-3 sm:rounded-t-xl sm:px-6 sm:py-4 lg:hidden">
+              <div className="min-w-0 pr-3">
+                <h3 className="break-words text-base font-semibold leading-tight text-gray-900 sm:text-lg">
                   {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : serviceEditMode && editingWO ? `EDIT PEKERJAAN ${editingWO.woNumber}` : editingWO ? 'Edit Registrasi WO' : 'Register Baru'}
                 </h3>
-                <p className="text-sm text-gray-500">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : serviceEditMode ? 'Tambah atau ubah layanan sebelum dibuatkan faktur' : 'Registrasi kendaraan masuk tanpa estimasi layanan'}</p>
+                <p className="mt-1 text-xs leading-snug text-gray-500 sm:text-sm">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : serviceEditMode ? 'Tambah atau ubah layanan sebelum dibuatkan faktur' : 'Registrasi kendaraan masuk tanpa estimasi layanan'}</p>
               </div>
               <button
                 onClick={handleCloseModal}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:overflow-visible">
               {/* Blok simpan jika masih Semua Cabang */}
               {currentBranchId === 'ALL' && !editingWO && (
                 <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 flex items-start gap-3">
@@ -2378,7 +2378,7 @@ export default function WorkOrders() {
                         <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                       )}
                       {serviceSearchFocused && serviceSearch.trim() && (
-                        <div className="absolute left-0 right-0 top-full mt-1 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl">
+                        <div className="absolute -left-12 top-full z-50 mt-1 max-h-[min(18rem,42dvh)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto overscroll-contain rounded-lg border border-gray-200 bg-white shadow-2xl sm:left-0 sm:right-0 sm:w-auto sm:max-w-none">
                           {availableServiceItems.filter(item => {
                             const query = serviceSearch.toLowerCase().trim();
                             return item.code.toLowerCase().includes(query) || (item.barcode || '').toLowerCase().includes(query) || item.name.toLowerCase().includes(query) || (item.receiptDescription || '').toLowerCase().includes(query) || item.categoryName.toLowerCase().includes(query);
@@ -2395,15 +2395,16 @@ export default function WorkOrders() {
                                   setServiceSearch('');
                                   setServiceSearchFocused(false);
                                 }}
-                                className={`flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-0 ${added ? 'cursor-not-allowed bg-green-50 opacity-60' : 'hover:bg-blue-50'}`}
+                                className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-gray-100 px-3 py-2.5 text-left last:border-0 ${added ? 'cursor-not-allowed bg-green-50 opacity-60' : 'active:bg-blue-100 hover:bg-blue-50'}`}
                               >
-                                <span className="w-24 flex-shrink-0 font-mono text-xs text-gray-500">{item.code}</span>
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-medium text-gray-900">{item.name}</span>
-                                  <span className="block truncate text-[10px] text-gray-400">{item.categoryName} · {item.type}</span>
+                                  <span className="block truncate text-sm font-semibold text-gray-900">{item.name}</span>
+                                  <span className="block truncate font-mono text-[10px] text-gray-500">{item.code} · {item.categoryName} · {item.type}</span>
                                 </span>
-                                <span className="flex-shrink-0 text-sm font-semibold text-gray-700">Rp {item.sellingPrice.toLocaleString('id-ID')}</span>
-                                {added && <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />}
+                                <span className="inline-flex flex-shrink-0 items-center gap-1.5 text-sm font-semibold text-gray-700">
+                                  Rp {item.sellingPrice.toLocaleString('id-ID')}
+                                  {added && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                                </span>
                               </button>
                             );
                           })}
@@ -2411,8 +2412,8 @@ export default function WorkOrders() {
                       )}
                       </div>
                       {hasPermission('item:create') && (
-                        <button type="button" onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 items-center gap-1 rounded-lg border border-green-300 px-3 text-sm font-medium text-green-700 hover:bg-green-50">
-                          <Plus className="h-4 w-4" /> Baru
+                        <button type="button" onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center gap-1 rounded-lg border border-green-300 text-sm font-medium text-green-700 hover:bg-green-50 sm:w-auto sm:px-3">
+                          <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Baru</span>
                         </button>
                       )}
                     </div>
@@ -2577,7 +2578,87 @@ export default function WorkOrders() {
                 )}
 
                 {formData.services.length > 0 ? (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                  <>
+                  <div className="space-y-2 sm:hidden">
+                    {formData.services.map((service, index) => {
+                      const isGroupHeader = isPackageHeaderService(service);
+                      const isGroupMember = isPackageMemberService(service);
+                      if (isGroupMember) return null;
+                      const packageMembers = isGroupHeader
+                        ? formData.services.slice(index + 1).filter((candidate, memberIndex, following) => (
+                            isPackageMemberService(candidate)
+                            && following.slice(0, memberIndex).every(isPackageMemberService)
+                          ))
+                        : [];
+                      const visibleIndex = formData.services.slice(0, index).filter(candidate => !isPackageMemberService(candidate)).length + 1;
+                      return (
+                        <div key={service.id} className={`rounded-xl border p-3 ${isGroupHeader ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-white'}`}>
+                          <div className="flex items-start gap-2">
+                            <span className="mt-0.5 text-xs text-gray-400">{visibleIndex}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className={`break-words text-sm font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>{service.name}</p>
+                                {isGroupHeader && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-700">Harga Paket</span>}
+                              </div>
+                              {service.code && <p className="font-mono text-[10px] text-gray-400">{service.code}</p>}
+                            </div>
+                            <button type="button" onClick={() => handleRemoveService(service.id)} className="flex-shrink-0 rounded-lg p-1.5 text-red-500 hover:bg-red-100" title="Hapus">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={service.description || ''}
+                            onChange={(event) => handleUpdateService(service.id, 'description', event.target.value)}
+                            placeholder="Keterangan (opsional)"
+                            className="mt-2 w-full border-b border-dashed border-gray-200 bg-transparent py-1 text-xs text-gray-500 outline-none focus:border-blue-500"
+                          />
+                          {packageMembers.length > 0 && (
+                            <div className="mt-2 rounded-lg bg-white/70 px-2.5 py-2 text-[10px] text-slate-600">
+                              <span className="font-semibold text-purple-600">Isi paket: </span>
+                              {packageMembers.map(member => member.name.replace(/^\s*-\s*/, '')).join(' · ')}
+                            </div>
+                          )}
+                          <div className="mt-3 grid grid-cols-[4.25rem_minmax(0,1fr)_auto] items-end gap-2">
+                            <label className="text-[10px] font-semibold uppercase text-gray-500">
+                              Qty
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="1"
+                                value={service.qty}
+                                onChange={(event) => handleUpdateService(service.id, 'qty', parseInt(event.target.value) || 1)}
+                                className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-2 text-center text-sm font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              />
+                            </label>
+                            <label className="text-[10px] font-semibold uppercase text-gray-500">
+                              Harga
+                              <span className="relative mt-1 block">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  value={service.price}
+                                  onChange={(event) => handleUpdateService(service.id, 'price', parseInt(event.target.value) || 0)}
+                                  className={`w-full rounded-lg border py-2 pl-7 pr-2 text-right text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isGroupHeader ? 'border-purple-300 bg-purple-50 font-bold text-purple-700' : service.price === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-300 bg-white'}`}
+                                />
+                              </span>
+                            </label>
+                            <div className="pb-2 text-right">
+                              <p className="text-[9px] font-semibold uppercase text-gray-400">Subtotal</p>
+                              <p className={`whitespace-nowrap text-sm font-bold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>Rp {(service.price * service.qty).toLocaleString('id-ID')}</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
+                      <span className="text-xs font-semibold text-gray-700">TOTAL ESTIMASI</span>
+                      <span className="text-base font-bold text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</span>
+                    </div>
+                  </div>
+                  <div className="hidden overflow-x-auto rounded-xl border border-gray-200 bg-white sm:block">
                     <table className="min-w-[720px] w-full text-sm">
                       <thead className="bg-slate-100 text-xs text-slate-600">
                         <tr>
@@ -2678,6 +2759,7 @@ export default function WorkOrders() {
                       </tfoot>
                     </table>
                   </div>
+                  </>
                 ) : (
                   <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center">
                     <Wrench className="mx-auto mb-1.5 h-7 w-7 text-gray-400" />
@@ -2726,18 +2808,18 @@ export default function WorkOrders() {
               </>}
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="sticky bottom-0 z-30 -mx-4 flex items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] sm:-mx-6 sm:gap-3 sm:px-6 sm:pb-0 sm:pt-4 sm:shadow-none lg:static">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                  className="rounded-lg border border-gray-300 px-3 py-2.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:px-5 sm:text-sm"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   onClick={() => { diagnosisSubmitAction.current = 'save'; }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
                 >
                   <Save className="w-4 h-4" />
                   {diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan Registrasi'}
@@ -2746,7 +2828,7 @@ export default function WorkOrders() {
                   <button
                     type="submit"
                     onClick={() => { diagnosisSubmitAction.current = 'invoice'; }}
-                    className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-green-600/20 transition-colors hover:bg-green-700"
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-green-600/20 transition-colors hover:bg-green-700 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
                   >
                     <CheckCircle2 className="h-4 w-4" />
                     Selesai &amp; Tagihkan

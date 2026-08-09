@@ -314,6 +314,36 @@ export default function AIAssistant() {
     return value.toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length >= 2 && !ignored.has(term));
   };
 
+  const extractVehiclePlateQuery = (userText: string) => {
+    const withoutIntent = userText.trim().replace(/^(?:cek|cari|data|kendaraan|mobil|plat|nomor)\s*/i, '');
+    const possiblePlate = withoutIntent.toUpperCase().match(/\b[A-Z]{1,2}[\s-]*\d{2,4}[\s-]*[A-Z]{1,3}\b/)?.[0];
+    if (possiblePlate) return normalizePlate(possiblePlate);
+
+    const terms = lookupTerms(withoutIntent)
+      .map((term) => normalizePlate(term))
+      .filter((term) => term.length >= 2);
+    return terms[0] || '';
+  };
+
+  const findVehicleSuggestions = (plateQuery: string) => {
+    if (!plateQuery) return [];
+    return data.vehicles
+      .map((item) => {
+        const normalized = normalizePlate(item.plateNumber);
+        let score = 99;
+        if (normalized.startsWith(plateQuery)) score = 0;
+        else if (normalized.includes(plateQuery)) score = 1;
+        else {
+          const distance = editDistance(plateQuery, normalized);
+          if (plateQuery.length >= 5 && distance <= Math.max(2, Math.floor(plateQuery.length * 0.3))) score = 2 + distance;
+        }
+        return { item, score };
+      })
+      .filter((candidate) => candidate.score < 99)
+      .sort((a, b) => a.score - b.score || a.item.plateNumber.localeCompare(b.item.plateNumber))
+      .slice(0, 10);
+  };
+
   const buildVehicleHistoryReply = (userText: string): string | null => {
     const lower = userText.toLowerCase();
     const isHistoryIntent = /(cek|riwayat|history|pemilik|milik siapa|siapa punya|pernah|servis|service|wo terakhir|keluhan sebelumnya)/i.test(lower);
@@ -323,30 +353,16 @@ export default function AIAssistant() {
     const compactText = userText.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const vehicle = data.vehicles.find((item) => compactText.includes(normalizePlate(item.plateNumber)));
     if (!vehicle) {
-      const possiblePlate = userText.toUpperCase().match(/\b[A-Z]{1,2}[\s-]*\d{2,4}[\s-]*[A-Z]{1,3}\b/)?.[0];
-      const terms = lookupTerms(userText).map((term) => normalizePlate(term)).filter((term) => term.length >= 2);
-      const plateQuery = possiblePlate ? normalizePlate(possiblePlate) : (terms[0] || '');
+      const plateQuery = extractVehiclePlateQuery(userText);
       if (!plateQuery) return null;
 
-      const candidates = data.vehicles
-        .map((item) => {
-          const normalized = normalizePlate(item.plateNumber);
-          let score = 99;
-          if (normalized.startsWith(plateQuery)) score = 0;
-          else if (normalized.includes(plateQuery)) score = 1;
-          else {
-            const distance = editDistance(plateQuery, normalized);
-            if (plateQuery.length >= 5 && distance <= Math.max(2, Math.floor(plateQuery.length * 0.3))) score = 2 + distance;
-          }
-          return { item, score };
-        })
-        .filter((candidate) => candidate.score < 99)
-        .sort((a, b) => a.score - b.score || a.item.plateNumber.localeCompare(b.item.plateNumber))
-        .slice(0, 10);
+      const candidates = findVehicleSuggestions(plateQuery);
 
       if (candidates.length > 0) {
         return [
-          `Ditemukan **${candidates.length} kendaraan** yang cocok atau mirip dengan **${plateQuery}**:`,
+          `Plat **${plateQuery}** tidak ditemukan persis.`,
+          '',
+          candidates.length === 1 ? 'Apakah yang dimaksud kendaraan berikut?' : `Ditemukan **${candidates.length} saran nomor plat**:`,
           '',
           ...candidates.map(({ item }, index) => {
             const customer = data.customers.find((entry) => entry.id === item.customerRefId || entry.customerCode === item.customerId);
@@ -357,13 +373,11 @@ export default function AIAssistant() {
             return `${index + 1}. **${item.plateNumber}** — ${[item.brand, item.model].filter(Boolean).join(' ') || '-'}\n   Pemilik: ${customer?.name || item.customerName || '-'} · ${woCount} WO`;
           }),
           '',
-          `Ketik nomor plat lengkap, misalnya **cek ${candidates[0].item.plateNumber}**.`,
+          'Pilih nomor plat di bawah untuk membuka detail kendaraan.',
         ].join('\n');
       }
 
-      return possiblePlate
-        ? `Kendaraan dengan plat **${normalizePlate(possiblePlate)}** tidak ditemukan dalam Register Kendaraan.\n\nPeriksa kembali nomor plat atau daftarkan kendaraan terlebih dahulu.`
-        : null;
+      return `Kendaraan dengan plat **${plateQuery}** tidak ditemukan dalam Register Kendaraan.\n\nPeriksa kembali nomor plat atau daftarkan kendaraan terlebih dahulu.`;
     }
 
     const customer = data.customers.find((item) =>
@@ -1388,6 +1402,11 @@ ${buildSmartContext(userMsgText)}`;
         if (vehicleWOs.length > 3) {
           actions.push({ label: 'Riwayat Lengkap', type: 'command', value: `riwayat lengkap ${exactVehicle.plateNumber}` });
         }
+      } else if (vehicleHistoryReply) {
+        const plateQuery = extractVehiclePlateQuery(content);
+        findVehicleSuggestions(plateQuery).forEach(({ item }) => {
+          actions.push({ label: item.plateNumber, type: 'select_vehicle', value: item.plateNumber });
+        });
       } else if (ambiguousCustomers.length > 0) {
         ambiguousCustomers.slice(0, 8).forEach(customer => {
           data.vehicles
