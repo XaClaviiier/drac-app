@@ -1944,7 +1944,11 @@ ${buildSmartContext(userMsgText)}`;
                         <button
                           key={branch.id}
                           type="button"
-                          onClick={() => setPendingBranchId(branch.id)}
+                          onClick={() => {
+                            setPendingBranchId(branch.id);
+                            // Cabang tujuan transaksi harus sama dengan cabang aktif.
+                            setCurrentBranchId(branch.id);
+                          }}
                           className={`rounded-lg border px-3 py-2 text-left font-semibold transition-colors ${
                             pendingBranchId === branch.id
                               ? 'border-cyan-400 bg-cyan-500 text-slate-950'
@@ -1955,7 +1959,13 @@ ${buildSmartContext(userMsgText)}`;
                         </button>
                       ))}
                     </div>
-                    {!pendingBranchId && <p className="mt-2 text-amber-300">Pilih cabang sebelum membuat WO.</p>}
+                    {pendingBranchId ? (
+                      <p className="mt-2 text-cyan-200">
+                        WO akan dicatat di <b>{cabangName(pendingBranchId)}</b>. Cabang ini menjadi cabang aktif transaksi.
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-amber-300">Pilih cabang aktif sebelum membuat WO.</p>
+                    )}
                   </div>
                   <div className="mt-2 rounded bg-slate-800 p-2">
                     {(pendingAction.services || []).map((s: any, i: number) => (

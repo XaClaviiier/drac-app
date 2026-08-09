@@ -392,15 +392,15 @@ export default function SalesInvoice() {
     const requestedInvoiceId = searchParams.get('view');
     if (!requestedInvoiceId || !hasLoadedData) return;
 
-    const invoice = data.invoices.find(item => item.id === requestedInvoiceId);
-    const canAccessBranch = !!invoice && (
-      hasPermission('all_branches')
-      || currentUser?.branchId === invoice.branchId
-      || currentUser?.branchIds?.includes(invoice.branchId)
+    // Backend all-data sudah memfilter faktur berdasarkan hak akses cabang
+    // pengguna. Cabang yang sedang aktif hanya filter daftar/transaksi baru,
+    // bukan pembatas untuk membuka dokumen yang memang boleh dibaca.
+    const invoice = data.invoices.find(item =>
+      item.id === requestedInvoiceId || item.invoiceNumber === requestedInvoiceId
     );
 
-    if (!invoice || !canAccessBranch) {
-      window.alert('Faktur tidak ditemukan atau Anda tidak memiliki akses ke cabang faktur ini.');
+    if (!invoice) {
+      window.alert('Faktur tidak ditemukan atau sudah tidak dapat diakses.');
     } else {
       setViewingInvoice(invoice);
     }
@@ -410,7 +410,7 @@ export default function SalesInvoice() {
       next.delete('view');
       return next;
     }, { replace: true });
-  }, [searchParams, setSearchParams, hasLoadedData, data.invoices, hasPermission, currentUser]);
+  }, [searchParams, setSearchParams, hasLoadedData, data.invoices]);
 
   const addFormItem = () => {
     const item = data.items.find((entry) => entry.id === formItemToAdd);
