@@ -126,7 +126,10 @@ try {
         }
     }
 
-    if ($paymentIds) $pdo->prepare('DELETE FROM customer_payments WHERE id IN (' . maintenancePlaceholders($paymentIds) . ')')->execute($paymentIds);
+    if ($paymentIds) {
+        $pdo->prepare('DELETE FROM customer_payment_audit_logs WHERE payment_id IN (' . maintenancePlaceholders($paymentIds) . ')')->execute($paymentIds);
+        $pdo->prepare('DELETE FROM customer_payments WHERE id IN (' . maintenancePlaceholders($paymentIds) . ')')->execute($paymentIds);
+    }
     if ($invoiceIds) {
         $pdo->prepare('DELETE FROM customer_payment_audit_logs WHERE invoice_id IN (' . maintenancePlaceholders($invoiceIds) . ')')->execute($invoiceIds);
         $pdo->prepare('DELETE FROM sales_invoice_items WHERE invoice_id IN (' . maintenancePlaceholders($invoiceIds) . ')')->execute($invoiceIds);
@@ -149,36 +152,37 @@ try {
         $pdo->prepare('DELETE FROM work_orders WHERE id IN (' . maintenancePlaceholders($woIds) . ')')->execute($woIds);
     }
 
-    // Master hanya dihapus bila tidak lagi dipakai transaksi yang dipertahankan.
+    // Master periode harus benar-benar dihapus. Dokumen historis tetap menyimpan
+    // nama/nomor plat snapshot, tetapi foreign reference dilepas agar tidak yatim.
     $deletedVehicles = 0;
-    foreach ($vehicleIds as $vehicleId) {
-        $ref = $pdo->prepare('SELECT COUNT(*) FROM work_orders WHERE vehicle_ref_id=?');
-        $ref->execute([$vehicleId]);
-        if ((int)$ref->fetchColumn() === 0) {
-            $delete = $pdo->prepare('DELETE FROM vehicles WHERE id=?');
-            $delete->execute([$vehicleId]);
-            $deletedVehicles += $delete->rowCount();
-        }
+    if ($vehicleIds) {
+        $vehiclePlaceholders = maintenancePlaceholders($vehicleIds);
+        $snapshotRows('work_orders', 'work_order_before_vehicle_unlink', "vehicle_ref_id IN ({$vehiclePlaceholders})", $vehicleIds);
+        $pdo->prepare("UPDATE work_orders SET vehicle_ref_id=NULL WHERE vehicle_ref_id IN ({$vehiclePlaceholders})")->execute($vehicleIds);
+        $delete = $pdo->prepare("DELETE FROM vehicles WHERE id IN ({$vehiclePlaceholders})");
+        $delete->execute($vehicleIds);
+        $deletedVehicles = $delete->rowCount();
     }
     $deletedCustomers = 0;
-    foreach ($customerIds as $customerId) {
-        $refs = 0;
-        foreach (['SELECT COUNT(*) FROM work_orders WHERE customer_ref_id=?', 'SELECT COUNT(*) FROM sales_invoices WHERE customer_ref_id=?', 'SELECT COUNT(*) FROM vehicles WHERE customer_id=?'] as $sql) {
-            $ref = $pdo->prepare($sql); $ref->execute([$customerId]); $refs += (int)$ref->fetchColumn();
-        }
-        if ($refs === 0) {
-            $delete = $pdo->prepare('DELETE FROM customers WHERE id=?');
-            $delete->execute([$customerId]);
-            $deletedCustomers += $delete->rowCount();
-        }
+    if ($customerIds) {
+        $customerPlaceholders = maintenancePlaceholders($customerIds);
+        $snapshotRows('work_orders', 'work_order_before_customer_unlink', "customer_ref_id IN ({$customerPlaceholders})", $customerIds);
+        $snapshotRows('sales_invoices', 'sales_invoice_before_customer_unlink', "customer_ref_id IN ({$customerPlaceholders})", $customerIds);
+        $snapshotRows('vehicles', 'vehicle_before_customer_unlink', "customer_id IN ({$customerPlaceholders})", $customerIds);
+        $pdo->prepare("UPDATE work_orders SET customer_ref_id=NULL WHERE customer_ref_id IN ({$customerPlaceholders})")->execute($customerIds);
+        $pdo->prepare("UPDATE sales_invoices SET customer_ref_id=NULL WHERE customer_ref_id IN ({$customerPlaceholders})")->execute($customerIds);
+        $pdo->prepare("UPDATE vehicles SET customer_id=NULL WHERE customer_id IN ({$customerPlaceholders})")->execute($customerIds);
+        $delete = $pdo->prepare("DELETE FROM customers WHERE id IN ({$customerPlaceholders})");
+        $delete->execute($customerIds);
+        $deletedCustomers = $delete->rowCount();
     }
 
     $result = array_merge($preview, [
         'purgeId' => $purgeId,
         'vehiclesDeleted' => $deletedVehicles,
-        'vehiclesSkipped' => count($vehicleIds) - $deletedVehicles,
+        'vehiclesSkipped' => 0,
         'customersDeleted' => $deletedCustomers,
-        'customersSkipped' => count($customerIds) - $deletedCustomers,
+        'customersSkipped' => 0,
     ]);
     $pdo->prepare('INSERT INTO data_purge_runs(id,period_from,period_to,summary_json,created_by,created_by_name) VALUES(?,?,?,?,?,?)')
         ->execute([$purgeId, $from, $to, json_encode($result), $owner['id'] ?? null, $owner['name'] ?? $owner['username'] ?? null]);
