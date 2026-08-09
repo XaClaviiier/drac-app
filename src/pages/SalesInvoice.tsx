@@ -376,6 +376,13 @@ export default function SalesInvoice() {
     setSearchParams({}, { replace: true });
   }, [searchParams, data.workOrders, setSearchParams]);
 
+  useEffect(() => {
+    const requestedSearch = searchParams.get('search');
+    if (!requestedSearch) return;
+    setSearchTerm(requestedSearch);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const addFormItem = () => {
     const item = data.items.find((entry) => entry.id === formItemToAdd);
     if (!item) return;

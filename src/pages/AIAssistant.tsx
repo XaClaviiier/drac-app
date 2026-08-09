@@ -21,7 +21,7 @@ interface ChatMsg {
   error?: boolean;
   time: string;
   action?: { type: string; payload: any };
-  actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'create_wo_vehicle' | 'open_workorders'; value?: string }>;
+  actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'create_wo_vehicle' | 'open_workorders' | 'open_workorder' | 'open_invoice'; value?: string }>;
   shareText?: string;
 }
 
@@ -313,62 +313,56 @@ export default function AIAssistant() {
     const activeWO = visibleWOs.find((wo) =>
       ['Register', 'Proses'].includes(wo.status) && !wo.continuedToWoId
     );
-    const latestClosedWO = visibleWOs.find((wo) => wo.status === 'Closed' && !wo.continuedToWoId);
+    const latestClosedWO = visibleWOs[0]?.status === 'Closed' && !visibleWOs[0].continuedToWoId ? visibleWOs[0] : undefined;
     const showAll = /(semua|seluruh|lengkap)/i.test(lower);
-    const listedWOs = showAll ? visibleWOs : visibleWOs.slice(0, 5);
-
+    const listedWOs = showAll ? visibleWOs : visibleWOs.slice(0, 3);
+    const vehicleName = [vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ') || '-';
+    const ownerName = customer?.name || vehicle.customerName || '-';
+    const ownerPhone = customer?.phone || vehicle.phone || '-';
     const lines = [
-      `**Kendaraan ditemukan**`,
-      ``,
-      `- Plat: **${vehicle.plateNumber}**`,
-      `- Pemilik: **${customer?.name || vehicle.customerName || '-'}**`,
-      `- Telepon: ${customer?.phone || vehicle.phone || '-'}`,
-      `- Kendaraan: ${[vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ') || '-'}`,
-      `- Warna: ${vehicle.color || '-'}`,
-      ``,
-      `**Riwayat servis: ${visibleWOs.length} WO yang dapat Anda akses**`,
+      `🚗 **${vehicle.plateNumber}**`,
+      `${vehicleName} • ${vehicle.color || '-'}`,
+      `👤 **${ownerName}** • ${ownerPhone}`,
     ];
 
     if (activeWO) {
       lines.push(
         '',
-        `⚠️ **WO aktif ditemukan: ${activeWO.woNumber}**`,
-        `Status: **${woStatusLabel(activeWO.status)}** · Cabang: ${cabangName(activeWO.branchId)}`,
-        `Keluhan: ${activeWO.description || '-'}`,
-        '',
-        '**Apakah WO ini mau dilanjutkan?** Gunakan tombol **Lanjutkan WO Aktif**. Jangan membuat WO baru selama WO ini masih aktif.',
+        `⚠️ **WO aktif: ${activeWO.woNumber}**`,
+        `${cabangName(activeWO.branchId)} • **${woStatusLabel(activeWO.status)}**`,
+        'Buka WO aktif ini sebelum membuat WO lain untuk kendaraan yang sama.',
       );
     } else if (latestClosedWO) {
       lines.push(
         '',
         `ℹ️ WO terakhir **${latestClosedWO.woNumber}** berstatus **Lost Sales**.`,
-        'Jika pelanggan kembali, buka detail WO lalu pilih **Tindak Lanjut**. Masalah sama memakai WO lama; masalah berbeda membuat WO baru.',
+        'Masalah yang sama dapat dilanjutkan dari WO tersebut; masalah berbeda dibuat sebagai WO baru.',
       );
     }
 
     if (listedWOs.length === 0) {
-      lines.push('', 'Belum ada riwayat WO pada cabang yang dapat Anda akses.');
+      lines.push('', '**Riwayat servis**', 'Belum ada WO pada cabang yang dapat Anda akses.');
       if (allVehicleWOs.length > 0 && !canSeeAllBranches) {
         lines.push('Kendaraan memiliki riwayat di cabang lain, tetapi detailnya dibatasi oleh hak akses Anda.');
       }
       return lines.join('\n');
     }
 
+    lines.push('', showAll ? `**Riwayat servis (${visibleWOs.length})**` : '**Servis terakhir**');
     listedWOs.forEach((wo, index) => {
-      const services = wo.services.map((service) => `${service.name} ×${service.qty}`).join(', ') || 'Belum ada layanan';
+      const services = compactServiceNames(wo.services);
       lines.push(
-        '',
-        `${index + 1}. **${wo.woNumber}** — ${wo.date}`,
-        `   Cabang: ${cabangName(wo.branchId)}`,
-        `   Keluhan: ${wo.description || '-'}`,
-        `   Layanan: ${services}`,
-        `   Status: **${woStatusLabel(wo.status)}**`,
-        `   Total: ${fmt(wo.total)}${wo.invoiceNumber ? ` · Faktur ${wo.invoiceNumber}` : ''}`,
+        index === 0 ? '' : '────────',
+        `**${wo.woNumber}** • ${formatHistoryDate(wo.date)}`,
+        `${cabangName(wo.branchId)} • **${woStatusLabel(wo.status)}** • ${fmt(wo.total)}`,
+        `Keluhan: ${wo.description || '-'}`,
+        `Layanan: ${services}`,
+        ...(wo.invoiceNumber ? [`Faktur: **${wo.invoiceNumber}**`] : []),
       );
     });
 
     if (!showAll && visibleWOs.length > listedWOs.length) {
-      lines.push('', `Menampilkan 5 WO terbaru. Ketik **riwayat lengkap ${vehicle.plateNumber}** untuk melihat semuanya.`);
+      lines.push('', `Masih ada ${visibleWOs.length - listedWOs.length} WO lain. Pilih **Riwayat Lengkap** untuk melihat semuanya.`);
     }
     return lines.join('\n');
   };
@@ -409,6 +403,34 @@ export default function AIAssistant() {
       fuzzySearch = candidates.length > 0;
     }
     return { candidates, fuzzySearch };
+  };
+
+  const formatHistoryDate = (value: string) => {
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const compactServiceNames = (services: WorkOrderService[]) => {
+    const packageMemberCounts = new Map<string, number>();
+    services.forEach((service) => {
+      const packageName = service.description?.match(/^Isi dari paket:\s*(.+)$/i)?.[1]?.trim();
+      if (!packageName) return;
+      const key = packageName.replace(/^\[PAKET\]\s*/i, '').trim().toUpperCase();
+      packageMemberCounts.set(key, (packageMemberCounts.get(key) || 0) + 1);
+    });
+
+    const roots = services
+      .filter((service) => !/^Isi dari paket:/i.test(service.description || ''))
+      .map((service) => {
+        const name = service.name.replace(/^\[PAKET\]\s*/i, '').trim();
+        const componentCount = packageMemberCounts.get(name.toUpperCase()) || 0;
+        return componentCount > 0 ? `${name} (+${componentCount} komponen paket)` : name;
+      });
+
+    if (roots.length === 0) return 'Belum ada layanan';
+    const shown = roots.slice(0, 3);
+    return `${shown.join(', ')}${roots.length > shown.length ? `, +${roots.length - shown.length} layanan lain` : ''}`;
   };
 
   const buildCustomerLookupReply = (userText: string, lookupResult = findCustomerMatches(userText)): string | null => {
@@ -1180,21 +1202,39 @@ ${buildSmartContext(userMsgText)}`;
       const exactWO = data.workOrders.find(wo => compactContent.includes(normalizePlate(wo.woNumber)));
       const actions: ChatMsg['actions'] = [];
       if (exactVehicle) {
-        actions.push({ label: 'Riwayat WO', type: 'command', value: `riwayat lengkap ${exactVehicle.plateNumber}` });
+        const canSeeAllBranches = hasPermission('all_branches');
+        const allowedBranchIds = new Set(
+          canSeeAllBranches
+            ? data.branches.filter(branch => branch.isActive).map(branch => branch.id)
+            : (currentUser?.branchIds?.length ? currentUser.branchIds : [currentUser?.branchId].filter(Boolean) as string[])
+        );
         const vehicleWOs = data.workOrders
           .filter(wo => (wo.vehicleRefId && wo.vehicleRefId === exactVehicle.id) || normalizePlate(wo.plateNumber) === normalizePlate(exactVehicle.plateNumber))
+          .filter(wo => allowedBranchIds.has(wo.branchId))
           .sort((a, b) => b.date.localeCompare(a.date) || b.woNumber.localeCompare(a.woNumber));
         const activeWO = vehicleWOs.find(wo => ['Register', 'Proses'].includes(wo.status) && !wo.continuedToWoId);
-        const latestClosedWO = vehicleWOs.find(wo => wo.status === 'Closed' && !wo.continuedToWoId);
-        if (activeWO && hasPermission('wo:edit')) {
-          actions.push({ label: `Lanjutkan WO Aktif ${activeWO.woNumber}`, type: 'open_workorders' });
-        } else if (latestClosedWO && hasPermission('wo:create')) {
-          actions.push({ label: 'Buat WO Lanjutan (Lanjut Kembali)', type: 'open_workorders' });
+        const latestWO = vehicleWOs[0];
+        const latestInvoiceNumber = latestWO?.invoiceNumber
+          || data.invoices.find(invoice => invoice.id === latestWO?.invoiceId || invoice.woId === latestWO?.id)?.invoiceNumber;
+
+        if (activeWO) {
+          actions.push({ label: `Buka WO Aktif ${activeWO.woNumber}`, type: 'open_workorder', value: activeWO.id });
         } else if (hasPermission('wo:create')) {
-          actions.push({ label: 'Buat WO Baru', type: 'create_wo_vehicle', value: exactVehicle.id });
+          actions.push({ label: '+ Buat WO Baru', type: 'create_wo_vehicle', value: exactVehicle.id });
         }
-        const owner = data.customers.find(customer => customer.id === exactVehicle.customerRefId || customer.customerCode === exactVehicle.customerId);
-        if (owner) actions.push({ label: 'Data Pemilik', type: 'command', value: `cek ${owner.customerCode}` });
+        if (latestWO && latestWO.id !== activeWO?.id) {
+          actions.push({
+            label: latestWO.status === 'Closed' ? 'Buka Lost Sales' : 'Buka WO Terakhir',
+            type: 'open_workorder',
+            value: latestWO.id,
+          });
+        }
+        if (latestInvoiceNumber && hasPermission('invoice:view')) {
+          actions.push({ label: 'Lihat Faktur', type: 'open_invoice', value: latestInvoiceNumber });
+        }
+        if (vehicleWOs.length > 3) {
+          actions.push({ label: 'Riwayat Lengkap', type: 'command', value: `riwayat lengkap ${exactVehicle.plateNumber}` });
+        }
       } else if (ambiguousCustomers.length > 0) {
         ambiguousCustomers.slice(0, 8).forEach(customer => {
           data.vehicles
@@ -1299,6 +1339,14 @@ ${buildSmartContext(userMsgText)}`;
     }
     if (action.type === 'open_workorders') {
       window.location.href = '/workorders';
+      return;
+    }
+    if (action.type === 'open_workorder' && action.value) {
+      window.location.href = `/workorders?view=${encodeURIComponent(action.value)}`;
+      return;
+    }
+    if (action.type === 'open_invoice' && action.value) {
+      window.location.href = `/invoices?search=${encodeURIComponent(action.value)}`;
       return;
     }
     if (action.type === 'create_wo_vehicle' && action.value) {
@@ -1589,14 +1637,30 @@ ${buildSmartContext(userMsgText)}`;
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {msg.actions.map((action, actionIndex) => {
                         const isVehicleChoice = action.type === 'select_vehicle';
+                        const isCreateWO = action.type === 'create_wo_vehicle';
+                        const isInvoice = action.type === 'open_invoice';
+                        const isOpenWO = action.type === 'open_workorder' || action.type === 'open_workorders';
+                        const actionClass = isVehicleChoice
+                          ? 'border-blue-300 bg-blue-600 text-white shadow-sm hover:bg-blue-500'
+                          : isCreateWO
+                            ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30'
+                            : isInvoice
+                              ? 'border-green-400/70 bg-green-500/20 text-green-100 hover:bg-green-500/30'
+                              : isOpenWO
+                                ? 'border-blue-400/70 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30'
+                                : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20';
                         return (
                           <button
                             key={`${action.label}-${actionIndex}`}
                             type="button"
                             onClick={() => handleMessageAction(action)}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${isVehicleChoice ? 'border-blue-300 bg-blue-600 text-white shadow-sm hover:bg-blue-500' : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'}`}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${actionClass}`}
                           >
                             {isVehicleChoice && <Car className="h-3.5 w-3.5" />}
+                            {isCreateWO && <Wrench className="h-3.5 w-3.5" />}
+                            {isOpenWO && <ExternalLink className="h-3.5 w-3.5" />}
+                            {isInvoice && <ExternalLink className="h-3.5 w-3.5" />}
+                            {action.type === 'command' && <History className="h-3.5 w-3.5" />}
                             {action.label}
                           </button>
                         );
