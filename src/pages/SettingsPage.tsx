@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2, MapPin, Hash, ShieldCheck, Bot, Save, KeyRound,
-  CheckCircle2, AlertTriangle, BookOpenCheck, ClipboardCheck, Wrench, FileText, WalletCards,
+  CheckCircle2, AlertTriangle, BookOpenCheck, ClipboardCheck, Wrench, FileText, WalletCards, Database, Trash2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 
-type Tab = 'company' | 'branches' | 'documents' | 'security' | 'ai' | 'guide';
+type Tab = 'company' | 'branches' | 'documents' | 'security' | 'ai' | 'guide' | 'maintenance';
 
 const tabs = [
   { id: 'company' as const, label: 'Profil Perusahaan', icon: Building2 },
@@ -16,6 +16,7 @@ const tabs = [
   { id: 'security' as const, label: 'Keamanan', icon: ShieldCheck },
   { id: 'ai' as const, label: 'Integrasi AI', icon: Bot },
   { id: 'guide' as const, label: 'Panduan Sistem', icon: BookOpenCheck },
+  { id: 'maintenance' as const, label: 'Pemeliharaan Data', icon: Database },
 ];
 
 const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
@@ -35,6 +36,12 @@ export default function SettingsPage() {
   const [cashAccounts, setCashAccounts] = useState<any[]>([]);
   const [ledgerAccounts, setLedgerAccounts] = useState<any[]>([]);
   const [branchAccountSettings, setBranchAccountSettings] = useState<any[]>([]);
+  const [maintenanceFrom, setMaintenanceFrom] = useState('2026-08-01');
+  const [maintenanceTo, setMaintenanceTo] = useState('2026-08-31');
+  const [maintenancePreview, setMaintenancePreview] = useState<any>(null);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+  const [maintenanceConfirmation, setMaintenanceConfirmation] = useState('');
+  const [maintenanceResult, setMaintenanceResult] = useState<any>(null);
   const canEdit = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator');
 
   useEffect(() => {
@@ -114,6 +121,35 @@ export default function SettingsPage() {
       return [...prev, { branchId, [key]: value || null }];
     });
   };
+  const previewMaintenance = async () => {
+    setMaintenanceLoading(true);
+    setMaintenanceResult(null);
+    try {
+      const result = await api.previewDataMaintenance(maintenanceFrom, maintenanceTo);
+      if (!result.success) throw new Error(result.message || 'Gagal memeriksa data');
+      setMaintenancePreview(result.data);
+    } catch (error: any) {
+      window.alert(error?.message || 'Gagal memeriksa data');
+    } finally {
+      setMaintenanceLoading(false);
+    }
+  };
+  const purgeMaintenance = async () => {
+    if (maintenanceConfirmation !== 'HAPUS DATA') return;
+    if (!window.confirm(`Hapus permanen semua transaksi dan master terkait periode ${maintenanceFrom} sampai ${maintenanceTo}? Snapshot pemulihan akan disimpan.`)) return;
+    setMaintenanceLoading(true);
+    try {
+      const result = await api.purgeDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceConfirmation);
+      if (!result.success) throw new Error(result.message || 'Gagal menghapus data');
+      setMaintenanceResult(result.data);
+      setMaintenancePreview(null);
+      setMaintenanceConfirmation('');
+    } catch (error: any) {
+      window.alert(error?.message || 'Gagal menghapus data');
+    } finally {
+      setMaintenanceLoading(false);
+    }
+  };
 
   if (!canEdit) {
     return (
@@ -135,7 +171,7 @@ export default function SettingsPage() {
 
       <div className="space-y-0">
         <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm">
-          {tabs.map(item => {
+          {tabs.filter(item => item.id !== 'maintenance' || currentUser?.isOwner).map(item => {
             const Icon = item.icon;
             return (
               <button
@@ -279,11 +315,55 @@ export default function SettingsPage() {
 
           {tab === 'guide' && <SystemGuide />}
 
-          {tab !== 'guide' && <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+          {tab === 'maintenance' && currentUser?.isOwner && (
+            <div className="space-y-4 rounded-md border border-red-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-3 border-b border-red-100 pb-4">
+                <span className="rounded-xl bg-red-100 p-3 text-red-700"><Database className="h-7 w-7" /></span>
+                <div><h2 className="text-xl font-bold text-gray-900">Pemeliharaan Data Transaksi</h2><p className="mt-1 text-sm text-gray-500">Khusus Owner. Sistem membuat snapshot sebelum penghapusan dan menjaga data di luar periode tetap utuh.</p></div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className={labelClass}><span>Dari tanggal</span><input type="date" className={inputClass} value={maintenanceFrom} onChange={event => { setMaintenanceFrom(event.target.value); setMaintenancePreview(null); }} /></label>
+                <label className={labelClass}><span>Sampai tanggal</span><input type="date" className={inputClass} value={maintenanceTo} onChange={event => { setMaintenanceTo(event.target.value); setMaintenancePreview(null); }} /></label>
+              </div>
+              <button type="button" onClick={previewMaintenance} disabled={maintenanceLoading} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{maintenanceLoading ? 'Memeriksa...' : 'Periksa Data Periode'}</button>
+
+              {maintenancePreview && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <h3 className="font-bold text-amber-900">Data yang akan dihapus</h3>
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {[
+                      ['Order Kerja', maintenancePreview.workOrders], ['Layanan WO', maintenancePreview.workOrderServices],
+                      ['Invoice', maintenancePreview.invoices], ['Detail Invoice', maintenancePreview.invoiceItems],
+                      ['Pembayaran', maintenancePreview.payments], ['Kendaraan', maintenancePreview.vehicles],
+                      ['Pelanggan', maintenancePreview.customers],
+                    ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-amber-200 bg-white p-3"><p className="text-xs text-gray-500">{label}</p><p className="text-2xl font-bold text-gray-900">{value}</p></div>)}
+                  </div>
+                  <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+                    <p className="text-sm font-semibold text-red-800">Ketik HAPUS DATA untuk mengaktifkan tombol penghapusan.</p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <input className={`${inputClass} font-mono font-bold uppercase`} value={maintenanceConfirmation} onChange={event => setMaintenanceConfirmation(event.target.value.toUpperCase())} placeholder="HAPUS DATA" />
+                      <button type="button" onClick={purgeMaintenance} disabled={maintenanceLoading || maintenanceConfirmation !== 'HAPUS DATA'} className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Trash2 className="h-4 w-4" /> Hapus Data Periode</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {maintenanceResult && (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900">
+                  <h3 className="flex items-center gap-2 font-bold"><CheckCircle2 className="h-5 w-5" /> Penghapusan selesai</h3>
+                  <p className="mt-1 text-sm">ID snapshot: <code className="font-bold">{maintenanceResult.purgeId}</code></p>
+                  <p className="mt-2 text-sm">Dihapus: {maintenanceResult.workOrders} WO, {maintenanceResult.invoices} invoice, {maintenanceResult.payments} pembayaran, {maintenanceResult.vehiclesDeleted} kendaraan, dan {maintenanceResult.customersDeleted} pelanggan.</p>
+                  {(maintenanceResult.vehiclesSkipped > 0 || maintenanceResult.customersSkipped > 0) && <p className="mt-2 text-xs text-amber-700">Beberapa master dilewati karena masih dipakai transaksi di luar periode: {maintenanceResult.vehiclesSkipped} kendaraan, {maintenanceResult.customersSkipped} pelanggan.</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab !== 'guide' && tab !== 'maintenance' && <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
             <Save className="h-12 w-12" />
           </button>}
 
-          {tab !== 'guide' && <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
+          {tab !== 'guide' && tab !== 'maintenance' && <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
             <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <Save className="h-4 w-4" /> {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>

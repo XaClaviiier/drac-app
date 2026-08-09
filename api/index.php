@@ -158,6 +158,9 @@ try {
         case 'performance-bonus':
             require 'endpoints/performance-bonus.php';
             break;
+        case 'data-maintenance':
+            require 'endpoints/data-maintenance.php';
+            break;
 
         // ----- GOODS RECEIPTS -----
         case 'goods-receipts':

@@ -84,6 +84,12 @@ export const api = {
     request('/ai-settings', { method: 'PUT', body: JSON.stringify({ apiKey, model }) }),
   aiChat: (messages: Array<{ role: string; content: string }>) =>
     request('/ai-chat', { method: 'POST', body: JSON.stringify({ messages }) }),
+  previewDataMaintenance: (from: string, to: string) =>
+    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { method: 'GET' }),
+  purgeDataMaintenance: (from: string, to: string, confirmation: string) =>
+    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+      method: 'POST', body: JSON.stringify({ confirmation }),
+    }),
 
   // ========== GENERIC CRUD ==========
   get: <T = any>(resource: string) => request<T>(`/${resource}`, { method: 'GET' }),
