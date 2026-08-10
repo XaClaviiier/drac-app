@@ -209,8 +209,14 @@ switch ($method) {
             elseif ($entity === 'model') $pdo->prepare("INSERT INTO vehicle_models(id,brand_id,name,is_active,sort_order) SELECT ?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_models WHERE brand_id=?")->execute([$newId,$d['brandId'] ?? '',$name,$d['brandId'] ?? '']);
             elseif ($entity === 'generation') {
                 $modelId=(string)($d['modelId']??'');
+                $yearFrom = !empty($d['yearFrom']) ? (int)$d['yearFrom'] : null;
+                $yearTo = !empty($d['yearTo']) ? (int)$d['yearTo'] : null;
+                if ($modelId === '') respondError('Model kendaraan wajib dipilih', 422);
+                if ($yearFrom && ($yearFrom < 1900 || $yearFrom > (int)date('Y') + 2)) respondError('Tahun awal tidak valid', 422);
+                if ($yearTo && ($yearTo < 1900 || $yearTo > (int)date('Y') + 2)) respondError('Tahun akhir tidak valid', 422);
+                if ($yearFrom && $yearTo && $yearTo < $yearFrom) respondError('Tahun akhir tidak boleh lebih kecil dari tahun awal', 422);
                 $pdo->prepare("INSERT INTO vehicle_generations(id,model_id,name,aliases,year_from,year_to,is_active,sort_order) SELECT ?,?,?,?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_generations WHERE model_id=?")
-                    ->execute([$newId,$modelId,$name,trim((string)($d['aliases']??'')),$d['yearFrom']?:null,$d['yearTo']?:null,$modelId]);
+                    ->execute([$newId,$modelId,$name,trim((string)($d['aliases']??'')),$yearFrom,$yearTo,$modelId]);
                 $engineInsert=$pdo->prepare("INSERT IGNORE INTO vehicle_generation_engines(generation_id,engine_cc) VALUES(?,?)");
                 foreach (($d['engineCcs']??[]) as $engineCc) if ((int)$engineCc>=600 && (int)$engineCc<=10000) $engineInsert->execute([$newId,(int)$engineCc]);
             }
@@ -296,6 +302,40 @@ switch ($method) {
                 respondError('Gagal menyimpan urutan master', 500);
             }
             respondSuccess(null, 'Urutan master kendaraan disimpan');
+        }
+        if ($entity === 'generation') {
+            $name = trim((string)($d['name'] ?? ''));
+            $modelId = trim((string)($d['modelId'] ?? ''));
+            $aliases = trim((string)($d['aliases'] ?? ''));
+            $yearFrom = !empty($d['yearFrom']) ? (int)$d['yearFrom'] : null;
+            $yearTo = !empty($d['yearTo']) ? (int)$d['yearTo'] : null;
+            $active = !empty($d['isActive']) ? 1 : 0;
+            if ($name === '' || $modelId === '') respondError('Model dan nama generasi wajib diisi', 422);
+            if ($yearFrom && ($yearFrom < 1900 || $yearFrom > (int)date('Y') + 2)) respondError('Tahun awal tidak valid', 422);
+            if ($yearTo && ($yearTo < 1900 || $yearTo > (int)date('Y') + 2)) respondError('Tahun akhir tidak valid', 422);
+            if ($yearFrom && $yearTo && $yearTo < $yearFrom) respondError('Tahun akhir tidak boleh lebih kecil dari tahun awal', 422);
+            $oldStmt = $pdo->prepare("SELECT name,is_active FROM vehicle_generations WHERE id=?");
+            $oldStmt->execute([$id]); $old = $oldStmt->fetch();
+            if (!$old) respondError('Generasi kendaraan tidak ditemukan', 404);
+            if ((int)$old['is_active'] !== $active) requireVehicleCatalogDeactivator($pdo, $catalogUser);
+            $engineCcs = array_values(array_unique(array_filter(array_map('intval', is_array($d['engineCcs'] ?? null) ? $d['engineCcs'] : []), fn($cc) => $cc >= 600 && $cc <= 10000)));
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare("UPDATE vehicle_generations SET model_id=?,name=?,aliases=?,year_from=?,year_to=?,is_active=? WHERE id=?")
+                    ->execute([$modelId,$name,$aliases,$yearFrom,$yearTo,$active,$id]);
+                $pdo->prepare("DELETE FROM vehicle_generation_engines WHERE generation_id=?")->execute([$id]);
+                $engineInsert = $pdo->prepare("INSERT INTO vehicle_generation_engines(generation_id,engine_cc) VALUES(?,?)");
+                foreach ($engineCcs as $engineCc) $engineInsert->execute([$id,$engineCc]);
+                $pdo->prepare("UPDATE vehicles SET generation_name=?,engine_cc=IF(engine_cc IN (" . ($engineCcs ? implode(',',array_fill(0,count($engineCcs),'?')) : 'NULL') . "),engine_cc,NULL) WHERE generation_id=?")
+                    ->execute(array_merge([$name],$engineCcs,[$id]));
+                $auditAction = (int)$old['is_active'] !== $active ? ($active ? 'activate' : 'deactivate') : 'update';
+                logVehicleCatalogChange($pdo,$catalogUser,'generation',$id,$name,$auditAction,'Alias, rentang tahun, dan pilihan mesin diperbarui');
+                $pdo->commit();
+            } catch (PDOException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError('Nama generasi sudah digunakan pada model tersebut', 409);
+            }
+            respondSuccess(null, 'Generasi dan pilihan mesin diperbarui');
         }
         $name = trim((string)($d['name'] ?? '')); $active = !empty($d['isActive']) ? 1 : 0;
         if ($name === '') respondError('Nama wajib diisi', 422);

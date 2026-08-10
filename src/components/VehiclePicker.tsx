@@ -44,7 +44,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     });
   }, []);
 
-  const activeBrands = catalogBrands.length ? catalogBrands.filter(brand => brand.isActive) : vehicleBrands.map(name => ({ id: name, name, isActive: true, models: (vehicleModels[name] || []).map(model => ({ id: model, name: model, isActive: true })) }));
+  const activeBrands: QuickCatalogBrand[] = catalogBrands.length ? catalogBrands.filter(brand => brand.isActive) : vehicleBrands.map(name => ({ id: name, name, isActive: true, models: (vehicleModels[name] || []).map(model => ({ id: model, name: model, isActive: true, generations: [] })) }));
   const activeModels = (activeBrands.find(brand => brand.name === newVehicle.brand)?.models || []).filter(model => model.isActive);
   const activeGenerations = (activeModels.find(model => model.name === newVehicle.model)?.generations || []).filter(generation => generation.isActive);
   const selectedGeneration = activeGenerations.find(generation => generation.id === newVehicle.generationId);
