@@ -103,6 +103,18 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('generation_id', $vehicleColumns, true)) $pdo->exec("ALTER TABLE vehicles ADD generation_id VARCHAR(64) NULL AFTER model_id");
     if (!in_array('generation_name', $vehicleColumns, true)) $pdo->exec("ALTER TABLE vehicles ADD generation_name VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id");
     if (!in_array('engine_cc', $vehicleColumns, true)) $pdo->exec("ALTER TABLE vehicles ADD engine_cc SMALLINT UNSIGNED NULL AFTER generation_name");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_generations (
+        id VARCHAR(64) PRIMARY KEY, model_id VARCHAR(64) NOT NULL, name VARCHAR(100) NOT NULL,
+        aliases VARCHAR(500) NOT NULL DEFAULT '', year_from SMALLINT UNSIGNED NULL,
+        year_to SMALLINT UNSIGNED NULL, is_active TINYINT(1) NOT NULL DEFAULT 1,
+        sort_order INT NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_vehicle_generation(model_id,name), KEY idx_generation_model(model_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_generation_engines (
+        generation_id VARCHAR(64) NOT NULL, engine_cc SMALLINT UNSIGNED NOT NULL,
+        PRIMARY KEY(generation_id,engine_cc)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $workOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM work_orders")->fetchAll(), 'Field');
     $continuationAuditColumns = ['continued_at', 'continued_by', 'continued_by_name', 'continued_branch_id'];
     $needsContinuationBackfill = count(array_intersect($continuationAuditColumns, $workOrderColumns)) !== count($continuationAuditColumns);
