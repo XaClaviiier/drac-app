@@ -136,6 +136,34 @@ function ensureApiSupportTables(PDO $pdo): void {
         $pdo->exec("UPDATE work_orders SET status='Closed' WHERE status='Batal'");
         $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN status ENUM('Register','Proses','Selesai','Closed') DEFAULT 'Register'");
     }
+    $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
+        migration_key VARCHAR(100) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $lostSalesMigrationKey = 'legacy_floating_work_orders_to_lost_sales_20260810_v1';
+    $lostSalesMigrationCheck = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $lostSalesMigrationCheck->execute([$lostSalesMigrationKey]);
+    if ((int)$lostSalesMigrationCheck->fetchColumn() === 0) {
+        $pdo->beginTransaction();
+        try {
+            // Data sebelum hari migrasi yang belum selesai dan belum memiliki
+            // faktur adalah prospek/transaksi mengambang, termasuk Register.
+            $pdo->exec("
+                UPDATE work_orders
+                SET status='Closed',
+                    cancel_reason=COALESCE(NULLIF(cancel_reason,''), 'Migrasi data lama: transaksi tidak dilanjutkan'),
+                    notes=CONCAT_WS(CHAR(10), NULLIF(notes,''), '[MIGRASI] Data lama mengambang diubah menjadi Lost Sales')
+                WHERE date < CURRENT_DATE
+                  AND status IN ('Register','Proses')
+                  AND (invoice_id IS NULL OR invoice_id='')
+                  AND (invoice_number IS NULL OR invoice_number='')
+            ");
+            $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$lostSalesMigrationKey]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
     if ($needsContinuationBackfill) {
         try {
             $pdo->exec("
