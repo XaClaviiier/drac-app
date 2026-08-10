@@ -14,7 +14,22 @@ $resolveVehicleCatalog = static function (PDO $pdo, array $data): array {
     $modelStmt->execute([$brand['id'], (string)($data['modelId'] ?? ''), $modelInput, (string)($data['modelId'] ?? '')]);
     $model = $modelStmt->fetch();
     if (!$model || !(bool)$model['is_active']) throw new InvalidArgumentException('Tipe/model tidak tersedia untuk merek yang dipilih. Tambahkan atau aktifkan tipe terlebih dahulu.');
-    return [$brand, $model];
+    $generation = null; $engineCc = null;
+    if (!empty($data['generationId']) || trim((string)($data['generationName'] ?? '')) !== '') {
+        $generationStmt=$pdo->prepare("SELECT id,name,year_from,year_to,is_active FROM vehicle_generations WHERE model_id=? AND (id=? OR LOWER(TRIM(name))=LOWER(TRIM(?))) LIMIT 1");
+        $generationStmt->execute([$model['id'],(string)($data['generationId']??''),trim((string)($data['generationName']??''))]);
+        $generation=$generationStmt->fetch();
+        if (!$generation || !(bool)$generation['is_active']) throw new InvalidArgumentException('Generasi tidak tersedia untuk tipe yang dipilih.');
+        $engineCc=(int)($data['engineCc']??0) ?: null;
+        if ($engineCc) {
+            $engineStmt=$pdo->prepare("SELECT COUNT(*) FROM vehicle_generation_engines WHERE generation_id=? AND engine_cc=?");
+            $engineStmt->execute([$generation['id'],$engineCc]);
+            if (!(int)$engineStmt->fetchColumn()) throw new InvalidArgumentException('Kapasitas mesin tidak tersedia untuk generasi yang dipilih. Pilih Belum Diketahui atau perbaiki master.');
+        }
+        $year=(int)($data['year']??0);
+        if ($year && ((!empty($generation['year_from']) && $year<(int)$generation['year_from']) || (!empty($generation['year_to']) && $year>(int)$generation['year_to']))) throw new InvalidArgumentException('Tahun kendaraan berada di luar rentang generasi yang dipilih.');
+    }
+    return [$brand, $model, $generation, $engineCc];
 };
 
 switch ($method) {
@@ -24,6 +39,9 @@ switch ($method) {
             $r['plateNumber']        = $r['plate_number'];
             $r['brandId']            = $r['brand_id'] ?? null;
             $r['modelId']            = $r['model_id'] ?? null;
+            $r['generationId']       = $r['generation_id'] ?? null;
+            $r['generationName']     = $r['generation_name'] ?? '';
+            $r['engineCc']           = isset($r['engine_cc']) ? (int)$r['engine_cc'] : null;
             $r['customerRefId']      = $r['customer_id'];
             $r['customerId']         = $r['customer_code'] ?: $r['customer_id'];
             $r['customerName']       = $r['customer_name'];
@@ -43,7 +61,7 @@ switch ($method) {
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
             respondError('Merek, model, dan warna wajib diisi.', 422);
         }
-        try { [$brand, $model] = $resolveVehicleCatalog($pdo, $d); }
+        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); }
         catch (InvalidArgumentException $e) { respondError($e->getMessage(), 422); }
         $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
         $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
@@ -56,10 +74,11 @@ switch ($method) {
         $firstSeenBranchId = (string)($d['firstSeenBranchId'] ?? $branchId);
         requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
-        $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, brand_id, model_id, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, brand_id, model_id, generation_id, generation_name, engine_cc, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $d['id'] ?? generateId(),
             $plate, $brand['name'], $model['name'], $brand['id'], $model['id'],
+            $generation['id']??null,$generation['name']??'',$engineCc,
             $d['year'] ?? 0, $d['color'] ?? '',
             $customer['id'], $customer['name'],
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
@@ -84,7 +103,7 @@ switch ($method) {
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
             respondError('Merek, model, dan warna wajib diisi.', 422);
         }
-        try { [$brand, $model] = $resolveVehicleCatalog($pdo, $d); }
+        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); }
         catch (InvalidArgumentException $e) { respondError($e->getMessage(), 422); }
         $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
         $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
@@ -92,9 +111,10 @@ switch ($method) {
         if (!$customer) respondError('Pelanggan kendaraan tidak ditemukan.', 422);
         $duplicate = findVehicleByNormalizedPlate($pdo, $plate, (string)$id);
         if ($duplicate) respondError('Plat sudah terdaftar atas nama ' . $duplicate['customer_name'] . '.', 409);
-        $stmt = $pdo->prepare("UPDATE vehicles SET plate_number=?, brand=?, model=?, brand_id=?, model_id=?, year=?, color=?, customer_id=?, customer_name=?, customer_code=?, phone=?, address=?, notes=?, branch_id=? WHERE id=?");
+        $stmt = $pdo->prepare("UPDATE vehicles SET plate_number=?, brand=?, model=?, brand_id=?, model_id=?, generation_id=?, generation_name=?, engine_cc=?, year=?, color=?, customer_id=?, customer_name=?, customer_code=?, phone=?, address=?, notes=?, branch_id=? WHERE id=?");
         $stmt->execute([
             $plate, $brand['name'], $model['name'], $brand['id'], $model['id'],
+            $generation['id']??null,$generation['name']??'',$engineCc,
             $d['year'] ?? 0, $d['color'] ?? '',
             $customer['id'], $customer['name'],
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',

@@ -7,7 +7,8 @@ import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../li
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
 
-type CatalogModel = { id: string; name: string; isActive: boolean; brandId: string; sortOrder: number; usageCount: number };
+type CatalogGeneration = { id: string; modelId: string; name: string; aliases: string; yearFrom?: number | null; yearTo?: number | null; engineCcs: number[]; isActive: boolean };
+type CatalogModel = { id: string; name: string; isActive: boolean; brandId: string; sortOrder: number; usageCount: number; generations?: CatalogGeneration[] };
 type CatalogBrand = { id: string; name: string; isActive: boolean; sortOrder: number; usageCount: number; models: CatalogModel[] };
 type CatalogColor = { id: string; name: string; isActive: boolean; sortOrder: number };
 type CatalogAuditLog = { id: string; entity: 'brand' | 'model' | 'color'; entityId?: string; entityName?: string; action: string; detail?: string; userName?: string; createdAt: string };
@@ -48,6 +49,19 @@ export default function VehicleRegister() {
   const [newColor, setNewColor] = useState('');
   const canManageCatalog = hasPermission('vehicle:create') || hasPermission('vehicle:edit');
   const canDeactivateCatalog = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('vehicle:delete'));
+
+  const addGeneration = async (model: CatalogModel) => {
+    const name = window.prompt(`Nama generasi/nama pasar untuk ${model.name}:\nContoh: Avanza Lama, Grand New, Reborn`)?.trim();
+    if (!name) return;
+    const aliases = window.prompt('Alias pencarian, pisahkan koma (opsional):\nContoh: lama, old, gen 1', '')?.trim() || '';
+    const yearFrom = Number(window.prompt('Tahun awal (kosongkan jika belum diketahui):', '') || 0) || null;
+    const yearTo = Number(window.prompt('Tahun akhir (kosongkan jika masih berjalan/belum diketahui):', '') || 0) || null;
+    const engineText = window.prompt('Pilihan mesin, pisahkan koma:\nContoh: 1.3, 1.5 atau 1300, 1500', '') || '';
+    const engineCcs = (engineText.match(/\d+(?:[.,]\d+)?/g) || []).map(value => { const number = Number(value.replace(',', '.')); return number > 0 && number < 20 ? Math.round(number * 1000) : Math.round(number); }).filter(value => value >= 600 && value <= 10000);
+    const response = await api.create('vehicle-catalog', { entity: 'generation', name, modelId: model.id, aliases, yearFrom, yearTo, engineCcs: [...new Set(engineCcs)] });
+    if (!response.success) { window.alert(response.message || 'Gagal menambahkan generasi.'); return; }
+    await loadCatalog();
+  };
 
   const loadCatalog = async () => {
     const response = await api.get('vehicle-catalog');
@@ -115,6 +129,9 @@ export default function VehicleRegister() {
     plateNumber: '',
     brand: '',
     model: '',
+    generationId: '',
+    generationName: '',
+    engineCc: 0,
     year: 0,
     color: '',
     customerRefId: '',
@@ -128,6 +145,9 @@ export default function VehicleRegister() {
     ? (catalog.brands.find(brand => brand.name === formData.brand)?.models || []).filter(model => model.isActive).map(model => model.name)
     : (vehicleModels[formData.brand] || []);
   const catalogColorNames = catalog.colors.length ? catalog.colors.filter(color => color.isActive).map(color => color.name) : vehicleColors;
+  const selectedFormModel = catalog.brands.find(brand => brand.name === formData.brand)?.models.find(model => model.name === formData.model);
+  const availableGenerations = (selectedFormModel?.generations || []).filter(generation => generation.isActive);
+  const selectedGeneration = availableGenerations.find(generation => generation.id === formData.generationId);
   const selectedCatalogBrand = catalog.brands.find(brand => brand.id === selectedBrandId);
 
   const filteredVehicles = useMemo(() => {
@@ -151,6 +171,7 @@ export default function VehicleRegister() {
       plateNumber: '',
       brand: '',
       model: '',
+      generationId: '', generationName: '', engineCc: 0,
       year: 0,
       color: '',
       customerRefId: '',
@@ -174,6 +195,9 @@ export default function VehicleRegister() {
         plateNumber: vehicle.plateNumber,
         brand: vehicle.brand,
         model: vehicle.model,
+        generationId: vehicle.generationId || '',
+        generationName: vehicle.generationName || '',
+        engineCc: vehicle.engineCc || 0,
         year: vehicle.year,
         color: vehicle.color,
         customerRefId: owner?.id || '',
@@ -383,6 +407,7 @@ export default function VehicleRegister() {
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-gray-900">{vehicle.brand}</p>
                       <p className="text-xs text-gray-500">{vehicle.model}</p>
+                      {(vehicle.generationName || vehicle.engineCc) && <p className="text-[11px] font-medium text-cyan-700">{vehicle.generationName || 'Generasi belum diketahui'}{vehicle.engineCc ? ` · ${(vehicle.engineCc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})}L` : ''}</p>}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">{vehicle.year || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{vehicle.color}</td>
@@ -445,7 +470,7 @@ export default function VehicleRegister() {
             <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Riwayat Kendaraan · {detailVehicle.plateNumber}</h3>
-                <p className="text-sm text-gray-500">{detailVehicle.brand} {detailVehicle.model} {detailVehicle.year || ''} · {detailVehicle.color}</p>
+                <p className="text-sm text-gray-500">{detailVehicle.brand} {detailVehicle.model}{detailVehicle.generationName ? ` · ${detailVehicle.generationName}` : ''}{detailVehicle.engineCc ? ` · ${(detailVehicle.engineCc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})}L` : ''} {detailVehicle.year || ''} · {detailVehicle.color}</p>
               </div>
               <button onClick={() => setDetailVehicle(null)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5" /></button>
             </div>
@@ -501,7 +526,7 @@ export default function VehicleRegister() {
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold text-gray-900">Tipe {selectedCatalogBrand ? `— ${selectedCatalogBrand.name}` : ''}</h4>{selectedCatalogBrand && <div className="flex gap-1"><button onClick={() => void reorderCatalog('model', selectedCatalogBrand.models, undefined, undefined, 'usage')} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${catalog.sortModes.modelSortMode === 'usage' ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-300 text-blue-700 hover:bg-blue-50'}`}><ChartNoAxesColumnIncreasing className="h-4 w-4" /> Paling Dipakai</button><button onClick={() => void reorderCatalog('model', selectedCatalogBrand.models, undefined, undefined, 'alphabetical')} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><ArrowDownAZ className="h-4 w-4" /> A–Z</button></div>}</div>
                     <div className="mb-3 flex gap-2"><input disabled={!selectedCatalogBrand} value={newModel} onChange={event => setNewModel(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && selectedCatalogBrand) void createCatalogItem('model', newModel, selectedCatalogBrand.id); }} placeholder="Tipe/model baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100" /><button disabled={!selectedCatalogBrand} onClick={() => selectedCatalogBrand && void createCatalogItem('model', newModel, selectedCatalogBrand.id)} className="rounded-lg bg-blue-600 px-3 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button></div>
                     <div className="space-y-2">
-                      {(selectedCatalogBrand?.models || []).map((model, index, models) => <div key={model.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${model.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{model.name} <span className="ml-1 text-xs text-gray-400">({model.usageCount || 0})</span></span><button disabled={index === 0} onClick={() => void reorderCatalog('model', models, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === models.length - 1} onClick={() => void reorderCatalog('model', models, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('model', model)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void mergeCatalogItem('model', model, models)} title="Gabungkan duplikat" className="p-2 text-violet-600"><Combine className="h-4 w-4" /></button>}{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('model', model)} className={`p-2 ${model.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}
+                      {(selectedCatalogBrand?.models || []).map((model, index, models) => <div key={model.id} className="rounded-lg border border-gray-200 p-2"><div className="flex items-center"><span className={`min-w-0 flex-1 truncate text-sm ${model.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{model.name} <span className="ml-1 text-xs text-gray-400">({model.usageCount || 0})</span></span><button title="Tambah generasi, tahun, dan CC" onClick={() => void addGeneration(model)} className="p-2 text-cyan-700"><GitBranch className="h-4 w-4" /></button><button disabled={index === 0} onClick={() => void reorderCatalog('model', models, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === models.length - 1} onClick={() => void reorderCatalog('model', models, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('model', model)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void mergeCatalogItem('model', model, models)} title="Gabungkan duplikat" className="p-2 text-violet-600"><Combine className="h-4 w-4" /></button>}{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('model', model)} className={`p-2 ${model.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>{(model.generations||[]).length>0&&<div className="mt-1 flex flex-wrap gap-1 pl-1">{(model.generations||[]).map(generation=><span key={generation.id} className="rounded bg-cyan-50 px-2 py-1 text-[10px] text-cyan-800">{generation.name}{generation.engineCcs.length ? ` · ${generation.engineCcs.map(cc=>(cc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})+'L').join('/')}` : ''}</span>)}</div>}</div>)}
                     </div>
                   </section>
                 </div>
@@ -574,7 +599,7 @@ export default function VehicleRegister() {
                     <select
                       required
                       value={formData.brand}
-                      onChange={(e) => setFormData({ ...formData, brand: e.target.value, model: '' })}
+                      onChange={(e) => setFormData({ ...formData, brand: e.target.value, model: '', generationId: '', generationName: '', engineCc: 0 })}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     >
                       <option value="">Pilih merek</option>
@@ -591,7 +616,7 @@ export default function VehicleRegister() {
                     <select
                       required
                       value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, model: e.target.value, generationId: '', generationName: '', engineCc: 0 })}
                       disabled={!formData.brand}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 bg-white"
                     >
@@ -600,6 +625,18 @@ export default function VehicleRegister() {
                       {catalogModelNames.map(model => (
                         <option key={model} value={model}>{model}</option>
                       ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Generasi / Nama Pasar <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                    <select value={formData.generationId} onChange={event => { const generation=availableGenerations.find(item=>item.id===event.target.value); setFormData({...formData,generationId:event.target.value,generationName:generation?.name||'',engineCc:0,year: formData.year && generation && ((generation.yearFrom&&formData.year<generation.yearFrom)||(generation.yearTo&&formData.year>generation.yearTo)) ? 0 : formData.year}); }} disabled={!formData.model} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 disabled:bg-gray-100">
+                      <option value="">Belum diketahui</option>{availableGenerations.map(generation=><option key={generation.id} value={generation.id}>{generation.name}{generation.yearFrom ? ` (${generation.yearFrom}${generation.yearTo ? `–${generation.yearTo}` : '–sekarang'})` : ''}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Kapasitas Mesin <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                    <select value={formData.engineCc} onChange={event=>setFormData({...formData,engineCc:Number(event.target.value)||0})} disabled={!selectedGeneration} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 disabled:bg-gray-100">
+                      <option value={0}>Belum diketahui</option>{(selectedGeneration?.engineCcs||[]).map(cc=><option key={cc} value={cc}>{(cc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})} L / {cc.toLocaleString('id-ID')} cc</option>)}
                     </select>
                   </div>
                   <div>
@@ -612,7 +649,7 @@ export default function VehicleRegister() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     >
                       <option value={0}>Tidak diketahui</option>
-                      {vehicleYears.map(year => <option key={year} value={year}>{year}</option>)}
+                      {vehicleYears.filter(year => !selectedGeneration || ((!selectedGeneration.yearFrom || year >= selectedGeneration.yearFrom) && (!selectedGeneration.yearTo || year <= selectedGeneration.yearTo))).map(year => <option key={year} value={year}>{year}</option>)}
                     </select>
                   </div>
                   <div>

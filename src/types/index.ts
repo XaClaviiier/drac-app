@@ -5,6 +5,9 @@ export interface Vehicle {
   model: string;
   brandId?: string;
   modelId?: string;
+  generationId?: string;
+  generationName?: string;
+  engineCc?: number | null;
   year: number;
   color: string;
   /** Relasi internal ke customers.id */

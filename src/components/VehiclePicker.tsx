@@ -6,7 +6,8 @@ import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../li
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 
-type QuickCatalogModel = { id: string; name: string; isActive: boolean };
+type QuickCatalogGeneration = { id: string; name: string; isActive: boolean; yearFrom?: number | null; yearTo?: number | null; engineCcs: number[] };
+type QuickCatalogModel = { id: string; name: string; isActive: boolean; generations?: QuickCatalogGeneration[] };
 type QuickCatalogBrand = { id: string; name: string; isActive: boolean; models: QuickCatalogModel[] };
 
 interface VehiclePickerProps {
@@ -28,6 +29,9 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     plateNumber: '',
     brand: '',
     model: '',
+    generationId: '',
+    generationName: '',
+    engineCc: 0,
     year: 0,
     color: '',
   });
@@ -42,6 +46,8 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
 
   const activeBrands = catalogBrands.length ? catalogBrands.filter(brand => brand.isActive) : vehicleBrands.map(name => ({ id: name, name, isActive: true, models: (vehicleModels[name] || []).map(model => ({ id: model, name: model, isActive: true })) }));
   const activeModels = (activeBrands.find(brand => brand.name === newVehicle.brand)?.models || []).filter(model => model.isActive);
+  const activeGenerations = (activeModels.find(model => model.name === newVehicle.model)?.generations || []).filter(generation => generation.isActive);
+  const selectedGeneration = activeGenerations.find(generation => generation.id === newVehicle.generationId);
 
   // Kendaraan milik pelanggan yang dipilih
   const customerVehicles = useMemo(() => {
@@ -158,6 +164,9 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       model: newVehicle.model,
       brandId: catalogBrand.id,
       modelId: catalogModel.id,
+      generationId: selectedGeneration?.id,
+      generationName: selectedGeneration?.name || '',
+      engineCc: newVehicle.engineCc || null,
       year: newVehicle.year || 0,
       color: newVehicle.color,
       customerRefId: customer.id,
@@ -179,7 +188,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       onNewVehicleCreated?.(vehicle);
       setShowNewForm(false);
       setOpen(false);
-      setNewVehicle({ plateNumber: '', brand: '', model: '', year: 0, color: '' });
+      setNewVehicle({ plateNumber: '', brand: '', model: '', generationId: '', generationName: '', engineCc: 0, year: 0, color: '' });
     } catch (error: any) {
       window.alert(`Gagal menyimpan kendaraan: ${error?.message || 'terjadi kesalahan'}`);
     }
@@ -346,7 +355,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={newVehicle.brand}
-                  onChange={(e) => setNewVehicle({ ...newVehicle, brand: e.target.value, model: '' })}
+                  onChange={(e) => setNewVehicle({ ...newVehicle, brand: e.target.value, model: '', generationId: '', generationName: '', engineCc: 0 })}
                   className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
                 >
                   <option value="">Merek *</option>
@@ -354,13 +363,17 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
                 </select>
                 <select
                   value={newVehicle.model}
-                  onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })}
+                  onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value, generationId: '', generationName: '', engineCc: 0 })}
                   disabled={!newVehicle.brand}
                   className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
                 >
                   <option value="">{newVehicle.brand ? 'Tipe/model *' : 'Pilih merek dahulu'}</option>
                   {activeModels.map((model) => <option key={model.id} value={model.name}>{model.name}</option>)}
                 </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <select value={newVehicle.generationId} onChange={event=>{const generation=activeGenerations.find(item=>item.id===event.target.value);setNewVehicle({...newVehicle,generationId:event.target.value,generationName:generation?.name||'',engineCc:0});}} disabled={!newVehicle.model} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm disabled:bg-gray-100"><option value="">Generasi belum diketahui</option>{activeGenerations.map(generation=><option key={generation.id} value={generation.id}>{generation.name}</option>)}</select>
+                <select value={newVehicle.engineCc} onChange={event=>setNewVehicle({...newVehicle,engineCc:Number(event.target.value)||0})} disabled={!selectedGeneration} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm disabled:bg-gray-100"><option value={0}>CC belum diketahui</option>{(selectedGeneration?.engineCcs||[]).map(cc=><option key={cc} value={cc}>{(cc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})}L / {cc}cc</option>)}</select>
               </div>
 
               {/* Warna + Tahun */}
@@ -381,7 +394,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
                   className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
                 >
                   <option value={0}>Tahun (opsional)</option>
-                  {vehicleYears.map((year) => <option key={year} value={year}>{year}</option>)}
+                  {vehicleYears.filter(year => !selectedGeneration || ((!selectedGeneration.yearFrom || year >= selectedGeneration.yearFrom) && (!selectedGeneration.yearTo || year <= selectedGeneration.yearTo))).map((year) => <option key={year} value={year}>{year}</option>)}
                 </select>
               </div>
 

@@ -148,6 +148,9 @@ try {
         $r['plateNumber']       = $r['plate_number'];
         $r['brandId']           = $r['brand_id'] ?? null;
         $r['modelId']           = $r['model_id'] ?? null;
+        $r['generationId']      = $r['generation_id'] ?? null;
+        $r['generationName']    = $r['generation_name'] ?? '';
+        $r['engineCc']          = isset($r['engine_cc']) ? (int)$r['engine_cc'] : null;
         $r['customerRefId']     = $r['customer_id'];
         $r['customerId']        = $r['customer_code'] ?: $r['customer_id'];
         $r['customerName']      = $r['customer_name'];

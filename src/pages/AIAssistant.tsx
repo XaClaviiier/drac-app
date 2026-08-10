@@ -1109,13 +1109,35 @@ ${buildSmartContext(userMsgText)}`;
     );
     if (!vehicle && a.plateNumber) {
       const parts = String(a.vehicleInfo || '').split(/[\s-]+/);
+      const vehicleText = String(a.vehicleInfo || '').trim();
+      const normalizedVehicleText = vehicleText.toLowerCase();
+      const catalogResponse = await api.get('vehicle-catalog');
+      const catalogBrands: any[] = catalogResponse.success ? (catalogResponse.data?.brands || []) : [];
+      let catalogMatch: { brand?: any; model?: any; generation?: any } = {};
+      for (const brand of catalogBrands) {
+        for (const model of (brand.models || [])) {
+          const modelMatched = normalizedVehicleText.includes(String(model.name).toLowerCase());
+          const generation = (model.generations || []).find((item: any) => [item.name, ...String(item.aliases || '').split(',')].some((alias: string) => alias.trim() && normalizedVehicleText.includes(alias.trim().toLowerCase())));
+          if (generation || modelMatched) { catalogMatch = { brand, model, generation }; break; }
+        }
+        if (catalogMatch.model) break;
+      }
+      const engineToken = vehicleText.match(/(?:^|\s)(\d{1,2}[.,]\d)(?=\s|$)|(?:^|\s)(\d{3,4})\s*cc\b/i);
+      const engineNumber = engineToken ? Number(String(engineToken[1] || engineToken[2]).replace(',', '.')) : 0;
+      const engineCc = engineNumber > 0 && engineNumber < 20 ? Math.round(engineNumber * 1000) : Math.round(engineNumber);
+      const allowedEngines: number[] = catalogMatch.generation?.engineCcs || [];
       const newV = {
         id: Date.now().toString() + 'v',
         plateNumber: String(a.plateNumber).toUpperCase(),
-        brand: parts[0] || '-',
-        model: parts[1] || '-',
-        year: parseInt(parts.find((x: string) => /^\d{4}$/.test(x)) || '0') || new Date().getFullYear(),
-        color: parts[parts.length - 1] || '-',
+        brand: catalogMatch.brand?.name || parts[0] || 'Lainnya',
+        model: catalogMatch.model?.name || parts[1] || '-',
+        brandId: catalogMatch.brand?.id,
+        modelId: catalogMatch.model?.id,
+        generationId: catalogMatch.generation?.id,
+        generationName: catalogMatch.generation?.name || '',
+        engineCc: engineCc && (!allowedEngines.length || allowedEngines.includes(engineCc)) ? engineCc : null,
+        year: parseInt(parts.find((x: string) => /^\d{4}$/.test(x)) || '0') || 0,
+        color: 'Lainnya',
         customerRefId: customer?.id,
         customerName: customer?.name || String(a.customerName || '').toUpperCase(),
         customerId: customer?.customerCode || '',

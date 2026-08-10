@@ -27,6 +27,44 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_colors (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_generations (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    model_id VARCHAR(64) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    aliases VARCHAR(500) NOT NULL DEFAULT '',
+    year_from SMALLINT UNSIGNED NULL,
+    year_to SMALLINT UNSIGNED NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_vehicle_generation(model_id,name),
+    KEY idx_generation_model(model_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_generation_engines (
+    generation_id VARCHAR(64) NOT NULL,
+    engine_cc SMALLINT UNSIGNED NOT NULL,
+    PRIMARY KEY(generation_id,engine_cc)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_id VARCHAR(64) NULL AFTER model_id");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_name VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_cc SMALLINT UNSIGNED NULL AFTER generation_name");
+
+// Istilah pasar yang umum dipakai bengkel. INSERT IGNORE menjaga edit user.
+$avanzaModel = $pdo->query("SELECT m.id FROM vehicle_models m JOIN vehicle_brands b ON b.id=m.brand_id WHERE b.name='Toyota' AND m.name='Avanza' LIMIT 1")->fetchColumn();
+if ($avanzaModel) {
+    $generationSeed = $pdo->prepare("INSERT IGNORE INTO vehicle_generations(id,model_id,name,aliases,year_from,year_to,sort_order) VALUES(?,?,?,?,?,?,?)");
+    $engineSeed = $pdo->prepare("INSERT IGNORE INTO vehicle_generation_engines(generation_id,engine_cc) VALUES(?,?)");
+    foreach ([
+        ['VG-AVANZA-LAMA','Avanza Lama','lama,old,gen 1',2003,2011,[1300,1500]],
+        ['VG-AVANZA-ALLNEW','All New Avanza','all new,gen 2',2011,2015,[1300,1500]],
+        ['VG-AVANZA-GRAND','Grand New Avanza','grand,grand new',2015,2021,[1300,1500]],
+        ['VG-AVANZA-FWD','All New Avanza FWD','fwd,gen 3,avanza baru',2021,null,[1300,1500]],
+    ] as $index => [$generationId,$generationName,$aliases,$yearFrom,$yearTo,$engines]) {
+        $generationSeed->execute([$generationId,$avanzaModel,$generationName,$aliases,$yearFrom,$yearTo,($index+1)*10]);
+        foreach ($engines as $engineCc) $engineSeed->execute([$generationId,$engineCc]);
+    }
+}
 $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_catalog_settings (
     id TINYINT NOT NULL PRIMARY KEY,
     brand_sort_mode ENUM('manual','usage') NOT NULL DEFAULT 'manual',
@@ -125,6 +163,11 @@ switch ($method) {
         $brands = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_brands ORDER BY sort_order,name")->fetchAll();
         $models = $pdo->query("SELECT id,brand_id AS brandId,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_models ORDER BY sort_order,name")->fetchAll();
         $colors = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_colors ORDER BY sort_order,name")->fetchAll();
+        $generations = $pdo->query("SELECT id,model_id AS modelId,name,aliases,year_from AS yearFrom,year_to AS yearTo,is_active AS isActive,sort_order AS sortOrder FROM vehicle_generations ORDER BY sort_order,name")->fetchAll();
+        $engineRows = $pdo->query("SELECT generation_id AS generationId,engine_cc AS engineCc FROM vehicle_generation_engines ORDER BY engine_cc")->fetchAll();
+        $enginesByGeneration = [];
+        foreach ($engineRows as $engineRow) $enginesByGeneration[$engineRow['generationId']][] = (int)$engineRow['engineCc'];
+        foreach ($generations as &$generation) { $generation['isActive']=(bool)$generation['isActive']; $generation['yearFrom']=$generation['yearFrom'] ? (int)$generation['yearFrom'] : null; $generation['yearTo']=$generation['yearTo'] ? (int)$generation['yearTo'] : null; $generation['engineCcs']=$enginesByGeneration[$generation['id']] ?? []; }
         $vehicleRows = $pdo->query("SELECT brand_id,model_id,brand,model FROM vehicles")->fetchAll();
         $brandUsage = []; $modelUsage = [];
         foreach ($vehicleRows as $vehicleRow) {
@@ -140,6 +183,7 @@ switch ($method) {
             foreach ($brand['models'] as &$model) {
                 $model['isActive'] = (bool)$model['isActive'];
                 $model['usageCount'] = (int)($modelUsage[$model['id']] ?? $modelUsage['name:' . strtolower(trim((string)$brand['name'])) . '|' . strtolower(trim((string)$model['name']))] ?? 0);
+                $model['generations'] = array_values(array_filter($generations, fn($generation) => $generation['modelId'] === $model['id']));
             }
         }
         foreach ($colors as &$color) $color['isActive'] = (bool)$color['isActive'];
@@ -163,6 +207,13 @@ switch ($method) {
             $newId = generateId();
             if ($entity === 'brand') $pdo->prepare("INSERT INTO vehicle_brands(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_brands")->execute([$newId,$name]);
             elseif ($entity === 'model') $pdo->prepare("INSERT INTO vehicle_models(id,brand_id,name,is_active,sort_order) SELECT ?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_models WHERE brand_id=?")->execute([$newId,$d['brandId'] ?? '',$name,$d['brandId'] ?? '']);
+            elseif ($entity === 'generation') {
+                $modelId=(string)($d['modelId']??'');
+                $pdo->prepare("INSERT INTO vehicle_generations(id,model_id,name,aliases,year_from,year_to,is_active,sort_order) SELECT ?,?,?,?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_generations WHERE model_id=?")
+                    ->execute([$newId,$modelId,$name,trim((string)($d['aliases']??'')),$d['yearFrom']?:null,$d['yearTo']?:null,$modelId]);
+                $engineInsert=$pdo->prepare("INSERT IGNORE INTO vehicle_generation_engines(generation_id,engine_cc) VALUES(?,?)");
+                foreach (($d['engineCcs']??[]) as $engineCc) if ((int)$engineCc>=600 && (int)$engineCc<=10000) $engineInsert->execute([$newId,(int)$engineCc]);
+            }
             elseif ($entity === 'color') $pdo->prepare("INSERT INTO vehicle_colors(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_colors")->execute([$newId,$name]);
             else respondError('Jenis master tidak valid', 422);
             logVehicleCatalogChange($pdo,$catalogUser,$entity,$newId,$name,'create',$entity === 'model' ? 'Ditambahkan ke merek ' . ($d['brandId'] ?? '-') : null);
