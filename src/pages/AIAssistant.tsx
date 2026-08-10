@@ -1383,9 +1383,10 @@ ${buildSmartContext(userMsgText)}`;
         }
 
         const checkBrand = content.match(/^(?:cek|cari)\s+(?:merek|brand)\s+(.+?)[?]?$/i);
+        const directCatalogQuery = content.match(/^(?:merek|brand|tipe|model)\s+(.+?)[?]?$/i);
         const checkModels = content.match(/^(?:cek|list|daftar)\s+(?:tipe|model)(?:\s+(?:mobil|kendaraan))?\s+(?:merek\s+)?(.+?)[?]?$/i);
         const questionBrand = content.match(/^apakah\s+(?:merek|brand)\s+(.+?)(?:\s+ada)?[?]?$/i);
-        const brandQuery = (checkBrand?.[1] || checkModels?.[1] || questionBrand?.[1] || '').trim().replace(/\s+ada$/i, '');
+        const brandQuery = (checkBrand?.[1] || checkModels?.[1] || questionBrand?.[1] || directCatalogQuery?.[1] || '').trim().replace(/\s+ada$/i, '');
         const matchedBrand = brandQuery ? findBrand(brandQuery) : undefined;
         if (matchedBrand) {
           const models = [...matchedBrand.models].filter(model => model.isActive).sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0) || a.name.localeCompare(b.name, 'id'));
@@ -1393,6 +1394,39 @@ ${buildSmartContext(userMsgText)}`;
           return;
         }
         if (brandQuery) {
+          const normalizedQuery = brandQuery.toLocaleLowerCase('id-ID');
+          const modelMatches = brands.flatMap(brand => brand.models
+            .filter(model => model.isActive && (
+              model.name.localeCompare(brandQuery, 'id', { sensitivity: 'base' }) === 0
+              || model.name.toLocaleLowerCase('id-ID').includes(normalizedQuery)
+              || normalizedQuery.includes(model.name.toLocaleLowerCase('id-ID'))
+            ))
+            .map(model => ({ brand, model })))
+            .sort((left, right) => {
+              const leftExact = left.model.name.localeCompare(brandQuery, 'id', { sensitivity: 'base' }) === 0 ? 0 : 1;
+              const rightExact = right.model.name.localeCompare(brandQuery, 'id', { sensitivity: 'base' }) === 0 ? 0 : 1;
+              return leftExact - rightExact || (right.model.usageCount || 0) - (left.model.usageCount || 0);
+            })
+            .slice(0, 8);
+          if (modelMatches.length > 0) {
+            const matchingVehicles = data.vehicles.filter(vehicle => modelMatches.some(({ brand, model }) =>
+              vehicle.brand.localeCompare(brand.name, 'id', { sensitivity: 'base' }) === 0
+              && vehicle.model.localeCompare(model.name, 'id', { sensitivity: 'base' }) === 0
+            ));
+            const actions: ChatMsg['actions'] = matchingVehicles.slice(0, 10).map(vehicle => ({
+              label: vehicle.plateNumber,
+              type: 'select_vehicle',
+              value: vehicle.plateNumber,
+            }));
+            reply([
+              `**${brandQuery} ditemukan sebagai tipe/model kendaraan.**`,
+              '',
+              ...modelMatches.map(({ brand, model }) => `- **${brand.name} ${model.name}** — ${model.usageCount || 0} kendaraan terdaftar`),
+              matchingVehicles.length ? '' : undefined,
+              matchingVehicles.length ? `Kendaraan terdaftar: ${matchingVehicles.map(vehicle => `**${vehicle.plateNumber}**`).join(', ')}` : undefined,
+            ].filter(Boolean).join('\n'), actions.length ? actions : undefined);
+            return;
+          }
           const suggestions = brands
             .filter(brand => brand.name.toLocaleLowerCase('id-ID').includes(brandQuery.toLocaleLowerCase('id-ID')) || brandQuery.toLocaleLowerCase('id-ID').includes(brand.name.toLocaleLowerCase('id-ID')))
             .slice(0, 5);
