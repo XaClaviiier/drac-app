@@ -10,12 +10,12 @@ import { localDateKey } from '../lib/date';
 type CatalogGeneration = { id: string; modelId: string; name: string; aliases: string; yearFrom?: number | null; yearTo?: number | null; engineCcs: number[]; isActive: boolean };
 type CatalogModel = { id: string; name: string; isActive: boolean; brandId: string; sortOrder: number; usageCount: number; generations?: CatalogGeneration[] };
 type CatalogBrand = { id: string; name: string; isActive: boolean; sortOrder: number; usageCount: number; models: CatalogModel[] };
-type CatalogColor = { id: string; name: string; isActive: boolean; sortOrder: number };
+type CatalogColor = { id: string; name: string; isActive: boolean; sortOrder: number; usageCount: number };
 type CatalogAuditLog = { id: string; entity: 'brand' | 'model' | 'generation' | 'color'; entityId?: string; entityName?: string; action: string; detail?: string; userName?: string; createdAt: string };
 type CatalogData = {
   brands: CatalogBrand[];
   colors: CatalogColor[];
-  sortModes: { brandSortMode: 'manual' | 'usage'; modelSortMode: 'manual' | 'usage'; colorSortMode: 'manual' };
+  sortModes: { brandSortMode: 'manual' | 'usage'; modelSortMode: 'manual' | 'usage'; colorSortMode: 'manual' | 'usage' };
   auditLogs: CatalogAuditLog[];
 };
 
@@ -570,9 +570,9 @@ export default function VehicleRegister() {
                 </section>
               ) : masterTab === 'color' ? (
                 <section className="mx-auto max-w-xl">
-                  <div className="mb-3 flex items-center justify-between"><h4 className="font-semibold text-gray-900">Daftar Warna</h4><button onClick={() => void reorderCatalog('color', catalog.colors, undefined, undefined, 'alphabetical')} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><ArrowDownAZ className="h-4 w-4" /> A–Z</button></div>
+                  <div className="mb-3 flex items-center justify-between"><h4 className="font-semibold text-gray-900">Daftar Warna</h4><span className="inline-flex items-center gap-1 rounded-lg border border-blue-600 bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white"><ChartNoAxesColumnIncreasing className="h-4 w-4" /> Paling Dipakai</span></div>
                   <div className="mb-3 flex gap-2"><input value={newColor} onChange={event => setNewColor(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void createCatalogItem('color', newColor); }} placeholder="Warna baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2" /><button onClick={() => void createCatalogItem('color', newColor)} className="rounded-lg bg-blue-600 px-3 text-white"><Plus className="h-4 w-4" /></button></div>
-                  <div className="space-y-2">{catalog.colors.map((color, index) => <div key={color.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${color.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{color.name}</span><button disabled={index === 0} onClick={() => void reorderCatalog('color', catalog.colors, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === catalog.colors.length - 1} onClick={() => void reorderCatalog('color', catalog.colors, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('color', color)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void mergeCatalogItem('color', color, catalog.colors)} title="Gabungkan duplikat" className="p-2 text-violet-600"><Combine className="h-4 w-4" /></button>}{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('color', color)} className={`p-2 ${color.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}</div>
+                  <div className="space-y-2">{catalog.colors.filter(color=>!masterSearch||color.name.toLowerCase().includes(masterSearch.toLowerCase())).map(color => <div key={color.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${color.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{color.name} <span className="ml-1 text-xs font-normal text-gray-400">({color.usageCount || 0} kendaraan)</span></span><button title="Ubah warna" onClick={() => void editCatalogItem('color', color)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void mergeCatalogItem('color', color, catalog.colors)} title="Gabungkan duplikat" className="p-2 text-violet-600"><Combine className="h-4 w-4" /></button>}{canDeactivateCatalog && <button title={color.isActive?'Nonaktifkan':'Aktifkan'} onClick={() => void toggleCatalogItem('color', color)} className={`p-2 ${color.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}</div>
                 </section>
               ) : (
                 <section>

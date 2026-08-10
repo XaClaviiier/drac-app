@@ -69,10 +69,12 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_catalog_settings (
     id TINYINT NOT NULL PRIMARY KEY,
     brand_sort_mode ENUM('manual','usage') NOT NULL DEFAULT 'manual',
     model_sort_mode ENUM('manual','usage') NOT NULL DEFAULT 'manual',
-    color_sort_mode ENUM('manual') NOT NULL DEFAULT 'manual',
+    color_sort_mode ENUM('manual','usage') NOT NULL DEFAULT 'usage',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("ALTER TABLE vehicle_catalog_settings MODIFY color_sort_mode ENUM('manual','usage') NOT NULL DEFAULT 'usage'");
 $pdo->exec("INSERT IGNORE INTO vehicle_catalog_settings(id) VALUES(1)");
+$pdo->exec("UPDATE vehicle_catalog_settings SET color_sort_mode='usage' WHERE id=1 AND color_sort_mode='manual'");
 $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_catalog_audit_logs (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     entity VARCHAR(20) NOT NULL,
@@ -168,13 +170,15 @@ switch ($method) {
         $enginesByGeneration = [];
         foreach ($engineRows as $engineRow) $enginesByGeneration[$engineRow['generationId']][] = (int)$engineRow['engineCc'];
         foreach ($generations as &$generation) { $generation['isActive']=(bool)$generation['isActive']; $generation['yearFrom']=$generation['yearFrom'] ? (int)$generation['yearFrom'] : null; $generation['yearTo']=$generation['yearTo'] ? (int)$generation['yearTo'] : null; $generation['engineCcs']=$enginesByGeneration[$generation['id']] ?? []; }
-        $vehicleRows = $pdo->query("SELECT brand_id,model_id,brand,model FROM vehicles")->fetchAll();
-        $brandUsage = []; $modelUsage = [];
+        $vehicleRows = $pdo->query("SELECT brand_id,model_id,brand,model,color FROM vehicles")->fetchAll();
+        $brandUsage = []; $modelUsage = []; $colorUsage = [];
         foreach ($vehicleRows as $vehicleRow) {
             $brandKey = (string)($vehicleRow['brand_id'] ?: 'name:' . strtolower(trim((string)$vehicleRow['brand'])));
             $modelKey = (string)($vehicleRow['model_id'] ?: 'name:' . strtolower(trim((string)$vehicleRow['brand'])) . '|' . strtolower(trim((string)$vehicleRow['model'])));
             $brandUsage[$brandKey] = ($brandUsage[$brandKey] ?? 0) + 1;
             $modelUsage[$modelKey] = ($modelUsage[$modelKey] ?? 0) + 1;
+            $colorKey = strtolower(trim((string)($vehicleRow['color'] ?? '')));
+            if ($colorKey !== '') $colorUsage[$colorKey] = ($colorUsage[$colorKey] ?? 0) + 1;
         }
         foreach ($brands as &$brand) {
             $brand['isActive'] = (bool)$brand['isActive'];
@@ -186,7 +190,7 @@ switch ($method) {
                 $model['generations'] = array_values(array_filter($generations, fn($generation) => $generation['modelId'] === $model['id']));
             }
         }
-        foreach ($colors as &$color) $color['isActive'] = (bool)$color['isActive'];
+        foreach ($colors as &$color) { $color['isActive'] = (bool)$color['isActive']; $color['usageCount'] = (int)($colorUsage[strtolower(trim((string)$color['name']))] ?? 0); }
         unset($brand,$model,$color);
         $sortSettings = $pdo->query("SELECT brand_sort_mode AS brandSortMode,model_sort_mode AS modelSortMode,color_sort_mode AS colorSortMode FROM vehicle_catalog_settings WHERE id=1")->fetch();
         if (($sortSettings['brandSortMode'] ?? 'manual') === 'usage') {
@@ -194,6 +198,9 @@ switch ($method) {
         }
         if (($sortSettings['modelSortMode'] ?? 'manual') === 'usage') {
             foreach ($brands as &$brand) usort($brand['models'], fn($left,$right) => ($right['usageCount'] <=> $left['usageCount']) ?: strcasecmp((string)$left['name'], (string)$right['name']));
+        }
+        if (($sortSettings['colorSortMode'] ?? 'usage') === 'usage') {
+            usort($colors, fn($left,$right) => ($right['usageCount'] <=> $left['usageCount']) ?: strcasecmp((string)$left['name'], (string)$right['name']));
         }
         $auditLogs = $pdo->query("SELECT id,entity,entity_id AS entityId,entity_name AS entityName,action,detail,user_id AS userId,user_name AS userName,created_at AS createdAt FROM vehicle_catalog_audit_logs ORDER BY id DESC LIMIT 100")->fetchAll();
         respondSuccess(['brands'=>$brands, 'colors'=>$colors, 'sortModes'=>$sortSettings ?: ['brandSortMode'=>'manual','modelSortMode'=>'manual','colorSortMode'=>'manual'], 'auditLogs'=>$auditLogs]);
@@ -292,9 +299,9 @@ switch ($method) {
             try {
                 $sort = $pdo->prepare("UPDATE {$table} SET sort_order=? WHERE id=?");
                 foreach ($orderedIds as $index => $orderedId) $sort->execute([($index + 1) * 10, $orderedId]);
-                $sortMode = ($d['sortMode'] ?? '') === 'usage' && in_array($entity,['brand','model'],true) ? 'usage' : 'manual';
+                $sortMode = ($d['sortMode'] ?? '') === 'usage' && in_array($entity,['brand','model','color'],true) ? 'usage' : 'manual';
                 $settingColumn = $entity === 'brand' ? 'brand_sort_mode' : ($entity === 'model' ? 'model_sort_mode' : 'color_sort_mode');
-                $pdo->prepare("UPDATE vehicle_catalog_settings SET {$settingColumn}=? WHERE id=1")->execute([$entity === 'color' ? 'manual' : $sortMode]);
+                $pdo->prepare("UPDATE vehicle_catalog_settings SET {$settingColumn}=? WHERE id=1")->execute([$sortMode]);
                 logVehicleCatalogChange($pdo,$catalogUser,$entity,null,null,'reorder',$sortMode === 'usage' ? 'Mode otomatis: paling dipakai' : 'Urutan manual diperbarui');
                 $pdo->commit();
             } catch (Throwable $e) {
