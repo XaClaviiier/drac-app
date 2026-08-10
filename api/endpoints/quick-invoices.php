@@ -130,10 +130,12 @@ try {
         if ($item['isStockItem']) adjustBranchStockAllowNegative($pdo, $branchId, $item['itemId'], -$item['qty']);
     }
 
-    // Gunakan ID migrasi yang sama agar sinkronisasi legacy di endpoint pembayaran
-    // tidak pernah membuat pembayaran kedua untuk invoice yang sama.
+    // Gunakan generator pembayaran yang sama dengan faktur biasa agar nomor tidak
+    // bertabrakan dengan transaksi manual, migrasi, atau transaksi kasir lain.
     $paymentId = 'legacy-' . $invoiceId;
-    $paymentNumber = 'PAY-' . $invoiceNumber;
+    $branchCodeStmt = $pdo->prepare('SELECT code FROM branches WHERE id=?');
+    $branchCodeStmt->execute([$branchId]);
+    $paymentNumber = nextCustomerPaymentNumber($pdo,$branchId,(string)$branchCodeStmt->fetchColumn(),$date);
     $payment = $pdo->prepare('INSERT INTO customer_payments(id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
     $payment->execute([$paymentId,$paymentNumber,$invoiceId,$date,$total,$paymentMethod,$account['id'],$account['name'],'Pembayaran penuh via REGINV',$branchId,$actor['id'] ?? null,$actor['name'] ?? null]);
     $pdo->prepare('UPDATE work_orders SET invoice_id=?,invoice_number=? WHERE id=?')->execute([$invoiceId,$invoiceNumber,$woId]);

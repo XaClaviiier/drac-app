@@ -729,6 +729,41 @@ if (!function_exists('nextDocumentNumber')) {
     }
 }
 
+if (!function_exists('nextCustomerPaymentNumber')) {
+    function nextCustomerPaymentNumber(PDO $pdo, string $branchId, string $branchCode, string $date): string {
+        $period = date('ym', strtotime($date));
+        $code = strtoupper(substr(trim($branchCode) ?: 'P', 0, 1));
+        $prefix = 'PAY-' . $code . $period;
+
+        // Kunci satu baris urutan per cabang/periode agar dua kasir tidak memperoleh
+        // nomor yang sama. Nomor lama tetap diperiksa karena data migrasi atau nomor
+        // yang pernah dibuat sebelum tabel sequence tersedia dapat lebih besar.
+        $pdo->prepare("INSERT IGNORE INTO customer_payment_sequences(branch_id,period,last_number) VALUES(?,?,0)")
+            ->execute([$branchId, $period]);
+        $lock = $pdo->prepare("SELECT last_number FROM customer_payment_sequences WHERE branch_id=? AND period=? FOR UPDATE");
+        $lock->execute([$branchId, $period]);
+        $stored = (int)$lock->fetchColumn();
+
+        $suffixStart = strlen($prefix) + 1;
+        $maxStmt = $pdo->prepare("SELECT COALESCE(MAX(CAST(SUBSTRING(payment_number, {$suffixStart}) AS UNSIGNED)),0)
+            FROM customer_payments WHERE payment_number LIKE ?");
+        $maxStmt->execute([$prefix . '%']);
+        $next = max($stored, (int)$maxStmt->fetchColumn()) + 1;
+
+        $exists = $pdo->prepare("SELECT 1 FROM customer_payments WHERE payment_number=? LIMIT 1");
+        do {
+            $number = $prefix . str_pad((string)$next, 3, '0', STR_PAD_LEFT);
+            $exists->execute([$number]);
+            if ($exists->fetchColumn()) $next++;
+            else break;
+        } while (true);
+
+        $pdo->prepare("UPDATE customer_payment_sequences SET last_number=? WHERE branch_id=? AND period=?")
+            ->execute([$next, $branchId, $period]);
+        return $number;
+    }
+}
+
 if (!function_exists('adjustBranchStock')) {
     function adjustBranchStock(PDO $pdo, string $branchId, string $itemId, int $delta): void {
         $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id = ?");

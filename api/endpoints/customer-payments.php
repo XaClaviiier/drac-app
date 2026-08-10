@@ -57,18 +57,6 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
     if (!empty($row['wo_id'])) $pdo->prepare("UPDATE work_orders SET status='Selesai' WHERE id=?")->execute([$row['wo_id']]);
 }
 
-function nextCustomerPaymentNumber(PDO $pdo, string $branchId, string $branchCode, string $date): string {
-    $period = date('ym', strtotime($date));
-    $pdo->prepare("INSERT IGNORE INTO customer_payment_sequences(branch_id,period,last_number) VALUES(?,?,0)")
-        ->execute([$branchId,$period]);
-    $lock = $pdo->prepare("SELECT last_number FROM customer_payment_sequences WHERE branch_id=? AND period=? FOR UPDATE");
-    $lock->execute([$branchId,$period]);
-    $next = (int)$lock->fetchColumn() + 1;
-    $pdo->prepare("UPDATE customer_payment_sequences SET last_number=? WHERE branch_id=? AND period=?")
-        ->execute([$next,$branchId,$period]);
-    return 'PAY-' . strtoupper(substr($branchCode ?: 'P',0,1)) . $period . str_pad((string)$next,3,'0',STR_PAD_LEFT);
-}
-
 function writePaymentAudit(PDO $pdo, array $payment, string $action, string $reason, array $user): void {
     $pdo->prepare("INSERT INTO customer_payment_audit_logs(payment_id,payment_number,invoice_id,action,reason,snapshot_json,user_id,user_name) VALUES(?,?,?,?,?,?,?,?)")
         ->execute([$payment['id'] ?? null,$payment['payment_number'] ?? '',$payment['invoice_id'] ?? '',$action,substr($reason,0,255),json_encode($payment),$user['id'] ?? null,$user['name'] ?? $user['username'] ?? null]);

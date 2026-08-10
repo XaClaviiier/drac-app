@@ -19,9 +19,8 @@ $recordInitialCustomerPayment = static function (PDO $pdo, string $invoiceId, st
     $accountStmt=$pdo->prepare("SELECT id,name,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1");$accountStmt->execute([$accountId]);$account=$accountStmt->fetch();
     $expected=$method==='Tunai'?'cash':'bank';
     if(!$account||$account['account_type']!==$expected||($account['branch_id']&&$account['branch_id']!==$branchId))throw new InvalidArgumentException('Akun penerimaan pembayaran belum diatur dengan benar untuk cabang ini');
-    $period=date('ym',strtotime($date));$pdo->prepare("INSERT IGNORE INTO customer_payment_sequences(branch_id,period,last_number) VALUES(?,?,0)")->execute([$branchId,$period]);
-    $seq=$pdo->prepare("SELECT last_number FROM customer_payment_sequences WHERE branch_id=? AND period=? FOR UPDATE");$seq->execute([$branchId,$period]);$next=(int)$seq->fetchColumn()+1;$pdo->prepare("UPDATE customer_payment_sequences SET last_number=? WHERE branch_id=? AND period=?")->execute([$next,$branchId,$period]);
-    $branch=$pdo->prepare("SELECT code FROM branches WHERE id=?");$branch->execute([$branchId]);$paymentNumber='PAY-'.strtoupper(substr((string)$branch->fetchColumn(),0,1)).$period.str_pad((string)$next,3,'0',STR_PAD_LEFT);
+    $branch=$pdo->prepare("SELECT code FROM branches WHERE id=?");$branch->execute([$branchId]);
+    $paymentNumber=nextCustomerPaymentNumber($pdo,$branchId,(string)$branch->fetchColumn(),$date);
     $pdo->prepare("INSERT INTO customer_payments(id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
         ->execute([generateId(),$paymentNumber,$invoiceId,$date,$amount,$method,$account['id'],$account['name'],'Pembayaran saat pembuatan faktur',$branchId,$actor['id']??null,$actor['name']??$actor['username']??null]);
 };
