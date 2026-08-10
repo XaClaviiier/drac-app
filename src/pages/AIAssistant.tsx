@@ -1360,12 +1360,22 @@ ${buildSmartContext(userMsgText)}`;
           return;
         }
 
-        const brandQuery = content.match(/(?:cek|cari|apakah|tipe|model)(?:\s+merek)?\s+(.+?)(?:\s+ada)?[?]?$/i)?.[1]?.trim();
-        const matchedBrand = brandQuery ? findBrand(brandQuery.replace(/^(merek|brand)\s+/i, '').replace(/\s+ada$/i, '')) : undefined;
+        const checkBrand = content.match(/^(?:cek|cari)\s+(?:merek|brand)\s+(.+?)[?]?$/i);
+        const checkModels = content.match(/^(?:cek|list|daftar)\s+(?:tipe|model)(?:\s+(?:mobil|kendaraan))?\s+(?:merek\s+)?(.+?)[?]?$/i);
+        const questionBrand = content.match(/^apakah\s+(?:merek|brand)\s+(.+?)(?:\s+ada)?[?]?$/i);
+        const brandQuery = (checkBrand?.[1] || checkModels?.[1] || questionBrand?.[1] || '').trim().replace(/\s+ada$/i, '');
+        const matchedBrand = brandQuery ? findBrand(brandQuery) : undefined;
         if (matchedBrand) {
           const models = [...matchedBrand.models].filter(model => model.isActive).sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0) || a.name.localeCompare(b.name, 'id'));
-          reply(`Merek **${matchedBrand.name}** tersedia dan memiliki **${models.length} tipe aktif**.\n\n${models.length ? models.map(model => `- ${model.name} (${model.usageCount || 0} kendaraan)`).join('\n') : '- Belum ada tipe'}`,
-            hasPermission('vehicle:create') || hasPermission('vehicle:edit') ? [{ label: `Tambah tipe untuk ${matchedBrand.name}`, type: 'command', value: `tambah tipe NAMA TIPE untuk ${matchedBrand.name}` }] : undefined);
+          reply(`Merek **${matchedBrand.name}** tersedia dan memiliki **${models.length} tipe aktif**.\n\n${models.length ? models.map(model => `- ${model.name} (${model.usageCount || 0} kendaraan)`).join('\n') : '- Belum ada tipe'}\n\nUntuk menambahkan tipe, ketik: **tambah tipe NAMA TIPE untuk ${matchedBrand.name}**.`);
+          return;
+        }
+        if (brandQuery) {
+          const suggestions = brands
+            .filter(brand => brand.name.toLocaleLowerCase('id-ID').includes(brandQuery.toLocaleLowerCase('id-ID')) || brandQuery.toLocaleLowerCase('id-ID').includes(brand.name.toLocaleLowerCase('id-ID')))
+            .slice(0, 5);
+          reply(`Merek **${brandQuery}** belum ditemukan.${suggestions.length ? `\n\nMungkin yang dimaksud:\n${suggestions.map(brand => `- ${brand.name}`).join('\n')}` : ''}`,
+            hasPermission('vehicle:create') || hasPermission('vehicle:edit') ? [{ label: `Tambah merek ${brandQuery}`, type: 'command', value: `tambah merek ${brandQuery}` }] : undefined);
           return;
         }
 

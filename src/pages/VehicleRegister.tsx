@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Car, X, Save, Database, Power, ArrowDownAZ, ChevronUp, ChevronDown, Eye, Clock3, GitBranch, ChartNoAxesColumnIncreasing } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Car, X, Save, Database, Power, ArrowDownAZ, ChevronUp, ChevronDown, Eye, Clock3, GitBranch, ChartNoAxesColumnIncreasing, Combine, ScrollText } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Vehicle } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -10,6 +10,13 @@ import { localDateKey } from '../lib/date';
 type CatalogModel = { id: string; name: string; isActive: boolean; brandId: string; sortOrder: number; usageCount: number };
 type CatalogBrand = { id: string; name: string; isActive: boolean; sortOrder: number; usageCount: number; models: CatalogModel[] };
 type CatalogColor = { id: string; name: string; isActive: boolean; sortOrder: number };
+type CatalogAuditLog = { id: string; entity: 'brand' | 'model' | 'color'; entityId?: string; entityName?: string; action: string; detail?: string; userName?: string; createdAt: string };
+type CatalogData = {
+  brands: CatalogBrand[];
+  colors: CatalogColor[];
+  sortModes: { brandSortMode: 'manual' | 'usage'; modelSortMode: 'manual' | 'usage'; colorSortMode: 'manual' };
+  auditLogs: CatalogAuditLog[];
+};
 
 const formatAuditTime = (value?: string) => {
   if (!value) return '-';
@@ -33,8 +40,8 @@ export default function VehicleRegister() {
   const [filterBrand, setFilterBrand] = useState('');
   const [filterModel, setFilterModel] = useState('');
   const [masterOpen, setMasterOpen] = useState(false);
-  const [masterTab, setMasterTab] = useState<'brand' | 'color'>('brand');
-  const [catalog, setCatalog] = useState<{ brands: CatalogBrand[]; colors: CatalogColor[] }>({ brands: [], colors: [] });
+  const [masterTab, setMasterTab] = useState<'brand' | 'color' | 'audit'>('brand');
+  const [catalog, setCatalog] = useState<CatalogData>({ brands: [], colors: [], sortModes: { brandSortMode: 'manual', modelSortMode: 'manual', colorSortMode: 'manual' }, auditLogs: [] });
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [newBrand, setNewBrand] = useState('');
   const [newModel, setNewModel] = useState('');
@@ -45,7 +52,7 @@ export default function VehicleRegister() {
   const loadCatalog = async () => {
     const response = await api.get('vehicle-catalog');
     if (response.success && response.data) {
-      const next = response.data as { brands: CatalogBrand[]; colors: CatalogColor[] };
+      const next = response.data as CatalogData;
       setCatalog(next);
       setSelectedBrandId(current => current && next.brands.some(brand => brand.id === current) ? current : (next.brands[0]?.id || ''));
     }
@@ -75,6 +82,19 @@ export default function VehicleRegister() {
     await loadCatalog();
   };
 
+  const mergeCatalogItem = async (entity: 'brand' | 'model' | 'color', item: CatalogBrand | CatalogModel | CatalogColor, candidates: Array<CatalogBrand | CatalogModel | CatalogColor>) => {
+    const targetName = window.prompt(`Gabungkan "${item.name}" ke nama master yang mana?`)?.trim();
+    if (!targetName) return;
+    const target = candidates.find(candidate => candidate.id !== item.id && candidate.name.localeCompare(targetName, 'id', { sensitivity: 'base' }) === 0);
+    if (!target) { window.alert(`Target "${targetName}" tidak ditemukan pada daftar yang sama.`); return; }
+    if (!target.isActive) { window.alert('Target penggabungan harus dalam keadaan aktif.'); return; }
+    if (!window.confirm(`Gabungkan "${item.name}" ke "${target.name}"? Kendaraan akan dipindahkan ke target dan data sumber dinonaktifkan. Histori kendaraan tidak dihapus.`)) return;
+    const response = await api.update('vehicle-catalog', item.id, { entity, action: 'merge', targetId: target.id });
+    if (!response.success) { window.alert(response.message || 'Gagal menggabungkan master kendaraan.'); return; }
+    await loadCatalog();
+    await refreshData();
+  };
+
   const reorderCatalog = async (entity: 'brand' | 'model' | 'color', items: Array<CatalogBrand | CatalogModel | CatalogColor>, index?: number, direction?: -1 | 1, mode?: 'alphabetical' | 'usage') => {
     const ordered = mode === 'alphabetical'
       ? [...items].sort((left, right) => left.name.localeCompare(right.name, 'id', { sensitivity: 'base' }))
@@ -86,7 +106,7 @@ export default function VehicleRegister() {
       if (target < 0 || target >= ordered.length) return;
       [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
     }
-    const response = await api.update('vehicle-catalog', 'reorder', { entity, action: 'reorder', orderedIds: ordered.map(item => item.id) });
+    const response = await api.update('vehicle-catalog', 'reorder', { entity, action: 'reorder', orderedIds: ordered.map(item => item.id), sortMode: mode === 'usage' ? 'usage' : 'manual' });
     if (!response.success) { window.alert(response.message || 'Gagal menyimpan urutan master kendaraan.'); return; }
     await loadCatalog();
   };
@@ -465,30 +485,42 @@ export default function VehicleRegister() {
             <div className="flex border-b border-blue-600 bg-gray-100 px-2 pt-2">
               <button onClick={() => setMasterTab('brand')} className={`rounded-t-md border border-b-0 px-5 py-2.5 text-sm font-semibold ${masterTab === 'brand' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600'}`}>Merek &amp; Tipe</button>
               <button onClick={() => setMasterTab('color')} className={`ml-1 rounded-t-md border border-b-0 px-5 py-2.5 text-sm font-semibold ${masterTab === 'color' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600'}`}>Warna</button>
+              <button onClick={() => setMasterTab('audit')} className={`ml-1 rounded-t-md border border-b-0 px-5 py-2.5 text-sm font-semibold ${masterTab === 'audit' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600'}`}><span className="inline-flex items-center gap-1"><ScrollText className="h-4 w-4" /> Riwayat</span></button>
             </div>
             <div className="max-h-[65vh] overflow-y-auto p-5">
               {masterTab === 'brand' ? (
                 <div className="grid gap-5 md:grid-cols-2">
                   <section>
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold text-gray-900">Daftar Merek</h4><div className="flex gap-1"><button onClick={() => void reorderCatalog('brand', catalog.brands, undefined, undefined, 'usage')} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><ChartNoAxesColumnIncreasing className="h-4 w-4" /> Paling Dipakai</button><button onClick={() => void reorderCatalog('brand', catalog.brands, undefined, undefined, 'alphabetical')} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><ArrowDownAZ className="h-4 w-4" /> A–Z</button></div></div>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold text-gray-900">Daftar Merek</h4><div className="flex gap-1"><button onClick={() => void reorderCatalog('brand', catalog.brands, undefined, undefined, 'usage')} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${catalog.sortModes.brandSortMode === 'usage' ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-300 text-blue-700 hover:bg-blue-50'}`}><ChartNoAxesColumnIncreasing className="h-4 w-4" /> Paling Dipakai</button><button onClick={() => void reorderCatalog('brand', catalog.brands, undefined, undefined, 'alphabetical')} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><ArrowDownAZ className="h-4 w-4" /> A–Z</button></div></div>
                     <div className="mb-3 flex gap-2"><input value={newBrand} onChange={event => setNewBrand(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void createCatalogItem('brand', newBrand); }} placeholder="Merek baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2" /><button onClick={() => void createCatalogItem('brand', newBrand)} className="rounded-lg bg-blue-600 px-3 text-white"><Plus className="h-4 w-4" /></button></div>
                     <div className="space-y-2">
-                      {catalog.brands.map((brand, index) => <div key={brand.id} className={`flex items-center rounded-lg border p-2 ${selectedBrandId === brand.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}><button onClick={() => setSelectedBrandId(brand.id)} className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${brand.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{brand.name} <span className="ml-1 text-xs font-normal text-gray-400">({brand.usageCount || 0})</span></button><button disabled={index === 0} onClick={() => void reorderCatalog('brand', catalog.brands, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === catalog.brands.length - 1} onClick={() => void reorderCatalog('brand', catalog.brands, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('brand', brand)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('brand', brand)} title={brand.isActive ? 'Nonaktifkan' : 'Aktifkan'} className={`p-2 ${brand.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}
+                      {catalog.brands.map((brand, index) => <div key={brand.id} className={`flex items-center rounded-lg border p-2 ${selectedBrandId === brand.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}><button onClick={() => setSelectedBrandId(brand.id)} className={`min-w-0 flex-1 truncate text-left text-sm font-medium ${brand.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{brand.name} <span className="ml-1 text-xs font-normal text-gray-400">({brand.usageCount || 0})</span></button><button disabled={index === 0} onClick={() => void reorderCatalog('brand', catalog.brands, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === catalog.brands.length - 1} onClick={() => void reorderCatalog('brand', catalog.brands, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('brand', brand)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void mergeCatalogItem('brand', brand, catalog.brands)} title="Gabungkan duplikat" className="p-2 text-violet-600"><Combine className="h-4 w-4" /></button>}{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('brand', brand)} title={brand.isActive ? 'Nonaktifkan' : 'Aktifkan'} className={`p-2 ${brand.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}
                     </div>
                   </section>
                   <section>
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold text-gray-900">Tipe {selectedCatalogBrand ? `— ${selectedCatalogBrand.name}` : ''}</h4>{selectedCatalogBrand && <div className="flex gap-1"><button onClick={() => void reorderCatalog('model', selectedCatalogBrand.models, undefined, undefined, 'usage')} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><ChartNoAxesColumnIncreasing className="h-4 w-4" /> Paling Dipakai</button><button onClick={() => void reorderCatalog('model', selectedCatalogBrand.models, undefined, undefined, 'alphabetical')} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><ArrowDownAZ className="h-4 w-4" /> A–Z</button></div>}</div>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold text-gray-900">Tipe {selectedCatalogBrand ? `— ${selectedCatalogBrand.name}` : ''}</h4>{selectedCatalogBrand && <div className="flex gap-1"><button onClick={() => void reorderCatalog('model', selectedCatalogBrand.models, undefined, undefined, 'usage')} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${catalog.sortModes.modelSortMode === 'usage' ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-300 text-blue-700 hover:bg-blue-50'}`}><ChartNoAxesColumnIncreasing className="h-4 w-4" /> Paling Dipakai</button><button onClick={() => void reorderCatalog('model', selectedCatalogBrand.models, undefined, undefined, 'alphabetical')} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><ArrowDownAZ className="h-4 w-4" /> A–Z</button></div>}</div>
                     <div className="mb-3 flex gap-2"><input disabled={!selectedCatalogBrand} value={newModel} onChange={event => setNewModel(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && selectedCatalogBrand) void createCatalogItem('model', newModel, selectedCatalogBrand.id); }} placeholder="Tipe/model baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100" /><button disabled={!selectedCatalogBrand} onClick={() => selectedCatalogBrand && void createCatalogItem('model', newModel, selectedCatalogBrand.id)} className="rounded-lg bg-blue-600 px-3 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button></div>
                     <div className="space-y-2">
-                      {(selectedCatalogBrand?.models || []).map((model, index, models) => <div key={model.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${model.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{model.name} <span className="ml-1 text-xs text-gray-400">({model.usageCount || 0})</span></span><button disabled={index === 0} onClick={() => void reorderCatalog('model', models, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === models.length - 1} onClick={() => void reorderCatalog('model', models, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('model', model)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('model', model)} className={`p-2 ${model.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}
+                      {(selectedCatalogBrand?.models || []).map((model, index, models) => <div key={model.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${model.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{model.name} <span className="ml-1 text-xs text-gray-400">({model.usageCount || 0})</span></span><button disabled={index === 0} onClick={() => void reorderCatalog('model', models, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === models.length - 1} onClick={() => void reorderCatalog('model', models, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('model', model)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void mergeCatalogItem('model', model, models)} title="Gabungkan duplikat" className="p-2 text-violet-600"><Combine className="h-4 w-4" /></button>}{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('model', model)} className={`p-2 ${model.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}
                     </div>
                   </section>
                 </div>
-              ) : (
+              ) : masterTab === 'color' ? (
                 <section className="mx-auto max-w-xl">
                   <div className="mb-3 flex items-center justify-between"><h4 className="font-semibold text-gray-900">Daftar Warna</h4><button onClick={() => void reorderCatalog('color', catalog.colors, undefined, undefined, 'alphabetical')} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><ArrowDownAZ className="h-4 w-4" /> A–Z</button></div>
                   <div className="mb-3 flex gap-2"><input value={newColor} onChange={event => setNewColor(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void createCatalogItem('color', newColor); }} placeholder="Warna baru" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2" /><button onClick={() => void createCatalogItem('color', newColor)} className="rounded-lg bg-blue-600 px-3 text-white"><Plus className="h-4 w-4" /></button></div>
-                  <div className="space-y-2">{catalog.colors.map((color, index) => <div key={color.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${color.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{color.name}</span><button disabled={index === 0} onClick={() => void reorderCatalog('color', catalog.colors, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === catalog.colors.length - 1} onClick={() => void reorderCatalog('color', catalog.colors, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('color', color)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('color', color)} className={`p-2 ${color.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}</div>
+                  <div className="space-y-2">{catalog.colors.map((color, index) => <div key={color.id} className="flex items-center rounded-lg border border-gray-200 p-2"><span className={`min-w-0 flex-1 truncate text-sm ${color.isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{color.name}</span><button disabled={index === 0} onClick={() => void reorderCatalog('color', catalog.colors, index, -1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronUp className="h-4 w-4" /></button><button disabled={index === catalog.colors.length - 1} onClick={() => void reorderCatalog('color', catalog.colors, index, 1)} className="p-1 text-gray-500 disabled:opacity-20"><ChevronDown className="h-4 w-4" /></button><button onClick={() => void editCatalogItem('color', color)} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>{canDeactivateCatalog && <button onClick={() => void mergeCatalogItem('color', color, catalog.colors)} title="Gabungkan duplikat" className="p-2 text-violet-600"><Combine className="h-4 w-4" /></button>}{canDeactivateCatalog && <button onClick={() => void toggleCatalogItem('color', color)} className={`p-2 ${color.isActive ? 'text-emerald-600' : 'text-gray-400'}`}><Power className="h-4 w-4" /></button>}</div>)}</div>
+                </section>
+              ) : (
+                <section>
+                  <div className="mb-3"><h4 className="font-semibold text-gray-900">Riwayat Perubahan Master</h4><p className="text-xs text-gray-500">Mencatat penambahan, perubahan nama, urutan, penggabungan, dan penonaktifan.</p></div>
+                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="w-full min-w-[680px] text-sm">
+                      <thead className="bg-gray-100 text-left text-xs uppercase text-gray-600"><tr><th className="px-3 py-2">Waktu</th><th className="px-3 py-2">Pengguna</th><th className="px-3 py-2">Data</th><th className="px-3 py-2">Aksi</th><th className="px-3 py-2">Keterangan</th></tr></thead>
+                      <tbody className="divide-y divide-gray-100">{catalog.auditLogs.map(log => <tr key={log.id}><td className="whitespace-nowrap px-3 py-2 text-gray-500">{formatAuditTime(log.createdAt)}</td><td className="px-3 py-2 font-medium text-gray-800">{log.userName || '-'}</td><td className="px-3 py-2">{log.entityName || log.entity}</td><td className="px-3 py-2 font-semibold text-blue-700">{log.action}</td><td className="px-3 py-2 text-gray-600">{log.detail || '-'}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                  {catalog.auditLogs.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Belum ada perubahan yang tercatat.</p>}
                 </section>
               )}
             </div>

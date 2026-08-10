@@ -27,6 +27,26 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_colors (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_catalog_settings (
+    id TINYINT NOT NULL PRIMARY KEY,
+    brand_sort_mode ENUM('manual','usage') NOT NULL DEFAULT 'manual',
+    model_sort_mode ENUM('manual','usage') NOT NULL DEFAULT 'manual',
+    color_sort_mode ENUM('manual') NOT NULL DEFAULT 'manual',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("INSERT IGNORE INTO vehicle_catalog_settings(id) VALUES(1)");
+$pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_catalog_audit_logs (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    entity VARCHAR(20) NOT NULL,
+    entity_id VARCHAR(64) NULL,
+    entity_name VARCHAR(100) NULL,
+    action VARCHAR(30) NOT NULL,
+    detail VARCHAR(500) NULL,
+    user_id VARCHAR(64) NULL,
+    user_name VARCHAR(150) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_vehicle_catalog_audit_created(created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 // Menjaga instalasi lama tetap kompatibel tanpa migrasi manual.
 foreach (['vehicle_brands', 'vehicle_models', 'vehicle_colors'] as $catalogTable) {
@@ -94,9 +114,14 @@ function requireVehicleCatalogDeactivator(PDO $pdo, array $user): void {
     if (strtolower((string)$stmt->fetchColumn()) !== 'administrator') respondError('Hanya Owner atau Administrator yang dapat menonaktifkan master kendaraan', 403);
 }
 
+function logVehicleCatalogChange(PDO $pdo, array $user, string $entity, ?string $entityId, ?string $entityName, string $action, ?string $detail = null): void {
+    $stmt = $pdo->prepare("INSERT INTO vehicle_catalog_audit_logs(entity,entity_id,entity_name,action,detail,user_id,user_name) VALUES(?,?,?,?,?,?,?)");
+    $stmt->execute([$entity,$entityId,$entityName,$action,$detail,$user['id'] ?? null,$user['name'] ?? $user['username'] ?? 'System']);
+}
+
 switch ($method) {
     case 'GET':
-        requireAuthenticatedUser($pdo);
+        $catalogViewer = requireAuthenticatedUser($pdo);
         $brands = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_brands ORDER BY sort_order,name")->fetchAll();
         $models = $pdo->query("SELECT id,brand_id AS brandId,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_models ORDER BY sort_order,name")->fetchAll();
         $colors = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_colors ORDER BY sort_order,name")->fetchAll();
@@ -118,18 +143,29 @@ switch ($method) {
             }
         }
         foreach ($colors as &$color) $color['isActive'] = (bool)$color['isActive'];
-        respondSuccess(['brands'=>$brands, 'colors'=>$colors]);
+        unset($brand,$model,$color);
+        $sortSettings = $pdo->query("SELECT brand_sort_mode AS brandSortMode,model_sort_mode AS modelSortMode,color_sort_mode AS colorSortMode FROM vehicle_catalog_settings WHERE id=1")->fetch();
+        if (($sortSettings['brandSortMode'] ?? 'manual') === 'usage') {
+            usort($brands, fn($left,$right) => ($right['usageCount'] <=> $left['usageCount']) ?: strcasecmp((string)$left['name'], (string)$right['name']));
+        }
+        if (($sortSettings['modelSortMode'] ?? 'manual') === 'usage') {
+            foreach ($brands as &$brand) usort($brand['models'], fn($left,$right) => ($right['usageCount'] <=> $left['usageCount']) ?: strcasecmp((string)$left['name'], (string)$right['name']));
+        }
+        $auditLogs = $pdo->query("SELECT id,entity,entity_id AS entityId,entity_name AS entityName,action,detail,user_id AS userId,user_name AS userName,created_at AS createdAt FROM vehicle_catalog_audit_logs ORDER BY id DESC LIMIT 100")->fetchAll();
+        respondSuccess(['brands'=>$brands, 'colors'=>$colors, 'sortModes'=>$sortSettings ?: ['brandSortMode'=>'manual','modelSortMode'=>'manual','colorSortMode'=>'manual'], 'auditLogs'=>$auditLogs]);
         break;
 
     case 'POST':
-        requireVehicleCatalogEditor($pdo);
+        $catalogUser = requireVehicleCatalogEditor($pdo);
         $d = getInput(); $entity = $d['entity'] ?? ''; $name = trim((string)($d['name'] ?? ''));
         if ($name === '') respondError('Nama wajib diisi', 422);
         try {
-            if ($entity === 'brand') $pdo->prepare("INSERT INTO vehicle_brands(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_brands")->execute([generateId(),$name]);
-            elseif ($entity === 'model') $pdo->prepare("INSERT INTO vehicle_models(id,brand_id,name,is_active,sort_order) SELECT ?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_models WHERE brand_id=?")->execute([generateId(),$d['brandId'] ?? '',$name,$d['brandId'] ?? '']);
-            elseif ($entity === 'color') $pdo->prepare("INSERT INTO vehicle_colors(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_colors")->execute([generateId(),$name]);
+            $newId = generateId();
+            if ($entity === 'brand') $pdo->prepare("INSERT INTO vehicle_brands(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_brands")->execute([$newId,$name]);
+            elseif ($entity === 'model') $pdo->prepare("INSERT INTO vehicle_models(id,brand_id,name,is_active,sort_order) SELECT ?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_models WHERE brand_id=?")->execute([$newId,$d['brandId'] ?? '',$name,$d['brandId'] ?? '']);
+            elseif ($entity === 'color') $pdo->prepare("INSERT INTO vehicle_colors(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_colors")->execute([$newId,$name]);
             else respondError('Jenis master tidak valid', 422);
+            logVehicleCatalogChange($pdo,$catalogUser,$entity,$newId,$name,'create',$entity === 'model' ? 'Ditambahkan ke merek ' . ($d['brandId'] ?? '-') : null);
         } catch (PDOException $e) { respondError('Nama sudah digunakan atau data induk tidak valid', 409); }
         respondSuccess(null, 'Master kendaraan ditambahkan');
         break;
@@ -138,6 +174,59 @@ switch ($method) {
         $catalogUser = requireVehicleCatalogEditor($pdo);
         if (!$id) respondError('ID required');
         $d = getInput(); $entity = $d['entity'] ?? '';
+        if (($d['action'] ?? '') === 'merge') {
+            requireVehicleCatalogDeactivator($pdo, $catalogUser);
+            $targetId = trim((string)($d['targetId'] ?? ''));
+            if ($targetId === '' || $targetId === $id) respondError('Target penggabungan tidak valid', 422);
+            $table = $entity === 'brand' ? 'vehicle_brands' : ($entity === 'model' ? 'vehicle_models' : ($entity === 'color' ? 'vehicle_colors' : ''));
+            if ($table === '') respondError('Jenis master tidak valid', 422);
+            $fields = $entity === 'model' ? 'id,name,brand_id,is_active' : 'id,name,is_active';
+            $lookup = $pdo->prepare("SELECT {$fields} FROM {$table} WHERE id IN (?,?) FOR UPDATE");
+            $pdo->beginTransaction();
+            try {
+                $lookup->execute([$id,$targetId]);
+                $found = [];
+                foreach ($lookup->fetchAll() as $row) $found[$row['id']] = $row;
+                $source = $found[$id] ?? null; $target = $found[$targetId] ?? null;
+                if (!$source || !$target) throw new InvalidArgumentException('Data sumber atau target tidak ditemukan.');
+                if (!(bool)$target['is_active']) throw new InvalidArgumentException('Target penggabungan harus aktif.');
+                if ($entity === 'brand') {
+                    $sourceModelsStmt = $pdo->prepare("SELECT id,name FROM vehicle_models WHERE brand_id=? FOR UPDATE");
+                    $sourceModelsStmt->execute([$id]);
+                    $targetModelStmt = $pdo->prepare("SELECT id,name FROM vehicle_models WHERE brand_id=? AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
+                    foreach ($sourceModelsStmt->fetchAll() as $sourceModel) {
+                        $targetModelStmt->execute([$targetId,$sourceModel['name']]);
+                        $existingTargetModel = $targetModelStmt->fetch();
+                        if ($existingTargetModel) {
+                            $pdo->prepare("UPDATE vehicles SET brand_id=?,brand=?,model_id=?,model=? WHERE model_id=?")
+                                ->execute([$targetId,$target['name'],$existingTargetModel['id'],$existingTargetModel['name'],$sourceModel['id']]);
+                            $pdo->prepare("UPDATE vehicle_models SET is_active=0 WHERE id=?")->execute([$sourceModel['id']]);
+                        } else {
+                            $pdo->prepare("UPDATE vehicle_models SET brand_id=? WHERE id=?")->execute([$targetId,$sourceModel['id']]);
+                            $pdo->prepare("UPDATE vehicles SET brand_id=?,brand=? WHERE model_id=?")
+                                ->execute([$targetId,$target['name'],$sourceModel['id']]);
+                        }
+                    }
+                    $pdo->prepare("UPDATE vehicles SET brand_id=?,brand=? WHERE brand_id=? OR LOWER(TRIM(brand))=LOWER(TRIM(?))")
+                        ->execute([$targetId,$target['name'],$id,$source['name']]);
+                } elseif ($entity === 'model') {
+                    if ((string)$source['brand_id'] !== (string)$target['brand_id']) throw new InvalidArgumentException('Tipe hanya dapat digabungkan dalam merek yang sama.');
+                    $brandNameStmt = $pdo->prepare("SELECT name FROM vehicle_brands WHERE id=?");
+                    $brandNameStmt->execute([$target['brand_id']]); $brandName = (string)$brandNameStmt->fetchColumn();
+                    $pdo->prepare("UPDATE vehicles SET brand_id=?,brand=?,model_id=?,model=? WHERE model_id=? OR (LOWER(TRIM(brand))=LOWER(TRIM(?)) AND LOWER(TRIM(model))=LOWER(TRIM(?)))")
+                        ->execute([$target['brand_id'],$brandName,$targetId,$target['name'],$id,$brandName,$source['name']]);
+                } else {
+                    $pdo->prepare("UPDATE vehicles SET color=? WHERE LOWER(TRIM(color))=LOWER(TRIM(?))")->execute([$target['name'],$source['name']]);
+                }
+                $pdo->prepare("UPDATE {$table} SET is_active=0 WHERE id=?")->execute([$id]);
+                logVehicleCatalogChange($pdo,$catalogUser,$entity,$id,$source['name'],'merge','Digabungkan ke ' . $target['name'] . ' (' . $targetId . ')');
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError($e->getMessage() ?: 'Gagal menggabungkan master kendaraan', $e instanceof InvalidArgumentException ? 422 : 500);
+            }
+            respondSuccess(null, 'Master kendaraan berhasil digabungkan');
+        }
         if (($d['action'] ?? '') === 'reorder') {
             $table = $entity === 'brand' ? 'vehicle_brands' : ($entity === 'model' ? 'vehicle_models' : ($entity === 'color' ? 'vehicle_colors' : ''));
             $orderedIds = is_array($d['orderedIds'] ?? null) ? $d['orderedIds'] : [];
@@ -146,6 +235,10 @@ switch ($method) {
             try {
                 $sort = $pdo->prepare("UPDATE {$table} SET sort_order=? WHERE id=?");
                 foreach ($orderedIds as $index => $orderedId) $sort->execute([($index + 1) * 10, $orderedId]);
+                $sortMode = ($d['sortMode'] ?? '') === 'usage' && in_array($entity,['brand','model'],true) ? 'usage' : 'manual';
+                $settingColumn = $entity === 'brand' ? 'brand_sort_mode' : ($entity === 'model' ? 'model_sort_mode' : 'color_sort_mode');
+                $pdo->prepare("UPDATE vehicle_catalog_settings SET {$settingColumn}=? WHERE id=1")->execute([$entity === 'color' ? 'manual' : $sortMode]);
+                logVehicleCatalogChange($pdo,$catalogUser,$entity,null,null,'reorder',$sortMode === 'usage' ? 'Mode otomatis: paling dipakai' : 'Urutan manual diperbarui');
                 $pdo->commit();
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
@@ -172,6 +265,9 @@ switch ($method) {
                 $pdo->prepare("UPDATE vehicles SET model=?,model_id=? WHERE (model_id=? OR LOWER(TRIM(model))=LOWER(TRIM(?))) AND (brand_id=? OR LOWER(TRIM(brand))=(SELECT LOWER(TRIM(name)) FROM vehicle_brands WHERE id=?))")
                     ->execute([$name,$id,$id,$old['name'],$old['brand_id'],$old['brand_id']]);
             }
+            $auditAction = (int)$old['is_active'] !== $active ? ($active ? 'activate' : 'deactivate') : 'rename';
+            $auditDetail = $auditAction === 'rename' ? 'Nama lama: ' . $old['name'] : null;
+            logVehicleCatalogChange($pdo,$catalogUser,$entity,$id,$name,$auditAction,$auditDetail);
             $pdo->commit();
         }
         catch (PDOException $e) {
