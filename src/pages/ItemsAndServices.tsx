@@ -307,9 +307,11 @@ export default function ItemsAndServices() {
       type: itemForm.type,
       brand: itemForm.brand,
       unit: itemForm.unit,
-      stock: isGroup ? 0 : itemForm.stock,
-      sellableStock: isGroup || itemForm.type === 'Jasa' ? 0 : Math.max(0, itemForm.stock),
-      purchasePrice: isGroup ? 0 : itemForm.purchasePrice,
+      // Saldo stok dan harga beli dikelola oleh transaksi persediaan/pembelian,
+      // bukan dari master Barang & Jasa.
+      stock: editingItem?.stock ?? 0,
+      sellableStock: editingItem?.sellableStock ?? 0,
+      purchasePrice: editingItem?.purchasePrice ?? 0,
       sellingPrice: itemForm.sellingPrice,
       isActive: itemForm.isActive,
       isQuickService: itemForm.isQuickService,
@@ -380,11 +382,11 @@ export default function ItemsAndServices() {
   // ==================== IMPORT / EXPORT CSV ====================
   // ==================== EXPORT / TEMPLATE ====================
   const downloadTemplate = () => {
-    const headers = ['kode', 'nama', 'deskripsi_nota', 'barcode', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
+    const headers = ['kode', 'nama', 'deskripsi_nota', 'barcode', 'jenis', 'kategori', 'merek', 'satuan', 'harga_jual', 'layanan_cepat', 'keterangan'];
     const sampleRows = [
-      ['BRG-0001', 'CONTOH SPAREPART AC', 'Sparepart AC', '8991234567890', 'Persediaan', 'Sparepart AC', 'Denso', 'PCS', '10', '150000', '250000', 'tidak', 'Contoh keterangan'],
-      ['JSA-0001', 'CONTOH JASA SERVICE', 'Jasa Service AC', '', 'Jasa', 'Jasa Service AC', '-', 'JASA', '0', '0', '200000', 'ya', 'Jasa teknisi'],
-      ['NP-0001', 'CONTOH TOOLS', 'Tools Bengkel', '', 'Non Persediaan', 'Tools Bengkel', 'Krisbow', 'PCS', '1', '350000', '500000', 'tidak', 'Alat bengkel'],
+      ['BRG-0001', 'CONTOH SPAREPART AC', 'Sparepart AC', '8991234567890', 'Persediaan', 'Sparepart AC', 'Denso', 'PCS', '250000', 'tidak', 'Contoh keterangan'],
+      ['JSA-0001', 'CONTOH JASA SERVICE', 'Jasa Service AC', '', 'Jasa', 'Jasa Service AC', '-', 'JASA', '200000', 'ya', 'Jasa teknisi'],
+      ['NP-0001', 'CONTOH TOOLS', 'Tools Bengkel', '', 'Non Persediaan', 'Tools Bengkel', 'Krisbow', 'PCS', '', 'tidak', 'Harga jual boleh kosong'],
     ];
     const csv = [headers.join(','), ...sampleRows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -534,8 +536,6 @@ export default function ItemsAndServices() {
     const idxKategori = findHeaderIndex(headersLower, 'kategori');
     const idxMerek = findHeaderIndex(headersLower, 'merek');
     const idxSatuan = findHeaderIndex(headersLower, 'satuan');
-    const idxStok = findHeaderIndex(headersLower, 'stok');
-    const idxHargaBeli = findHeaderIndex(headersLower, 'harga_beli');
     const idxHargaJual = findHeaderIndex(headersLower, 'harga_jual');
     const idxLayanan = findHeaderIndex(headersLower, 'layanan_cepat');
     const idxKet = findHeaderIndex(headersLower, 'keterangan');
@@ -571,8 +571,6 @@ export default function ItemsAndServices() {
       const kategoriRaw = idxKategori >= 0 ? getByIdx(idxKategori) : '';
       const merekRaw = idxMerek >= 0 ? getByIdx(idxMerek) : '';
       const satuanRaw = idxSatuan >= 0 ? getByIdx(idxSatuan) : 'PCS';
-      const stokRaw = idxStok >= 0 ? getByIdx(idxStok) : '0';
-      const hargaBeliRaw = idxHargaBeli >= 0 ? getByIdx(idxHargaBeli) : '0';
       const hargaJualRaw = idxHargaJual >= 0 ? getByIdx(idxHargaJual) : '0';
       const layananRaw = idxLayanan >= 0 ? getByIdx(idxLayanan) : '';
       const ketRaw = idxKet >= 0 ? getByIdx(idxKet) : '';
@@ -582,9 +580,7 @@ export default function ItemsAndServices() {
       const kategori = kategoriRaw.trim();
       const merek = merekRaw.trim();
       const satuan = satuanRaw.toUpperCase() || 'PCS';
-      const stok = parseNumber(stokRaw);
-      const hargaBeli = parseNumber(hargaBeliRaw);
-      const hargaJual = parseNumber(hargaJualRaw) || (isAccurateMode && hargaBeliRaw ? 0 : parseNumber(hargaJualRaw));
+      const hargaJual = parseNumber(hargaJualRaw);
       const layananCepat = layananRaw.toLowerCase();
 
       // Jenis mapping
@@ -685,10 +681,10 @@ export default function ItemsAndServices() {
         categoryName: category?.name || '',
         brand: merek === '-' || merek.toLowerCase() === 'null' ? '' : merek,
         unit: satuan || 'PCS',
-        stock: jenis === 'Jasa' || jenis === 'Group' ? 0 : stok,
-        sellableStock: jenis === 'Jasa' || jenis === 'Group' ? 0 : stok,
-        purchasePrice: jenis === 'Jasa' || jenis === 'Group' ? 0 : hargaBeli,
-        sellingPrice: hargaJual || (jenis === 'Jasa' || jenis === 'Group' ? 0 : hargaBeli),
+        stock: 0,
+        sellableStock: 0,
+        purchasePrice: 0,
+        sellingPrice: hargaJual,
         isActive: true,
         isQuickService: ['ya', 'yes', 'y', '1', 'true', 'cepat'].includes(layananCepat) || (jenis === 'Jasa' && isAccurateMode), // auto quick service for Jasa from Accurate
         description: ketRaw,
@@ -1121,7 +1117,7 @@ export default function ItemsAndServices() {
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 rounded-t-xl">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{editingItem ? 'Edit Barang/Jasa' : 'Barang/Jasa Baru'}</h3>
-                <p className="text-sm text-gray-500">Isi data item, stok, kategori, dan harga jual.</p>
+                <p className="text-sm text-gray-500">Isi identitas item dan harga jual opsional. Stok serta harga beli berasal dari transaksi pembelian.</p>
               </div>
               <button onClick={() => setShowItemModal(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
             </div>
@@ -1169,23 +1165,12 @@ export default function ItemsAndServices() {
                     {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
                   </select>
                 </div>
-                {itemForm.type !== 'Group' && (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">Stok</label>
-                      <input type="number" disabled={itemForm.type === 'Jasa'} value={itemForm.stock} onChange={(e) => setItemForm({ ...itemForm, stock: parseInt(e.target.value) || 0 })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100" />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">Harga Beli</label>
-                      <input type="number" disabled={itemForm.type === 'Jasa'} value={itemForm.purchasePrice} onChange={(e) => setItemForm({ ...itemForm, purchasePrice: parseInt(e.target.value) || 0 })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100" />
-                    </div>
-                  </>
-                )}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {itemForm.type === 'Group' ? 'Harga 1 Group (Paket) *' : 'Harga Jual *'}
+                    {itemForm.type === 'Group' ? 'Harga 1 Group (Opsional)' : 'Harga Jual (Opsional)'}
                   </label>
-                  <input type="number" required value={itemForm.sellingPrice} onChange={(e) => setItemForm({ ...itemForm, sellingPrice: parseInt(e.target.value) || 0 })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <input type="number" min="0" value={itemForm.sellingPrice} onChange={(e) => setItemForm({ ...itemForm, sellingPrice: parseInt(e.target.value) || 0 })} placeholder="Boleh kosong, dapat ditentukan saat transaksi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-right outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <p className="mt-1 text-xs text-gray-500">Boleh dikosongkan. Harga dapat ditentukan saat membuat WO atau faktur.</p>
                   {itemForm.type === 'Group' && itemForm.groupMembers.length > 0 && (
                     <p className="mt-1 text-xs text-gray-500">
                       Total harga item: {formatCurrency(memberSubtotal(itemForm.groupMembers))} — Harga group bisa lebih murah (diskon paket)
@@ -1413,7 +1398,8 @@ export default function ItemsAndServices() {
                     </ol>
                     <div className="mt-2 bg-white rounded p-2 border border-blue-200">
                       <p className="text-xs font-semibold text-gray-700">Kolom Accurate yang terbaca otomatis:</p>
-                      <p className="text-xs text-gray-600">Kode Barang → kode, Nama Barang → nama, Jenis Barang → jenis, Kategori → kategori, Merek → merek, Satuan → satuan, Stok/Kts → stok</p>
+                      <p className="text-xs text-gray-600">Kode Barang → kode, Nama Barang → nama, Jenis Barang → jenis, Kategori → kategori, Merek → merek, Satuan → satuan, Harga Jual → harga jual opsional.</p>
+                      <p className="mt-1 text-xs text-amber-700">Kolom stok dan harga beli dari file tidak diimpor ke master; keduanya masuk melalui transaksi persediaan/pembelian.</p>
                     </div>
                   </div>
                   <div>
@@ -1435,9 +1421,7 @@ export default function ItemsAndServices() {
                     <div><strong>kategori</strong> — Nama kategori</div>
                     <div><strong>merek</strong> — Merek (opsional)</div>
                     <div><strong>satuan</strong> — PCS / SET / JASA dll</div>
-                    <div><strong>stok</strong> — Angka</div>
-                    <div><strong>harga_beli</strong> — Angka</div>
-                    <div><strong>harga_jual</strong> — Angka</div>
+                    <div><strong>harga_jual</strong> — Angka (opsional)</div>
                     <div><strong>layanan_cepat</strong> — ya / tidak</div>
                     <div><strong>keterangan</strong> — Opsional</div>
                   </div>
@@ -1502,8 +1486,6 @@ export default function ItemsAndServices() {
                           <th className="px-3 py-2 text-left font-medium">Nama</th>
                           <th className="px-3 py-2 text-left font-medium">Jenis</th>
                           <th className="px-3 py-2 text-left font-medium">Kategori</th>
-                          <th className="px-3 py-2 text-right font-medium">Stok</th>
-                          <th className="px-3 py-2 text-right font-medium">Harga Beli</th>
                           <th className="px-3 py-2 text-right font-medium">Harga Jual</th>
                         </tr>
                       </thead>
@@ -1522,8 +1504,6 @@ export default function ItemsAndServices() {
                               {row.categoryName}
                               {row._isNewCategory && <span className="ml-1 text-[10px] text-green-600">(baru)</span>}
                             </td>
-                            <td className="px-3 py-2 text-right">{row.stock}</td>
-                            <td className="px-3 py-2 text-right text-gray-600">Rp {row.purchasePrice.toLocaleString('id-ID')}</td>
                             <td className="px-3 py-2 text-right font-semibold">Rp {row.sellingPrice.toLocaleString('id-ID')}</td>
                           </tr>
                         ))}

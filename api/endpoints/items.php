@@ -70,7 +70,7 @@ switch ($method) {
                 ($d['categoryId'] ?? '') ?: null, $d['categoryName'] ?? '',
                 $type, $d['brand'] ?? '', $d['unit'] ?? 'PCS',
                 0, 0,
-                max(0, (float)($d['purchasePrice'] ?? 0)), max(0, (float)($d['sellingPrice'] ?? 0)),
+                0, max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
                 !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
@@ -133,12 +133,14 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
-            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, purchase_price=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=? WHERE id=?");
+            // Harga beli dan saldo stok hanya boleh berubah melalui transaksi
+            // penerimaan, pembelian, atau penyesuaian persediaan.
+            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=? WHERE id=?");
             $stmt->execute([
                 $d['code'], $d['name'],
                 ($d['categoryId'] ?? '') ?: null, $d['categoryName'] ?? '',
                 $type, $d['brand'] ?? '', $d['unit'] ?? 'PCS',
-                max(0, (float)($d['purchasePrice'] ?? 0)), max(0, (float)($d['sellingPrice'] ?? 0)),
+                max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
                 !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
