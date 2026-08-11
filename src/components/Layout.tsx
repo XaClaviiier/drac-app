@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Car, FileText, Users, Wrench, Boxes, PackageCheck, Truck, ReceiptText,
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
-  Warehouse, ArrowLeft, Home, Sparkles, CirclePlus,
+  Warehouse, ArrowLeft, Home, CirclePlus,
   ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
   ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Coins,
 } from 'lucide-react';
@@ -478,7 +478,7 @@ export default function Layout() {
         {location.pathname !== '/' && (
           <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md items-end justify-around rounded-t-3xl border border-white/10 bg-[#092542]/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 text-white shadow-2xl backdrop-blur-xl lg:hidden">
             <MobileBottom icon={Home} label="Beranda" active={false} onClick={() => navigate('/')} />
-            <MobileBottom icon={Sparkles} label="Aktivitas" active={location.pathname === '/workorders'} onClick={() => navigate('/workorders')} />
+            <MobileBottom icon={Activity} label="Timeline" active={location.pathname === '/workorders/timeline'} onClick={() => navigate('/workorders/timeline')} />
             <MobileBottom icon={CirclePlus} label="Tambah" active={false} onClick={() => navigate(currentBranchId === 'ALL' ? '/' : '/workorders')} />
             {hasPermission('ai:view') && <MobileBottom icon={Bot} label="Asisten AI" active={location.pathname === '/ai'} onClick={() => navigate('/ai')} />}
             <MobileBottom icon={Settings} label="Akun" active={location.pathname === '/settings'} onClick={() => navigate('/settings')} />
