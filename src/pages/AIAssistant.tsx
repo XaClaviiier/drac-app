@@ -180,6 +180,7 @@ export default function AIAssistant() {
   const [showSettings, setShowSettings] = useState(false);
   const [showBranchChooser, setShowBranchChooser] = useState(() => restoredAISession?.showBranchChooser ?? (currentBranchId === 'ALL'));
   const [showStarterMenu, setShowStarterMenu] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -1898,18 +1899,23 @@ ${buildSmartContext(userMsgText)}`;
     }
   };
 
-  const frontActions = [
+  const primaryFrontActions = [
     { label: 'Registrasi WO', icon: Zap, command: 'reg wo', direct: true, tone: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' },
     { label: 'Cek Kendaraan', icon: Car, command: 'cek ', direct: false, tone: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
     { label: 'Cek Pelanggan', icon: Users, command: 'cek nama ', direct: false, tone: 'border-violet-500/30 bg-violet-500/10 text-violet-300' },
+    { label: 'Cek Parts', icon: Package, command: 'cek part ', direct: false, tone: 'border-orange-500/30 bg-orange-500/10 text-orange-300' },
     { label: 'WO Hari Ini', icon: Wrench, command: 'list wo hari ini', direct: true, tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
-    { label: 'WO Register', icon: History, command: 'list wo register', direct: true, tone: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
-    { label: 'Stok Menipis', icon: Package, command: 'Barang apa saja yang stoknya menipis?', direct: true, tone: 'border-orange-500/30 bg-orange-500/10 text-orange-300' },
-    { label: 'Master Kendaraan', icon: Database, command: 'list merek kendaraan', direct: true, tone: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' },
+    { label: 'Belum Diproses', icon: History, command: 'list wo register', direct: true, tone: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
   ];
+  const secondaryFrontActions = [
+    { label: 'Stok Kritis', icon: AlertTriangle, command: 'Barang apa saja yang stoknya menipis?', direct: true, tone: 'border-rose-500/30 bg-rose-500/10 text-rose-300' },
+    { label: 'Daftar Kendaraan', icon: Database, command: 'list merek kendaraan', direct: true, tone: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' },
+  ];
+  const frontActions = [...primaryFrontActions, ...secondaryFrontActions];
 
   const runFrontAction = (command: string, direct: boolean) => {
     setShowStarterMenu(false);
+    setShowMoreActions(false);
     if (direct) {
       void send(command);
       return;
@@ -1959,11 +1965,21 @@ ${buildSmartContext(userMsgText)}`;
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-slate-800"><Grid2X2 className="h-4 w-4 text-blue-600" /> Menu Perintah</h3>
             <div className="grid grid-cols-2 gap-2">
-              {frontActions.map(action => {
+              {primaryFrontActions.map(action => {
                 const Icon = action.icon;
                 return (
                   <button key={`desktop-${action.label}`} type="button" onClick={() => runFrontAction(action.command, action.direct)} disabled={busy} className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-2 text-center text-[11px] font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50">
                     <Icon className="h-5 w-5 text-blue-600" /><span>{action.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-200 pt-2">
+              {secondaryFrontActions.map(action => {
+                const Icon = action.icon;
+                return (
+                  <button key={`desktop-${action.label}`} type="button" onClick={() => runFrontAction(action.command, action.direct)} disabled={busy} className="flex min-h-12 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white p-2 text-center text-[11px] font-semibold text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50">
+                    <Icon className="h-4 w-4 text-blue-600" /><span>{action.label}</span>
                   </button>
                 );
               })}
@@ -2022,7 +2038,7 @@ ${buildSmartContext(userMsgText)}`;
                   <button type="button" onClick={() => setShowStarterMenu(false)} className="rounded p-1 text-slate-400 hover:bg-slate-800"><X className="h-4 w-4" /></button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {frontActions.map(action => {
+                  {primaryFrontActions.map(action => {
                     const Icon = action.icon;
                     return (
                       <button key={`menu-${action.label}`} type="button" onClick={() => runFrontAction(action.command, action.direct)} className={`flex min-h-12 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold hover:bg-slate-800 ${action.tone}`}>
@@ -2031,6 +2047,21 @@ ${buildSmartContext(userMsgText)}`;
                     );
                   })}
                 </div>
+                <button type="button" onClick={() => setShowMoreActions(value => !value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-[11px] font-semibold text-slate-300 hover:border-cyan-500 hover:text-cyan-200">
+                  {showMoreActions ? 'Tutup menu lainnya' : 'Lainnya'}
+                </button>
+                {showMoreActions && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-700 pt-2">
+                    {secondaryFrontActions.map(action => {
+                      const Icon = action.icon;
+                      return (
+                        <button key={`more-menu-${action.label}`} type="button" onClick={() => runFrontAction(action.command, action.direct)} className={`flex min-h-11 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold hover:bg-slate-800 ${action.tone}`}>
+                          <Icon className="h-4 w-4 flex-shrink-0" /><span>{action.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -2060,7 +2091,7 @@ ${buildSmartContext(userMsgText)}`;
                   Pilih perintah atau ketik langsung.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  {frontActions.map(action => {
+                  {primaryFrontActions.map(action => {
                     const Icon = action.icon;
                     return (
                       <button key={action.label} type="button" onClick={() => runFrontAction(action.command, action.direct)} className={`flex min-h-14 items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-colors hover:bg-slate-800 ${action.tone}`}>
@@ -2070,6 +2101,21 @@ ${buildSmartContext(userMsgText)}`;
                     );
                   })}
                 </div>
+                <button type="button" onClick={() => setShowMoreActions(value => !value)} className="mx-auto mt-3 flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-xs font-semibold text-slate-300 hover:border-cyan-500 hover:text-cyan-200">
+                  <Grid2X2 className="h-4 w-4" /> {showMoreActions ? 'Tutup lainnya' : 'Lainnya'}
+                </button>
+                {showMoreActions && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {secondaryFrontActions.map(action => {
+                      const Icon = action.icon;
+                      return (
+                        <button key={`more-${action.label}`} type="button" onClick={() => runFrontAction(action.command, action.direct)} className={`flex min-h-12 items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-colors hover:bg-slate-800 ${action.tone}`}>
+                          <Icon className="h-5 w-5 flex-shrink-0" /><span>{action.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {!hasKey && <p className="mt-3 text-center text-xs font-semibold text-amber-300">Integrasi AI belum diatur oleh Owner.</p>}
               </div>
             )}
