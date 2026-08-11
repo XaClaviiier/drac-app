@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, LegacyWOStatus, Vehicle, WorkOrder, WorkOrderService, WOStatus } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -22,6 +22,7 @@ const DEFAULT_COMPLAINT_TEMPLATES = [
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
 const COMPLAINT_TEMPLATE_VERSION_KEY = 'dokterac_complaint_templates_version';
 const COMPLAINT_TEMPLATE_VERSION = '2';
+const LOST_SALES_REASONS = ['Pelanggan membatalkan', 'Harga tidak disetujui', 'Pelanggan menunda', 'Suku cadang tidak tersedia', 'Kendaraan dibawa ke bengkel lain', 'Tidak dapat dihubungi', 'Lainnya'];
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
   { id: 'fund', label: 'Menyiapkan dana', isActive: true },
@@ -84,6 +85,10 @@ export default function WorkOrders() {
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
   const [statusDialog, setStatusDialog] = useState<{ wo: WorkOrder; next: WorkOrder['status'] } | null>(null);
   const [statusReason, setStatusReason] = useState('');
+  const [cancelStep, setCancelStep] = useState<1 | 2>(1);
+  const [cancelReasonChoice, setCancelReasonChoice] = useState('');
+  const [cancelReasonNotes, setCancelReasonNotes] = useState('');
+  const [cancelConfirmation, setCancelConfirmation] = useState('');
   const [showPendingTemplateEditor, setShowPendingTemplateEditor] = useState(false);
   const [pendingTemplateDraft, setPendingTemplateDraft] = useState(
     data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS
@@ -983,15 +988,23 @@ export default function WorkOrders() {
 
   // Alur status berurutan: dipanggil dari tombol aksi di kartu WO.
   const requestStatusChange = (wo: WorkOrder, next: WorkOrder['status']) => {
+    if (next === 'Closed' && wo.invoiceId) {
+      window.alert(`WO tidak dapat dibatalkan karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}.`);
+      return;
+    }
     setStatusReason('');
+    setCancelStep(1);
+    setCancelReasonChoice('');
+    setCancelReasonNotes('');
+    setCancelConfirmation('');
     setStatusDialog({ wo, next });
   };
 
-  const confirmStatusChange = async () => {
+  const confirmStatusChange = async (reasonOverride?: string) => {
     if (!statusDialog) return;
     const { wo, next } = statusDialog;
     try {
-      const result = await changeWorkOrderStatus(wo.id, next, statusReason);
+      const result = await changeWorkOrderStatus(wo.id, next, reasonOverride ?? statusReason);
       if (!result.ok) {
         window.alert(result.message || 'Perubahan status ditolak.');
         return;
@@ -1000,6 +1013,10 @@ export default function WorkOrders() {
       setTimeout(() => setSuccessMsg(''), 4000);
       setStatusDialog(null);
       setStatusReason('');
+      setCancelStep(1);
+      setCancelReasonChoice('');
+      setCancelReasonNotes('');
+      setCancelConfirmation('');
     } catch (error: any) {
       window.alert(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
     }
@@ -1643,9 +1660,7 @@ export default function WorkOrders() {
                           <button onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">{wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
                         )}
                         {hasPermission('wo:edit') && wo.status === 'Proses' && (
-                          <button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
-                            Selesai
-                          </button>
+                          <><button onClick={() => requestStatusChange(wo, 'Closed')} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">Batalkan</button><button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">Selesai</button></>
                         )}
                         {hasPermission('invoice:create') && wo.status === 'Selesai' && !wo.invoiceId && wo.total > 0 && (
                           <button onClick={() => handleOpenInvoiceModal(wo)} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
@@ -2082,6 +2097,7 @@ export default function WorkOrders() {
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
                 <>
+                  <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan Pekerjaan</button>
                   <button onClick={() => { handleOpenModal(detailWO, true); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Tambah/Edit Layanan</button>
                   <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
                 </>
@@ -2901,15 +2917,28 @@ export default function WorkOrders() {
       {statusDialog && (() => {
         const { wo, next } = statusDialog;
         const needsReason = next === 'Closed';
+        const closeStatusDialog = () => {
+          setStatusDialog(null);
+          setCancelStep(1);
+          setCancelReasonChoice('');
+          setCancelReasonNotes('');
+          setCancelConfirmation('');
+        };
+        const finalCancelReason = cancelReasonChoice === 'Lainnya'
+          ? `Lainnya: ${cancelReasonNotes.trim()}`
+          : cancelReasonNotes.trim() ? `${cancelReasonChoice} — ${cancelReasonNotes.trim()}` : cancelReasonChoice;
+        const finalCancelEnabled = Boolean(cancelReasonChoice
+          && (cancelReasonChoice !== 'Lainnya' || cancelReasonNotes.trim())
+          && cancelConfirmation.trim().toUpperCase() === 'BATAL');
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between rounded-t-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white">
+              <div className={`flex items-center justify-between rounded-t-xl bg-gradient-to-r px-6 py-4 text-white ${needsReason ? 'from-rose-600 to-red-700' : 'from-blue-600 to-indigo-600'}`}>
                 <div className="flex items-center gap-2">
-                  <ArrowLeftRight className="h-5 w-5" />
-                  <h3 className="text-lg font-bold">Ubah status WO</h3>
+                  {needsReason ? <AlertTriangle className="h-5 w-5" /> : <ArrowLeftRight className="h-5 w-5" />}
+                  <div><h3 className="text-lg font-bold">{needsReason ? 'Batalkan Pekerjaan' : 'Ubah status WO'}</h3>{needsReason && <p className="text-xs text-rose-100">Konfirmasi {cancelStep} dari 2</p>}</div>
                 </div>
-                <button onClick={() => setStatusDialog(null)} className="rounded-lg p-2 hover:bg-white/20"><X className="h-5 w-5" /></button>
+                <button onClick={closeStatusDialog} className="rounded-lg p-2 hover:bg-white/20"><X className="h-5 w-5" /></button>
               </div>
               <div className="space-y-4 p-6 text-sm">
                 <p className="text-gray-700">
@@ -2923,29 +2952,40 @@ export default function WorkOrders() {
                   <p>Layanan: {wo.services.length} item</p>
                   <p>Total: Rp {wo.total.toLocaleString('id-ID')}</p>
                 </div>
-                {needsReason && (
-                  <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label className="block text-xs font-semibold text-gray-700">Alasan <span className="text-red-500">*</span></label>
-                    </div>
-                    <textarea
-                      value={statusReason}
-                      onChange={(e) => setStatusReason(e.target.value)}
-                      rows={3}
-                      placeholder={next === 'Closed' ? 'Contoh: tidak menyetujui estimasi atau belum ada anggaran' : 'Tambahkan keterangan'}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
-                    />
+                {needsReason && cancelStep === 1 && (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-800">
+                    <strong>Apakah betul pekerjaan ini mau dibatalkan?</strong>
+                    <p className="mt-1 text-xs">WO akan menjadi Lost Sales. Data layanan tetap tersimpan dan pembatalan tercatat pada timeline.</p>
                   </div>
                 )}
+                {needsReason && cancelStep === 2 && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-gray-700">Alasan Lost Sales <span className="text-red-500">*</span></label>
+                      <select value={cancelReasonChoice} onChange={(e) => setCancelReasonChoice(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 outline-none focus:border-rose-500">
+                        <option value="">Pilih alasan pembatalan</option>
+                        {LOST_SALES_REASONS.map(reason => <option key={reason} value={reason}>{reason}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-gray-700">Catatan {cancelReasonChoice === 'Lainnya' ? <span className="text-red-500">*</span> : '(opsional)'}</label>
+                      <textarea value={cancelReasonNotes} onChange={(e) => setCancelReasonNotes(e.target.value)} rows={2} placeholder="Tambahkan rincian alasan" className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-rose-500" />
+                    </div>
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                      <label className="mb-1 block text-xs font-bold text-red-800">Ketik BATAL untuk konfirmasi akhir</label>
+                      <input value={cancelConfirmation} onChange={(e) => setCancelConfirmation(e.target.value)} placeholder="BATAL" autoComplete="off" className="w-full rounded-lg border border-red-300 bg-white px-3 py-2 font-mono uppercase outline-none focus:border-red-600" />
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
-                  <button onClick={() => setStatusDialog(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Batal</button>
-                  <button
-                    onClick={confirmStatusChange}
-                    disabled={needsReason && !statusReason.trim()}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    Ya, Ubah Status
-                  </button>
+                  {needsReason && cancelStep === 2
+                    ? <button onClick={() => setCancelStep(1)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Kembali</button>
+                    : <button onClick={closeStatusDialog} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{needsReason ? 'Tidak' : 'Batal'}</button>}
+                  {needsReason
+                    ? cancelStep === 1
+                      ? <button onClick={() => setCancelStep(2)} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Ya, Lanjutkan</button>
+                      : <button onClick={() => void confirmStatusChange(finalCancelReason)} disabled={!finalCancelEnabled} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-gray-300">Batalkan &amp; Jadikan Lost Sales</button>
+                    : <button onClick={() => void confirmStatusChange()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Ya, Ubah Status</button>}
                 </div>
               </div>
             </div>
