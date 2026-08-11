@@ -79,7 +79,8 @@ export default function WorkOrders() {
   const [showModal, setShowModal] = useState(false);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [serviceEditMode, setServiceEditMode] = useState(false);
-  const diagnosisSubmitAction = useRef<'save' | 'invoice'>('save');
+  const diagnosisSubmitAction = useRef<'save' | 'invoice' | 'lost'>('save');
+  const lostSalesReason = useRef('');
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
@@ -798,6 +799,7 @@ export default function WorkOrders() {
     // form WO. Submit dari kontrol anak tidak boleh menutup/menyimpan form induk.
     if (e.target !== e.currentTarget) return;
     const shouldCreateInvoice = diagnosisMode && diagnosisSubmitAction.current === 'invoice';
+    const shouldMarkLostSales = diagnosisSubmitAction.current === 'lost';
     diagnosisSubmitAction.current = 'save';
 
     if (editingWO?.invoiceId) {
@@ -943,8 +945,14 @@ export default function WorkOrders() {
           }
         }
         await updateWorkOrder(editingWO.id, finalWorkOrder);
+        if (shouldMarkLostSales) {
+          const result = await changeWorkOrderStatus(editingWO.id, 'Closed', lostSalesReason.current);
+          lostSalesReason.current = '';
+          if (!result.ok) throw new Error(result.message || 'WO gagal diubah menjadi Lost Sales.');
+          setSuccessMsg(`${editingWO.woNumber} berhasil disimpan sebagai Lost Sales.`);
+        }
         if (serviceEditMode) await refreshData();
-        setSuccessMsg(diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
+        if (!shouldMarkLostSales) setSuccessMsg(diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
         if (shouldCreateInvoice) {
           handleCloseModal();
           handleOpenInvoiceModal(finalWorkOrder);
@@ -1103,11 +1111,9 @@ export default function WorkOrders() {
         window.alert('Alasan tanggal mundur wajib diisi.');
         return;
       }
-      if (invoicePayment !== 0 && invoicePayment !== invoiceWO.total) {
-        const difference = invoiceWO.total - invoicePayment;
-        window.alert(difference > 0
-          ? `Pembayaran kurang Rp ${difference.toLocaleString('id-ID')}. Jumlah Tunai + Transfer harus sama dengan total tagihan, atau pilih Belum Bayar.`
-          : `Pembayaran melebihi tagihan Rp ${Math.abs(difference).toLocaleString('id-ID')}.`);
+      if (invoicePayment > invoiceWO.total) {
+        const difference = invoicePayment - invoiceWO.total;
+        window.alert(`Pembayaran melebihi tagihan Rp ${difference.toLocaleString('id-ID')}. Kurangi nominal Tunai atau Transfer.`);
         return;
       }
       setIsCreatingInvoice(true);
@@ -2827,6 +2833,23 @@ export default function WorkOrders() {
                 >
                   Batal
                 </button>
+                {editingWO && editingWO.status === 'Register' && hasPermission('wo:edit') && !editingWO.invoiceId && (
+                  <button
+                    type="submit"
+                    onClick={(event) => {
+                      const reason = window.prompt('Alasan Lost Sales:');
+                      if (!reason?.trim()) {
+                        event.preventDefault();
+                        return;
+                      }
+                      lostSalesReason.current = reason.trim();
+                      diagnosisSubmitAction.current = 'lost';
+                    }}
+                    className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-rose-700 sm:px-5 sm:text-sm"
+                  >
+                    Lost Sales
+                  </button>
+                )}
                 <button
                   type="submit"
                   onClick={() => { diagnosisSubmitAction.current = 'save'; }}
@@ -3309,14 +3332,20 @@ export default function WorkOrders() {
             </div>
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between text-sm">
+              <div className="rounded-lg bg-gray-50 p-4 space-y-2">
+                <div className="flex items-start justify-between gap-3 text-sm">
                   <span className="text-gray-500">Pelanggan</span>
-                  <span className="font-medium text-gray-900">{invoiceWO.customerName}</span>
+                  <span className="text-right font-medium text-gray-900">
+                    <span className="block">{invoiceWO.customerName}</span>
+                    <span className="block text-xs font-normal text-gray-500">{customerPhoneForWO(invoiceWO)}</span>
+                  </span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex items-start justify-between gap-3 text-sm">
                   <span className="text-gray-500">Kendaraan</span>
-                  <span className="font-medium text-gray-900">{invoiceWO.plateNumber}</span>
+                  <span className="max-w-[70%] text-right font-medium text-gray-900">
+                    <span className="block font-mono">{invoiceWO.plateNumber}</span>
+                    <span className="block text-xs font-normal text-gray-500">{invoiceWO.vehicleInfo || 'Data kendaraan belum lengkap'}</span>
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Jumlah Layanan</span>
@@ -3335,27 +3364,23 @@ export default function WorkOrders() {
                   <div>
                     <label className="block text-sm font-medium mb-1">Tanggal Faktur</label>
                     <input type="date" max={localDateKey()} disabled={!invoiceDateUnlocked} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                    <p className="mt-1 text-xs font-medium text-gray-600">{formatBusinessDate(invoiceDate)}</p>
                     <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
                   </div>
                   {invoicePayment > 0 && <div>
                     <label className="block text-sm font-medium mb-1">Tanggal Pembayaran</label>
                     <input type="date" min={invoiceDate} max={localDateKey()} disabled={!invoicePaymentDateUnlocked} value={invoicePaymentDate} onChange={(e) => setInvoicePaymentDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                    <p className="mt-1 text-xs font-medium text-gray-600">{formatBusinessDate(invoicePaymentDate)}</p>
                     <button type="button" onClick={() => hasPermission('payment:backdate') ? setInvoicePaymentDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal pembayaran.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
                   </div>}
                 </div>
                 {data.settings.security.requireBackdateReason !== false && (invoiceDate < localDateKey() || (invoicePayment > 0 && invoicePaymentDate < localDateKey())) && (
                   <input required value={invoiceBackdateReason} onChange={(e) => setInvoiceBackdateReason(e.target.value)} placeholder="Alasan transaksi tanggal mundur" className="w-full mb-4 px-3 py-2 border border-amber-400 bg-amber-50 rounded-lg" />
                 )}
-                <label className="block text-sm font-medium text-gray-700 mb-2">Pembayaran</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Rincian Pembayaran</label>
                 <div className="space-y-3">
                   <div className="grid grid-cols-[110px_1fr] items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { setInvoiceCashPayment(invoiceWO.total); setInvoiceTransferPayment(0); }}
-                      className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${invoiceCashPayment === invoiceWO.total && invoiceTransferPayment === 0 ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
-                    >
-                      Tunai
-                    </button>
+                    <span className="px-1 text-sm font-medium text-gray-700">Tunai</span>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">Rp</span>
                       <input
@@ -3370,13 +3395,7 @@ export default function WorkOrders() {
                     </div>
                   </div>
                   <div className="grid grid-cols-[110px_1fr] items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { setInvoiceCashPayment(0); setInvoiceTransferPayment(invoiceWO.total); }}
-                      className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${invoiceTransferPayment === invoiceWO.total && invoiceCashPayment === 0 ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
-                    >
-                      Transfer
-                    </button>
+                    <span className="px-1 text-sm font-medium text-gray-700">Transfer</span>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">Rp</span>
                       <input
@@ -3397,7 +3416,7 @@ export default function WorkOrders() {
                 <div className="flex justify-between text-sm"><span className="text-gray-600">Total pembayaran</span><strong>Rp {invoicePayment.toLocaleString('id-ID')}</strong></div>
                 <div className="mt-1 flex justify-between text-sm"><span className="text-gray-600">Total tagihan</span><strong>Rp {invoiceWO.total.toLocaleString('id-ID')}</strong></div>
                 <div className={`mt-2 flex justify-between border-t pt-2 text-sm font-semibold ${invoicePayment === invoiceWO.total ? 'text-green-700' : invoicePayment > invoiceWO.total ? 'text-red-600' : 'text-amber-700'}`}>
-                  <span>Selisih</span><span>Rp {Math.abs(invoiceWO.total - invoicePayment).toLocaleString('id-ID')}</span>
+                  <span>{invoicePayment > invoiceWO.total ? 'Kelebihan' : 'Sisa tagihan'}</span><span>Rp {Math.abs(invoiceWO.total - invoicePayment).toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex gap-2 mt-2">
                   <button
@@ -3405,7 +3424,7 @@ export default function WorkOrders() {
                     onClick={() => { setInvoiceCashPayment(invoiceWO.total); setInvoiceTransferPayment(0); }}
                     className="flex-1 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    Lunas Tunai
+                    Bayar Lunas Tunai
                   </button>
                   <button
                     type="button"
@@ -3416,16 +3435,16 @@ export default function WorkOrders() {
                   </button>
                 </div>
                 <p className={`mt-2 text-sm font-medium ${invoicePayment === invoiceWO.total ? 'text-green-600' : invoicePayment > invoiceWO.total ? 'text-red-600' : 'text-yellow-600'}`}>
-                  Status: {invoicePayment === invoiceWO.total ? 'Lunas' : invoicePayment === 0 ? 'Belum Bayar' : invoicePayment > invoiceWO.total ? 'Melebihi tagihan' : `Belum lengkap (kurang Rp ${(invoiceWO.total - invoicePayment).toLocaleString('id-ID')})`}
+                  Status: {invoicePayment === invoiceWO.total ? 'Lunas' : invoicePayment === 0 ? 'Belum Lunas' : invoicePayment > invoiceWO.total ? 'Melebihi tagihan' : `Sebagian (sisa Rp ${(invoiceWO.total - invoicePayment).toLocaleString('id-ID')})`}
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
               <button
                 type="button"
                 onClick={() => setInvoiceWO(null)}
-                className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors sm:px-5"
               >
                 Batal
               </button>
@@ -3433,10 +3452,10 @@ export default function WorkOrders() {
                 type="button"
                 onClick={handleCreateInvoice}
                 disabled={isCreatingInvoice}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors shadow-lg shadow-green-600/20"
+                className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-green-600/20 transition-colors hover:bg-green-700 disabled:bg-gray-400 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
               >
                 <Receipt className="w-4 h-4" />
-                {isCreatingInvoice ? 'Menyimpan...' : 'Buat Faktur'}
+                {isCreatingInvoice ? 'Menyimpan...' : invoicePayment === 0 ? 'Buat Faktur' : invoicePayment >= invoiceWO.total ? 'Buat Faktur & Bayar' : 'Buat Faktur & Catat Pembayaran'}
               </button>
             </div>
           </div>

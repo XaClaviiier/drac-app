@@ -63,9 +63,11 @@ interface RegistrationDraft {
   vehicleInfo: string;
 }
 
-type AIVehicleCatalogModel = { id: string; name: string; isActive: boolean; usageCount?: number };
+type AIVehicleCatalogGeneration = { id: string; name: string; aliases?: string; isActive: boolean; engineCcs?: number[] };
+type AIVehicleCatalogModel = { id: string; name: string; isActive: boolean; usageCount?: number; generations?: AIVehicleCatalogGeneration[] };
 type AIVehicleCatalogBrand = { id: string; name: string; isActive: boolean; usageCount?: number; models: AIVehicleCatalogModel[] };
-type AIVehicleCatalog = { brands: AIVehicleCatalogBrand[] };
+type AIVehicleCatalogColor = { id: string; name: string; isActive: boolean };
+type AIVehicleCatalog = { brands: AIVehicleCatalogBrand[]; colors?: AIVehicleCatalogColor[] };
 
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 const aiSessionStorageKey = (userId: string) => `dokterac_ai_session_${userId}`;
@@ -110,15 +112,46 @@ const parseCompactTransactionDate = (text: string): { date: string; token: strin
   return { date: localDateISO(parsed), token: match[0].trim() };
 };
 
-const parseInlineRegistrationIdentity = (text: string): { customerName: string; phone: string } | null => {
-  const match = text.trim().match(/^reg(?:\s+wo)?\s+(.+?)\s+(08[\d\s-]{6,14})(?=\s|,|$)/i);
+type InlineRegistrationIdentity = {
+  customerName: string;
+  phone: string;
+  address: string;
+  plateNumber: string;
+  vehicleInfo: string;
+  description: string;
+};
+
+const parseInlineRegistrationIdentity = (text: string): InlineRegistrationIdentity | null => {
+  const source = text.trim();
+  const match = source.match(/^reg(?:\s+wo)?\s+(.+?)\s+(08[\d\s-]{6,14})(?=\s|,|$)/i);
   if (!match) return null;
 
   const customerName = match[1].replace(/[,;]+$/g, '').trim();
   const phone = match[2].replace(/\D/g, '');
   if (!customerName || phone.length < 8) return null;
 
-  return { customerName: customerName.toUpperCase(), phone };
+  let remainder = source.slice(match[0].length).trim().replace(/^[,;]\s*/, '');
+  let explicitComplaint = '';
+  const complaintMatch = remainder.match(/(?:^|[,;]\s*)keluhan\s*:\s*(.+)$/i);
+  if (complaintMatch) {
+    explicitComplaint = complaintMatch[1].trim();
+    remainder = remainder.slice(0, complaintMatch.index).replace(/[,;\s]+$/, '');
+  }
+
+  const segments = remainder.split(',').map(part => part.trim());
+  const address = segments[0] || '';
+  const vehicleSegment = segments[1] || '';
+  const description = explicitComplaint || segments.slice(2).filter(Boolean).join(', ');
+  const vehicleMatch = vehicleSegment.match(/^([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3})\s*(.*)$/i);
+
+  return {
+    customerName: customerName.toUpperCase(),
+    phone,
+    address,
+    plateNumber: vehicleMatch?.[1]?.replace(/\s+/g, '').toUpperCase() || '',
+    vehicleInfo: vehicleMatch?.[2]?.trim() || '',
+    description,
+  };
 };
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const render = (t: string) =>
@@ -1067,7 +1100,10 @@ ATURAN:
 NAMA PELANGGAN/KENDARAAN:
 - Selalu pakai nama/plat PERSIS seperti di DATA. Jangan diubah atau ditebak.
 - Kalau user sebut nama/plat yang mirip tapi tidak persis sama, tampilkan semua kemungkinan & minta konfirmasi.
-- Untuk format "Reg [nama] [nomor telepon] [lokasi], [plat] [kendaraan]", nama pelanggan adalah teks di antara "Reg" dan nomor telepon. Teks setelah nomor telepon adalah lokasi/keterangan, bukan nama pelanggan.
+- Format registrasi lengkap adalah: "reg wo [nama] [nomor telepon] [alamat], [plat] [merek] [tipe] [warna], [keluhan]".
+- Teks sesudah nomor telepon sampai koma pertama SELALU alamat, bukan keluhan.
+- Bagian sesudah koma pertama SELALU data kendaraan. Keluhan hanya bagian sesudah koma kedua atau sesudah label "keluhan:".
+- Merek, tipe, dan warna wajib berasal dari Master Kendaraan. Jangan menebak tipe kendaraan yang tidak tersedia.
 
 MEMBUAT WO (HANYA UNTUK PESAN YANG DIMULAI "reg wo"):
 Format tanggal singkat yang boleh dipakai user:
@@ -1126,7 +1162,7 @@ ${buildSmartContext(userMsgText)}`;
         customerCode: generateCustomerCode(),
         name: String(a.customerName).toUpperCase(),
         phone: a.phone || '',
-        address: '',
+        address: String(a.address || '').trim(),
         email: '',
         createdAt: transactionDate,
         branchId,
@@ -1138,19 +1174,33 @@ ${buildSmartContext(userMsgText)}`;
       v.plateNumber.replace(/\s/g, '').toUpperCase() === String(a.plateNumber || '').replace(/\s/g, '').toUpperCase()
     );
     if (!vehicle && a.plateNumber) {
-      const parts = String(a.vehicleInfo || '').split(/[\s-]+/);
       const vehicleText = String(a.vehicleInfo || '').trim();
       const normalizedVehicleText = vehicleText.toLowerCase();
-      const catalogResponse = await api.get('vehicle-catalog');
-      const catalogBrands: any[] = catalogResponse.success ? (catalogResponse.data?.brands || []) : [];
+      const catalogResponse = await api.get<AIVehicleCatalog>('vehicle-catalog');
+      const catalogBrands = catalogResponse.success ? (catalogResponse.data?.brands || []).filter(brand => brand.isActive) : [];
+      const catalogColors = catalogResponse.success ? (catalogResponse.data?.colors || []).filter(color => color.isActive) : [];
       let catalogMatch: { brand?: any; model?: any; generation?: any } = {};
       for (const brand of catalogBrands) {
-        for (const model of (brand.models || [])) {
-          const modelMatched = normalizedVehicleText.includes(String(model.name).toLowerCase());
-          const generation = (model.generations || []).find((item: any) => [item.name, ...String(item.aliases || '').split(',')].some((alias: string) => alias.trim() && normalizedVehicleText.includes(alias.trim().toLowerCase())));
+        const brandMatched = normalizedVehicleText.includes(String(brand.name).trim().toLowerCase());
+        if (!brandMatched) continue;
+        for (const model of (brand.models || []).filter(model => model.isActive)) {
+          const modelMatched = normalizedVehicleText.includes(String(model.name).trim().toLowerCase());
+          const generation = (model.generations || []).filter(item => item.isActive).find((item: any) => [item.name, ...String(item.aliases || '').split(',')].some((alias: string) => alias.trim() && normalizedVehicleText.includes(alias.trim().toLowerCase())));
           if (generation || modelMatched) { catalogMatch = { brand, model, generation }; break; }
         }
         if (catalogMatch.model) break;
+      }
+      if (!catalogMatch.brand) {
+        const typedBrand = vehicleText.split(/\s+/)[0] || vehicleText;
+        throw new Error(`Merek kendaraan "${typedBrand}" belum cocok dengan Master Kendaraan. Pilih merek yang tersedia atau tambahkan merek melalui Register Kendaraan > Master Kendaraan.`);
+      }
+      if (!catalogMatch.model) {
+        const availableModels = (catalogMatch.brand.models || []).filter((model: any) => model.isActive).slice(0, 6).map((model: any) => model.name).join(', ');
+        throw new Error(`Tipe kendaraan pada "${vehicleText}" belum tersedia untuk ${catalogMatch.brand.name}. Pilihan master: ${availableModels || 'belum ada'}. Tambahkan tipe di Master Kendaraan lalu ulangi registrasi.`);
+      }
+      const matchedColor = catalogColors.find(color => normalizedVehicleText.includes(color.name.trim().toLowerCase()));
+      if (!matchedColor) {
+        throw new Error(`Warna kendaraan pada "${vehicleText}" belum cocok dengan daftar warna di Master Kendaraan. Pilih atau tambahkan warna terlebih dahulu.`);
       }
       const engineToken = vehicleText.match(/(?:^|\s)(\d{1,2}[.,]\d)(?=\s|$)|(?:^|\s)(\d{3,4})\s*cc\b/i);
       const engineNumber = engineToken ? Number(String(engineToken[1] || engineToken[2]).replace(',', '.')) : 0;
@@ -1159,15 +1209,15 @@ ${buildSmartContext(userMsgText)}`;
       const newV = {
         id: Date.now().toString() + 'v',
         plateNumber: String(a.plateNumber).toUpperCase(),
-        brand: catalogMatch.brand?.name || parts[0] || 'Lainnya',
-        model: catalogMatch.model?.name || parts[1] || '-',
+        brand: catalogMatch.brand.name,
+        model: catalogMatch.model.name,
         brandId: catalogMatch.brand?.id,
         modelId: catalogMatch.model?.id,
         generationId: catalogMatch.generation?.id,
         generationName: catalogMatch.generation?.name || '',
         engineCc: engineCc && (!allowedEngines.length || allowedEngines.includes(engineCc)) ? engineCc : null,
-        year: parseInt(parts.find((x: string) => /^\d{4}$/.test(x)) || '0') || 0,
-        color: 'Lainnya',
+        year: parseInt(vehicleText.split(/[\s-]+/).find((x: string) => /^\d{4}$/.test(x)) || '0') || 0,
+        color: matchedColor.name,
         customerRefId: customer?.id,
         customerName: customer?.name || String(a.customerName || '').toUpperCase(),
         customerId: customer?.customerCode || '',
@@ -1692,14 +1742,11 @@ ${buildSmartContext(userMsgText)}`;
         if (inlineIdentity) {
           action.customerName = inlineIdentity.customerName;
           action.phone = inlineIdentity.phone;
-          const registrationParts = content.split(',').map(part => part.trim()).filter(Boolean);
-          if (registrationParts.length < 3) {
-            action.description = '';
-            action.complaintRequired = true;
-          } else {
-            action.description = registrationParts.slice(2).join(', ');
-            action.complaintRequired = false;
-          }
+          action.address = inlineIdentity.address;
+          if (inlineIdentity.plateNumber) action.plateNumber = inlineIdentity.plateNumber;
+          if (inlineIdentity.vehicleInfo) action.vehicleInfo = inlineIdentity.vehicleInfo;
+          action.description = inlineIdentity.description;
+          action.complaintRequired = !inlineIdentity.description;
         }
         const similarCustomers = findSimilarRegistrationCustomers(String(action.customerName || ''), String(action.phone || ''));
         if (similarCustomers.length > 0) {
@@ -1766,6 +1813,7 @@ ${buildSmartContext(userMsgText)}`;
   const confirmAction = async () => {
     if (!pendingAction || !pendingBranchId) return;
     setBusy(true);
+    let completed = false;
     try {
       if (pendingAction.action === 'create_quick_invoice') {
         const r = await executeQuickInvoice(pendingAction, pendingBranchId);
@@ -1775,6 +1823,7 @@ ${buildSmartContext(userMsgText)}`;
           role: 'assistant', time: now(), shareText,
           content: `✅ **REGINV berhasil dibuat!**\n\n- WO: **${r.woNumber}**\n- Invoice: **${r.invoiceNumber}**\n- Pembayaran: **${r.paymentNumber}**\n- Total: **${fmt(Number(r.total))}**\n- Masuk ke: **${r.accountName}**\n\nKetiga dokumen saling terhubung dan stok sudah dipotong oleh invoice.`,
         }]);
+        completed = true;
         return;
       }
       const r = await executeCreateWO(pendingAction, pendingBranchId);
@@ -1788,11 +1837,14 @@ ${buildSmartContext(userMsgText)}`;
         shareText,
         content: `✅ **Order Kerja berhasil dibuat!**\n\n- Nomor: **${r.woNumber}**\n- Pelanggan: **${r.customerName}**\n- Kendaraan: **${r.plateNumber}**\n- Layanan: **${r.servicesCount} item**\n- Estimasi: **${fmt(r.total)}**\n- Cabang: **${r.branchName}**\n- Status: **Register**\n\nBuka menu Servis Job untuk menambah layanan atau mulai dikerjakan.`,
       }]);
+      completed = true;
     } catch (e: any) {
       setMessages(h => [...h, { role: 'assistant', content: `⚠️ Gagal membuat WO: ${e.message}`, error: true, time: now() }]);
     } finally {
-      setPendingAction(null);
-      setPendingBranchId('');
+      if (completed) {
+        setPendingAction(null);
+        setPendingBranchId('');
+      }
       setBusy(false);
     }
   };
@@ -2167,6 +2219,7 @@ ${buildSmartContext(userMsgText)}`;
                 </p>
                 <div className="mb-3 space-y-1 text-xs text-slate-300">
                   <p>Pelanggan: <b className="text-white">{pendingAction.customerName}</b> {pendingAction.phone && `(${pendingAction.phone})`}</p>
+                  {pendingAction.address && <p>Alamat: <b className="text-white">{pendingAction.address}</b></p>}
                   {pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved && (
                     <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
                       <p className="mb-2 font-semibold text-amber-200">Ada pelanggan dengan nama atau telepon mirip. Pakai data lama?</p>
