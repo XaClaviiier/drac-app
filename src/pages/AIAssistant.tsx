@@ -109,6 +109,17 @@ const parseCompactTransactionDate = (text: string): { date: string; token: strin
 
   return { date: localDateISO(parsed), token: match[0].trim() };
 };
+
+const parseInlineRegistrationIdentity = (text: string): { customerName: string; phone: string } | null => {
+  const match = text.trim().match(/^reg(?:\s+wo)?\s+(.+?)\s+(08[\d\s-]{6,14})(?=\s|,|$)/i);
+  if (!match) return null;
+
+  const customerName = match[1].replace(/[,;]+$/g, '').trim();
+  const phone = match[2].replace(/\D/g, '');
+  if (!customerName || phone.length < 8) return null;
+
+  return { customerName: customerName.toUpperCase(), phone };
+};
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const render = (t: string) =>
   esc(t.replace(/\n{2,}/g, '\n'))
@@ -494,6 +505,24 @@ export default function AIAssistant() {
       fuzzySearch = candidates.length > 0;
     }
     return { candidates, fuzzySearch };
+  };
+
+  const findSimilarRegistrationCustomers = (name: string, phone: string) => {
+    const ignoredWords = new Set(['pak', 'bapak', 'bu', 'ibu', 'mr', 'mrs']);
+    const words = (value: string) => value.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
+      .filter(word => word.length >= 3 && !ignoredWords.has(word));
+    const requestedWords = words(name);
+    const normalizedPhone = phone.replace(/\D/g, '');
+
+    return data.customers.filter(customer => {
+      if (customer.name.trim().toUpperCase() === name.trim().toUpperCase()) return false;
+      if (normalizedPhone.length >= 8 && customer.phone.replace(/\D/g, '') === normalizedPhone) return true;
+      const customerWords = words(customer.name);
+      return requestedWords.some(requested => customerWords.some(existing =>
+        Math.min(requested.length, existing.length) >= 4
+        && (requested.startsWith(existing) || existing.startsWith(requested))
+      ));
+    }).slice(0, 5);
   };
 
   const startNewChat = () => {
@@ -1038,6 +1067,7 @@ ATURAN:
 NAMA PELANGGAN/KENDARAAN:
 - Selalu pakai nama/plat PERSIS seperti di DATA. Jangan diubah atau ditebak.
 - Kalau user sebut nama/plat yang mirip tapi tidak persis sama, tampilkan semua kemungkinan & minta konfirmasi.
+- Untuk format "Reg [nama] [nomor telepon] [lokasi], [plat] [kendaraan]", nama pelanggan adalah teks di antara "Reg" dan nomor telepon. Teks setelah nomor telepon adalah lokasi/keterangan, bukan nama pelanggan.
 
 MEMBUAT WO (HANYA UNTUK PESAN YANG DIMULAI "reg wo"):
 Format tanggal singkat yang boleh dipakai user:
@@ -1656,8 +1686,26 @@ ${buildSmartContext(userMsgText)}`;
 
       if (action?.action === 'create_wo') {
         const parsedDate = parseCompactTransactionDate(content);
+        const inlineIdentity = parseInlineRegistrationIdentity(content);
         const codedServices = servicesFromCodes(content);
         if (parsedDate) action.date = parsedDate.date;
+        if (inlineIdentity) {
+          action.customerName = inlineIdentity.customerName;
+          action.phone = inlineIdentity.phone;
+          const registrationParts = content.split(',').map(part => part.trim()).filter(Boolean);
+          if (registrationParts.length < 3) {
+            action.description = '';
+            action.complaintRequired = true;
+          } else {
+            action.description = registrationParts.slice(2).join(', ');
+            action.complaintRequired = false;
+          }
+        }
+        const similarCustomers = findSimilarRegistrationCustomers(String(action.customerName || ''), String(action.phone || ''));
+        if (similarCustomers.length > 0) {
+          action.customerCandidates = similarCustomers.map(customer => customer.id);
+          action.customerMatchResolved = false;
+        }
         if (codedServices.length > 0) action.services = codedServices;
       }
 
@@ -2119,8 +2167,35 @@ ${buildSmartContext(userMsgText)}`;
                 </p>
                 <div className="mb-3 space-y-1 text-xs text-slate-300">
                   <p>Pelanggan: <b className="text-white">{pendingAction.customerName}</b> {pendingAction.phone && `(${pendingAction.phone})`}</p>
+                  {pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved && (
+                    <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
+                      <p className="mb-2 font-semibold text-amber-200">Ada pelanggan dengan nama atau telepon mirip. Pakai data lama?</p>
+                      <div className="space-y-2">
+                        {pendingAction.customerCandidates.map((customerId: string) => {
+                          const customer = data.customers.find(item => item.id === customerId);
+                          if (!customer) return null;
+                          return <button key={customer.id} type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerName: customer.name, phone: customer.phone, customerId: customer.customerCode, customerRefId: customer.id, customerMatchResolved: true }))} className="w-full rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-left text-xs text-white hover:border-amber-300">Pakai <b>{customer.name}</b> · {customer.phone || 'tanpa telepon'}</button>;
+                        })}
+                        <button type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerMatchResolved: true, customerCandidates: [] }))} className="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500">Lanjut buat pelanggan baru: {pendingAction.customerName}</button>
+                      </div>
+                    </div>
+                  )}
                   <p>Kendaraan: <b className="text-white">{pendingAction.plateNumber}</b> — {pendingAction.vehicleInfo}</p>
                   <p>Keluhan: {pendingAction.description || '-'}</p>
+                  {pendingAction.complaintRequired && !pendingAction.description?.trim() && (
+                    <div className="my-3 rounded-lg border border-orange-400 bg-orange-950/40 p-3">
+                      <p className="mb-2 font-semibold text-orange-200">Keluhan belum diisi. Pilih keluhan:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['AC tidak dingin', 'Berisik', 'Berbau', 'Freon habis', 'Pengecekan rutin'].map(complaint => (
+                          <button key={complaint} type="button" onClick={() => setPendingAction((current: any) => ({ ...current, description: complaint, complaintRequired: false }))} className="rounded-lg border border-orange-500/60 bg-slate-800 px-3 py-2 text-left text-xs text-white hover:border-orange-300">{complaint}</button>
+                        ))}
+                        <button type="button" onClick={() => {
+                          const complaint = window.prompt('Tuliskan keluhan pelanggan:');
+                          if (complaint?.trim()) setPendingAction((current: any) => ({ ...current, description: complaint.trim(), complaintRequired: false }));
+                        }} className="rounded-lg bg-orange-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-orange-500">Keluhan lainnya…</button>
+                      </div>
+                    </div>
+                  )}
                   {pendingAction.action === 'create_quick_invoice' && <p>Metode pembayaran: <b className="text-white">{pendingAction.paymentMethod}</b></p>}
                   <div className="mt-3">
                     <p className="mb-2 font-semibold text-white">Cabang tempat WO dibuat:</p>
@@ -2164,7 +2239,7 @@ ${buildSmartContext(userMsgText)}`;
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => { setPendingAction(null); setPendingBranchId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
-                  <button disabled={!pendingBranchId} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
+                  <button disabled={!pendingBranchId || !pendingAction.description?.trim() || (pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved)} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
                     <CheckCircle2 className="h-4 w-4" /> {pendingBranchId ? `${pendingAction.action === 'create_quick_invoice' ? 'Buat REGINV' : 'Buat WO'} di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang'}
                   </button>
                 </div>
