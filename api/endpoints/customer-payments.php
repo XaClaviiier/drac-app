@@ -49,8 +49,11 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
     $last = $pdo->prepare("SELECT date,payment_method FROM customer_payments WHERE invoice_id=? ORDER BY date DESC,created_at DESC LIMIT 1");
     $last->execute([$invoiceId]);
     $latest = $last->fetch();
-    $method = (string)($latest['payment_method'] ?? 'Tunai');
-    if ($method !== 'Tunai') $method = 'Transfer';
+    $methods = $pdo->prepare("SELECT COUNT(DISTINCT payment_method) FROM customer_payments WHERE invoice_id=? AND amount>0");
+    $methods->execute([$invoiceId]);
+    $methodCount = (int)$methods->fetchColumn();
+    $method = $methodCount > 1 ? 'Campuran' : (string)($latest['payment_method'] ?? 'Tunai');
+    if (!in_array($method, ['Tunai','Transfer','Campuran'], true)) $method = 'Transfer';
     $pdo->prepare("UPDATE sales_invoices SET payment=?,payment_date=?,payment_method=?,status=? WHERE id=?")
         ->execute([$paid,$latest['date'] ?? null,$method,$status,$invoiceId]);
     $pdo->prepare("UPDATE work_orders SET status='Selesai' WHERE invoice_id=?")->execute([$invoiceId]);

@@ -106,8 +106,9 @@ export default function WorkOrders() {
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<WorkOrderColumnKey[]>(DEFAULT_WORK_ORDER_COLUMNS);
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
-  const [invoicePayment, setInvoicePayment] = useState(0);
-  const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<'Tunai' | 'Transfer'>('Tunai');
+  const [invoiceCashPayment, setInvoiceCashPayment] = useState(0);
+  const [invoiceTransferPayment, setInvoiceTransferPayment] = useState(0);
+  const invoicePayment = invoiceCashPayment + invoiceTransferPayment;
   const [invoiceDate, setInvoiceDate] = useState(localDateKey());
   const [invoicePaymentDate, setInvoicePaymentDate] = useState(localDateKey());
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
@@ -1028,8 +1029,8 @@ export default function WorkOrders() {
       return;
     }
     setInvoiceWO(wo);
-    setInvoicePayment(wo.total);
-    setInvoicePaymentMethod('Tunai');
+    setInvoiceCashPayment(wo.total);
+    setInvoiceTransferPayment(0);
     const today = localDateKey();
     setInvoiceDate(today);
     setInvoicePaymentDate(today);
@@ -1102,15 +1103,23 @@ export default function WorkOrders() {
         window.alert('Alasan tanggal mundur wajib diisi.');
         return;
       }
+      if (invoicePayment !== 0 && invoicePayment !== invoiceWO.total) {
+        const difference = invoiceWO.total - invoicePayment;
+        window.alert(difference > 0
+          ? `Pembayaran kurang Rp ${difference.toLocaleString('id-ID')}. Jumlah Tunai + Transfer harus sama dengan total tagihan, atau pilih Belum Bayar.`
+          : `Pembayaran melebihi tagihan Rp ${Math.abs(difference).toLocaleString('id-ID')}.`);
+        return;
+      }
       setIsCreatingInvoice(true);
       try {
-        const invoice = await createInvoiceFromWO(invoiceWO.id, invoicePayment, invoicePaymentMethod, invoiceDate, invoicePayment > 0 ? invoicePaymentDate : undefined, invoiceBackdateReason);
+        const invoice = await createInvoiceFromWO(invoiceWO.id, invoiceCashPayment, invoiceTransferPayment, invoiceDate, invoicePayment > 0 ? invoicePaymentDate : undefined, invoiceBackdateReason);
       if (invoice) {
         setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${invoiceWO.woNumber}!`);
         setTimeout(() => setSuccessMsg(''), 4000);
       }
         setInvoiceWO(null);
-        setInvoicePayment(0);
+        setInvoiceCashPayment(0);
+        setInvoiceTransferPayment(0);
       } catch (error: any) {
         window.alert(`Gagal membuat faktur: ${error?.message || 'terjadi kesalahan'}`);
       } finally {
@@ -3357,56 +3366,77 @@ export default function WorkOrders() {
                 {data.settings.security.requireBackdateReason !== false && (invoiceDate < localDateKey() || (invoicePayment > 0 && invoicePaymentDate < localDateKey())) && (
                   <input required value={invoiceBackdateReason} onChange={(e) => setInvoiceBackdateReason(e.target.value)} placeholder="Alasan transaksi tanggal mundur" className="w-full mb-4 px-3 py-2 border border-amber-400 bg-amber-50 rounded-lg" />
                 )}
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Metode Pembayaran
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['Tunai', 'Transfer'] as const).map((method) => (
+                <label className="block text-sm font-medium text-gray-700 mb-2">Pembayaran</label>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[110px_1fr] items-center gap-3">
                     <button
-                      key={method}
                       type="button"
-                      onClick={() => setInvoicePaymentMethod(method)}
-                      className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${
-                        invoicePaymentMethod === method
-                          ? 'border-green-500 bg-green-50 text-green-700'
-                          : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
-                      }`}
+                      onClick={() => { setInvoiceCashPayment(invoiceWO.total); setInvoiceTransferPayment(0); }}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${invoiceCashPayment === invoiceWO.total && invoiceTransferPayment === 0 ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
                     >
-                      {method}
+                      Tunai
                     </button>
-                  ))}
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">Rp</span>
+                      <input
+                        aria-label="Jumlah pembayaran tunai"
+                        type="text"
+                        inputMode="numeric"
+                        value={formatPaymentInput(invoiceCashPayment)}
+                        onChange={(e) => setInvoiceCashPayment(parsePaymentInput(e.target.value))}
+                        placeholder="0"
+                        className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-right font-semibold tabular-nums outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[110px_1fr] items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setInvoiceCashPayment(0); setInvoiceTransferPayment(invoiceWO.total); }}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${invoiceTransferPayment === invoiceWO.total && invoiceCashPayment === 0 ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      Transfer
+                    </button>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">Rp</span>
+                      <input
+                        aria-label="Jumlah pembayaran transfer"
+                        type="text"
+                        inputMode="numeric"
+                        value={formatPaymentInput(invoiceTransferPayment)}
+                        onChange={(e) => setInvoiceTransferPayment(parsePaymentInput(e.target.value))}
+                        placeholder="0"
+                        className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-right font-semibold tabular-nums outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Jumlah Pembayaran (Rp)
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={formatPaymentInput(invoicePayment)}
-                  onChange={(e) => setInvoicePayment(parsePaymentInput(e.target.value))}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                />
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex justify-between text-sm"><span className="text-gray-600">Total pembayaran</span><strong>Rp {invoicePayment.toLocaleString('id-ID')}</strong></div>
+                <div className="mt-1 flex justify-between text-sm"><span className="text-gray-600">Total tagihan</span><strong>Rp {invoiceWO.total.toLocaleString('id-ID')}</strong></div>
+                <div className={`mt-2 flex justify-between border-t pt-2 text-sm font-semibold ${invoicePayment === invoiceWO.total ? 'text-green-700' : invoicePayment > invoiceWO.total ? 'text-red-600' : 'text-amber-700'}`}>
+                  <span>Selisih</span><span>Rp {Math.abs(invoiceWO.total - invoicePayment).toLocaleString('id-ID')}</span>
+                </div>
                 <div className="flex gap-2 mt-2">
                   <button
                     type="button"
-                    onClick={() => setInvoicePayment(invoiceWO.total)}
+                    onClick={() => { setInvoiceCashPayment(invoiceWO.total); setInvoiceTransferPayment(0); }}
                     className="flex-1 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    Bayar Lunas
+                    Lunas Tunai
                   </button>
                   <button
                     type="button"
-                    onClick={() => setInvoicePayment(0)}
+                    onClick={() => { setInvoiceCashPayment(0); setInvoiceTransferPayment(0); }}
                     className="flex-1 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Belum Bayar
                   </button>
                 </div>
-                <p className={`mt-2 text-sm font-medium ${invoicePayment >= invoiceWO.total ? 'text-green-600' : 'text-yellow-600'}`}>
-                  Status: {invoicePayment >= invoiceWO.total ? 'Lunas' : `Belum Lunas (sisa Rp ${(invoiceWO.total - invoicePayment).toLocaleString('id-ID')})`}
+                <p className={`mt-2 text-sm font-medium ${invoicePayment === invoiceWO.total ? 'text-green-600' : invoicePayment > invoiceWO.total ? 'text-red-600' : 'text-yellow-600'}`}>
+                  Status: {invoicePayment === invoiceWO.total ? 'Lunas' : invoicePayment === 0 ? 'Belum Bayar' : invoicePayment > invoiceWO.total ? 'Melebihi tagihan' : `Belum lengkap (kurang Rp ${(invoiceWO.total - invoicePayment).toLocaleString('id-ID')})`}
                 </p>
               </div>
             </div>

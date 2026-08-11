@@ -233,7 +233,7 @@ export default function SalesInvoice() {
         payment: invoice.payment,
         paymentDate: invoice.paymentDate || invoice.date,
         backdateReason: invoice.backdateReason || '',
-        paymentMethod: invoice.paymentMethod || 'Tunai',
+        paymentMethod: invoice.paymentMethod === 'Transfer' ? 'Transfer' : 'Tunai',
         status: invoice.status,
       });
       setFormItems((invoice.items || []).map((item, index) => ({ ...item, id: `edit-${invoice.id}-${index}` })));
@@ -483,7 +483,15 @@ export default function SalesInvoice() {
           window.alert('Tambahkan minimal satu barang atau jasa ke faktur.');
           return;
         }
-        const invoice = await createInvoiceFromWO(selectedWO.id, woPayment, woPaymentMethod, woInvoiceDate, woPayment > 0 ? woPaymentDate : undefined, woBackdateReason, woDraftItems);
+        const invoice = await createInvoiceFromWO(
+          selectedWO.id,
+          woPaymentMethod === 'Tunai' ? woPayment : 0,
+          woPaymentMethod === 'Transfer' ? woPayment : 0,
+          woInvoiceDate,
+          woPayment > 0 ? woPaymentDate : undefined,
+          woBackdateReason,
+          woDraftItems
+        );
         if (invoice) {
           setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
           setTimeout(() => setSuccessMsg(''), 4000);

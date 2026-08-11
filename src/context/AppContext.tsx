@@ -44,7 +44,7 @@ interface AppContextType {
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
-  createInvoiceFromWO: (woId: string, payment: number, paymentMethod: 'Tunai' | 'Transfer', invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
+  createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
   addItem: (item: Item) => Promise<void>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -721,8 +721,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const createInvoiceFromWO = async (
     woId: string,
-    payment: number,
-    paymentMethod: 'Tunai' | 'Transfer',
+    cashPayment: number,
+    transferPayment: number,
     invoiceDate?: string,
     paymentDate?: string,
     backdateReason?: string,
@@ -737,13 +737,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (invoiceTotal <= 0) {
       throw new Error('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
     }
+    const payment = cashPayment + transferPayment;
+    const paymentMethod: SalesInvoice['paymentMethod'] = cashPayment > 0 && transferPayment > 0
+      ? 'Campuran'
+      : transferPayment > 0 ? 'Transfer' : 'Tunai';
     const status: SalesInvoice['status'] = payment >= invoiceTotal ? 'Lunas' : 'Belum Lunas';
     const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
     let invoiceNumber = generateDocumentNumber('invoice', wo.branchId);
     let invoiceId = Date.now().toString();
 
     if (!isDemoMode) {
-      const result = await api.createInvoiceFromWorkOrder(woId, payment, paymentMethod, today, paymentDate, backdateReason, finalItems);
+      const result = await api.createInvoiceFromWorkOrder(woId, cashPayment, transferPayment, today, paymentDate, backdateReason, finalItems);
       if (!result.success || !result.data) {
         throw new Error(result.message || 'Gagal membuat faktur dari WO');
       }

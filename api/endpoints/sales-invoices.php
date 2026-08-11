@@ -83,7 +83,17 @@ switch ($method) {
                 }
 
                 $date = $d['date'] ?? date('Y-m-d');
-                $payment = max(0, (float)($d['payment'] ?? 0));
+                // Pembayaran awal dapat dibagi ke kas dan bank. Klien lama tetap
+                // didukung melalui field payment/paymentMethod.
+                if (array_key_exists('cashPayment', $d) || array_key_exists('transferPayment', $d)) {
+                    $cashPayment = max(0, (float)($d['cashPayment'] ?? 0));
+                    $transferPayment = max(0, (float)($d['transferPayment'] ?? 0));
+                } else {
+                    $legacyPayment = max(0, (float)($d['payment'] ?? 0));
+                    $cashPayment = ($d['paymentMethod'] ?? 'Tunai') === 'Tunai' ? $legacyPayment : 0;
+                    $transferPayment = ($d['paymentMethod'] ?? 'Tunai') === 'Tunai' ? 0 : $legacyPayment;
+                }
+                $payment = $cashPayment + $transferPayment;
                 $paymentDate = $payment > 0 ? ($d['paymentDate'] ?? $date) : null;
                 $backdateReason = trim((string)($d['backdateReason'] ?? ''));
                 if ($date > date('Y-m-d') || ($paymentDate && $paymentDate > date('Y-m-d'))) {
@@ -95,10 +105,7 @@ switch ($method) {
                 if (isBackdateReasonRequired($pdo) && ($date < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') {
                     throw new Exception('Alasan tanggal mundur wajib diisi');
                 }
-                $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
-                if (!in_array($paymentMethod, ['Tunai', 'Transfer'], true)) {
-                    throw new Exception('Metode pembayaran tidak valid');
-                }
+                $paymentMethod = $cashPayment > 0 && $transferPayment > 0 ? 'Campuran' : ($transferPayment > 0 ? 'Transfer' : 'Tunai');
                 $servicesStmt = $pdo->prepare("SELECT * FROM work_order_services WHERE wo_id = ?");
                 $servicesStmt->execute([$woId]);
                 $services = $servicesStmt->fetchAll();
@@ -110,7 +117,7 @@ switch ($method) {
                 }, $services);
                 $normalizedInvoice = $normalizeSalesInvoiceItems($pdo,$rawInvoiceItems);
                 $invoiceItems=$normalizedInvoice['items'];$total=$normalizedInvoice['total'];
-                if($payment>$total)throw new InvalidArgumentException('Pembayaran awal tidak boleh melebihi total faktur');
+                if($payment!==0.0 && abs($payment-$total)>0.001)throw new InvalidArgumentException('Jumlah Tunai + Transfer harus sama dengan total faktur, atau keduanya Rp0 untuk Belum Bayar');
                 $status = $payment >= $total ? 'Lunas' : 'Belum Lunas';
                 $invoiceId = generateId();
                 $invoiceNumber = nextDocumentNumber($pdo, 'sales_invoice', $wo['branch_id'], $date);
@@ -155,7 +162,8 @@ switch ($method) {
                     WHERE id = ?
                 ");
                 $updateWo->execute([$invoiceId, $invoiceNumber, $woId]);
-                $recordInitialCustomerPayment($pdo,$invoiceId,(string)$wo['branch_id'],(string)($paymentDate??$date),$payment,$paymentMethod,$actor);
+                $recordInitialCustomerPayment($pdo,$invoiceId,(string)$wo['branch_id'],(string)($paymentDate??$date),$cashPayment,'Tunai',$actor);
+                $recordInitialCustomerPayment($pdo,$invoiceId,(string)$wo['branch_id'],(string)($paymentDate??$date),$transferPayment,'Transfer',$actor);
 
                 $pdo->commit();
                 respondSuccess([

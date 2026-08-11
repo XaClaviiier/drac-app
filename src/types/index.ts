@@ -51,7 +51,7 @@ export interface SalesInvoice {
   description: string;
   total: number;
   payment: number;
-  paymentMethod?: 'Tunai' | 'Transfer';
+  paymentMethod?: 'Tunai' | 'Transfer' | 'Campuran';
   paymentDate?: string;
   backdateReason?: string;
   status: 'Lunas' | 'Belum Lunas';
