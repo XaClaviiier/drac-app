@@ -38,11 +38,14 @@ export default function SettingsPage() {
   const [branchAccountSettings, setBranchAccountSettings] = useState<any[]>([]);
   const [maintenanceFrom, setMaintenanceFrom] = useState('2026-08-01');
   const [maintenanceTo, setMaintenanceTo] = useState('2026-08-31');
+  const [maintenanceBranchId, setMaintenanceBranchId] = useState('');
   const [maintenancePreview, setMaintenancePreview] = useState<any>(null);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceConfirmation, setMaintenanceConfirmation] = useState('');
   const [maintenanceResult, setMaintenanceResult] = useState<any>(null);
   const canEdit = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator');
+  const maintenanceBranch = data.branches.find(branch => branch.id === maintenanceBranchId);
+  const maintenanceExpectedConfirmation = maintenanceBranchId === 'ALL' ? 'HAPUS SEMUA CABANG' : maintenanceBranch ? `HAPUS ${maintenanceBranch.name.toUpperCase()}` : '';
 
   useEffect(() => {
     setDraft(structuredClone(data.settings));
@@ -122,10 +125,11 @@ export default function SettingsPage() {
     });
   };
   const previewMaintenance = async () => {
+    if (!maintenanceBranchId) { window.alert('Pilih cabang yang transaksinya akan diperiksa.'); return; }
     setMaintenanceLoading(true);
     setMaintenanceResult(null);
     try {
-      const result = await api.previewDataMaintenance(maintenanceFrom, maintenanceTo);
+      const result = await api.previewDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceBranchId);
       if (!result.success) throw new Error(result.message || 'Gagal memeriksa data');
       setMaintenancePreview(result.data);
     } catch (error: any) {
@@ -135,11 +139,12 @@ export default function SettingsPage() {
     }
   };
   const purgeMaintenance = async () => {
-    if (maintenanceConfirmation !== 'HAPUS DATA') return;
-    if (!window.confirm(`Hapus permanen semua transaksi dan master terkait periode ${maintenanceFrom} sampai ${maintenanceTo}? Snapshot pemulihan akan disimpan.`)) return;
+    if (!maintenanceBranchId || maintenanceConfirmation !== maintenanceExpectedConfirmation) return;
+    const targetName = maintenanceBranchId === 'ALL' ? 'SEMUA CABANG' : maintenanceBranch?.name;
+    if (!window.confirm(`Hapus permanen transaksi ${targetName} untuk periode ${maintenanceFrom} sampai ${maintenanceTo}? Master pelanggan dan kendaraan tetap dipertahankan.`)) return;
     setMaintenanceLoading(true);
     try {
-      const result = await api.purgeDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceConfirmation);
+      const result = await api.purgeDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceBranchId, maintenanceConfirmation);
       if (!result.success) throw new Error(result.message || 'Gagal menghapus data');
       setMaintenanceResult(result.data);
       setMaintenancePreview(null);
@@ -321,28 +326,31 @@ export default function SettingsPage() {
                 <span className="rounded-xl bg-red-100 p-3 text-red-700"><Database className="h-7 w-7" /></span>
                 <div><h2 className="text-xl font-bold text-gray-900">Pemeliharaan Data Transaksi</h2><p className="mt-1 text-sm text-gray-500">Khusus Owner. Sistem membuat snapshot sebelum penghapusan dan menjaga data di luar periode tetap utuh.</p></div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className={labelClass}><span>Dari tanggal</span><input type="date" className={inputClass} value={maintenanceFrom} onChange={event => { setMaintenanceFrom(event.target.value); setMaintenancePreview(null); }} /></label>
-                <label className={labelClass}><span>Sampai tanggal</span><input type="date" className={inputClass} value={maintenanceTo} onChange={event => { setMaintenanceTo(event.target.value); setMaintenancePreview(null); }} /></label>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className={labelClass}><span>Cabang yang akan dihapus *</span><select className={inputClass} value={maintenanceBranchId} onChange={event => { setMaintenanceBranchId(event.target.value); setMaintenancePreview(null); setMaintenanceResult(null); setMaintenanceConfirmation(''); }}><option value="">Pilih cabang...</option>{data.branches.filter(branch=>branch.isActive).map(branch=><option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>)}<option value="ALL">⚠ SEMUA CABANG</option></select></label>
+                <label className={labelClass}><span>Dari tanggal</span><input type="date" className={inputClass} value={maintenanceFrom} onChange={event => { setMaintenanceFrom(event.target.value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
+                <label className={labelClass}><span>Sampai tanggal</span><input type="date" className={inputClass} value={maintenanceTo} onChange={event => { setMaintenanceTo(event.target.value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
               </div>
-              <button type="button" onClick={previewMaintenance} disabled={maintenanceLoading} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{maintenanceLoading ? 'Memeriksa...' : 'Periksa Data Periode'}</button>
+              {maintenanceBranchId === 'ALL' && <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800"><AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" /> Pilihan ini mencakup transaksi seluruh cabang dalam periode. Gunakan hanya jika benar-benar diperlukan.</div>}
+              <button type="button" onClick={previewMaintenance} disabled={maintenanceLoading || !maintenanceBranchId} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">{maintenanceLoading ? 'Memeriksa...' : 'Periksa Data Periode'}</button>
 
               {maintenancePreview && (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-                  <h3 className="font-bold text-amber-900">Data yang akan dihapus</h3>
+                  <h3 className="font-bold text-amber-900">Data yang akan dihapus — {maintenancePreview.branchName}</h3>
+                  <p className="mt-1 text-xs text-amber-800">Periode {maintenancePreview.from} sampai {maintenancePreview.to}</p>
                   <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {[
                       ['Order Kerja', maintenancePreview.workOrders], ['Layanan WO', maintenancePreview.workOrderServices],
                       ['Invoice', maintenancePreview.invoices], ['Detail Invoice', maintenancePreview.invoiceItems],
-                      ['Pembayaran', maintenancePreview.payments], ['Kendaraan', maintenancePreview.vehicles],
-                      ['Pelanggan', maintenancePreview.customers],
+                      ['Pembayaran', maintenancePreview.payments],
                     ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-amber-200 bg-white p-3"><p className="text-xs text-gray-500">{label}</p><p className="text-2xl font-bold text-gray-900">{value}</p></div>)}
                   </div>
+                  <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Pelanggan dan kendaraan merupakan master global dan tidak ikut dihapus.</p>
                   <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-                    <p className="text-sm font-semibold text-red-800">Ketik HAPUS DATA untuk mengaktifkan tombol penghapusan.</p>
+                    <p className="text-sm font-semibold text-red-800">Ketik <span className="font-mono">{maintenanceExpectedConfirmation}</span> untuk mengaktifkan tombol penghapusan.</p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                      <input className={`${inputClass} font-mono font-bold uppercase`} value={maintenanceConfirmation} onChange={event => setMaintenanceConfirmation(event.target.value.toUpperCase())} placeholder="HAPUS DATA" />
-                      <button type="button" onClick={purgeMaintenance} disabled={maintenanceLoading || maintenanceConfirmation !== 'HAPUS DATA'} className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Trash2 className="h-4 w-4" /> Hapus Data Periode</button>
+                      <input className={`${inputClass} font-mono font-bold uppercase`} value={maintenanceConfirmation} onChange={event => setMaintenanceConfirmation(event.target.value.toUpperCase())} placeholder={maintenanceExpectedConfirmation} />
+                      <button type="button" onClick={purgeMaintenance} disabled={maintenanceLoading || maintenanceConfirmation !== maintenanceExpectedConfirmation} className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Trash2 className="h-4 w-4" /> Hapus Transaksi Cabang</button>
                     </div>
                   </div>
                 </div>
@@ -352,8 +360,8 @@ export default function SettingsPage() {
                 <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900">
                   <h3 className="flex items-center gap-2 font-bold"><CheckCircle2 className="h-5 w-5" /> Penghapusan selesai</h3>
                   <p className="mt-1 text-sm">ID snapshot: <code className="font-bold">{maintenanceResult.purgeId}</code></p>
-                  <p className="mt-2 text-sm">Dihapus: {maintenanceResult.workOrders} WO, {maintenanceResult.invoices} invoice, {maintenanceResult.payments} pembayaran, {maintenanceResult.vehiclesDeleted} kendaraan, dan {maintenanceResult.customersDeleted} pelanggan.</p>
-                  {(maintenanceResult.vehiclesSkipped > 0 || maintenanceResult.customersSkipped > 0) && <p className="mt-2 text-xs text-amber-700">Beberapa master dilewati karena masih dipakai transaksi di luar periode: {maintenanceResult.vehiclesSkipped} kendaraan, {maintenanceResult.customersSkipped} pelanggan.</p>}
+                  <p className="mt-2 text-sm">Cabang: <strong>{maintenanceResult.branchName}</strong>. Dihapus: {maintenanceResult.workOrders} WO, {maintenanceResult.invoices} invoice, dan {maintenanceResult.payments} pembayaran.</p>
+                  <p className="mt-2 text-xs text-emerald-700">Master pelanggan dan kendaraan tetap dipertahankan.</p>
                 </div>
               )}
             </div>

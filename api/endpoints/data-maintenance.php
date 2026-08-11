@@ -2,8 +2,18 @@
 $owner = requireOwner($pdo);
 $from = (string)($_GET['from'] ?? '');
 $to = (string)($_GET['to'] ?? '');
+$branchId = trim((string)($_GET['branchId'] ?? ''));
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) || $from > $to) {
     respondError('Periode tidak valid', 422);
+}
+if ($branchId === '') respondError('Cabang wajib dipilih', 422);
+$allBranches = strtoupper($branchId) === 'ALL';
+$branchName = 'SEMUA CABANG';
+if (!$allBranches) {
+    $branchStmt = $pdo->prepare('SELECT name FROM branches WHERE id=? AND is_active=1');
+    $branchStmt->execute([$branchId]);
+    $branchName = trim((string)$branchStmt->fetchColumn());
+    if ($branchName === '') respondError('Cabang tidak ditemukan atau tidak aktif', 422);
 }
 
 function maintenanceIds(PDO $pdo, string $sql, array $params): array {
@@ -41,28 +51,36 @@ function maintenanceRecalculateInvoice(PDO $pdo, string $invoiceId): void {
         ->execute([$paid, $latest['date'] ?? null, $method, $status, $invoiceId]);
 }
 
-$woIds = maintenanceIds($pdo, 'SELECT id FROM work_orders WHERE date BETWEEN ? AND ?', [$from, $to]);
-$invoiceSql = 'SELECT id FROM sales_invoices WHERE date BETWEEN ? AND ?';
-$invoiceParams = [$from, $to];
+$woSql = 'SELECT id FROM work_orders WHERE date BETWEEN ? AND ?';
+$woParams = [$from, $to];
+if (!$allBranches) { $woSql .= ' AND branch_id=?'; $woParams[] = $branchId; }
+$woIds = maintenanceIds($pdo, $woSql, $woParams);
+$invoiceSql = 'SELECT id FROM sales_invoices WHERE ((date BETWEEN ? AND ?)' . ($allBranches ? '' : ' AND branch_id=?') . ')';
+$invoiceParams = $allBranches ? [$from, $to] : [$from, $to, $branchId];
 if ($woIds) {
     $invoiceSql .= ' OR wo_id IN (' . maintenancePlaceholders($woIds) . ')';
     $invoiceParams = array_merge($invoiceParams, $woIds);
 }
 $invoiceIds = maintenanceIds($pdo, $invoiceSql, $invoiceParams);
 
-$paymentSql = 'SELECT id FROM customer_payments WHERE date BETWEEN ? AND ?';
-$paymentParams = [$from, $to];
+$paymentSql = 'SELECT id FROM customer_payments WHERE ((date BETWEEN ? AND ?)' . ($allBranches ? '' : ' AND branch_id=?') . ')';
+$paymentParams = $allBranches ? [$from, $to] : [$from, $to, $branchId];
 if ($invoiceIds) {
     $paymentSql .= ' OR invoice_id IN (' . maintenancePlaceholders($invoiceIds) . ')';
     $paymentParams = array_merge($paymentParams, $invoiceIds);
 }
 $paymentIds = maintenanceIds($pdo, $paymentSql, $paymentParams);
-$vehicleIds = maintenanceIds($pdo, 'SELECT id FROM vehicles WHERE DATE(created_at) BETWEEN ? AND ?', [$from, $to]);
-$customerIds = maintenanceIds($pdo, 'SELECT id FROM customers WHERE DATE(created_at) BETWEEN ? AND ?', [$from, $to]);
+// Pelanggan dan kendaraan adalah master global lintas cabang. Pemeliharaan
+// transaksi tidak boleh menghapusnya otomatis.
+$vehicleIds = [];
+$customerIds = [];
 
 $preview = [
     'from' => $from,
     'to' => $to,
+    'branchId' => $allBranches ? 'ALL' : $branchId,
+    'branchName' => $branchName,
+    'masterDataPreserved' => true,
     'workOrders' => count($woIds),
     'workOrderServices' => $woIds ? maintenanceCount($pdo, 'work_order_services', 'wo_id IN (' . maintenancePlaceholders($woIds) . ')', $woIds) : 0,
     'invoices' => count($invoiceIds),
@@ -76,13 +94,18 @@ if ($method === 'GET') respondSuccess($preview);
 if ($method !== 'POST') respondError('Method not allowed', 405);
 
 $input = getInput();
-if (($input['confirmation'] ?? '') !== 'HAPUS DATA') respondError('Konfirmasi penghapusan tidak sesuai', 422);
+$expectedConfirmation = $allBranches ? 'HAPUS SEMUA CABANG' : 'HAPUS ' . strtoupper($branchName);
+if (trim((string)($input['confirmation'] ?? '')) !== $expectedConfirmation) respondError('Konfirmasi penghapusan tidak sesuai', 422);
 
 $pdo->exec("CREATE TABLE IF NOT EXISTS data_purge_runs (
     id VARCHAR(64) PRIMARY KEY, period_from DATE NOT NULL, period_to DATE NOT NULL,
+    branch_id VARCHAR(64) NULL, branch_name VARCHAR(150) NOT NULL DEFAULT 'SEMUA CABANG',
     summary_json LONGTEXT NOT NULL, created_by VARCHAR(64) NULL, created_by_name VARCHAR(150) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$purgeRunColumns = array_column($pdo->query('SHOW COLUMNS FROM data_purge_runs')->fetchAll(), 'Field');
+if (!in_array('branch_id', $purgeRunColumns, true)) $pdo->exec("ALTER TABLE data_purge_runs ADD branch_id VARCHAR(64) NULL AFTER period_to");
+if (!in_array('branch_name', $purgeRunColumns, true)) $pdo->exec("ALTER TABLE data_purge_runs ADD branch_name VARCHAR(150) NOT NULL DEFAULT 'SEMUA CABANG' AFTER branch_id");
 $pdo->exec("CREATE TABLE IF NOT EXISTS data_purge_snapshots (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, purge_id VARCHAR(64) NOT NULL,
     entity_type VARCHAR(60) NOT NULL, entity_id VARCHAR(100) NOT NULL, snapshot_json LONGTEXT NOT NULL,
@@ -184,8 +207,8 @@ try {
         'customersDeleted' => $deletedCustomers,
         'customersSkipped' => 0,
     ]);
-    $pdo->prepare('INSERT INTO data_purge_runs(id,period_from,period_to,summary_json,created_by,created_by_name) VALUES(?,?,?,?,?,?)')
-        ->execute([$purgeId, $from, $to, json_encode($result), $owner['id'] ?? null, $owner['name'] ?? $owner['username'] ?? null]);
+    $pdo->prepare('INSERT INTO data_purge_runs(id,period_from,period_to,branch_id,branch_name,summary_json,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?)')
+        ->execute([$purgeId, $from, $to, $allBranches ? null : $branchId, $branchName, json_encode($result), $owner['id'] ?? null, $owner['name'] ?? $owner['username'] ?? null]);
     $pdo->commit();
     respondSuccess($result, 'Data periode berhasil dihapus');
 } catch (Throwable $error) {

@@ -84,10 +84,10 @@ export const api = {
     request('/ai-settings', { method: 'PUT', body: JSON.stringify({ apiKey, model }) }),
   aiChat: (messages: Array<{ role: string; content: string }>) =>
     request('/ai-chat', { method: 'POST', body: JSON.stringify({ messages }) }),
-  previewDataMaintenance: (from: string, to: string) =>
-    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { method: 'GET' }),
-  purgeDataMaintenance: (from: string, to: string, confirmation: string) =>
-    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+  previewDataMaintenance: (from: string, to: string, branchId: string) =>
+    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}`, { method: 'GET' }),
+  purgeDataMaintenance: (from: string, to: string, branchId: string, confirmation: string) =>
+    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}`, {
       method: 'POST', body: JSON.stringify({ confirmation }),
     }),
 
