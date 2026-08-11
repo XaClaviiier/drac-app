@@ -294,7 +294,7 @@ switch ($method) {
             $allowedTransitions = [
                 'Register' => ['Register', 'Proses', 'Closed'],
                 'Proses' => ['Proses', 'Selesai', 'Closed'],
-                'Selesai' => ['Selesai'],
+                'Selesai' => ['Selesai', 'Closed'],
                 'Closed' => ['Closed', 'Proses'],
             ];
             if (!isset($allowedTransitions[$currentStatus]) || !in_array($nextStatus, $allowedTransitions[$currentStatus], true)) {
@@ -331,6 +331,17 @@ switch ($method) {
             }
             if ($nextStatus === 'Closed' && trim((string)($d['cancelReason'] ?? '')) === '') {
                 throw new InvalidArgumentException('Alasan Lost Sales wajib diisi.');
+            }
+            if ($nextStatus === 'Closed') {
+                $linkedInvoice = !empty($currentWorkOrder['invoice_id']);
+                if (!$linkedInvoice) {
+                    $invoiceCheck = $pdo->prepare("SELECT COUNT(*) FROM sales_invoices WHERE wo_id=?");
+                    $invoiceCheck->execute([$id]);
+                    $linkedInvoice = (int)$invoiceCheck->fetchColumn() > 0;
+                }
+                if ($linkedInvoice) {
+                    throw new InvalidArgumentException('WO yang sudah memiliki faktur tidak dapat dijadikan Lost Sales. Batalkan transaksi melalui Maintenance Data terlebih dahulu.');
+                }
             }
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
             $transactionTime = substr((string)($d['transactionTime'] ?? $currentWorkOrder['transaction_time'] ?? date('H:i')), 0, 5);

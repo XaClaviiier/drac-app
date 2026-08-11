@@ -562,7 +562,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const forward: Record<WOStatus, WOStatus[]> = {
       Register: ['Proses', 'Closed'],
       Proses: ['Selesai', 'Closed'],
-      Selesai: [],
+      Selesai: ['Closed'],
       Closed: ['Proses'],
     };
     return forward[from]?.includes(to) ?? false;
