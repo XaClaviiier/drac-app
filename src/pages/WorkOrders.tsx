@@ -88,7 +88,6 @@ export default function WorkOrders() {
   const [cancelStep, setCancelStep] = useState<1 | 2>(1);
   const [cancelReasonChoice, setCancelReasonChoice] = useState('');
   const [cancelReasonNotes, setCancelReasonNotes] = useState('');
-  const [cancelConfirmation, setCancelConfirmation] = useState('');
   const [showPendingTemplateEditor, setShowPendingTemplateEditor] = useState(false);
   const [pendingTemplateDraft, setPendingTemplateDraft] = useState(
     data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS
@@ -123,6 +122,9 @@ export default function WorkOrders() {
   const [lostSalesFollowUp, setLostSalesFollowUp] = useState<WorkOrder | null>(null);
   const [isFollowingUpLostSales, setIsFollowingUpLostSales] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const canShowAdminRowActions = Boolean(
+    currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
+  );
   const [showComplaintEditor, setShowComplaintEditor] = useState(false);
   const [newComplaintTemplate, setNewComplaintTemplate] = useState('');
   const [complaintTemplates, setComplaintTemplates] = useState<string[]>(() => {
@@ -997,7 +999,6 @@ export default function WorkOrders() {
     setCancelStep(1);
     setCancelReasonChoice('');
     setCancelReasonNotes('');
-    setCancelConfirmation('');
     setStatusDialog({ wo, next });
   };
 
@@ -1017,7 +1018,6 @@ export default function WorkOrders() {
       setCancelStep(1);
       setCancelReasonChoice('');
       setCancelReasonNotes('');
-      setCancelConfirmation('');
     } catch (error: any) {
       window.alert(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
     }
@@ -1665,26 +1665,15 @@ export default function WorkOrders() {
                     </td>}
                     {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {hasPermission('wo:edit') && wo.status === 'Register' && !wo.continuedToWoId && (
-                          <button onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">{wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
-                        )}
-                        {hasPermission('wo:edit') && wo.status === 'Proses' && (
-                          <><button onClick={() => requestStatusChange(wo, 'Closed')} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">Batalkan</button><button onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">Selesai</button></>
-                        )}
-                        {hasPermission('invoice:create') && wo.status === 'Selesai' && !wo.invoiceId && wo.total > 0 && (
-                          <button onClick={() => handleOpenInvoiceModal(wo)} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
-                            Faktur
-                          </button>
-                        )}
                         <button onClick={() => setDetailWO(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
                           <Eye className="h-4 w-4" />
                         </button>
-                        {hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
+                        {canShowAdminRowActions && hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
                           <button onClick={() => handleOpenModal(wo)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit">
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                        {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
                           <button onClick={() => void handleDelete(wo)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1747,16 +1736,13 @@ export default function WorkOrders() {
                 {canViewAllBranches && <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>}
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
-                {hasPermission('wo:edit') && wo.status === 'Register' && !wo.continuedToWoId && (
-                  <button type="button" onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-semibold text-white">{wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
-                )}
-                {hasPermission('wo:edit') && wo.status === 'Proses' && (
-                  <button type="button" onClick={() => requestStatusChange(wo, 'Selesai')} className="rounded-lg bg-green-600 px-2.5 py-1.5 text-[11px] font-semibold text-white">Selesai</button>
-                )}
-                {hasPermission('invoice:create') && wo.status === 'Selesai' && !wo.invoiceId && wo.total > 0 && (
-                  <button type="button" onClick={() => handleOpenInvoiceModal(wo)} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white">Buat Faktur</button>
-                )}
                 <button type="button" onClick={() => setDetailWO(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Lihat detail ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
+                {canShowAdminRowActions && hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
+                  <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>
+                )}
+                {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                  <button type="button" onClick={() => void handleDelete(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600" aria-label={`Hapus ${wo.woNumber}`}><Trash2 className="h-4 w-4" /></button>
+                )}
               </div>
             </article>
           );
@@ -2931,14 +2917,12 @@ export default function WorkOrders() {
           setCancelStep(1);
           setCancelReasonChoice('');
           setCancelReasonNotes('');
-          setCancelConfirmation('');
         };
         const finalCancelReason = cancelReasonChoice === 'Lainnya'
           ? `Lainnya: ${cancelReasonNotes.trim()}`
           : cancelReasonNotes.trim() ? `${cancelReasonChoice} — ${cancelReasonNotes.trim()}` : cancelReasonChoice;
         const finalCancelEnabled = Boolean(cancelReasonChoice
-          && (cancelReasonChoice !== 'Lainnya' || cancelReasonNotes.trim())
-          && cancelConfirmation.trim().toUpperCase() === 'BATAL');
+          && (cancelReasonChoice !== 'Lainnya' || cancelReasonNotes.trim()));
         return (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
@@ -2979,10 +2963,6 @@ export default function WorkOrders() {
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-gray-700">Catatan {cancelReasonChoice === 'Lainnya' ? <span className="text-red-500">*</span> : '(opsional)'}</label>
                       <textarea value={cancelReasonNotes} onChange={(e) => setCancelReasonNotes(e.target.value)} rows={2} placeholder="Tambahkan rincian alasan" className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-rose-500" />
-                    </div>
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                      <label className="mb-1 block text-xs font-bold text-red-800">Ketik BATAL untuk konfirmasi akhir</label>
-                      <input value={cancelConfirmation} onChange={(e) => setCancelConfirmation(e.target.value)} placeholder="BATAL" autoComplete="off" className="w-full rounded-lg border border-red-300 bg-white px-3 py-2 font-mono uppercase outline-none focus:border-red-600" />
                     </div>
                   </>
                 )}
