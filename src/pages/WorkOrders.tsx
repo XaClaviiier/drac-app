@@ -2247,14 +2247,16 @@ export default function WorkOrders() {
                   <button onClick={() => openCompletionModal(detailWO)} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
                 </>
               )}
+              {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
+                <>
+                  <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-white text-orange-700 hover:bg-orange-50" title="Kembali ke Dikerjakan" aria-label={`Kembalikan ${detailWO.woNumber} ke Dikerjakan`}><Undo2 className="h-5 w-5" /></button>
+                </>
+              )}
               {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && detailWO.total > 0 && (
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
-                <>
-                  <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-white px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"><Undo2 className="h-4 w-4" /> Kembali ke Dikerjakan</button>
-                  <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan / Lost Sales</button>
-                </>
+                <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan / Lost Sales</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.continuedToWoId && (
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
