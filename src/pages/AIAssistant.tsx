@@ -1331,20 +1331,35 @@ ${buildSmartContext(userMsgText)}`;
     );
     if (!vehicle && a.plateNumber) {
       const vehicleText = String(a.vehicleInfo || '').trim();
-      const normalizedVehicleText = vehicleText.toLowerCase();
+      const normalizedVehicleText = vehicleText.toLocaleLowerCase('id-ID');
       const catalogResponse = await api.get<AIVehicleCatalog>('vehicle-catalog');
       const catalogBrands = catalogResponse.success ? (catalogResponse.data?.brands || []).filter(brand => brand.isActive) : [];
       const catalogColors = catalogResponse.success ? (catalogResponse.data?.colors || []).filter(color => color.isActive) : [];
       let catalogMatch: { brand?: any; model?: any; generation?: any } = {};
-      for (const brand of catalogBrands) {
-        const brandMatched = normalizedVehicleText.includes(String(brand.name).trim().toLowerCase());
-        if (!brandMatched) continue;
-        for (const model of (brand.models || []).filter(model => model.isActive)) {
-          const modelMatched = normalizedVehicleText.includes(String(model.name).trim().toLowerCase());
-          const generation = (model.generations || []).filter(item => item.isActive).find((item: any) => [item.name, ...String(item.aliases || '').split(',')].some((alias: string) => alias.trim() && normalizedVehicleText.includes(alias.trim().toLowerCase())));
-          if (generation || modelMatched) { catalogMatch = { brand, model, generation }; break; }
+      const confirmedResolution = a.vehicleCatalogResolution as VehicleCatalogResolution | undefined;
+      if (confirmedResolution?.status === 'ready') {
+        const confirmedBrand = catalogBrands.find(brand => brand.id === confirmedResolution.brandId)
+          || catalogBrands.find(brand => brand.name.localeCompare(String(confirmedResolution.brandName || ''), 'id', { sensitivity: 'base' }) === 0);
+        const confirmedModel = confirmedBrand?.models.find(model => model.isActive && model.id === confirmedResolution.modelId)
+          || confirmedBrand?.models.find(model => model.isActive && model.name.localeCompare(String(confirmedResolution.modelName || ''), 'id', { sensitivity: 'base' }) === 0);
+        if (confirmedBrand && confirmedModel) {
+          const confirmedGeneration = (confirmedModel.generations || []).filter(item => item.isActive).find(item =>
+            normalizedVehicleText.includes(item.name.trim().toLocaleLowerCase('id-ID'))
+          );
+          catalogMatch = { brand: confirmedBrand, model: confirmedModel, generation: confirmedGeneration };
         }
-        if (catalogMatch.model) break;
+      }
+      if (!catalogMatch.model) {
+        for (const brand of catalogBrands) {
+          const brandMatched = normalizedVehicleText.includes(String(brand.name).trim().toLocaleLowerCase('id-ID'));
+          if (!brandMatched) continue;
+          for (const model of (brand.models || []).filter(model => model.isActive)) {
+            const modelMatched = normalizedVehicleText.includes(String(model.name).trim().toLocaleLowerCase('id-ID'));
+            const generation = (model.generations || []).filter(item => item.isActive).find((item: any) => [item.name, ...String(item.aliases || '').split(',')].some((alias: string) => alias.trim() && normalizedVehicleText.includes(alias.trim().toLocaleLowerCase('id-ID'))));
+            if (generation || modelMatched) { catalogMatch = { brand, model, generation }; break; }
+          }
+          if (catalogMatch.model) break;
+        }
       }
       if (!catalogMatch.brand) {
         const typedBrand = vehicleText.split(/\s+/)[0] || vehicleText;
@@ -1354,7 +1369,8 @@ ${buildSmartContext(userMsgText)}`;
         const availableModels = (catalogMatch.brand.models || []).filter((model: any) => model.isActive).slice(0, 6).map((model: any) => model.name).join(', ');
         throw new Error(`Tipe kendaraan pada "${vehicleText}" belum tersedia untuk ${catalogMatch.brand.name}. Pilihan master: ${availableModels || 'belum ada'}. Tambahkan tipe di Master Kendaraan lalu ulangi registrasi.`);
       }
-      const matchedColor = catalogColors.find(color => normalizedVehicleText.includes(color.name.trim().toLowerCase()));
+      const matchedColor = catalogColors.find(color => color.name.localeCompare(String(confirmedResolution?.color || ''), 'id', { sensitivity: 'base' }) === 0)
+        || catalogColors.find(color => normalizedVehicleText.includes(color.name.trim().toLocaleLowerCase('id-ID')));
       if (!matchedColor) {
         throw new Error(`Warna kendaraan pada "${vehicleText}" belum cocok dengan daftar warna di Master Kendaraan. Pilih atau tambahkan warna terlebih dahulu.`);
       }
