@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Send, KeyRound, Sparkles, Car, Users, Package,
-  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2, Building2, Grid2X2,
+  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2, Building2, Grid2X2, Plus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
@@ -62,6 +62,27 @@ interface RegistrationDraft {
   phone: string;
   vehicleInfo: string;
 }
+
+type VehicleCatalogResolution = {
+  status: 'checking' | 'ready' | 'missing_brand' | 'missing_model' | 'error';
+  brandId?: string;
+  brandName?: string;
+  modelId?: string;
+  modelName?: string;
+  brandCandidate?: string;
+  modelCandidate?: string;
+  year?: number;
+  color?: string;
+  message?: string;
+};
+
+const titleCaseVehicleName = (value: string) => value
+  .trim()
+  .toLocaleLowerCase('id-ID')
+  .replace(/(^|[\s-])\p{L}/gu, letter => letter.toLocaleUpperCase('id-ID'));
+
+const canonicalVehicleInfo = (brand: string, model: string, year?: number, color?: string) =>
+  `${brand} ${model}${year ? ` ${year}` : ''}${color ? ` - ${color}` : ''}`.trim();
 
 type AIVehicleCatalogGeneration = { id: string; name: string; aliases?: string; isActive: boolean; engineCcs?: number[] };
 type AIVehicleCatalogModel = { id: string; name: string; isActive: boolean; usageCount?: number; generations?: AIVehicleCatalogGeneration[] };
@@ -238,6 +259,140 @@ export default function AIAssistant() {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, busy, showBranchChooser]);
+
+  useEffect(() => {
+    if (!pendingAction || !['create_wo', 'create_quick_invoice'].includes(pendingAction.action) || pendingAction.vehicleCatalogResolution) return;
+    let cancelled = false;
+    setPendingAction((current: any) => current ? {
+      ...current,
+      vehicleCatalogResolution: { status: 'checking' } satisfies VehicleCatalogResolution,
+    } : current);
+
+    void (async () => {
+      try {
+        const existingVehicle = data.vehicles.find(vehicle => normalizePlate(vehicle.plateNumber) === normalizePlate(String(pendingAction.plateNumber || '')));
+        if (existingVehicle) {
+          const normalized = canonicalVehicleInfo(existingVehicle.brand, existingVehicle.model, existingVehicle.year || undefined, existingVehicle.color || undefined);
+          if (!cancelled) setPendingAction((current: any) => current ? {
+            ...current,
+            vehicleRefId: existingVehicle.id,
+            vehicleInfo: normalized,
+            vehicleCatalogResolution: {
+              status: 'ready', brandId: existingVehicle.brandId, brandName: existingVehicle.brand,
+              modelId: existingVehicle.modelId, modelName: existingVehicle.model,
+              year: existingVehicle.year || undefined, color: existingVehicle.color || undefined,
+            } satisfies VehicleCatalogResolution,
+          } : current);
+          return;
+        }
+
+        const response = await api.get<AIVehicleCatalog>('vehicle-catalog');
+        if (!response.success) throw new Error(response.message || 'Master Kendaraan tidak dapat dibaca.');
+        const brands = (response.data?.brands || []).filter(brand => brand.isActive);
+        const colors = (response.data?.colors || []).filter(color => color.isActive);
+        const raw = String(pendingAction.vehicleInfo || '').trim();
+        const normalizedRaw = raw.toLocaleLowerCase('id-ID');
+        const year = Number(raw.match(/\b(?:19|20)\d{2}\b/)?.[0] || 0) || undefined;
+        const color = colors.find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')))?.name;
+        const brand = [...brands]
+          .sort((left, right) => right.name.length - left.name.length)
+          .find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')));
+        const firstToken = raw.split(/[\s,/-]+/).find(Boolean) || '';
+        const brandCandidate = titleCaseVehicleName(brand?.name || firstToken);
+        let modelText = raw;
+        if (brand) modelText = modelText.replace(new RegExp(brand.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
+        else if (firstToken) modelText = modelText.replace(new RegExp(`^${firstToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), ' ');
+        if (year) modelText = modelText.replace(String(year), ' ');
+        if (color) modelText = modelText.replace(new RegExp(color.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
+        const modelCandidate = titleCaseVehicleName(modelText.replace(/[-,/]+/g, ' ').replace(/\s+/g, ' ').trim());
+
+        if (!brand) {
+          if (!cancelled) setPendingAction((current: any) => current ? {
+            ...current,
+            vehicleCatalogResolution: { status: 'missing_brand', brandCandidate, modelCandidate, year, color } satisfies VehicleCatalogResolution,
+          } : current);
+          return;
+        }
+        const model = [...brand.models]
+          .filter(item => item.isActive)
+          .sort((left, right) => right.name.length - left.name.length)
+          .find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')));
+        if (!model) {
+          if (!cancelled) setPendingAction((current: any) => current ? {
+            ...current,
+            vehicleCatalogResolution: {
+              status: 'missing_model', brandId: brand.id, brandName: brand.name,
+              modelCandidate, year, color,
+            } satisfies VehicleCatalogResolution,
+          } : current);
+          return;
+        }
+        const normalized = canonicalVehicleInfo(brand.name, model.name, year, color);
+        if (!cancelled) setPendingAction((current: any) => current ? {
+          ...current,
+          vehicleInfo: normalized,
+          vehicleCatalogResolution: {
+            status: 'ready', brandId: brand.id, brandName: brand.name,
+            modelId: model.id, modelName: model.name, year, color,
+          } satisfies VehicleCatalogResolution,
+        } : current);
+      } catch (error: any) {
+        if (!cancelled) setPendingAction((current: any) => current ? {
+          ...current,
+          vehicleCatalogResolution: { status: 'error', message: error?.message || 'Gagal memeriksa Master Kendaraan.' } satisfies VehicleCatalogResolution,
+        } : current);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [pendingAction?.action, pendingAction?.plateNumber, pendingAction?.vehicleInfo, data.vehicles]);
+
+  const addPendingVehicleBrand = async () => {
+    const resolution = pendingAction?.vehicleCatalogResolution as VehicleCatalogResolution | undefined;
+    if (!resolution?.brandCandidate) return;
+    setBusy(true);
+    try {
+      const created = await api.create('vehicle-catalog', { entity: 'brand', name: resolution.brandCandidate });
+      if (!created.success) throw new Error(created.message || 'Merek kendaraan gagal ditambahkan.');
+      const refreshed = await api.get<AIVehicleCatalog>('vehicle-catalog');
+      const brand = refreshed.data?.brands.find(item => item.name.localeCompare(resolution.brandCandidate!, 'id', { sensitivity: 'base' }) === 0);
+      if (!brand) throw new Error('Merek berhasil dibuat tetapi belum dapat dimuat ulang.');
+      setPendingAction((current: any) => current ? {
+        ...current,
+        vehicleCatalogResolution: {
+          ...resolution, status: 'missing_model', brandId: brand.id, brandName: brand.name,
+        } satisfies VehicleCatalogResolution,
+      } : current);
+      setMessages(history => [...history, { role: 'assistant', content: `Merek **${brand.name}** berhasil ditambahkan. Selanjutnya konfirmasi tipe kendaraannya.`, time: now() }]);
+    } catch (error: any) {
+      setMessages(history => [...history, { role: 'assistant', content: `Gagal menambahkan merek: ${error.message}`, error: true, time: now() }]);
+    } finally { setBusy(false); }
+  };
+
+  const addPendingVehicleModel = async () => {
+    const resolution = pendingAction?.vehicleCatalogResolution as VehicleCatalogResolution | undefined;
+    if (!resolution?.brandId || !resolution.modelCandidate) return;
+    setBusy(true);
+    try {
+      const created = await api.create('vehicle-catalog', { entity: 'model', name: resolution.modelCandidate, brandId: resolution.brandId });
+      if (!created.success) throw new Error(created.message || 'Tipe kendaraan gagal ditambahkan.');
+      const refreshed = await api.get<AIVehicleCatalog>('vehicle-catalog');
+      const brand = refreshed.data?.brands.find(item => item.id === resolution.brandId);
+      const model = brand?.models.find(item => item.name.localeCompare(resolution.modelCandidate!, 'id', { sensitivity: 'base' }) === 0);
+      if (!brand || !model) throw new Error('Tipe berhasil dibuat tetapi belum dapat dimuat ulang.');
+      const normalized = canonicalVehicleInfo(brand.name, model.name, resolution.year, resolution.color);
+      setPendingAction((current: any) => current ? {
+        ...current,
+        vehicleInfo: normalized,
+        vehicleCatalogResolution: {
+          ...resolution, status: 'ready', brandId: brand.id, brandName: brand.name,
+          modelId: model.id, modelName: model.name,
+        } satisfies VehicleCatalogResolution,
+      } : current);
+      setMessages(history => [...history, { role: 'assistant', content: `Tipe **${model.name}** berhasil ditambahkan ke **${brand.name}**. Draft WO siap dilanjutkan.`, time: now() }]);
+    } catch (error: any) {
+      setMessages(history => [...history, { role: 'assistant', content: `Gagal menambahkan tipe: ${error.message}`, error: true, time: now() }]);
+    } finally { setBusy(false); }
+  };
 
   useEffect(() => {
     if (currentBranchId === 'ALL') setShowBranchChooser(true);
@@ -1286,7 +1441,9 @@ ${buildSmartContext(userMsgText)}`;
       customerName: customer?.name || String(a.customerName || '').toUpperCase(),
       vehicleRefId: vehicle?.id,
       plateNumber: vehicle?.plateNumber || String(a.plateNumber || '').toUpperCase(),
-      vehicleInfo: a.vehicleInfo || (vehicle ? `${vehicle.brand} ${vehicle.model} ${vehicle.year} - ${vehicle.color}` : ''),
+      vehicleInfo: vehicle
+        ? canonicalVehicleInfo(vehicle.brand, vehicle.model, vehicle.year || undefined, vehicle.color || undefined)
+        : String(a.vehicleInfo || '').trim(),
       description: a.description || '',
       services,
       total,
@@ -1910,6 +2067,8 @@ ${buildSmartContext(userMsgText)}`;
   const secondaryFrontActions = [
     { label: 'Stok Kritis', icon: AlertTriangle, command: 'Barang apa saja yang stoknya menipis?', direct: true, tone: 'border-rose-500/30 bg-rose-500/10 text-rose-300' },
     { label: 'Daftar Kendaraan', icon: Database, command: 'list merek kendaraan', direct: true, tone: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' },
+    { label: 'Tambah Merek', icon: Plus, command: 'tambah merek ', direct: false, tone: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' },
+    { label: 'Tambah Tipe', icon: Plus, command: 'tambah tipe ', direct: false, tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
   ];
   const frontActions = [...primaryFrontActions, ...secondaryFrontActions];
 
@@ -2280,6 +2439,28 @@ ${buildSmartContext(userMsgText)}`;
                     </div>
                   )}
                   <p>Kendaraan: <b className="text-white">{pendingAction.plateNumber}</b> — {pendingAction.vehicleInfo}</p>
+                  {pendingAction.vehicleCatalogResolution?.status === 'checking' && <div className="my-3 flex items-center gap-2 rounded-lg border border-cyan-500/50 bg-cyan-950/50 p-3 text-cyan-200"><Loader2 className="h-4 w-4 animate-spin" /> Memeriksa Master Kendaraan…</div>}
+                  {pendingAction.vehicleCatalogResolution?.status === 'ready' && <div className="my-3 rounded-lg border border-emerald-500/50 bg-emerald-950/40 p-3 text-emerald-200"><p className="font-semibold">✓ Data kendaraan cocok dengan master</p><p className="mt-1 text-xs">{pendingAction.vehicleCatalogResolution.brandName} · {pendingAction.vehicleCatalogResolution.modelName}</p></div>}
+                  {pendingAction.vehicleCatalogResolution?.status === 'missing_brand' && (
+                    <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
+                      <p className="font-semibold text-amber-200">Merek <b>{pendingAction.vehicleCatalogResolution.brandCandidate || '-'}</b> belum ada di Master Kendaraan.</p>
+                      <p className="mt-1 text-xs text-amber-300">WO belum dapat dibuat sebelum merek dan tipe dikonfirmasi.</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <button type="button" disabled={busy || !pendingAction.vehicleCatalogResolution.brandCandidate} onClick={() => void addPendingVehicleBrand()} className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50">+ Tambahkan {pendingAction.vehicleCatalogResolution.brandCandidate} sebagai Merek</button>
+                        <button type="button" onClick={() => { const corrected = window.prompt('Perbaiki merek dan tipe kendaraan:', pendingAction.vehicleInfo); if (corrected?.trim()) setPendingAction((current: any) => ({ ...current, vehicleInfo: corrected.trim(), vehicleCatalogResolution: undefined })); }} className="rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:border-amber-300">Perbaiki Data</button>
+                      </div>
+                    </div>
+                  )}
+                  {pendingAction.vehicleCatalogResolution?.status === 'missing_model' && (
+                    <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
+                      <p className="font-semibold text-amber-200">Merek <b>{pendingAction.vehicleCatalogResolution.brandName}</b> ditemukan, tetapi tipe <b>{pendingAction.vehicleCatalogResolution.modelCandidate || '-'}</b> belum ada.</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <button type="button" disabled={busy || !pendingAction.vehicleCatalogResolution.modelCandidate} onClick={() => void addPendingVehicleModel()} className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50">+ Tambahkan {pendingAction.vehicleCatalogResolution.modelCandidate} ke {pendingAction.vehicleCatalogResolution.brandName}</button>
+                        <button type="button" onClick={() => { const corrected = window.prompt(`Perbaiki tipe untuk ${pendingAction.vehicleCatalogResolution.brandName}:`, pendingAction.vehicleCatalogResolution.modelCandidate || ''); if (corrected?.trim()) setPendingAction((current: any) => ({ ...current, vehicleInfo: canonicalVehicleInfo(pendingAction.vehicleCatalogResolution.brandName, corrected.trim(), pendingAction.vehicleCatalogResolution.year, pendingAction.vehicleCatalogResolution.color), vehicleCatalogResolution: undefined })); }} className="rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:border-amber-300">Perbaiki Tipe</button>
+                      </div>
+                    </div>
+                  )}
+                  {pendingAction.vehicleCatalogResolution?.status === 'error' && <div className="my-3 rounded-lg border border-red-500/60 bg-red-950/40 p-3 text-red-200">Master Kendaraan gagal diperiksa: {pendingAction.vehicleCatalogResolution.message}</div>}
                   <p>Keluhan: {pendingAction.description || '-'}</p>
                   {pendingAction.complaintRequired && !pendingAction.description?.trim() && (
                     <div className="my-3 rounded-lg border border-orange-400 bg-orange-950/40 p-3">
@@ -2338,7 +2519,7 @@ ${buildSmartContext(userMsgText)}`;
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => { setPendingAction(null); setPendingBranchId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
-                  <button disabled={!pendingBranchId || !pendingAction.description?.trim() || (pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved)} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
+                  <button disabled={!pendingBranchId || !pendingAction.description?.trim() || pendingAction.vehicleCatalogResolution?.status !== 'ready' || (pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved)} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
                     <CheckCircle2 className="h-4 w-4" /> {pendingBranchId ? `${pendingAction.action === 'create_quick_invoice' ? 'Buat REGINV' : 'Buat WO'} di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang'}
                   </button>
                 </div>

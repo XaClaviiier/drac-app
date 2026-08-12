@@ -141,14 +141,18 @@ $pdo->exec("
 
 function requireVehicleCatalogEditor(PDO $pdo): array {
     $user = requireAuthenticatedUser($pdo);
+    $roleStmt = $pdo->prepare("SELECT name FROM roles WHERE id = ?");
+    $roleStmt->execute([$user['role_id'] ?? '']);
+    $roleName = strtolower(trim((string)$roleStmt->fetchColumn()));
     if (!empty($user['is_owner'])
+        || in_array($roleName, ['teknisi', 'technician'], true)
         || authenticatedUserHasPermission($pdo, $user, 'vehicle:create')
         || authenticatedUserHasPermission($pdo, $user, 'vehicle:edit')) return $user;
     respondError('Anda tidak memiliki hak mengubah master kendaraan', 403);
 }
 
 function requireVehicleCatalogDeactivator(PDO $pdo, array $user): void {
-    if (!empty($user['is_owner']) || authenticatedUserHasPermission($pdo, $user, 'vehicle:delete')) return;
+    if (!empty($user['is_owner'])) return;
     $stmt = $pdo->prepare("SELECT name FROM roles WHERE id = ?");
     $stmt->execute([$user['role_id'] ?? '']);
     if (strtolower((string)$stmt->fetchColumn()) !== 'administrator') respondError('Hanya Owner atau Administrator yang dapat menonaktifkan master kendaraan', 403);
