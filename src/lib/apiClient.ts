@@ -101,6 +101,8 @@ export const api = {
     request(`/${resource}/${id}`, { method: 'DELETE' }),
   removeWithReason: (resource: string, id: string, reason: string) =>
     request(`/${resource}/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
+  deleteVehicleCatalogItem: (id: string, entity: 'brand' | 'model' | 'color') =>
+    request(`/vehicle-catalog/${id}`, { method: 'DELETE', body: JSON.stringify({ entity }) }),
 
   deleteCustomerPaymentsForInvoice: (invoiceId: string) =>
     request(`/customer-payments/invoice/${invoiceId}`, { method: 'DELETE' }),
