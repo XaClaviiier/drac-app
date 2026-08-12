@@ -2,17 +2,19 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2, MapPin, Hash, ShieldCheck, Bot, Save, KeyRound,
   CheckCircle2, AlertTriangle, BookOpenCheck, ClipboardCheck, Wrench, FileText, WalletCards, Database, Trash2,
+  GitBranch, Plus, ChevronUp, ChevronDown, Power,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 
-type Tab = 'company' | 'branches' | 'documents' | 'security' | 'ai' | 'guide' | 'maintenance';
+type Tab = 'company' | 'branches' | 'documents' | 'workflow' | 'security' | 'ai' | 'guide' | 'maintenance';
 
 const tabs = [
   { id: 'company' as const, label: 'Profil Perusahaan', icon: Building2 },
   { id: 'branches' as const, label: 'Cabang', icon: MapPin },
   { id: 'documents' as const, label: 'Nomor Dokumen', icon: Hash },
+  { id: 'workflow' as const, label: 'Alur Servis', icon: GitBranch },
   { id: 'security' as const, label: 'Keamanan', icon: ShieldCheck },
   { id: 'ai' as const, label: 'Integrasi AI', icon: Bot },
   { id: 'guide' as const, label: 'Panduan Sistem', icon: BookOpenCheck },
@@ -43,9 +45,25 @@ export default function SettingsPage() {
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceConfirmation, setMaintenanceConfirmation] = useState('');
   const [maintenanceResult, setMaintenanceResult] = useState<any>(null);
+  const [newLostSalesReason, setNewLostSalesReason] = useState('');
   const canEdit = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator');
   const maintenanceBranch = data.branches.find(branch => branch.id === maintenanceBranchId);
   const maintenanceExpectedConfirmation = maintenanceBranchId === 'ALL' ? 'HAPUS SEMUA CABANG' : maintenanceBranch ? `HAPUS ${maintenanceBranch.name.toUpperCase()}` : '';
+  const lostSalesReasons = draft.lostSalesReasonTemplates || [];
+  const updateLostSalesReasons = (reasons: NonNullable<AppSettings['lostSalesReasonTemplates']>) => setDraft(prev => ({ ...prev, lostSalesReasonTemplates: reasons }));
+  const moveLostSalesReason = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= lostSalesReasons.length) return;
+    const next = [...lostSalesReasons];
+    [next[index], next[target]] = [next[target], next[index]];
+    updateLostSalesReasons(next);
+  };
+  const addLostSalesReason = () => {
+    const label = newLostSalesReason.trim();
+    if (!label || lostSalesReasons.some(reason => reason.label.localeCompare(label, 'id', { sensitivity: 'base' }) === 0)) return;
+    updateLostSalesReasons([...lostSalesReasons, { id: `lost-${Date.now()}`, label, isActive: true, requiresNote: false }]);
+    setNewLostSalesReason('');
+  };
 
   useEffect(() => {
     setDraft(structuredClone(data.settings));
@@ -261,6 +279,33 @@ export default function SettingsPage() {
                 <DocumentCard title="Work Order" value={draft.documents.workOrderPrefix} preview={previews.workOrder} onChange={value => setDraft(prev => ({ ...prev, documents: { ...prev.documents, workOrderPrefix: value.toUpperCase() } }))} />
                 <DocumentCard title="Invoice Penjualan" value={draft.documents.invoicePrefix} preview={previews.invoice} onChange={value => setDraft(prev => ({ ...prev, documents: { ...prev.documents, invoicePrefix: value.toUpperCase() } }))} />
                 <CompanyField label="Digit urutan"><select className={inputClass} value={draft.documents.sequenceDigits} onChange={e => setDraft(prev => ({ ...prev, documents: { ...prev.documents, sequenceDigits: Number(e.target.value) } }))}><option value={3}>3 digit</option><option value={4}>4 digit</option></select></CompanyField>
+              </div>
+            </div>
+          )}
+
+          {tab === 'workflow' && (
+            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+              <TabHeader title="Alur Servis" description="Kelola pilihan operasional yang digunakan pada proses WO." />
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Alasan Lost Sales</h3>
+                <p className="mt-1 text-sm text-gray-500">Alasan yang nonaktif tidak muncul pada transaksi baru, tetapi histori lama tetap tersimpan.</p>
+              </div>
+              <div className="space-y-2">
+                {lostSalesReasons.map((reason, index) => (
+                  <div key={reason.id} className={`grid items-center gap-2 rounded-xl border p-3 sm:grid-cols-[auto_minmax(180px,1fr)_auto_auto] ${reason.isActive ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-100'}`}>
+                    <div className="flex sm:flex-col">
+                      <button type="button" disabled={index === 0} onClick={() => moveLostSalesReason(index, -1)} className="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-20" title="Naikkan"><ChevronUp className="h-4 w-4" /></button>
+                      <button type="button" disabled={index === lostSalesReasons.length - 1} onClick={() => moveLostSalesReason(index, 1)} className="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-20" title="Turunkan"><ChevronDown className="h-4 w-4" /></button>
+                    </div>
+                    <input value={reason.label} onChange={event => updateLostSalesReasons(lostSalesReasons.map(item => item.id === reason.id ? { ...item, label: event.target.value } : item))} className={inputClass} aria-label="Nama alasan Lost Sales" />
+                    <label className="flex items-center gap-2 whitespace-nowrap text-xs font-medium text-gray-600"><input type="checkbox" checked={reason.requiresNote === true} onChange={event => updateLostSalesReasons(lostSalesReasons.map(item => item.id === reason.id ? { ...item, requiresNote: event.target.checked } : item))} className="h-4 w-4 rounded" /> Catatan wajib</label>
+                    <button type="button" onClick={() => updateLostSalesReasons(lostSalesReasons.map(item => item.id === reason.id ? { ...item, isActive: !item.isActive } : item))} className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ${reason.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}><Power className="h-4 w-4" />{reason.isActive ? 'Aktif' : 'Nonaktif'}</button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-col gap-2 border-t border-gray-200 pt-4 sm:flex-row">
+                <input value={newLostSalesReason} onChange={event => setNewLostSalesReason(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addLostSalesReason(); } }} placeholder="Alasan Lost Sales baru" className={inputClass} />
+                <button type="button" onClick={addLostSalesReason} className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><Plus className="h-4 w-4" />Tambah Alasan</button>
               </div>
             </div>
           )}

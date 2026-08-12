@@ -22,13 +22,23 @@ $defaultSettings = [
         ['id' => 'schedule', 'label' => 'Menunggu jadwal', 'isActive' => true],
         ['id' => 'other', 'label' => 'Lainnya', 'isActive' => true],
     ],
+    'lostSalesReasonTemplates' => [
+        ['id' => 'customer-cancel', 'label' => 'Pelanggan membatalkan', 'isActive' => true, 'requiresNote' => false],
+        ['id' => 'price-rejected', 'label' => 'Harga tidak disetujui', 'isActive' => true, 'requiresNote' => false],
+        ['id' => 'customer-delay', 'label' => 'Pelanggan menunda', 'isActive' => true, 'requiresNote' => false],
+        ['id' => 'parts-unavailable', 'label' => 'Suku cadang tidak tersedia', 'isActive' => true, 'requiresNote' => false],
+        ['id' => 'other-workshop', 'label' => 'Kendaraan dibawa ke bengkel lain', 'isActive' => true, 'requiresNote' => false],
+        ['id' => 'unreachable', 'label' => 'Tidak dapat dihubungi', 'isActive' => true, 'requiresNote' => false],
+        ['id' => 'other', 'label' => 'Lainnya', 'isActive' => true, 'requiresNote' => true],
+    ],
 ];
 
 if ($method === 'GET') {
     $stmt = $pdo->prepare("SELECT settings_json FROM app_settings WHERE id = 1");
     $stmt->execute();
     $row = $stmt->fetch();
-    respondSuccess($row ? json_decode($row['settings_json'], true) : $defaultSettings);
+    $storedSettings = $row ? json_decode($row['settings_json'], true) : [];
+    respondSuccess(array_replace($defaultSettings, is_array($storedSettings) ? $storedSettings : []));
 }
 
 if ($method === 'PUT') {

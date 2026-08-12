@@ -22,7 +22,15 @@ const DEFAULT_COMPLAINT_TEMPLATES = [
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
 const COMPLAINT_TEMPLATE_VERSION_KEY = 'dokterac_complaint_templates_version';
 const COMPLAINT_TEMPLATE_VERSION = '2';
-const LOST_SALES_REASONS = ['Pelanggan membatalkan', 'Harga tidak disetujui', 'Pelanggan menunda', 'Suku cadang tidak tersedia', 'Kendaraan dibawa ke bengkel lain', 'Tidak dapat dihubungi', 'Lainnya'];
+const DEFAULT_LOST_SALES_REASONS = [
+  { id: 'customer-cancel', label: 'Pelanggan membatalkan', isActive: true, requiresNote: false },
+  { id: 'price-rejected', label: 'Harga tidak disetujui', isActive: true, requiresNote: false },
+  { id: 'customer-delay', label: 'Pelanggan menunda', isActive: true, requiresNote: false },
+  { id: 'parts-unavailable', label: 'Suku cadang tidak tersedia', isActive: true, requiresNote: false },
+  { id: 'other-workshop', label: 'Kendaraan dibawa ke bengkel lain', isActive: true, requiresNote: false },
+  { id: 'unreachable', label: 'Tidak dapat dihubungi', isActive: true, requiresNote: false },
+  { id: 'other', label: 'Lainnya', isActive: true, requiresNote: true },
+];
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
   { id: 'fund', label: 'Menyiapkan dana', isActive: true },
@@ -3107,11 +3115,13 @@ export default function WorkOrders() {
           setCancelReasonChoice('');
           setCancelReasonNotes('');
         };
-        const finalCancelReason = cancelReasonChoice === 'Lainnya'
-          ? `Lainnya: ${cancelReasonNotes.trim()}`
-          : cancelReasonNotes.trim() ? `${cancelReasonChoice} — ${cancelReasonNotes.trim()}` : cancelReasonChoice;
-        const finalCancelEnabled = Boolean(cancelReasonChoice
-          && (cancelReasonChoice !== 'Lainnya' || cancelReasonNotes.trim()));
+        const lostSalesReasons = (data.settings.lostSalesReasonTemplates || DEFAULT_LOST_SALES_REASONS).filter(reason => reason.isActive);
+        const selectedLostSalesReason = lostSalesReasons.find(reason => reason.id === cancelReasonChoice);
+        const finalCancelReason = selectedLostSalesReason?.requiresNote
+          ? `${selectedLostSalesReason.label}: ${cancelReasonNotes.trim()}`
+          : cancelReasonNotes.trim() ? `${selectedLostSalesReason?.label} — ${cancelReasonNotes.trim()}` : (selectedLostSalesReason?.label || '');
+        const finalCancelEnabled = Boolean(selectedLostSalesReason
+          && (!selectedLostSalesReason.requiresNote || cancelReasonNotes.trim()));
         return (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
@@ -3146,11 +3156,11 @@ export default function WorkOrders() {
                       <label className="mb-1 block text-xs font-semibold text-gray-700">Alasan Lost Sales <span className="text-red-500">*</span></label>
                       <select value={cancelReasonChoice} onChange={(e) => setCancelReasonChoice(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 outline-none focus:border-rose-500">
                         <option value="">Pilih alasan pembatalan</option>
-                        {LOST_SALES_REASONS.map(reason => <option key={reason} value={reason}>{reason}</option>)}
+                        {lostSalesReasons.map(reason => <option key={reason.id} value={reason.id}>{reason.label}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-gray-700">Catatan {cancelReasonChoice === 'Lainnya' ? <span className="text-red-500">*</span> : '(opsional)'}</label>
+                      <label className="mb-1 block text-xs font-semibold text-gray-700">Catatan {selectedLostSalesReason?.requiresNote ? <span className="text-red-500">*</span> : '(opsional)'}</label>
                       <textarea value={cancelReasonNotes} onChange={(e) => setCancelReasonNotes(e.target.value)} rows={2} placeholder="Tambahkan rincian alasan" className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-rose-500" />
                     </div>
                   </>

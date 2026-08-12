@@ -237,6 +237,7 @@ export interface AppSettings {
   security: SecuritySettings;
   ai: AISettings;
   pendingReasonTemplates?: Array<{ id: string; label: string; isActive: boolean }>;
+  lostSalesReasonTemplates?: Array<{ id: string; label: string; isActive: boolean; requiresNote?: boolean }>;
 }
 
 export type Permission =
