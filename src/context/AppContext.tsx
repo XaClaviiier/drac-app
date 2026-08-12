@@ -562,7 +562,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const forward: Record<WOStatus, WOStatus[]> = {
       Register: ['Proses', 'Closed'],
       Proses: ['Selesai', 'Closed'],
-      Selesai: ['Closed'],
+      Selesai: ['Proses', 'Closed'],
       Closed: ['Proses'],
     };
     return forward[from]?.includes(to) ?? false;
@@ -605,9 +605,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     // Lost Sales wajib punya alasan.
-    const needsReason = nextStatus === 'Closed';
+    const isReopen = wo.status === 'Selesai' && nextStatus === 'Proses';
+    const needsReason = nextStatus === 'Closed' || isReopen;
     if (needsReason && !reason?.trim()) {
-      return { ok: false, message: 'Alasan wajib diisi untuk perubahan ini.' };
+      return { ok: false, message: isReopen ? 'Alasan mengembalikan WO ke Dikerjakan wajib diisi.' : 'Alasan wajib diisi untuk perubahan ini.' };
     }
 
     const now = new Date().toISOString();

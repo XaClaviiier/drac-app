@@ -294,7 +294,7 @@ switch ($method) {
             $allowedTransitions = [
                 'Register' => ['Register', 'Proses', 'Closed'],
                 'Proses' => ['Proses', 'Selesai', 'Closed'],
-                'Selesai' => ['Selesai', 'Closed'],
+                'Selesai' => ['Selesai', 'Proses', 'Closed'],
                 'Closed' => ['Closed', 'Proses'],
             ];
             if (!isset($allowedTransitions[$currentStatus]) || !in_array($nextStatus, $allowedTransitions[$currentStatus], true)) {
@@ -331,6 +331,12 @@ switch ($method) {
             }
             if ($nextStatus === 'Closed' && trim((string)($d['cancelReason'] ?? '')) === '') {
                 throw new InvalidArgumentException('Alasan Lost Sales wajib diisi.');
+            }
+            $incomingStatusLog = is_array($d['statusLog'] ?? null) ? $d['statusLog'] : [];
+            $incomingLastLog = !empty($incomingStatusLog) ? end($incomingStatusLog) : null;
+            $reopenReason = is_array($incomingLastLog) ? trim((string)($incomingLastLog['reason'] ?? '')) : '';
+            if ($currentStatus === 'Selesai' && $nextStatus === 'Proses' && $reopenReason === '') {
+                throw new InvalidArgumentException('Alasan mengembalikan WO ke Dikerjakan wajib diisi.');
             }
             if ($nextStatus === 'Closed') {
                 $linkedInvoice = !empty($currentWorkOrder['invoice_id']);
@@ -372,7 +378,9 @@ switch ($method) {
             $statusLog = json_decode((string)($currentWorkOrder['status_log'] ?? '[]'), true);
             if (!is_array($statusLog)) $statusLog = [];
             if ($nextStatus !== $currentStatus) {
-                $statusReason = $nextStatus === 'Closed' ? trim((string)($d['cancelReason'] ?? '')) : null;
+                $statusReason = $nextStatus === 'Closed'
+                    ? trim((string)($d['cancelReason'] ?? ''))
+                    : (($currentStatus === 'Selesai' && $nextStatus === 'Proses') ? $reopenReason : null);
                 $statusLog[] = [
                     'from' => $currentStatus,
                     'to' => $nextStatus,

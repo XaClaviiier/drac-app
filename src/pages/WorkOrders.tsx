@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch, AlertTriangle, Undo2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, LegacyWOStatus, Vehicle, WorkOrder, WorkOrderService, WOStatus } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -1118,6 +1118,30 @@ export default function WorkOrders() {
     }
   };
 
+  const handleReopenCompletedWorkOrder = async (wo: WorkOrder) => {
+    if (wo.invoiceId || wo.invoiceNumber || data.invoices.some(invoice => invoice.woId === wo.id)) {
+      window.alert('WO sudah memiliki faktur. Hapus faktur dan pembayarannya terlebih dahulu sebelum mengembalikan WO ke Dikerjakan.');
+      return;
+    }
+    const reason = window.prompt(`Mundur ${wo.woNumber} kembali ke Dikerjakan.\n\nMasukkan alasan perubahan:`, 'Salah menekan Selesai');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      window.alert('Alasan mengembalikan WO ke Dikerjakan wajib diisi.');
+      return;
+    }
+    try {
+      const result = await changeWorkOrderStatus(wo.id, 'Proses', reason.trim());
+      if (!result.ok) {
+        window.alert(result.message || 'WO tidak dapat dikembalikan ke Dikerjakan.');
+        return;
+      }
+      setSuccessMsg(`${wo.woNumber} dikembalikan ke Dikerjakan.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (error: any) {
+      window.alert(`Gagal mengembalikan WO: ${error?.message || 'server tidak merespons'}`);
+    }
+  };
+
   const handleOpenInvoiceModal = (wo: WorkOrder) => {
     if (wo.status !== 'Selesai') {
       window.alert(`WO ${wo.woNumber} masih berstatus ${wo.status}. Ubah status menjadi Selesai sebelum membuat faktur.`);
@@ -1758,6 +1782,11 @@ export default function WorkOrders() {
                     </td>}
                     {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        {hasPermission('wo:edit') && wo.status === 'Selesai' && !wo.invoiceId && !wo.invoiceNumber && (
+                          <button type="button" onClick={() => void handleReopenCompletedWorkOrder(wo)} className="rounded-lg p-2 text-orange-600 transition-colors hover:bg-orange-50 hover:text-orange-700" title="Mundur kembali ke Dikerjakan" aria-label={`Mundur ${wo.woNumber} kembali ke Dikerjakan`}>
+                            <Undo2 className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => shareWorkOrderToWhatsApp(wo)}
@@ -1967,6 +1996,11 @@ export default function WorkOrders() {
                         title="Buat WO baru di cabang ini, tarik data pengecekan"
                       >
                         <ArrowLeftRight className="h-3.5 w-3.5" /> Lanjutkan di Sini
+                      </button>
+                    )}
+                    {hasPermission('wo:edit') && wo.status === 'Selesai' && !wo.invoiceId && !wo.invoiceNumber && (
+                      <button type="button" onClick={() => void handleReopenCompletedWorkOrder(wo)} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-orange-200 bg-white p-2 text-orange-600 transition-colors hover:bg-orange-50 hover:text-orange-700" title="Mundur kembali ke Dikerjakan" aria-label={`Mundur ${wo.woNumber} kembali ke Dikerjakan`}>
+                        <Undo2 className="h-5 w-5" />
                       </button>
                     )}
                     {wo.status !== 'Closed' && <button
