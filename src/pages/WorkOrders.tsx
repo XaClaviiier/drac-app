@@ -2242,9 +2242,15 @@ export default function WorkOrders() {
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
                 <>
-                  <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan Pekerjaan</button>
                   <button onClick={() => { handleOpenModal(detailWO, true); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Tambah/Edit Layanan</button>
                   <button onClick={() => openCompletionModal(detailWO)} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
+                  <button
+                    onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }}
+                    className="rounded-lg border border-red-700 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+                    style={{ backgroundColor: '#dc2626', borderColor: '#b91c1c', color: '#ffffff' }}
+                  >
+                    Batalkan Pekerjaan
+                  </button>
                 </>
               )}
               {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && detailWO.total > 0 && (
