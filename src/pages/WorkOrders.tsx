@@ -1750,6 +1750,15 @@ export default function WorkOrders() {
                     </td>}
                     {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => shareWorkOrderToWhatsApp(wo)}
+                          className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                          title="Bagikan WO ke WhatsApp"
+                          aria-label={`Bagikan ${wo.woNumber} ke WhatsApp`}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </button>
                         <button onClick={() => setDetailWO(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
                           <Eye className="h-4 w-4" />
                         </button>
