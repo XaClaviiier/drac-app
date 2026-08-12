@@ -1806,11 +1806,6 @@ export default function WorkOrders() {
                     </td>}
                     {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {hasPermission('wo:edit') && wo.status === 'Selesai' && !wo.invoiceId && !wo.invoiceNumber && (
-                          <button type="button" onClick={() => void handleReopenCompletedWorkOrder(wo)} className="rounded-lg p-2 text-orange-600 transition-colors hover:bg-orange-50 hover:text-orange-700" title="Mundur kembali ke Dikerjakan" aria-label={`Mundur ${wo.woNumber} kembali ke Dikerjakan`}>
-                            <Undo2 className="h-4 w-4" />
-                          </button>
-                        )}
                         <button
                           type="button"
                           onClick={() => shareWorkOrderToWhatsApp(wo)}
@@ -2020,11 +2015,6 @@ export default function WorkOrders() {
                         title="Buat WO baru di cabang ini, tarik data pengecekan"
                       >
                         <ArrowLeftRight className="h-3.5 w-3.5" /> Lanjutkan di Sini
-                      </button>
-                    )}
-                    {hasPermission('wo:edit') && wo.status === 'Selesai' && !wo.invoiceId && !wo.invoiceNumber && (
-                      <button type="button" onClick={() => void handleReopenCompletedWorkOrder(wo)} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-orange-200 bg-white p-2 text-orange-600 transition-colors hover:bg-orange-50 hover:text-orange-700" title="Mundur kembali ke Dikerjakan" aria-label={`Mundur ${wo.woNumber} kembali ke Dikerjakan`}>
-                        <Undo2 className="h-5 w-5" />
                       </button>
                     )}
                     {wo.status !== 'Closed' && <button
@@ -2261,7 +2251,10 @@ export default function WorkOrders() {
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
-                <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan / Lost Sales</button>
+                <>
+                  <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-white px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"><Undo2 className="h-4 w-4" /> Kembali ke Dikerjakan</button>
+                  <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan / Lost Sales</button>
+                </>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.continuedToWoId && (
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
