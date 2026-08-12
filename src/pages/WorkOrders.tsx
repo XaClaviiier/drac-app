@@ -29,6 +29,11 @@ const DEFAULT_PENDING_REASONS = [
   { id: 'schedule', label: 'Menunggu jadwal', isActive: true },
   { id: 'other', label: 'Lainnya', isActive: true },
 ];
+const COMPLETION_NOTE_TEMPLATES = [
+  'Pekerjaan selesai, AC kembali dingin dan berfungsi normal.',
+  'Pekerjaan selesai dan sudah diuji bersama pelanggan.',
+  'Pekerjaan selesai, pelanggan menyetujui hasil pengerjaan.',
+];
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 const localTimeKey = (date = new Date()) =>
@@ -85,6 +90,10 @@ export default function WorkOrders() {
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
   const [statusDialog, setStatusDialog] = useState<{ wo: WorkOrder; next: WorkOrder['status'] } | null>(null);
+  const [completionWO, setCompletionWO] = useState<WorkOrder | null>(null);
+  const [completionForm, setCompletionForm] = useState({ temperature: '', lp: '', hp: '', note: '' });
+  const [completionError, setCompletionError] = useState('');
+  const [isCompletingWO, setIsCompletingWO] = useState(false);
   const [statusReason, setStatusReason] = useState('');
   const [cancelStep, setCancelStep] = useState<1 | 2>(1);
   const [cancelReasonChoice, setCancelReasonChoice] = useState('');
@@ -1010,6 +1019,76 @@ export default function WorkOrders() {
     setStatusDialog({ wo, next });
   };
 
+  const openCompletionModal = (wo: WorkOrder) => {
+    setCompletionWO(wo);
+    setCompletionForm({
+      temperature: wo.finalTemperature === undefined || wo.finalTemperature === null ? '' : String(wo.finalTemperature),
+      lp: wo.finalLp === undefined || wo.finalLp === null ? '' : String(wo.finalLp),
+      hp: wo.finalHp === undefined || wo.finalHp === null ? '' : String(wo.finalHp),
+      note: wo.findings?.trim() || '',
+    });
+    setCompletionError('');
+  };
+
+  const closeCompletionModal = () => {
+    if (isCompletingWO) return;
+    setCompletionWO(null);
+    setCompletionError('');
+  };
+
+  const completeWorkOrder = async () => {
+    if (!completionWO || isCompletingWO) return;
+    const measurementValues = [completionForm.temperature, completionForm.lp, completionForm.hp];
+    const filledMeasurements = measurementValues.filter(value => value.trim() !== '').length;
+    if (filledMeasurements > 0 && filledMeasurements < 3) {
+      setCompletionError('Jika mengisi hasil pengukuran, Suhu, LP, dan HP harus diisi lengkap.');
+      return;
+    }
+    if (filledMeasurements === 0 && !completionForm.note.trim()) {
+      setCompletionError('Isi Suhu, LP, dan HP secara lengkap atau tuliskan catatan hasil pekerjaan.');
+      return;
+    }
+    const parsedMeasurements = measurementValues.map(value => Number(value.replace(',', '.')));
+    if (filledMeasurements === 3 && parsedMeasurements.some(value => !Number.isFinite(value))) {
+      setCompletionError('Nilai Suhu, LP, atau HP tidak valid. Gunakan angka, misalnya 8 atau 35.5.');
+      return;
+    }
+
+    setIsCompletingWO(true);
+    setCompletionError('');
+    try {
+      const now = new Date().toISOString();
+      const completed: WorkOrder = {
+        ...completionWO,
+        status: 'Selesai',
+        finalTemperature: filledMeasurements === 3 ? parsedMeasurements[0] : completionWO.finalTemperature,
+        finalLp: filledMeasurements === 3 ? parsedMeasurements[1] : completionWO.finalLp,
+        finalHp: filledMeasurements === 3 ? parsedMeasurements[2] : completionWO.finalHp,
+        findings: completionForm.note.trim() || completionWO.findings,
+        statusLog: [
+          ...(completionWO.statusLog || []),
+          {
+            from: completionWO.status,
+            to: 'Selesai',
+            at: now,
+            byUserId: currentUser?.id || '-',
+            byUserName: currentUser?.name || 'System',
+            reason: 'Pekerjaan selesai dan hasil akhir dicatat.',
+          },
+        ],
+      };
+      await updateWorkOrder(completionWO.id, completed);
+      setSuccessMsg(`${completionWO.woNumber} berhasil diselesaikan. Selanjutnya dapat dibuatkan faktur.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+      setCompletionWO(null);
+      setDetailWO(null);
+    } catch (error: any) {
+      setCompletionError(error?.message || 'WO gagal diselesaikan. Periksa data lalu coba lagi.');
+    } finally {
+      setIsCompletingWO(false);
+    }
+  };
+
   const confirmStatusChange = async (reasonOverride?: string) => {
     if (!statusDialog) return;
     const { wo, next } = statusDialog;
@@ -1824,7 +1903,7 @@ export default function WorkOrders() {
                     )}
                     {hasPermission('wo:edit') && wo.status === 'Proses' && (
                       <button
-                        onClick={() => requestStatusChange(wo, 'Selesai')}
+                        onClick={() => openCompletionModal(wo)}
                         className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
                         title="Pekerjaan selesai, siap dibuat faktur"
                       >
@@ -2100,7 +2179,7 @@ export default function WorkOrders() {
                 <>
                   <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan Pekerjaan</button>
                   <button onClick={() => { handleOpenModal(detailWO, true); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Tambah/Edit Layanan</button>
-                  <button onClick={() => { requestStatusChange(detailWO, 'Selesai'); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
+                  <button onClick={() => openCompletionModal(detailWO)} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
                 </>
               )}
               {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && detailWO.total > 0 && (
@@ -2930,6 +3009,84 @@ export default function WorkOrders() {
           </div>
         );
       })()}
+
+      {/* ===== Form penyelesaian pekerjaan ===== */}
+      {completionWO && (
+        <div className="fixed inset-0 z-[75] flex items-stretch justify-center bg-black/55 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="completion-title">
+          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
+            <div className="flex flex-shrink-0 items-start justify-between bg-gradient-to-r from-emerald-600 to-green-700 px-5 py-4 text-white">
+              <div className="flex min-w-0 items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-6 w-6 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h3 id="completion-title" className="text-lg font-bold">Penyelesaian Pekerjaan</h3>
+                  <p className="truncate font-mono text-xs text-emerald-100">{completionWO.woNumber} · {completionWO.plateNumber}</p>
+                </div>
+              </div>
+              <button type="button" disabled={isCompletingWO} onClick={closeCompletionModal} className="rounded-lg p-2 hover:bg-white/20 disabled:opacity-50" aria-label="Tutup"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-5 sm:p-6">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+                <div className="flex justify-between gap-4"><span className="text-gray-500">Pelanggan</span><strong className="text-right text-gray-900">{completionWO.customerName}</strong></div>
+                <div className="mt-1 flex justify-between gap-4"><span className="text-gray-500">Kendaraan</span><strong className="text-right text-gray-900">{completionWO.vehicleInfo}</strong></div>
+                <div className="mt-1 flex justify-between gap-4"><span className="text-gray-500">Total pekerjaan</span><strong className="text-blue-700">Rp {completionWO.total.toLocaleString('id-ID')}</strong></div>
+              </div>
+
+              {(completionWO.diagnosisTemperature !== undefined || completionWO.diagnosisLp !== undefined || completionWO.diagnosisHp !== undefined) && (
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">
+                  <p className="font-semibold">Pengukuran saat diagnosa</p>
+                  <p className="mt-1">Suhu: {completionWO.diagnosisTemperature ?? '-'}°C · LP: {completionWO.diagnosisLp ?? '-'} psi · HP: {completionWO.diagnosisHp ?? '-'} psi</p>
+                </div>
+              )}
+
+              <div>
+                <div className="mb-2">
+                  <h4 className="font-semibold text-gray-900">Pengukuran akhir</h4>
+                  <p className="text-xs text-gray-500">Opsional, tetapi jika diisi ketiganya harus lengkap.</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  <label className="text-xs font-semibold text-gray-700">Suhu (°C)
+                    <input inputMode="decimal" value={completionForm.temperature} onChange={(e) => { setCompletionForm(current => ({ ...current, temperature: e.target.value })); setCompletionError(''); }} placeholder="8" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-right text-base font-semibold outline-none focus:border-emerald-500" />
+                  </label>
+                  <label className="text-xs font-semibold text-gray-700">LP (psi)
+                    <input inputMode="decimal" value={completionForm.lp} onChange={(e) => { setCompletionForm(current => ({ ...current, lp: e.target.value })); setCompletionError(''); }} placeholder="35" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-right text-base font-semibold outline-none focus:border-emerald-500" />
+                  </label>
+                  <label className="text-xs font-semibold text-gray-700">HP (psi)
+                    <input inputMode="decimal" value={completionForm.hp} onChange={(e) => { setCompletionForm(current => ({ ...current, hp: e.target.value })); setCompletionError(''); }} placeholder="180" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-right text-base font-semibold outline-none focus:border-emerald-500" />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-800">Catatan hasil pekerjaan</label>
+                <p className="mb-2 text-xs text-gray-500">Wajib bila pengukuran akhir tidak diisi lengkap.</p>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {COMPLETION_NOTE_TEMPLATES.map(template => (
+                    <button key={template} type="button" onClick={() => { setCompletionForm(current => ({ ...current, note: template })); setCompletionError(''); }} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left text-xs font-medium text-emerald-800 hover:bg-emerald-100">
+                      {template.replace(/\.$/, '')}
+                    </button>
+                  ))}
+                </div>
+                <textarea rows={4} value={completionForm.note} onChange={(e) => { setCompletionForm(current => ({ ...current, note: e.target.value })); setCompletionError(''); }} placeholder="Tuliskan hasil akhir, pengujian, atau keterangan pekerjaan..." className="w-full resize-y rounded-xl border border-gray-300 px-3 py-3 text-sm outline-none focus:border-emerald-500" />
+              </div>
+
+              {completionError && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span>{completionError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-shrink-0 gap-3 border-t border-gray-200 bg-white p-4 sm:justify-end sm:px-6">
+              <button type="button" disabled={isCompletingWO} onClick={closeCompletionModal} className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 sm:flex-none">Batal</button>
+              <button type="button" disabled={isCompletingWO} onClick={() => void completeWorkOrder()} className="inline-flex flex-[1.5] items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60 sm:flex-none">
+                <CheckCircle2 className="h-4 w-4" />{isCompletingWO ? 'Menyimpan...' : 'Simpan & Selesaikan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== Konfirmasi ubah status WO ===== */}
       {statusDialog && (() => {
