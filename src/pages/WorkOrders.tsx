@@ -2247,11 +2247,6 @@ export default function WorkOrders() {
                   <button onClick={() => openCompletionModal(detailWO)} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
                 </>
               )}
-              {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
-                <>
-                  <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-white text-orange-700 hover:bg-orange-50" title="Kembali ke Dikerjakan" aria-label={`Kembalikan ${detailWO.woNumber} ke Dikerjakan`}><Undo2 className="h-5 w-5" /></button>
-                </>
-              )}
               {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && detailWO.total > 0 && (
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
               )}
@@ -2263,6 +2258,9 @@ export default function WorkOrders() {
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Register' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
               <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
+              {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
+                <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-white text-orange-700 hover:bg-orange-50" title="Kembali ke Dikerjakan" aria-label={`Kembalikan ${detailWO.woNumber} ke Dikerjakan`}><Undo2 className="h-5 w-5" /></button>
+              )}
             </div>
           </aside>
         </div>
