@@ -2237,7 +2237,6 @@ export default function WorkOrders() {
                 <>
                   <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{detailWO.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
                   {detailWO.services.length > 0 && detailWO.total > 0 && <button onClick={() => { requestStatusChange(detailWO, 'Proses'); setDetailWO(null); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Setuju · Dikerjakan</button>}
-                  <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Lost Sales</button>
                 </>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
@@ -2266,6 +2265,15 @@ export default function WorkOrders() {
               <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
               {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
                 <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-white text-orange-700 hover:bg-orange-50" title="Kembali ke Dikerjakan" aria-label={`Kembalikan ${detailWO.woNumber} ke Dikerjakan`}><Undo2 className="h-5 w-5" /></button>
+              )}
+              {hasPermission('wo:edit') && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
+                <button
+                  onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }}
+                  className="rounded-lg border border-red-700 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+                  style={{ backgroundColor: '#dc2626', borderColor: '#b91c1c', color: '#ffffff' }}
+                >
+                  Lost Sales
+                </button>
               )}
             </div>
           </aside>

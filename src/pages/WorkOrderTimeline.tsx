@@ -11,14 +11,14 @@ import { localDateKey } from '../lib/date';
 type StageKey = 'register' | 'diagnosis' | 'approval' | 'parts' | 'working' | 'done' | 'lost';
 type Segment = { key: StageKey; label: string; start: Date; end: Date; duration: number };
 
-const STAGES: Record<StageKey, { label: string; short: string; bar: string; soft: string; text: string; icon: typeof Wrench }> = {
-  register: { label: 'Register', short: 'Register', bar: 'bg-slate-500', soft: 'border-slate-300 bg-slate-50', text: 'text-slate-700', icon: FileText },
-  diagnosis: { label: 'Diagnosa', short: 'Diagnosa', bar: 'bg-orange-500', soft: 'border-orange-300 bg-orange-50', text: 'text-orange-700', icon: Stethoscope },
-  approval: { label: 'Tunggu Persetujuan', short: 'Persetujuan', bar: 'bg-amber-400', soft: 'border-amber-300 bg-amber-50', text: 'text-amber-700', icon: UserRound },
-  parts: { label: 'Tunggu Parts', short: 'Parts', bar: 'bg-violet-500', soft: 'border-violet-300 bg-violet-50', text: 'text-violet-700', icon: Package },
-  working: { label: 'Dikerjakan', short: 'Dikerjakan', bar: 'bg-blue-600', soft: 'border-blue-400 bg-blue-50', text: 'text-blue-700', icon: Wrench },
-  done: { label: 'Selesai', short: 'Selesai', bar: 'bg-green-600', soft: 'border-green-400 bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
-  lost: { label: 'Lost Sales / Batal', short: 'Lost Sales', bar: 'bg-red-600', soft: 'border-red-300 bg-red-50', text: 'text-red-700', icon: XCircle },
+const STAGES: Record<StageKey, { label: string; short: string; bar: string; color: string; soft: string; text: string; icon: typeof Wrench }> = {
+  register: { label: 'Register', short: 'Register', bar: 'bg-slate-500', color: '#64748b', soft: 'border-slate-300 bg-slate-50', text: 'text-slate-700', icon: FileText },
+  diagnosis: { label: 'Diagnosa', short: 'Diagnosa', bar: 'bg-orange-500', color: '#f97316', soft: 'border-orange-300 bg-orange-50', text: 'text-orange-700', icon: Stethoscope },
+  approval: { label: 'Tunggu Persetujuan', short: 'Persetujuan', bar: 'bg-amber-400', color: '#fbbf24', soft: 'border-amber-300 bg-amber-50', text: 'text-amber-700', icon: UserRound },
+  parts: { label: 'Tunggu Parts', short: 'Parts', bar: 'bg-violet-500', color: '#8b5cf6', soft: 'border-violet-300 bg-violet-50', text: 'text-violet-700', icon: Package },
+  working: { label: 'Dikerjakan', short: 'Dikerjakan', bar: 'bg-blue-600', color: '#2563eb', soft: 'border-blue-400 bg-blue-50', text: 'text-blue-700', icon: Wrench },
+  done: { label: 'Selesai', short: 'Selesai', bar: 'bg-green-600', color: '#16a34a', soft: 'border-green-400 bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
+  lost: { label: 'Lost Sales / Batal', short: 'Lost Sales', bar: 'bg-red-600', color: '#dc2626', soft: 'border-red-300 bg-red-50', text: 'text-red-700', icon: XCircle },
 };
 
 const AXIS_START_HOUR = 8;
@@ -238,14 +238,14 @@ export default function WorkOrderTimeline() {
                   <span className="block truncate text-xs text-gray-600">{wo.plateNumber} · {wo.vehicleInfo}</span>
                   <span className="block truncate text-xs text-gray-500">Teknisi: {wo.technicianName || wo.createdByName || '-'}</span>
                 </div>
-                <div className="relative my-2 overflow-hidden rounded bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)]" style={{ backgroundSize: `${100 / (timelineHours.length - 1)}% 100%` }}>
+                <div className="relative my-2 min-h-[44px] overflow-hidden rounded bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)]" style={{ minHeight: '44px', backgroundSize: `${100 / (timelineHours.length - 1)}% 100%` }}>
                   {segments.map((segment, index) => {
                     const rawLeft = position(segment.start);
                     const rawRight = position(segment.end);
                     if (rawRight < 0 || rawLeft > 100) return null;
                     const left = Math.max(0, Math.min(100, rawLeft));
                     const right = Math.max(0, Math.min(100, rawRight));
-                    return <span key={`${segment.key}-${index}`} title={`${segment.label}: ${durationLabel(segment.duration)}`} className={`absolute top-1/2 flex h-8 -translate-y-1/2 items-center justify-center overflow-hidden rounded px-1 text-[10px] font-bold text-white shadow-sm ${STAGES[segment.key].bar}`} style={{ left: `${left}%`, width: `${Math.max(2.2, right - left)}%` }}>{durationLabel(segment.duration)}</span>;
+                    return <span key={`${segment.key}-${index}`} title={`${segment.label}: ${durationLabel(segment.duration)}`} className={`absolute top-1/2 z-10 flex h-8 -translate-y-1/2 items-center justify-center overflow-hidden rounded px-1 text-[10px] font-bold text-white shadow-sm ${STAGES[segment.key].bar}`} style={{ left: `${left}%`, width: `${Math.max(2.2, right - left)}%`, height: '32px', backgroundColor: STAGES[segment.key].color, color: '#ffffff' }}>{durationLabel(segment.duration)}</span>;
                   })}
                   {showNowLine && (
                     <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>
