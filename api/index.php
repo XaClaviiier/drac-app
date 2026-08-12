@@ -117,6 +117,9 @@ try {
         case 'customers':
             require 'endpoints/customers.php';
             break;
+        case 'customer-contacts':
+            require 'endpoints/customer-contacts.php';
+            break;
 
         // ----- VEHICLES -----
         case 'vehicles':

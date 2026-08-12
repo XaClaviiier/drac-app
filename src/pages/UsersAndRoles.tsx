@@ -80,7 +80,7 @@ export default function UsersAndRoles() {
   // Branch modal
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
-  const [branchForm, setBranchForm] = useState({ code: '', name: '', address: '', phone: '', isActive: true });
+  const [branchForm, setBranchForm] = useState({ code: '', name: '', address: '', phone: '', reviewUrl: '', isActive: true });
 
   const filteredUsers = useMemo(() => {
     const q = search.toLowerCase();
@@ -114,10 +114,10 @@ export default function UsersAndRoles() {
   const openBranchModal = (branch?: Branch) => {
     if (branch) {
       setEditingBranch(branch);
-      setBranchForm({ code: branch.code, name: branch.name, address: branch.address, phone: branch.phone, isActive: branch.isActive });
+      setBranchForm({ code: branch.code, name: branch.name, address: branch.address, phone: branch.phone, reviewUrl: branch.reviewUrl || '', isActive: branch.isActive });
     } else {
       setEditingBranch(null);
-      setBranchForm({ code: '', name: '', address: '', phone: '', isActive: true });
+      setBranchForm({ code: '', name: '', address: '', phone: '', reviewUrl: '', isActive: true });
     }
     setShowBranchModal(true);
   };
@@ -591,6 +591,11 @@ export default function UsersAndRoles() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Telepon</label>
                 <input value={branchForm.phone} onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Link Google Review</label>
+                <input type="url" value={branchForm.reviewUrl} onChange={(e) => setBranchForm({ ...branchForm, reviewUrl: e.target.value })} placeholder="https://g.page/r/.../review" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                <p className="mt-1 text-xs text-gray-500">Dipakai pada template WhatsApp Minta Ulasan.</p>
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={branchForm.isActive} onChange={(e) => setBranchForm({ ...branchForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />

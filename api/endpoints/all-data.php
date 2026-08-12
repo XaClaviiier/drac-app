@@ -90,7 +90,7 @@ try {
 
     // Branches
     $rows = $pdo->query("SELECT * FROM branches ORDER BY code")->fetchAll();
-    foreach ($rows as &$r) $r['isActive'] = (bool)$r['is_active'];
+    foreach ($rows as &$r) { $r['isActive'] = (bool)$r['is_active']; $r['reviewUrl'] = $r['review_url'] ?? ''; }
     $data['branches'] = array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['id']])));
 
     // Roles
