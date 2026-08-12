@@ -139,6 +139,7 @@ export default function WorkOrders() {
   const [financialTimelineLoading, setFinancialTimelineLoading] = useState(false);
   const [lostSalesFollowUp, setLostSalesFollowUp] = useState<WorkOrder | null>(null);
   const [isFollowingUpLostSales, setIsFollowingUpLostSales] = useState(false);
+  const [resumeLostSalesAfterEstimate, setResumeLostSalesAfterEstimate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const canShowAdminRowActions = Boolean(
     currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
@@ -692,6 +693,7 @@ export default function WorkOrders() {
     setShowModal(false);
     setDiagnosisMode(false);
     setServiceEditMode(false);
+    setResumeLostSalesAfterEstimate(false);
     resetForm();
   };
 
@@ -908,7 +910,18 @@ export default function WorkOrders() {
             ? totalServices
             : editingWO.estimateTotal,
         };
-        let finalWorkOrder = savedWorkOrder;
+        let finalWorkOrder = resumeLostSalesAfterEstimate ? {
+          ...savedWorkOrder,
+          status: 'Proses' as const,
+          statusLog: [...(editingWO.statusLog || []), {
+            from: editingWO.status,
+            to: 'Proses' as const,
+            at: new Date().toISOString(),
+            byUserId: currentUser?.id || '-',
+            byUserName: currentUser?.name || 'System',
+            reason: 'Lost Sales ditindaklanjuti untuk masalah yang sama setelah estimasi dilengkapi.',
+          }],
+        } : savedWorkOrder;
         if (shouldCreateInvoice) {
           const actor = {
             byUserId: currentUser?.id || '-',
@@ -969,7 +982,7 @@ export default function WorkOrders() {
           setSuccessMsg(`${editingWO.woNumber} berhasil disimpan sebagai Lost Sales.`);
         }
         if (serviceEditMode) await refreshData();
-        if (!shouldMarkLostSales) setSuccessMsg(diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
+        if (!shouldMarkLostSales) setSuccessMsg(resumeLostSalesAfterEstimate ? `${editingWO.woNumber} berhasil dilengkapi dan masuk status Dikerjakan.` : diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
         if (shouldCreateInvoice) {
           handleCloseModal();
           handleOpenInvoiceModal(finalWorkOrder);
@@ -1390,6 +1403,17 @@ export default function WorkOrders() {
 
   const continueLostSalesSameIssue = async () => {
     if (!lostSalesFollowUp || isFollowingUpLostSales) return;
+    const positiveEstimate = lostSalesFollowUp.services.reduce((sum, service) => sum + Number(service.price || 0) * Number(service.qty || 0), 0);
+    if (!lostSalesFollowUp.services.length || positiveEstimate <= 0) {
+      const sourceWO = lostSalesFollowUp;
+      setLostSalesFollowUp(null);
+      setDetailWO(null);
+      setResumeLostSalesAfterEstimate(true);
+      handleOpenDiagnosis(sourceWO);
+      setSuccessMsg(`${sourceWO.woNumber}: lengkapi layanan dan estimasi sebelum melanjutkan ke Dikerjakan.`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+      return;
+    }
     const activeWO = findActiveWoByPlate(lostSalesFollowUp.plateNumber);
     if (activeWO && activeWO.id !== lostSalesFollowUp.id) {
       window.alert(`Kendaraan ${lostSalesFollowUp.plateNumber} sudah memiliki WO aktif ${activeWO.woNumber}.`);
@@ -2267,8 +2291,8 @@ export default function WorkOrders() {
               </div>
               <p className="text-sm font-semibold text-gray-800">Apakah keluhan pelanggan masih masalah yang sama?</p>
               <button type="button" disabled={isFollowingUpLostSales} onClick={() => void continueLostSalesSameIssue()} className="w-full rounded-xl border border-blue-200 bg-blue-50 p-4 text-left transition-colors hover:bg-blue-100 disabled:opacity-50">
-                <span className="block font-semibold text-blue-900">Masalah sama — lanjut dikerjakan</span>
-                <span className="mt-1 block text-xs text-blue-700">Gunakan WO ini beserta diagnosa dan estimasi lama. Status menjadi Dikerjakan.</span>
+                <span className="block font-semibold text-blue-900">{lostSalesFollowUp.services.length > 0 && lostSalesFollowUp.total > 0 ? 'Masalah sama — lanjut dikerjakan' : 'Masalah sama — lengkapi layanan & estimasi'}</span>
+                <span className="mt-1 block text-xs text-blue-700">{lostSalesFollowUp.services.length > 0 && lostSalesFollowUp.total > 0 ? 'Gunakan WO ini beserta diagnosa dan estimasi lama. Status menjadi Dikerjakan.' : 'WO ini belum memiliki layanan berbayar. Lengkapi layanan dan harga terlebih dahulu.'}</span>
               </button>
               <button type="button" disabled={isFollowingUpLostSales} onClick={() => void continueLostSalesDifferentIssue()} className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-left transition-colors hover:bg-emerald-100 disabled:opacity-50">
                 <span className="block font-semibold text-emerald-900">Masalah berbeda — buat WO baru</span>
@@ -2986,7 +3010,7 @@ export default function WorkOrders() {
                   className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
                 >
                   <Save className="w-4 h-4" />
-                  {diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan Registrasi'}
+                  {resumeLostSalesAfterEstimate ? 'Setuju · Dikerjakan' : diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan Registrasi'}
                 </button>
                 {diagnosisMode && editingWO && hasPermission('invoice:create') && !editingWO.invoiceId && (
                   <button
