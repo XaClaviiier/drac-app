@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import type { Customer, Item, Vehicle } from '../types';
 
-type Line = { item: Item; qty: number; price: number };
+type Line = { item: Item; qty: number; price: number; selected: boolean };
 type AccountMap = { branchId: string; bankAccountId: string };
 const today = () => new Date().toISOString().slice(0,10);
 const normalize = (v:string) => v.toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -35,10 +35,11 @@ export default function HistoricalQuickEntry(){
   const customerResults = !customerPickerOpen||customerQuery.length<2?[]:data.customers.filter(c=>`${c.customerCode} ${c.name} ${c.phone}`.toLowerCase().includes(customerQuery.toLowerCase())).slice(0,8);
   const vehicleResults = !vehiclePickerOpen||vehicleQuery.length<2?[]:vehicles.filter(v=>normalize(`${v.plateNumber}${v.brand}${v.model}`).includes(normalize(vehicleQuery))).slice(0,8);
   const itemResults = !itemPickerOpen||itemQuery.length<2?[]:data.items.filter(i=>i.isActive && normalize(`${i.code}${i.barcode||''}${i.name}`).includes(normalize(itemQuery))).slice(0,10);
-  const total=lines.reduce((s,l)=>s+l.qty*l.price,0); const paymentTotal=receiptTotal||total; const difference=paymentTotal-total; const mapped=accountMaps.some(m=>m.branchId===branchId&&m.bankAccountId);
+  const selectedLines=lines.filter(l=>l.selected);
+  const total=selectedLines.reduce((s,l)=>s+l.qty*l.price,0); const paymentTotal=receiptTotal||total; const difference=paymentTotal-total; const mapped=accountMaps.some(m=>m.branchId===branchId&&m.bankAccountId);
   const chooseCustomer=(c:Customer)=>{setCustomer(c);setCustomerQuery(`${c.name} • ${c.phone}`);setCustomerPickerOpen(false);setVehicle(null);setVehicleQuery('');setVehiclePickerOpen(false);};
   const chooseVehicle=(v:Vehicle)=>{setVehicle(v);setVehicleQuery(`${v.plateNumber} • ${v.brand} ${v.model}`);setVehiclePickerOpen(false);};
-  const addItem=(i:Item)=>{setLines(x=>x.some(l=>l.item.id===i.id)?x:x.concat({item:i,qty:1,price:i.sellingPrice}));setItemQuery('');setItemPickerOpen(false);};
+  const addItem=(i:Item)=>{setLines(x=>x.some(l=>l.item.id===i.id)?x.map(l=>l.item.id===i.id?{...l,selected:true}:l):x.concat({item:i,qty:1,price:i.sellingPrice,selected:true}));setItemQuery('');setItemPickerOpen(false);};
   const parseDate=(raw:string)=>{const p=raw.trim().split(/[\/\-]/).map(Number);if(!p[0])return '';const now=new Date();const y=p[2]?(p[2]<100?2000+p[2]:p[2]):now.getFullYear();const m=p[1]||now.getMonth()+1;return `${y}-${String(m).padStart(2,'0')}-${String(p[0]).padStart(2,'0')}`;};
   const findCustomer=(name:string,phone='')=>{
     const normalizedPhone=normalize(phone);
@@ -48,7 +49,7 @@ export default function HistoricalQuickEntry(){
   };
   const findVehicle=(plate:string)=>data.vehicles.find(v=>normalize(v.plateNumber)===normalize(plate))
     ||data.vehicles.find(v=>normalize(v.plateNumber).includes(normalize(plate)));
-  const parseItem=(raw:string):Line|null=>{
+  const parseItem=(raw:string,selected=true):Line|null=>{
     const value=raw.trim(); if(!value)return null;
     let name=value,qty=1,price:number|undefined;
     const standard=value.match(/^(.+?)(?:\s+x([\d.,]+))?(?:\s+@([\d.,]+))?$/i);
@@ -56,7 +57,7 @@ export default function HistoricalQuickEntry(){
     if(price===undefined){const receipt=value.match(/^(.+?)\s+([\d.,]+)$/);if(receipt){name=receipt[1].trim();price=Number(receipt[2].replace(/\D/g,''));}}
     const key=normalize(name);
     const item=data.items.find(i=>normalize(i.code)===key)||data.items.find(i=>normalize(i.name)===key)||data.items.find(i=>normalize(i.name).includes(key)||key.includes(normalize(i.name)));
-    return item?{item,qty,price:price??item.sellingPrice}:null;
+    return item?{item,qty,price:price??item.sellingPrice,selected}:null;
   };
   const parseText=()=>{
     const rows=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
@@ -89,7 +90,7 @@ export default function HistoricalQuickEntry(){
     if(foundVehicle&&!foundCustomer)foundCustomer=data.customers.find(c=>c.id===foundVehicle!.customerRefId);
     if(foundCustomer)chooseCustomer(foundCustomer);
     if(foundVehicle){setVehicle(foundVehicle);setVehicleQuery(`${foundVehicle.plateNumber} • ${foundVehicle.brand} ${foundVehicle.model}`);}
-    setLines(parsed); setReceiptTotal(parsed.reduce((sum,line)=>sum+line.qty*line.price,0));
+    setLines(parsed); setReceiptTotal(parsed.filter(line=>line.selected).reduce((sum,line)=>sum+line.qty*line.price,0));
     const missing=[!foundCustomer&&'pelanggan',!foundVehicle&&'kendaraan',!parsed.length&&'barang/jasa'].filter(Boolean).join(', ');
     setMessage(!missing?'Teks berhasil dibaca. Periksa ringkasan lalu simpan.':`Data terbaca, tetapi master ${missing} belum cocok. Cari/pilih data tersebut secara manual.`);
   };
@@ -127,16 +128,16 @@ export default function HistoricalQuickEntry(){
     if(matchedCustomer)chooseCustomer(matchedCustomer); else setCustomer(null);
     if(matchedVehicle){setVehicle(matchedVehicle);setVehicleQuery(`${matchedVehicle.plateNumber} • ${matchedVehicle.brand} ${matchedVehicle.model}`);}else setVehicle(null);
     setDescription(r.complaint||'Transaksi historis');
-    const receiptLines=(Array.isArray(r.items)?r.items:[]).map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${parseMoney(x.price)}`)).filter((x:any):x is Line=>!!x);
+    const receiptLines=(Array.isArray(r.items)?r.items:[]).map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${parseMoney(x.price)}`,x.checked!==false)).filter((x:any):x is Line=>!!x);
     const ocrTotal=parseMoney(r.total);
-    const detailedTotal=receiptLines.reduce((sum,line)=>sum+line.qty*line.price,0);
+    const detailedTotal=receiptLines.filter(line=>line.selected).reduce((sum,line)=>sum+line.qty*line.price,0);
     if(ocrTotal>0&&receiptLines.length&&detailedTotal!==ocrTotal){
-      const zeroIndex=receiptLines.findIndex(line=>line.price<=0);
-      const index=zeroIndex>=0?zeroIndex:0;
+      const zeroIndex=receiptLines.findIndex(line=>line.selected&&line.price<=0);
+      const index=zeroIndex>=0?zeroIndex:receiptLines.findIndex(line=>line.selected);
       const remainder=ocrTotal-detailedTotal;
-      if(remainder>0)receiptLines[index]={...receiptLines[index],price:receiptLines[index].price+(remainder/receiptLines[index].qty)};
+      if(remainder>0&&index>=0)receiptLines[index]={...receiptLines[index],price:receiptLines[index].price+(remainder/receiptLines[index].qty)};
     }
-    setLines(receiptLines); setReceiptTotal(ocrTotal||receiptLines.reduce((sum,line)=>sum+line.qty*line.price,0));
+    setLines(receiptLines); setReceiptTotal(ocrTotal||receiptLines.filter(line=>line.selected).reduce((sum,line)=>sum+line.qty*line.price,0));
     const missing=[!matchedCustomer&&'pelanggan',!matchedVehicle&&'kendaraan',!receiptLines.length&&'barang/jasa'].filter(Boolean).join(', ');
     const resultMessage=`${response.message||'Nota berhasil dibaca.'}${missing?` Master ${missing} belum cocok; pilih secara manual.`:''}`;
     setReceiptStatus(resultMessage); setMessage(resultMessage);
@@ -152,7 +153,7 @@ export default function HistoricalQuickEntry(){
     if(!r.success)return setMessage(r.message||'Gagal menyimpan Groq Key.');
     setGroqKey(''); setAiConfigured(true); setMessage('Groq Key berhasil disimpan dan siap digunakan untuk membaca nota.');
   };
-  const save=async()=>{if(!branchId||!customer||!vehicle||!lines.length||total<=0)return setMessage('Lengkapi cabang, pelanggan, kendaraan, dan item dengan total lebih dari Rp0.');if(Math.abs(difference)>0.01)return setMessage('Total rincian harus sama dengan Total Nota/Pembayaran. Koreksi harga item atau total nota terlebih dahulu.');setSaving(true);setMessage('');const r=await api.create('historical-entries',{branchId,date,customerId:customer.id,vehicleId:vehicle.id,description,paymentTotal,items:lines.map(l=>({itemId:l.item.id,qty:l.qty,price:l.price}))});setSaving(false);if(!r.success)return setMessage(r.message||'Gagal menyimpan.');setMessage(`${r.message}: ${r.data?.woNumber} • ${r.data?.invoiceNumber} • ${r.data?.paymentNumber}`);setLines([]);setReceiptTotal(0);await refreshData();};
+  const save=async()=>{if(!branchId||!customer||!vehicle||!selectedLines.length||total<=0)return setMessage('Lengkapi cabang, pelanggan, kendaraan, dan centang item dengan total lebih dari Rp0.');if(Math.abs(difference)>0.01)return setMessage('Total item yang dicentang harus sama dengan Total Nota/Pembayaran. Koreksi centang, harga item, atau total nota terlebih dahulu.');setSaving(true);setMessage('');const r=await api.create('historical-entries',{branchId,date,customerId:customer.id,vehicleId:vehicle.id,description,paymentTotal,items:selectedLines.map(l=>({itemId:l.item.id,qty:l.qty,price:l.price}))});setSaving(false);if(!r.success)return setMessage(r.message||'Gagal menyimpan.');setMessage(`${r.message}: ${r.data?.woNumber} • ${r.data?.invoiceNumber} • ${r.data?.paymentNumber}`);setLines([]);setReceiptTotal(0);await refreshData();};
   const Picker=({results,onPick}:{results:any[],onPick:(x:any)=>void})=>results.length?<div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border bg-white shadow-xl">{results.map(x=><button key={x.id} type="button" onClick={()=>onPick(x)} className="block w-full border-b px-3 py-2 text-left text-sm hover:bg-blue-50">{x.name||x.plateNumber} <span className="text-gray-500">{x.phone||`${x.brand} ${x.model}`}</span></button>)}</div>:null;
   return <div className="mx-auto max-w-7xl p-4">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h1 className="text-xl font-bold">Input Cepat Historis</h1><p className="text-sm text-gray-500">WO → Faktur lunas → Pembayaran transfer, tanpa mengurangi stok.</p></div><div className="flex gap-2"><button onClick={()=>setMode('text')} className={`rounded-lg px-4 py-2 ${mode==='text'?'bg-blue-600 text-white':'border bg-white'}`}>Ketik Cepat</button><button onClick={()=>setMode('form')} className={`rounded-lg px-4 py-2 ${mode==='form'?'bg-blue-600 text-white':'border bg-white'}`}>Form Cepat</button></div></div>
@@ -163,7 +164,7 @@ export default function HistoricalQuickEntry(){
       <div className="grid gap-3 md:grid-cols-2"><div className="relative"><label className="text-sm">Cari pelanggan</label><input value={customerQuery} onFocus={()=>{if(!customer)setCustomerPickerOpen(true)}} onChange={e=>{setCustomerQuery(e.target.value);setCustomer(null);setCustomerPickerOpen(true)}} placeholder="Nama, kode, atau nomor HP" className="mt-1 w-full rounded-lg border p-2"/><Picker results={customerResults} onPick={chooseCustomer}/></div><div className="relative"><label className="text-sm">Cari kendaraan</label><input value={vehicleQuery} onFocus={()=>{if(!vehicle)setVehiclePickerOpen(true)}} onChange={e=>{setVehicleQuery(e.target.value);setVehicle(null);setVehiclePickerOpen(true)}} placeholder="Nomor plat, merek, atau tipe" className="mt-1 w-full rounded-lg border p-2"/><Picker results={vehicleResults} onPick={chooseVehicle}/></div></div>
       <label className="mt-3 block text-sm">Keterangan<input value={description} onChange={e=>setDescription(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label>
       <div className="relative mt-3"><label className="text-sm">Cari barang / jasa</label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={itemQuery} onFocus={()=>setItemPickerOpen(true)} onChange={e=>{setItemQuery(e.target.value);setItemPickerOpen(true)}} placeholder="Kode, barcode, atau nama" className="mt-1 w-full rounded-lg border py-2 pl-9 pr-3"/></div><Picker results={itemResults} onPick={addItem}/></div>
-      <div className="mt-3 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr><th className="p-2 text-left">Barang/Jasa</th><th>Qty</th><th>Harga historis</th><th>Subtotal</th><th/></tr></thead><tbody>{lines.map((l,i)=><tr key={l.item.id} className="border-t"><td className="p-2 font-medium">{l.item.code} — {l.item.name}</td><td><input type="number" min="1" value={l.qty} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,qty:Number(e.target.value)}:v))} className="w-20 rounded border p-1"/></td><td><input type="number" min="0" value={l.price} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,price:Number(e.target.value)}:v))} className="w-32 rounded border p-1"/></td><td className="whitespace-nowrap p-2 font-semibold">Rp {(l.qty*l.price).toLocaleString('id-ID')}</td><td><button onClick={()=>setLines(x=>x.filter((_,n)=>n!==i))} className="p-2 text-red-500"><Trash2 className="h-4 w-4"/></button></td></tr>)}</tbody></table>{!lines.length&&<div className="p-8 text-center text-sm text-gray-400">Belum ada barang atau jasa.</div>}</div>
+      <div className="mt-3 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr><th className="p-2 text-center">Pilih</th><th className="p-2 text-left">Barang/Jasa</th><th>Qty</th><th>Harga historis</th><th>Subtotal</th><th/></tr></thead><tbody>{lines.map((l,i)=><tr key={l.item.id} className={`border-t ${l.selected?'bg-emerald-50/40':'bg-slate-50 text-slate-400'}`}><td className="p-2 text-center"><input type="checkbox" checked={l.selected} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,selected:e.target.checked}:v))} className="h-5 w-5 accent-green-600" aria-label={`Pilih ${l.item.name}`}/></td><td className="p-2 font-medium">{l.item.code} — {l.item.name}</td><td><input type="number" min="1" disabled={!l.selected} value={l.qty} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,qty:Number(e.target.value)}:v))} className="w-20 rounded border p-1 disabled:bg-slate-100"/></td><td><input type="number" min="0" disabled={!l.selected} value={l.price} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,price:Number(e.target.value)}:v))} className="w-32 rounded border p-1 disabled:bg-slate-100"/></td><td className="whitespace-nowrap p-2 font-semibold">{l.selected?`Rp ${(l.qty*l.price).toLocaleString('id-ID')}`:'Tidak dipilih'}</td><td><button onClick={()=>setLines(x=>x.filter((_,n)=>n!==i))} className="p-2 text-red-500"><Trash2 className="h-4 w-4"/></button></td></tr>)}</tbody></table>{!lines.length&&<div className="p-8 text-center text-sm text-gray-400">Belum ada barang atau jasa.</div>}</div>
       <div className="mt-3 grid gap-3 rounded-lg border bg-slate-50 p-3 sm:grid-cols-3"><div><span className="text-xs text-slate-500">Total rincian item</span><div className="font-semibold">Rp {total.toLocaleString('id-ID')}</div></div><label className="text-xs text-slate-500">Total Nota/Pembayaran (Rp)<input type="number" min="0" value={paymentTotal||''} onChange={e=>setReceiptTotal(Math.max(0,Number(e.target.value)||0))} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-base font-bold text-green-700"/></label><div><span className="text-xs text-slate-500">Selisih</span><div className={`font-bold ${Math.abs(difference)<0.01?'text-green-600':'text-red-600'}`}>Rp {difference.toLocaleString('id-ID')}</div><p className="text-xs text-slate-500">Harus Rp0 sebelum disimpan.</p></div></div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div>{message&&<span className="text-sm font-medium text-blue-700">{message}</span>}<p className="text-xs text-amber-700">Barang tetap tercatat di faktur, tetapi stok gudang tidak berubah.</p></div><div className="flex items-center gap-4"><strong>Total pembayaran Rp {paymentTotal.toLocaleString('id-ID')}</strong><button disabled={saving||!mapped||paymentTotal<=0||Math.abs(difference)>0.01} onClick={save} className="rounded-lg bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-40"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{saving?'Menyimpan...':'Simpan Lengkap'}</button></div></div>
     </div>
