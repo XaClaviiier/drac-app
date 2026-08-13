@@ -84,6 +84,8 @@ export const api = {
     request('/ai-settings', { method: 'PUT', body: JSON.stringify({ apiKey, model }) }),
   aiChat: (messages: Array<{ role: string; content: string }>) =>
     request('/ai-chat', { method: 'POST', body: JSON.stringify({ messages }) }),
+  readReceipt: (image: string) =>
+    request('/receipt-ocr', { method: 'POST', body: JSON.stringify({ image }) }),
   previewDataMaintenance: (from: string, to: string, branchId: string) =>
     request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}`, { method: 'GET' }),
   purgeDataMaintenance: (from: string, to: string, branchId: string, confirmation: string) =>

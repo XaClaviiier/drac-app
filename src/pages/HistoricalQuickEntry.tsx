@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, CheckCircle2, FileText, Search, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { Camera, CheckCircle2, FileText, Search, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import type { Customer, Item, Vehicle } from '../types';
@@ -19,6 +19,7 @@ export default function HistoricalQuickEntry(){
   const [lines,setLines]=useState<Line[]>([]); const [description,setDescription]=useState('Transaksi historis');
   const [text,setText]=useState('Tanggal: 2/1/26\nPelanggan: ALEXANDER\nKendaraan: DD1234AB\nItem: JSA-001 x1 @200000');
   const [accountMaps,setAccountMaps]=useState<AccountMap[]>([]); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
+  const [readingReceipt,setReadingReceipt]=useState(false);
   useEffect(()=>{ api.get<AccountMap[]>('branch-account-settings').then(r=>setAccountMaps(r.data||[])); },[]);
   useEffect(()=>{ if(branchId) setCurrentBranchId(branchId); },[branchId]);
   const vehicles = useMemo(()=>customer ? data.vehicles.filter(v=>v.customerRefId===customer.id) : data.vehicles,[data.vehicles,customer]);
@@ -30,18 +31,80 @@ export default function HistoricalQuickEntry(){
   const chooseVehicle=(v:Vehicle)=>{setVehicle(v);setVehicleQuery(`${v.plateNumber} • ${v.brand} ${v.model}`);};
   const addItem=(i:Item)=>{setLines(x=>x.some(l=>l.item.id===i.id)?x:x.concat({item:i,qty:1,price:i.sellingPrice}));setItemQuery('');};
   const parseDate=(raw:string)=>{const p=raw.trim().split(/[\/\-]/).map(Number);if(!p[0])return '';const now=new Date();const y=p[2]?(p[2]<100?2000+p[2]:p[2]):now.getFullYear();const m=p[1]||now.getMonth()+1;return `${y}-${String(m).padStart(2,'0')}-${String(p[0]).padStart(2,'0')}`;};
+  const findCustomer=(name:string,phone='')=>{
+    const normalizedPhone=normalize(phone);
+    return (normalizedPhone&&data.customers.find(c=>normalize(c.phone||'')===normalizedPhone))
+      ||data.customers.find(c=>normalize(c.name)===normalize(name))
+      ||data.customers.find(c=>normalize(c.name).includes(normalize(name)));
+  };
+  const findVehicle=(plate:string)=>data.vehicles.find(v=>normalize(v.plateNumber)===normalize(plate))
+    ||data.vehicles.find(v=>normalize(v.plateNumber).includes(normalize(plate)));
+  const parseItem=(raw:string):Line|null=>{
+    const value=raw.trim(); if(!value)return null;
+    let name=value,qty=1,price:number|undefined;
+    const standard=value.match(/^(.+?)(?:\s+x([\d.,]+))?(?:\s+@([\d.,]+))?$/i);
+    if(standard){name=standard[1].trim();qty=Number((standard[2]||'1').replace(',','.'));if(standard[3])price=Number(standard[3].replace(/\D/g,''));}
+    if(price===undefined){const receipt=value.match(/^(.+?)\s+([\d.,]+)$/);if(receipt){name=receipt[1].trim();price=Number(receipt[2].replace(/\D/g,''));}}
+    const key=normalize(name);
+    const item=data.items.find(i=>normalize(i.code)===key)||data.items.find(i=>normalize(i.name)===key)||data.items.find(i=>normalize(i.name).includes(key)||key.includes(normalize(i.name)));
+    return item?{item,qty,price:price??item.sellingPrice}:null;
+  };
   const parseText=()=>{
-    const rows=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean); let foundCustomer:Customer|undefined, foundVehicle:Vehicle|undefined; const parsed:Line[]=[];
-    for(const row of rows){const [label,...rest]=row.split(':');const value=rest.join(':').trim();
+    const rows=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    let foundCustomer:Customer|undefined, foundVehicle:Vehicle|undefined;
+    const parsed:Line[]=[];
+    const pipes=text.split('|').map(x=>x.trim()).filter(Boolean);
+
+    // Format cepat: tanggal | nama | HP | plat | merek | tipe | warna | keluhan | layanan harga; layanan harga | total
+    if(pipes.length>=4&&/^\d{1,2}(?:[\/-]\d{1,2})?(?:[\/-]\d{2,4})?$/.test(pipes[0])){
+      const d=parseDate(pipes[0]); if(d)setDate(d);
+      const customerName=pipes[1]||'', phone=pipes[2]||'', plate=pipes[3]||'';
+      setCustomerQuery(`${customerName}${phone?` • ${phone}`:''}`);
+      setVehicleQuery(plate);
+      foundCustomer=findCustomer(customerName,phone);
+      foundVehicle=findVehicle(plate);
+      if(pipes[7])setDescription(pipes[7].replace(/\s+/g,' ').trim());
+      if(pipes[8])pipes[8].split(';').map(parseItem).filter((x):x is Line=>!!x).forEach(x=>parsed.push(x));
+    }
+
+    // Format alternatif: Tanggal: ..., Pelanggan: ..., Item: ...
+    for(const row of rows){
+      const [label,...rest]=row.split(':'); const value=rest.join(':').trim();
+      if(!value)continue;
       if(/tanggal/i.test(label)){const d=parseDate(value);if(d)setDate(d);}
-      else if(/pelanggan/i.test(label)){const q=normalize(value);foundCustomer=data.customers.find(c=>normalize(`${c.customerCode}${c.name}${c.phone}`).includes(q));}
-      else if(/kendaraan|plat|nopol/i.test(label)){const q=normalize(value);foundVehicle=data.vehicles.find(v=>normalize(v.plateNumber)===q)||data.vehicles.find(v=>normalize(v.plateNumber).includes(q));}
-      else if(/item|layanan|barang/i.test(label)){const m=value.match(/^(.+?)(?:\s+x([\d.,]+))?(?:\s+@([\d.,]+))?$/i);if(m){const key=normalize(m[1]);const i=data.items.find(x=>normalize(x.code)===key)||data.items.find(x=>normalize(x.name).includes(key));if(i)parsed.push({item:i,qty:Number((m[2]||'1').replace(',','.')),price:m[3]?Number(m[3].replace(/\D/g,'')):i.sellingPrice});}}
+      else if(/pelanggan/i.test(label)){foundCustomer=findCustomer(value);setCustomerQuery(value);}
+      else if(/kendaraan|plat|nopol/i.test(label)){foundVehicle=findVehicle(value);setVehicleQuery(value);}
+      else if(/item|layanan|barang/i.test(label)){value.split(';').map(parseItem).filter((x):x is Line=>!!x).forEach(x=>parsed.push(x));}
       else if(/keluhan|keterangan/i.test(label))setDescription(value);
     }
     if(foundVehicle&&!foundCustomer)foundCustomer=data.customers.find(c=>c.id===foundVehicle!.customerRefId);
-    if(foundCustomer)chooseCustomer(foundCustomer); if(foundVehicle){setVehicle(foundVehicle);setVehicleQuery(`${foundVehicle.plateNumber} • ${foundVehicle.brand} ${foundVehicle.model}`);} if(parsed.length)setLines(parsed);
-    setMessage(foundCustomer&&foundVehicle&&parsed.length?'Teks berhasil dibaca. Periksa ringkasan lalu simpan.':'Sebagian data belum cocok. Lengkapi melalui Form Cepat.');
+    if(foundCustomer)chooseCustomer(foundCustomer);
+    if(foundVehicle){setVehicle(foundVehicle);setVehicleQuery(`${foundVehicle.plateNumber} • ${foundVehicle.brand} ${foundVehicle.model}`);}
+    setLines(parsed);
+    const missing=[!foundCustomer&&'pelanggan',!foundVehicle&&'kendaraan',!parsed.length&&'barang/jasa'].filter(Boolean).join(', ');
+    setMessage(!missing?'Teks berhasil dibaca. Periksa ringkasan lalu simpan.':`Data terbaca, tetapi master ${missing} belum cocok. Cari/pilih data tersebut secara manual.`);
+  };
+  const readReceipt=async(file?:File)=>{
+    if(!file)return;
+    if(!/^image\/(jpeg|png|webp)$/.test(file.type))return setMessage('Pilih foto nota JPG, PNG, atau WebP.');
+    if(file.size>6*1024*1024)return setMessage('Ukuran foto maksimal 6 MB.');
+    setReadingReceipt(true); setMessage('Membaca foto nota...');
+    const image=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(file);});
+    const response=await api.readReceipt(image); setReadingReceipt(false);
+    if(!response.success||!response.data)return setMessage(response.message||'Nota gagal dibaca.');
+    const r:any=response.data;
+    const d=parseDate(r.date||''); if(d)setDate(d);
+    const matchedCustomer=findCustomer(r.customerName||'',r.phone||'');
+    const matchedVehicle=findVehicle(r.plate||'');
+    setCustomerQuery([r.customerName,r.phone].filter(Boolean).join(' • '));
+    setVehicleQuery(r.plate||'');
+    if(matchedCustomer)chooseCustomer(matchedCustomer); else setCustomer(null);
+    if(matchedVehicle){setVehicle(matchedVehicle);setVehicleQuery(`${matchedVehicle.plateNumber} • ${matchedVehicle.brand} ${matchedVehicle.model}`);}else setVehicle(null);
+    setDescription(r.complaint||'Transaksi historis');
+    const receiptLines=(Array.isArray(r.items)?r.items:[]).map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${Number(x.price)||0}`)).filter((x:any):x is Line=>!!x);
+    setLines(receiptLines);
+    const missing=[!matchedCustomer&&'pelanggan',!matchedVehicle&&'kendaraan',!receiptLines.length&&'barang/jasa'].filter(Boolean).join(', ');
+    setMessage(`${response.message||'Nota berhasil dibaca.'}${missing?` Master ${missing} belum cocok; pilih secara manual.`:''}`);
   };
   const save=async()=>{if(!branchId||!customer||!vehicle||!lines.length||total<=0)return setMessage('Lengkapi cabang, pelanggan, kendaraan, dan item dengan total lebih dari Rp0.');setSaving(true);setMessage('');const r=await api.create('historical-entries',{branchId,date,customerId:customer.id,vehicleId:vehicle.id,description,items:lines.map(l=>({itemId:l.item.id,qty:l.qty,price:l.price}))});setSaving(false);if(!r.success)return setMessage(r.message||'Gagal menyimpan.');setMessage(`${r.message}: ${r.data?.woNumber} • ${r.data?.invoiceNumber} • ${r.data?.paymentNumber}`);setLines([]);await refreshData();};
   const Picker=({results,onPick}:{results:any[],onPick:(x:any)=>void})=>results.length?<div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border bg-white shadow-xl">{results.map(x=><button key={x.id} type="button" onClick={()=>onPick(x)} className="block w-full border-b px-3 py-2 text-left text-sm hover:bg-blue-50">{x.name||x.plateNumber} <span className="text-gray-500">{x.phone||`${x.brand} ${x.model}`}</span></button>)}</div>:null;
@@ -49,7 +112,7 @@ export default function HistoricalQuickEntry(){
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h1 className="text-xl font-bold">Input Cepat Historis</h1><p className="text-sm text-gray-500">WO → Faktur lunas → Pembayaran transfer, tanpa mengurangi stok.</p></div><div className="flex gap-2"><button onClick={()=>setMode('text')} className={`rounded-lg px-4 py-2 ${mode==='text'?'bg-blue-600 text-white':'border bg-white'}`}>Ketik Cepat</button><button onClick={()=>setMode('form')} className={`rounded-lg px-4 py-2 ${mode==='form'?'bg-blue-600 text-white':'border bg-white'}`}>Form Cepat</button></div></div>
     <div className="rounded-xl border bg-white p-4 shadow-sm">
       <div className="mb-4 grid gap-3 md:grid-cols-3"><label className="text-sm">Cabang<select value={branchId} onChange={e=>setBranchId(e.target.value)} className="mt-1 w-full rounded-lg border p-2">{allowedBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label className="text-sm">Tanggal transaksi<input type="date" max={today()} value={date} onChange={e=>setDate(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label><div className={`rounded-lg border p-3 text-sm ${mapped?'border-green-200 bg-green-50 text-green-700':'border-red-200 bg-red-50 text-red-700'}`}><ShieldCheck className="mr-1 inline h-4 w-4"/>{mapped?'Transfer ke rekening bank cabang':'Rekening bank cabang belum dipetakan'}</div></div>
-      {mode==='text'&&<div className="mb-4 rounded-xl bg-slate-900 p-3 text-white"><div className="mb-2 flex items-center gap-2 font-semibold"><FileText className="h-4 w-4"/>Format tanpa AI/token</div><textarea value={text} onChange={e=>setText(e.target.value)} rows={6} className="w-full rounded-lg border border-slate-600 bg-slate-800 p-3 font-mono text-sm"/><button onClick={parseText} className="mt-2 rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950"><Send className="mr-2 inline h-4 w-4"/>Baca Data</button></div>}
+      {mode==='text'&&<div className="mb-4 rounded-xl bg-slate-900 p-3 text-white"><div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 font-semibold"><FileText className="h-4 w-4"/>Format tanpa AI/token</div><label className={`cursor-pointer rounded-lg border border-cyan-400 px-3 py-1.5 text-sm font-semibold text-cyan-300 hover:bg-cyan-950 ${readingReceipt?'pointer-events-none opacity-50':''}`}><Camera className="mr-1.5 inline h-4 w-4"/>{readingReceipt?'Membaca...':'Upload Foto Nota'}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={e=>{void readReceipt(e.target.files?.[0]);e.currentTarget.value='';}}/></label></div><textarea value={text} onChange={e=>setText(e.target.value)} rows={6} className="w-full rounded-lg border border-slate-600 bg-slate-800 p-3 font-mono text-sm"/><button onClick={parseText} className="mt-2 rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950"><Send className="mr-2 inline h-4 w-4"/>Baca Data</button></div>}
       <div className="grid gap-3 md:grid-cols-2"><div className="relative"><label className="text-sm">Cari pelanggan</label><input value={customerQuery} onChange={e=>{setCustomerQuery(e.target.value);setCustomer(null)}} placeholder="Nama, kode, atau nomor HP" className="mt-1 w-full rounded-lg border p-2"/><Picker results={customerResults} onPick={chooseCustomer}/></div><div className="relative"><label className="text-sm">Cari kendaraan</label><input value={vehicleQuery} onChange={e=>{setVehicleQuery(e.target.value);setVehicle(null)}} placeholder="Nomor plat, merek, atau tipe" className="mt-1 w-full rounded-lg border p-2"/><Picker results={vehicleResults} onPick={chooseVehicle}/></div></div>
       <label className="mt-3 block text-sm">Keterangan<input value={description} onChange={e=>setDescription(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label>
       <div className="relative mt-3"><label className="text-sm">Cari barang / jasa</label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={itemQuery} onChange={e=>setItemQuery(e.target.value)} placeholder="Kode, barcode, atau nama" className="mt-1 w-full rounded-lg border py-2 pl-9 pr-3"/></div><Picker results={itemResults} onPick={addItem}/></div>

@@ -75,6 +75,9 @@ if ($requestUser && $resource === 'quick-invoices') {
 if ($requestUser && $resource === 'historical-entries') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
 }
+if ($requestUser && $resource === 'receipt-ocr') {
+    requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
+}
 if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
     requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
 }
@@ -167,6 +170,9 @@ try {
             break;
         case 'historical-entries':
             require 'endpoints/historical-entries.php';
+            break;
+        case 'receipt-ocr':
+            require 'endpoints/receipt-ocr.php';
             break;
         case 'cash-accounts':
             require 'endpoints/cash-accounts.php';
