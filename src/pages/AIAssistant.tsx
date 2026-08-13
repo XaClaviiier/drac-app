@@ -142,12 +142,22 @@ type InlineRegistrationIdentity = {
   description: string;
 };
 
+// Teks perintah bukan bagian dari identitas pelanggan. Normalisasi ini dipakai
+// di seluruh jalur registrasi (form bertahap, parser cepat, dan hasil model AI)
+// agar input seperti "reg wo WO,Budiman ..." tetap tersimpan sebagai BUDIMAN.
+const sanitizeRegistrationCustomerName = (value: unknown) => String(value || '')
+  .trim()
+  .replace(/^(?:(?:reginv|reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/i, '')
+  .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
+  .replace(/\s+/g, ' ')
+  .toUpperCase();
+
 const parseInlineRegistrationIdentity = (text: string): InlineRegistrationIdentity | null => {
   const source = text.trim();
   const match = source.match(/^reg(?:\s+wo)?\s+(.+?)\s+(08[\d\s-]{6,14})(?=\s|,|$)/i);
   if (!match) return null;
 
-  const customerName = match[1].replace(/[,;]+$/g, '').trim();
+  const customerName = sanitizeRegistrationCustomerName(match[1]);
   const phone = match[2].replace(/\D/g, '');
   if (!customerName || phone.length < 8) return null;
 
@@ -166,7 +176,7 @@ const parseInlineRegistrationIdentity = (text: string): InlineRegistrationIdenti
   const vehicleMatch = vehicleSegment.match(/^([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3})\s*(.*)$/i);
 
   return {
-    customerName: customerName.toUpperCase(),
+    customerName,
     phone,
     address,
     plateNumber: vehicleMatch?.[1]?.replace(/\s+/g, '').toUpperCase() || '',
@@ -1070,7 +1080,7 @@ export default function AIAssistant() {
 
     if (registrationDraft.step === 'customerName') {
       if (value.length < 3) return 'Nama pelanggan minimal 3 karakter.';
-      setRegistrationDraft({ ...registrationDraft, step: 'phone', customerName: value.toUpperCase() });
+      setRegistrationDraft({ ...registrationDraft, step: 'phone', customerName: sanitizeRegistrationCustomerName(value) });
       return `Nama pelanggan: **${value.toUpperCase()}**\n\nMasukkan nomor telepon pelanggan.`;
     }
 
@@ -1296,6 +1306,8 @@ ${buildSmartContext(userMsgText)}`;
   };
 
   const executeCreateWO = async (a: any, selectedBranchId: string) => {
+    const normalizedCustomerName = sanitizeRegistrationCustomerName(a.customerName);
+    a = { ...a, customerName: normalizedCustomerName };
     const branchId = selectedBranchId;
     const branchName = data.branches.find(b => b.id === branchId)?.name || branchId;
     const suppliedDate = String(a.date || '');
@@ -1316,7 +1328,7 @@ ${buildSmartContext(userMsgText)}`;
       customer = await addCustomer({
         id: Date.now().toString(),
         customerCode: generateCustomerCode(),
-        name: String(a.customerName).toUpperCase(),
+        name: normalizedCustomerName,
         phone: a.phone || '',
         address: String(a.address || '').trim(),
         email: '',

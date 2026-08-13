@@ -50,6 +50,25 @@ try {
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_lp DECIMAL(8,2) NULL AFTER final_temperature");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_hp DECIMAL(8,2) NULL AFTER final_lp");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS approved_services_json LONGTEXT NULL AFTER approved_at");
+
+    // Bersihkan nama pelanggan yang pernah ikut menyimpan kata perintah AI.
+    // customer_ref_id dipakai agar seluruh salinan nama pada kendaraan dan
+    // transaksi lama tetap konsisten tanpa mengubah relasi atau nomor dokumen.
+    $badCustomerRows = $pdo->query("SELECT id,name FROM customers WHERE UPPER(name) REGEXP '^(REGINV|REG[[:space:]]+WO|REG|WO)[[:space:],;:-]'")->fetchAll();
+    $updateCustomerName = $pdo->prepare("UPDATE customers SET name=? WHERE id=?");
+    $updateVehicleCustomerName = $pdo->prepare("UPDATE vehicles SET customer_name=? WHERE customer_id=?");
+    $updateWorkOrderCustomerName = $pdo->prepare("UPDATE work_orders SET customer_name=? WHERE customer_ref_id=?");
+    $updateInvoiceCustomerName = $pdo->prepare("UPDATE sales_invoices SET customer_name=? WHERE customer_ref_id=?");
+    foreach ($badCustomerRows as $badCustomerRow) {
+        $cleanName = preg_replace('/^(?:(?:reginv|reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', trim((string)$badCustomerRow['name']));
+        $cleanName = trim((string)$cleanName, " \t\n\r\0\x0B,;:-");
+        $cleanName = function_exists('mb_strtoupper') ? mb_strtoupper($cleanName, 'UTF-8') : strtoupper($cleanName);
+        if ($cleanName === '') continue;
+        $updateCustomerName->execute([$cleanName, $badCustomerRow['id']]);
+        $updateVehicleCustomerName->execute([$cleanName, $badCustomerRow['id']]);
+        $updateWorkOrderCustomerName->execute([$cleanName, $badCustomerRow['id']]);
+        $updateInvoiceCustomerName->execute([$cleanName, $badCustomerRow['id']]);
+    }
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
     if ($statusColumn && (
         stripos((string)$statusColumn['Type'], "'Register'") === false

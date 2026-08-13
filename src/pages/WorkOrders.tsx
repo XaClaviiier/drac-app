@@ -3343,12 +3343,26 @@ export default function WorkOrders() {
                   </button>
                 )}
                 <button
-                  type="submit"
-                  onClick={() => { diagnosisSubmitAction.current = 'save'; }}
+                  type={editingWO && !diagnosisMode && !serviceEditMode ? 'button' : 'submit'}
+                  onClick={() => {
+                    if (editingWO && !diagnosisMode && !serviceEditMode) {
+                      setServiceEditMode(true);
+                      return;
+                    }
+                    diagnosisSubmitAction.current = 'save';
+                  }}
                   className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
                 >
                   <Save className="w-4 h-4" />
-                  {resumeLostSalesAfterEstimate ? 'Setuju · Dikerjakan' : diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan'}
+                  {resumeLostSalesAfterEstimate
+                    ? 'Setuju · Dikerjakan'
+                    : diagnosisMode
+                      ? 'Simpan Diagnosa'
+                      : serviceEditMode
+                        ? 'Simpan Perubahan'
+                        : editingWO
+                          ? 'Edit Layanan'
+                          : 'Simpan'}
                 </button>
                 {!editingWO && (
                   <button

@@ -1,4 +1,12 @@
 <?php
+$sanitizeCustomerName = static function ($value): string {
+    $name = trim((string)$value);
+    $name = preg_replace('/^(?:(?:reginv|reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', $name);
+    $name = preg_replace('/^[,;:\-\s]+|[,;:\-\s]+$/u', '', (string)$name);
+    $name = preg_replace('/\s+/u', ' ', (string)$name);
+    $name = trim((string)$name);
+    return function_exists('mb_strtoupper') ? mb_strtoupper($name, 'UTF-8') : strtoupper($name);
+};
 switch ($method) {
     case 'GET':
         $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
@@ -13,7 +21,7 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
-        $name = trim((string)($d['name'] ?? ''));
+        $name = $sanitizeCustomerName($d['name'] ?? '');
         $phone = trim((string)($d['phone'] ?? ''));
         if ($name === '' || $phone === '') respondError('Nama dan nomor HP wajib diisi.', 422);
         $normalizedPhone = preg_replace('/\D/', '', $phone);
@@ -36,7 +44,7 @@ switch ($method) {
         $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $d['id'] ?? generateId(),
-            $code, strtoupper($name), $phone,
+            $code, $name, $phone,
             $d['email'] ?? '', $d['address'] ?? '',
             $branchId, $firstSeenBranchId
         ]);
@@ -53,8 +61,10 @@ switch ($method) {
         if (!$current) respondError('Pelanggan tidak ditemukan', 404);
         $branchId = (string)($d['branchId'] ?? $current['branch_id']);
         requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        $name = $sanitizeCustomerName($d['name'] ?? '');
+        if ($name === '') respondError('Nama pelanggan wajib diisi.', 422);
         $stmt = $pdo->prepare("UPDATE customers SET name=?, phone=?, email=?, address=?, branch_id=? WHERE id=?");
-        $stmt->execute([$d['name'], $d['phone'] ?? '', $d['email'] ?? '', $d['address'] ?? '', $branchId, $id]);
+        $stmt->execute([$name, $d['phone'] ?? '', $d['email'] ?? '', $d['address'] ?? '', $branchId, $id]);
         respondSuccess(null, 'Pelanggan diupdate');
         break;
 
