@@ -379,5 +379,65 @@ switch ($method) {
         respondSuccess(null, 'Master kendaraan diperbarui');
         break;
 
+    case 'DELETE':
+        $catalogUser = requireVehicleCatalogEditor($pdo);
+        requireVehicleCatalogDeactivator($pdo, $catalogUser);
+        $d = json_decode(file_get_contents('php://input'), true) ?: [];
+        $entity = (string)($d['entity'] ?? '');
+        if (!in_array($entity, ['brand', 'model', 'color'], true)) respondError('Jenis master tidak valid', 422);
+        if (!$id) respondError('ID master kendaraan wajib diisi', 422);
+
+        $table = $entity === 'brand' ? 'vehicle_brands' : ($entity === 'model' ? 'vehicle_models' : 'vehicle_colors');
+        $stmt = $pdo->prepare("SELECT id,name FROM {$table} WHERE id=? LIMIT 1");
+        $stmt->execute([$id]);
+        $item = $stmt->fetch();
+        if (!$item) respondError('Master kendaraan tidak ditemukan', 404);
+
+        if ($entity === 'brand') {
+            $usageStmt = $pdo->prepare("SELECT COUNT(*) FROM vehicles WHERE brand_id=? OR LOWER(TRIM(brand))=LOWER(TRIM(?))");
+            $usageStmt->execute([$id, $item['name']]);
+            $usageCount = (int)$usageStmt->fetchColumn();
+            if ($usageCount > 0) respondError("Merek tidak dapat dihapus karena digunakan oleh {$usageCount} kendaraan. Gunakan Nonaktifkan atau Gabungkan.", 409);
+            $childStmt = $pdo->prepare('SELECT COUNT(*) FROM vehicle_models WHERE brand_id=?');
+            $childStmt->execute([$id]);
+            $childCount = (int)$childStmt->fetchColumn();
+            if ($childCount > 0) respondError("Merek tidak dapat dihapus karena masih memiliki {$childCount} tipe. Hapus atau gabungkan seluruh tipe terlebih dahulu.", 409);
+        } elseif ($entity === 'model') {
+            $modelStmt = $pdo->prepare('SELECT brand_id,name FROM vehicle_models WHERE id=?');
+            $modelStmt->execute([$id]);
+            $model = $modelStmt->fetch();
+            $usageStmt = $pdo->prepare("SELECT COUNT(*) FROM vehicles WHERE model_id=? OR (brand_id=? AND LOWER(TRIM(model))=LOWER(TRIM(?)))");
+            $usageStmt->execute([$id, $model['brand_id'], $model['name']]);
+            $usageCount = (int)$usageStmt->fetchColumn();
+            if ($usageCount > 0) respondError("Tipe tidak dapat dihapus karena digunakan oleh {$usageCount} kendaraan. Gunakan Nonaktifkan atau Gabungkan.", 409);
+        } else {
+            $usageStmt = $pdo->prepare("SELECT COUNT(*) FROM vehicles WHERE LOWER(TRIM(color))=LOWER(TRIM(?))");
+            $usageStmt->execute([$item['name']]);
+            $usageCount = (int)$usageStmt->fetchColumn();
+            if ($usageCount > 0) respondError("Warna tidak dapat dihapus karena digunakan oleh {$usageCount} kendaraan. Gunakan Nonaktifkan atau Gabungkan.", 409);
+        }
+
+        try {
+            $pdo->beginTransaction();
+            if ($entity === 'model') {
+                $generationIdsStmt = $pdo->prepare('SELECT id FROM vehicle_generations WHERE model_id=?');
+                $generationIdsStmt->execute([$id]);
+                $generationIds = $generationIdsStmt->fetchAll(PDO::FETCH_COLUMN);
+                if ($generationIds) {
+                    $placeholders = implode(',', array_fill(0, count($generationIds), '?'));
+                    $pdo->prepare("DELETE FROM vehicle_generation_engines WHERE generation_id IN ({$placeholders})")->execute($generationIds);
+                    $pdo->prepare("DELETE FROM vehicle_generations WHERE id IN ({$placeholders})")->execute($generationIds);
+                }
+            }
+            logVehicleCatalogChange($pdo, $catalogUser, $entity, $id, $item['name'], 'delete', 'Dihapus permanen karena belum digunakan kendaraan');
+            $pdo->prepare("DELETE FROM {$table} WHERE id=?")->execute([$id]);
+            $pdo->commit();
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            respondError('Master tidak dapat dihapus karena masih memiliki relasi data', 409);
+        }
+        respondSuccess(null, 'Master kendaraan berhasil dihapus');
+        break;
+
     default: respondError('Method not allowed', 405);
 }

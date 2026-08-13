@@ -1,6 +1,14 @@
 <?php
 if ($method !== 'POST') respondError('Method not allowed', 405);
 
+$sanitizeQuickCustomerName = static function ($value): string {
+    $name = trim((string)$value);
+    $name = preg_replace('/^(?:(?:reginv|reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', $name);
+    $name = preg_replace('/^[,;:\-\s]+|[,;:\-\s]+$/u', '', (string)$name);
+    $name = trim((string)preg_replace('/\s+/u', ' ', (string)$name));
+    return function_exists('mb_strtoupper') ? mb_strtoupper($name, 'UTF-8') : strtoupper($name);
+};
+
 $d = getInput();
 $pdo->beginTransaction();
 try {
@@ -37,7 +45,7 @@ try {
         }
     }
     if (!$customer) {
-        $name = strtoupper(trim((string)($d['customerName'] ?? '')));
+        $name = $sanitizeQuickCustomerName($d['customerName'] ?? '');
         if ($name === '' || strlen($phone) < 8) throw new InvalidArgumentException('Nama dan nomor HP pelanggan wajib diisi.');
         $lastCode = $pdo->query("SELECT customer_code FROM customers WHERE customer_code REGEXP '^PLG-[0-9]+$' ORDER BY CAST(SUBSTRING(customer_code,5) AS UNSIGNED) DESC LIMIT 1 FOR UPDATE")->fetchColumn();
         $max = $lastCode ? (int)substr((string)$lastCode, 4) : 0;

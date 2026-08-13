@@ -97,6 +97,8 @@ function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $exclud
 }
 
 function ensureApiSupportTables(PDO $pdo): void {
+    $branchColumns = array_column($pdo->query("SHOW COLUMNS FROM branches")->fetchAll(), 'Field');
+    if (!in_array('review_url', $branchColumns, true)) $pdo->exec("ALTER TABLE branches ADD review_url VARCHAR(500) NULL AFTER phone");
     $vehicleColumns = array_column($pdo->query("SHOW COLUMNS FROM vehicles")->fetchAll(), 'Field');
     if (!in_array('brand_id', $vehicleColumns, true)) $pdo->exec("ALTER TABLE vehicles ADD brand_id VARCHAR(64) NULL AFTER model");
     if (!in_array('model_id', $vehicleColumns, true)) $pdo->exec("ALTER TABLE vehicles ADD model_id VARCHAR(64) NULL AFTER brand_id");
@@ -491,7 +493,7 @@ function ensureApiSupportTables(PDO $pdo): void {
     // Hak pembayaran berdiri sendiri. Role lama otomatis mewarisi hak yang
     // setara dari modul faktur agar tidak kehilangan menu setelah pembaruan.
     if ($pdo->query("SHOW TABLES LIKE 'roles'")->fetch()) {
-        $roleRows = $pdo->query("SELECT id,permissions FROM roles")->fetchAll();
+        $roleRows = $pdo->query("SELECT id,code,name,permissions FROM roles")->fetchAll();
         $roleUpdate = $pdo->prepare("UPDATE roles SET permissions=? WHERE id=?");
         foreach ($roleRows as $roleRow) {
             $permissions = json_decode((string)($roleRow['permissions'] ?? '[]'), true);
@@ -500,6 +502,9 @@ function ensureApiSupportTables(PDO $pdo): void {
             if (in_array('invoice:view', $permissions, true)) $next[] = 'payment:view';
             if (in_array('invoice:create', $permissions, true) || in_array('invoice:edit', $permissions, true)) $next[] = 'payment:create';
             if (in_array('invoice:delete', $permissions, true) || in_array('invoice:edit', $permissions, true)) $next[] = 'payment:delete';
+            $roleCode = strtoupper(trim((string)($roleRow['code'] ?? '')));
+            $roleName = strtolower(trim((string)($roleRow['name'] ?? '')));
+            if ($roleCode === 'ADM' || str_contains($roleName, 'administrator')) $next[] = 'payment:edit';
             $next = array_values(array_unique($next));
             if ($next !== $permissions) $roleUpdate->execute([json_encode($next), $roleRow['id']]);
         }
@@ -856,7 +861,7 @@ function requireUserPermission(PDO $pdo, string $permission): array {
             'invoice:backdate' => 'Input Faktur Tanggal Mundur',
             'payment:backdate' => 'Input Pembayaran Tanggal Mundur',
             'payment:view' => 'Lihat Pembayaran', 'payment:create' => 'Buat Pembayaran',
-            'payment:delete' => 'Hapus Pembayaran',
+            'payment:edit' => 'Edit Pembayaran', 'payment:delete' => 'Hapus Pembayaran',
         ];
         respondError('Akun tidak memiliki izin ' . ($labels[$permission] ?? $permission), 403);
     }

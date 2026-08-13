@@ -8,9 +8,10 @@ interface CustomerPickerProps {
   value: string;
   onChange: (customerId: string) => void;
   onNewCustomerCreated?: (customer: Customer) => void;
+  disabled?: boolean;
 }
 
-export default function CustomerPicker({ value, onChange, onNewCustomerCreated }: CustomerPickerProps) {
+export default function CustomerPicker({ value, onChange, onNewCustomerCreated, disabled = false }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
   const [open, setOpen] = useState(false);
@@ -55,6 +56,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
   }, [data.customers, inputText]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const v = e.target.value.toUpperCase();
     setInputText(v);
     setOpen(true);
@@ -71,6 +73,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
   }, [onChange]);
 
   const handleFocus = () => {
+    if (disabled) return;
     setOpen(true);
     if (selectedCustomer) setInputText(''); // kosongkan agar bisa cari ulang
   };
@@ -147,15 +150,18 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
           onChange={handleInputChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
+          disabled={disabled}
           placeholder="Ketik nama, HP, atau kode pelanggan..."
           autoComplete="off"
           className={`w-full pl-9 pr-10 py-2.5 border rounded-lg outline-none transition-colors text-sm ${
-            selectedCustomer
+            disabled
+              ? 'cursor-not-allowed border-gray-200 bg-gray-100 font-medium text-gray-600'
+              : selectedCustomer
               ? 'border-blue-400 bg-blue-50 font-medium text-blue-900'
               : 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
           }`}
         />
-        {selectedCustomer && (
+        {selectedCustomer && !disabled && (
           <button
             type="button"
             onClick={() => {
@@ -186,7 +192,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated }
       )}
 
       {/* Dropdown */}
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-50 mt-1 w-full bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
           {!showNewForm ? (
             <>

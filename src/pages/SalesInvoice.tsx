@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle, RefreshCw, ChevronDown, Eye, Settings2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -11,6 +11,29 @@ import { localDateKey } from '../lib/date';
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
+type InvoiceColumnKey = 'date' | 'number' | 'customer' | 'vehicle' | 'total' | 'branch' | 'actions';
+type InvoicePaymentHistory = {
+  id: string;
+  paymentNumber: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  date: string;
+  amount: number;
+  paymentMethod?: string;
+  accountName?: string;
+  createdByName?: string;
+};
+const SALES_INVOICE_COLUMNS: Array<{ key: InvoiceColumnKey; label: string; locked?: boolean }> = [
+  { key: 'date', label: 'Tanggal' },
+  { key: 'number', label: 'Nomor Faktur / Status', locked: true },
+  { key: 'customer', label: 'Pelanggan' },
+  { key: 'vehicle', label: 'Data Kendaraan' },
+  { key: 'total', label: 'Total / Pembayaran' },
+  { key: 'branch', label: 'Cabang' },
+  { key: 'actions', label: 'Aksi', locked: true },
+];
+const DEFAULT_SALES_INVOICE_COLUMNS = SALES_INVOICE_COLUMNS.map(column => column.key);
+
 export default function SalesInvoice() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
@@ -20,6 +43,11 @@ export default function SalesInvoice() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDate, setFilterDate] = useState('');
+  const [filterCustomer, setFilterCustomer] = useState('');
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<InvoiceColumnKey[]>(DEFAULT_SALES_INVOICE_COLUMNS);
+  const [invoicePaymentHistory, setInvoicePaymentHistory] = useState<InvoicePaymentHistory[]>([]);
+  const [invoicePaymentHistoryLoading, setInvoicePaymentHistoryLoading] = useState(false);
   const [showWOPicker, setShowWOPicker] = useState(false);
   const [woSearchTerm, setWoSearchTerm] = useState('');
   const [selectedWOId, setSelectedWOId] = useState('');
@@ -28,7 +56,6 @@ export default function SalesInvoice() {
   const [woPayment, setWoPayment] = useState(0);
   const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'Transfer'>('Tunai');
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
-  const [paymentDateUnlocked, setPaymentDateUnlocked] = useState(false);
   const [woInvoiceDate, setWoInvoiceDate] = useState(localDateKey());
   const [woPaymentDate, setWoPaymentDate] = useState(localDateKey());
   const [woBackdateReason, setWoBackdateReason] = useState('');
@@ -36,6 +63,72 @@ export default function SalesInvoice() {
   const [successMsg, setSuccessMsg] = useState('');
   const [formItems, setFormItems] = useState<NonNullable<SalesInvoice['items']>>([]);
   const [formItemToAdd, setFormItemToAdd] = useState('');
+  const [formItemSearch, setFormItemSearch] = useState('');
+  const [formActionMenu, setFormActionMenu] = useState<'ambil' | 'proses' | null>(null);
+  const [formDiscount, setFormDiscount] = useState(0);
+  const [itemSearchOpen, setItemSearchOpen] = useState(false);
+  const [detailItemId, setDetailItemId] = useState('');
+  const [detailQty, setDetailQty] = useState(1);
+  const [detailPrice, setDetailPrice] = useState(0);
+  const [detailDiscountPercent, setDetailDiscountPercent] = useState(0);
+  const [detailDiscountAmount, setDetailDiscountAmount] = useState(0);
+  const [detailWarehouseId, setDetailWarehouseId] = useState('');
+  const [detailActiveTab, setDetailActiveTab] = useState<'detail' | 'info' | 'image'>('detail');
+  const [detailFormRowId, setDetailFormRowId] = useState('');
+
+  const invoiceColumnStorageKey = `dokterac_invoice_columns_${currentUser?.id || currentUser?.username || 'default'}`;
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(invoiceColumnStorageKey);
+      if (!saved) {
+        setVisibleColumns(DEFAULT_SALES_INVOICE_COLUMNS);
+        return;
+      }
+      const parsed = JSON.parse(saved) as InvoiceColumnKey[];
+      const valid = parsed.filter(key => SALES_INVOICE_COLUMNS.some(column => column.key === key));
+      setVisibleColumns(Array.from(new Set<InvoiceColumnKey>(['number', ...valid, 'actions'])));
+    } catch {
+      setVisibleColumns(DEFAULT_SALES_INVOICE_COLUMNS);
+    }
+  }, [invoiceColumnStorageKey]);
+
+  const isInvoiceColumnVisible = (key: InvoiceColumnKey) => visibleColumns.includes(key);
+  const updateVisibleInvoiceColumns = (columns: InvoiceColumnKey[]) => {
+    const next = Array.from(new Set<InvoiceColumnKey>(['number', ...columns, 'actions']));
+    setVisibleColumns(next);
+    localStorage.setItem(invoiceColumnStorageKey, JSON.stringify(next));
+  };
+  const toggleInvoiceColumn = (key: InvoiceColumnKey) => {
+    const config = SALES_INVOICE_COLUMNS.find(column => column.key === key);
+    if (config?.locked) return;
+    updateVisibleInvoiceColumns(isInvoiceColumnVisible(key)
+      ? visibleColumns.filter(column => column !== key)
+      : [...visibleColumns, key]);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!viewingInvoice) {
+      setInvoicePaymentHistory([]);
+      setInvoicePaymentHistoryLoading(false);
+      return () => { cancelled = true; };
+    }
+    setInvoicePaymentHistoryLoading(true);
+    void api.get<InvoicePaymentHistory[]>('customer-payments').then(result => {
+      if (cancelled) return;
+      const payments = result.success && Array.isArray(result.data)
+        ? result.data.filter(payment => payment.invoiceId === viewingInvoice.id || payment.invoiceNumber === viewingInvoice.invoiceNumber)
+        : [];
+      setInvoicePaymentHistory(payments.sort((left, right) => `${right.date} ${right.paymentNumber}`.localeCompare(`${left.date} ${left.paymentNumber}`)));
+      setInvoicePaymentHistoryLoading(false);
+    }).catch(() => {
+      if (!cancelled) {
+        setInvoicePaymentHistory([]);
+        setInvoicePaymentHistoryLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [viewingInvoice?.id, viewingInvoice?.invoiceNumber]);
 
   const [formData, setFormData] = useState({
     date: localDateKey(),
@@ -50,7 +143,7 @@ export default function SalesInvoice() {
     paymentDate: localDateKey(),
     backdateReason: '',
     paymentMethod: 'Tunai' as 'Tunai' | 'Transfer',
-    status: 'Lunas' as 'Lunas' | 'Belum Lunas',
+    status: 'Belum Lunas' as 'Lunas' | 'Belum Lunas',
   });
 
   type InvoiceItem = NonNullable<SalesInvoice['items']>[number];
@@ -68,6 +161,15 @@ export default function SalesInvoice() {
     }
     return members;
   };
+  const cleanPackageLabel = (value: string) => value.replace(/^(?:\s*\[PAKET\]\s*)+/i, '').trim();
+  const masterItemForInvoiceItem = (item: InvoiceItem) => data.items.find(master => master.id === item.itemId);
+  const invoiceItemReceiptName = (item: InvoiceItem) => {
+    const master = masterItemForInvoiceItem(item);
+    const storedReceiptName = !/^Isi dari paket:/i.test(item.description || '') ? item.description?.trim() : '';
+    return cleanPackageLabel(master?.receiptDescription?.trim() || storedReceiptName || master?.name?.trim() || item.name.replace(/^\s*-\s*/, '').trim());
+  };
+  const invoiceItemCode = (item: InvoiceItem) => item.code || masterItemForInvoiceItem(item)?.code || '-';
+  const invoiceItemBarcodeOrCode = (item: InvoiceItem) => masterItemForInvoiceItem(item)?.barcode?.trim() || invoiceItemCode(item);
   const updateInvoiceItems = (items: InvoiceItem[], id: string, field: 'qty' | 'price', value: number) => {
     const targetIndex = items.findIndex(item => item.id === id);
     if (targetIndex < 0) return items;
@@ -91,7 +193,54 @@ export default function SalesInvoice() {
   };
 
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
+  const invoiceCustomerPhone = (invoice: SalesInvoice) => data.customers.find(customer => (
+    customer.id === invoice.customerRefId || customer.customerCode === invoice.customerId
+  ))?.phone || '-';
+  const invoiceVehicleSummary = (invoice: SalesInvoice) => {
+    const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
+    const rawInfo = linkedWO?.vehicleInfo || invoice.vehicleInfo || '-';
+    const plateFromWO = linkedWO?.plateNumber?.trim();
+    const plateFromText = rawInfo.toUpperCase().match(/\b[A-Z]{1,2}\s?\d{1,4}\s?[A-Z]{0,3}\b/)?.[0]?.replace(/\s+/g, '');
+    const plateNumber = plateFromWO || plateFromText || '-';
+    const vehicle = data.vehicles.find(item => (
+      item.plateNumber.replace(/\s+/g, '').toUpperCase() === plateNumber.replace(/\s+/g, '').toUpperCase()
+    ));
+    const detail = vehicle
+      ? `${vehicle.brand} ${vehicle.model} · ${vehicle.color}`
+      : rawInfo
+          .replace(new RegExp(plateNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), '')
+          .replace(/\s*\/\s*/g, ' · ')
+          .replace(/\s*[-–—]\s*/g, ' · ')
+          .replace(/(?:\s*·\s*)+$/g, '')
+          .trim() || '-';
+    return { plateNumber, detail };
+  };
   const formItemsTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const formGrandTotal = Math.max(0, formItemsTotal - formDiscount);
+  const manualInvoiceReady = Boolean(
+    currentBranchId !== 'ALL'
+    &&
+    (editingInvoice || (formData.customerRefId && formData.vehicleRefId))
+    && formItems.length > 0
+    && formGrandTotal > 0
+  );
+  const visibleInvoiceItems = formItems.filter(item => !isPackageMemberItem(item));
+  const searchableItems = data.items.filter(item => item.isActive && item.type !== 'Group' && (
+    !formItemSearch.trim()
+    || `${item.code} ${item.name} ${item.description || ''}`.toLowerCase().includes(formItemSearch.trim().toLowerCase())
+  ));
+  // Akses properti hanya dirender di dalam guard `detailItem &&`; non-null assertion
+  // membantu TypeScript mempertahankan narrowing di callback JSX yang bersarang.
+  const detailItem = data.items.find(item => item.id === detailItemId)!;
+  const availableWarehouses = data.warehouses.filter(warehouse => warehouse.isActive && warehouse.isSellable && (
+    currentBranchId === 'ALL' || warehouse.branchId === currentBranchId
+  ));
+  const detailWarehouseStock = detailItem && detailWarehouseId
+    ? data.warehouseStocks.find(stock => stock.warehouseId === detailWarehouseId && stock.itemId === detailItem.id)?.quantity || 0
+    : detailItem?.sellableStock || 0;
+  const detailGrossTotal = detailPrice * detailQty;
+  const detailPercentValue = Math.round(detailGrossTotal * detailDiscountPercent / 100);
+  const detailFinalTotal = Math.max(0, detailGrossTotal - detailPercentValue - detailDiscountAmount);
 
   const handleCustomerSelect = (customerRefId: string) => {
     const customer = data.customers.find((item) => item.id === customerRefId);
@@ -140,7 +289,8 @@ export default function SalesInvoice() {
           inv.vehicleInfo.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = !filterStatus || inv.status === filterStatus;
         const matchesDate = !filterDate || inv.date === filterDate;
-        return matchesSearch && matchesStatus && matchesDate;
+        const matchesCustomer = !filterCustomer || inv.customerName === filterCustomer;
+        return matchesSearch && matchesStatus && matchesDate && matchesCustomer;
       })
       .sort((a, b) => {
         // Newest first: compare by date desc, then by invoice number desc
@@ -148,7 +298,14 @@ export default function SalesInvoice() {
         if (dateCompare !== 0) return dateCompare;
         return b.invoiceNumber.localeCompare(a.invoiceNumber);
       });
-  }, [data.invoices, searchTerm, filterStatus, filterDate, currentBranchId]);
+  }, [data.invoices, searchTerm, filterStatus, filterDate, filterCustomer, currentBranchId]);
+
+  const invoiceCustomers = useMemo(() => Array.from(new Set(
+    data.invoices
+      .filter(invoice => currentBranchId === 'ALL' || invoice.branchId === currentBranchId)
+      .map(invoice => invoice.customerName)
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b)), [data.invoices, currentBranchId]);
 
   const formatShareDate = (date: string) => {
     const [year, month, day] = date.split('-');
@@ -206,18 +363,25 @@ export default function SalesInvoice() {
       paymentDate: localDateKey(),
       backdateReason: '',
       paymentMethod: 'Tunai',
-      status: 'Lunas',
+      status: 'Belum Lunas',
     });
     setEditingInvoice(null);
     setFormItems([]);
     setFormItemToAdd('');
+    setFormItemSearch('');
+    setFormActionMenu(null);
+    setFormDiscount(0);
+    setItemSearchOpen(false);
+    setDetailItemId('');
     setInvoiceDateUnlocked(false);
-    setPaymentDateUnlocked(false);
   };
 
   const handleOpenModal = (invoice?: SalesInvoice) => {
+    setFormActionMenu(null);
     if (invoice) {
       setEditingInvoice(invoice);
+      const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
+      const editableItems = invoice.items?.length ? invoice.items : linkedWO?.services || [];
       const matchedVehicle = data.vehicles.find(
         (v) => invoice.vehicleInfo.includes(v.plateNumber)
       );
@@ -236,7 +400,8 @@ export default function SalesInvoice() {
         paymentMethod: invoice.paymentMethod === 'Transfer' ? 'Transfer' : 'Tunai',
         status: invoice.status,
       });
-      setFormItems((invoice.items || []).map((item, index) => ({ ...item, id: `edit-${invoice.id}-${index}` })));
+      setFormItems(editableItems.map((item, index) => ({ ...item, id: `edit-${invoice.id}-${index}` })));
+      setFormDiscount(Math.max(0, editableItems.reduce((sum, item) => sum + item.price * item.qty, 0) - invoice.total));
     } else {
       resetForm();
     }
@@ -248,7 +413,7 @@ export default function SalesInvoice() {
     resetForm();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const today = localDateKey();
     if (formData.date > today || (formData.payment > 0 && formData.paymentDate > today)) {
@@ -273,24 +438,40 @@ export default function SalesInvoice() {
       window.alert('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
       return;
     }
+    const updatedInvoiceTotal = Math.max(0, finalTotal - formDiscount);
+    const existingPayment = editingInvoice?.payment || 0;
+    if (editingInvoice && existingPayment > updatedInvoiceTotal) {
+      window.alert(`Total faktur tidak boleh lebih kecil dari pembayaran yang sudah diterima (Rp ${existingPayment.toLocaleString('id-ID')}). Sesuaikan layanan atau koreksi pembayaran melalui menu Pembayaran terlebih dahulu.`);
+      return;
+    }
+    const computedStatus: SalesInvoice['status'] = existingPayment >= updatedInvoiceTotal && updatedInvoiceTotal > 0 ? 'Lunas' : 'Belum Lunas';
+    if (editingInvoice?.status === 'Lunas' && computedStatus === 'Belum Lunas' && !window.confirm(
+      `Total faktur berubah menjadi Rp ${updatedInvoiceTotal.toLocaleString('id-ID')}, sedangkan pembayaran baru Rp ${existingPayment.toLocaleString('id-ID')}.\n\nStempel LUNAS akan dihapus dan faktur menjadi Belum Lunas dengan sisa Rp ${(updatedInvoiceTotal - existingPayment).toLocaleString('id-ID')}. Lanjutkan?`
+    )) return;
     const finalForm = {
       ...formData,
-      total: finalTotal,
-      payment: Math.min(formData.payment, finalTotal),
-      status: formData.payment >= finalTotal ? 'Lunas' as const : 'Belum Lunas' as const,
+      total: updatedInvoiceTotal,
+      payment: existingPayment,
+      status: computedStatus,
       items: formItems,
     };
     const targetBranchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
     const invoiceNumber = generateDocumentNumber('invoice', targetBranchId, new Date(`${formData.date}T12:00:00`));
 
     if (editingInvoice) {
-      updateInvoice(editingInvoice.id, {
+      await updateInvoice(editingInvoice.id, {
         ...editingInvoice,
         ...finalForm,
         age: finalForm.status === 'Lunas' ? 0 : Math.floor((Date.now() - new Date(finalForm.date).getTime()) / (1000 * 60 * 60 * 24)),
       });
+      setSuccessMsg(
+        finalForm.status === 'Lunas'
+          ? `${editingInvoice.invoiceNumber} diperbarui dan tetap Lunas.`
+          : `${editingInvoice.invoiceNumber} diperbarui. Pembayaran kurang Rp ${Math.max(0, finalForm.total - finalForm.payment).toLocaleString('id-ID')}; status menjadi Belum Lunas.`,
+      );
+      setTimeout(() => setSuccessMsg(''), 5000);
     } else {
-      addInvoice({
+      await addInvoice({
         id: Date.now().toString(),
         invoiceNumber,
         ...finalForm,
@@ -299,20 +480,6 @@ export default function SalesInvoice() {
       });
     }
     handleCloseModal();
-  };
-
-  const handleDeletePayment = async (invoice: SalesInvoice) => {
-    if (invoice.payment <= 0) return;
-    if (!window.confirm(`Hapus pembayaran Rp ${invoice.payment.toLocaleString('id-ID')} dari ${invoice.invoiceNumber}? Invoice akan kembali terutang.`)) return;
-    try {
-      const result = await api.deleteCustomerPaymentsForInvoice(invoice.id);
-      if (!result.success) throw new Error(result.message || 'Pembayaran gagal dihapus');
-      await refreshData();
-      setSuccessMsg(`Pembayaran ${invoice.invoiceNumber} dihapus. Invoice kembali ${invoice.total <= 0 ? 'Lunas (Rp0)' : 'Belum Lunas'}.`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (error: any) {
-      window.alert(`Gagal menghapus pembayaran: ${error?.message || 'terjadi kesalahan'}`);
-    }
   };
 
   const handleDelete = async (invoice: SalesInvoice) => {
@@ -424,6 +591,50 @@ export default function SalesInvoice() {
     setFormItemToAdd('');
   };
 
+  const addItemDirectly = (itemId: string) => {
+    const item = data.items.find(entry => entry.id === itemId);
+    if (!item) return;
+    setFormItems(current => {
+      const existing = current.find(entry => entry.itemId === item.id);
+      return existing
+        ? current.map(entry => entry.id === existing.id ? { ...entry, qty: entry.qty + 1 } : entry)
+        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: item.sellingPrice, qty: 1 }];
+    });
+    setFormItemSearch('');
+    setItemSearchOpen(false);
+    window.setTimeout(() => document.getElementById('invoice-item-search')?.focus(), 0);
+  };
+
+  const openItemDetail = (formRowId: string) => {
+    const formRow = formItems.find(entry => entry.id === formRowId);
+    const item = data.items.find(entry => entry.id === formRow?.itemId);
+    if (!item || !formRow) return;
+    const defaultWarehouse = availableWarehouses.find(warehouse => warehouse.isDefault) || availableWarehouses[0];
+    setDetailFormRowId(formRow.id);
+    setDetailItemId(item.id);
+    setDetailQty(formRow.qty);
+    setDetailPrice(formRow.price);
+    setDetailDiscountPercent(0);
+    setDetailDiscountAmount(0);
+    setDetailWarehouseId(item.type === 'Persediaan' ? defaultWarehouse?.id || '' : '');
+    setDetailActiveTab('detail');
+    setItemSearchOpen(false);
+  };
+
+  const confirmItemDetail = () => {
+    if (!detailItem) return;
+    if (detailItem.type === 'Persediaan') {
+      if (!detailWarehouseId) return window.alert('Pilih gudang untuk barang persediaan.');
+      if (detailQty > detailWarehouseStock) return window.alert(`Stok tidak cukup. Tersedia ${detailWarehouseStock} ${detailItem.unit}.`);
+    }
+    const effectivePrice = detailQty > 0 ? Math.max(0, Math.round(detailFinalTotal / detailQty)) : 0;
+    setFormItems(current => current.map(entry => entry.id === detailFormRowId ? { ...entry, qty: detailQty, price: effectivePrice } : entry));
+    setDetailFormRowId('');
+    setDetailItemId('');
+    setFormItemSearch('');
+    window.setTimeout(() => document.getElementById('invoice-item-search')?.focus(), 0);
+  };
+
   const updateFormItem = (id: string, field: 'qty' | 'price', value: number) => {
     setFormItems((current) => updateInvoiceItems(current, id, field, value));
   };
@@ -508,7 +719,30 @@ export default function SalesInvoice() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 lg:-mx-5 lg:-mt-5 lg:space-y-1">
+      {/* Subtab Faktur Penjualan: daftar, data baru/edit, dan detail faktur. */}
+      <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
+        <button
+          type="button"
+          onClick={() => { if (showModal) handleCloseModal(); setViewingInvoice(null); }}
+          title="Daftar Faktur Penjualan"
+          className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal && !viewingInvoice ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}
+        >
+          <FileText className="h-6 w-6" />
+        </button>
+        {showModal && (
+          <div className="ml-0.5 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
+            <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">{editingInvoice ? editingInvoice.invoiceNumber : 'Data Baru'}</button>
+            <button type="button" onClick={handleCloseModal} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+        {viewingInvoice && (
+          <div className="ml-0.5 flex h-11 min-w-40 max-w-72 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
+            <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">{viewingInvoice.invoiceNumber}</button>
+            <button type="button" onClick={() => setViewingInvoice(null)} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+      </div>
       {/* Success Message */}
       {successMsg && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
@@ -518,45 +752,50 @@ export default function SalesInvoice() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="flex-1 relative">
+      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} border border-gray-300 bg-gray-50 p-3 shadow-sm`}>
+        <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+          <div className="relative min-w-[260px] flex-[1_1_360px] xl:min-w-[300px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
               placeholder="Cari nomor faktur, pelanggan, kendaraan..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className="h-10 w-full rounded border border-gray-300 bg-white pl-10 pr-4 text-sm outline-none focus:border-blue-500"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-400" />
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm"
-              >
-                <option value="">Semua Status</option>
-                <option value="Lunas">Lunas</option>
-                <option value="Belum Lunas">Belum Lunas</option>
-              </select>
-            </div>
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-            />
-          </div>
-          <div className="flex gap-2">
+          <select
+            value={filterCustomer}
+            onChange={(e) => setFilterCustomer(e.target.value)}
+            className="h-10 min-w-[175px] flex-1 rounded border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[190px]"
+          >
+            <option value="">Pelanggan: Semua</option>
+            {invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}
+          </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="h-10 min-w-[145px] flex-1 rounded border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[155px]"
+          >
+            <option value="">Status: Semua</option>
+            <option value="Lunas">Status: Lunas</option>
+            <option value="Belum Lunas">Status: Belum Lunas</option>
+          </select>
+          <input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="h-10 min-w-[145px] flex-1 rounded border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[150px]"
+            title="Tanggal faktur"
+          />
+          <button type="button" onClick={() => { setFilterDate(''); setFilterCustomer(''); setFilterStatus(''); setSearchTerm(''); }} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded border border-blue-500 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100" title="Kosongkan semua filter"><Filter className="h-4 w-4"/><span className="hidden 2xl:inline">Reset</span></button>
+          <div className="ml-auto flex flex-wrap items-center gap-2 xl:ml-0 xl:flex-nowrap">
             {hasPermission('invoice:create') && (
               <>
                 <button
                   type="button"
                   onClick={handleOpenWOPicker}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded bg-emerald-700 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-800"
                 >
                   <Wrench className="h-4 w-4" />
                   <span className="hidden xl:inline">Faktur dari WO</span>
@@ -565,7 +804,7 @@ export default function SalesInvoice() {
                 <button
                   type="button"
                   onClick={() => handleOpenModal()}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
                 >
                   <Plus className="h-4 w-4" />
                   <span className="hidden xl:inline">Buat Faktur</span>
@@ -576,45 +815,62 @@ export default function SalesInvoice() {
               type="button"
               onClick={() => void handleRefresh()}
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white p-2.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60 lg:px-3"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded border border-blue-500 bg-white px-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
               title="Ambil ulang data faktur dari server"
             >
               <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
             </button>
-            <button className="p-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors" title="Download">
+            <button className="h-10 rounded border border-blue-500 bg-white px-3 text-blue-700 hover:bg-blue-50" title="Download">
               <Download className="w-5 h-5" />
             </button>
-            <button className="p-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors" title="Print">
+            <button className="h-10 rounded border border-blue-500 bg-white px-3 text-blue-700 hover:bg-blue-50" title="Print">
               <Printer className="w-5 h-5" />
             </button>
+            <div className="relative" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnPicker(false); }}>
+              <button type="button" onClick={() => setShowColumnPicker(value => !value)} className={`inline-flex h-10 w-10 items-center justify-center rounded border ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Pilih kolom tabel">
+                <Settings2 className="h-5 w-5" />
+              </button>
+              {showColumnPicker && (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+                  <div className="mb-2 flex items-center justify-between border-b border-gray-100 pb-2"><span className="text-sm font-bold text-gray-800">Kolom Daftar Faktur</span><button type="button" onClick={() => setShowColumnPicker(false)} className="rounded p-1 text-gray-400 hover:bg-gray-100"><X className="h-4 w-4" /></button></div>
+                  {SALES_INVOICE_COLUMNS.map(column => (
+                    <label key={column.key} className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${column.locked ? 'cursor-not-allowed bg-gray-50 text-gray-500' : 'cursor-pointer hover:bg-blue-50'}`}>
+                      <input type="checkbox" checked={isInvoiceColumnVisible(column.key)} disabled={column.locked} onChange={() => toggleInvoiceColumn(column.key)} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                      <span>{column.label}</span>
+                      {column.locked && <span className="ml-auto text-[10px] font-semibold uppercase text-gray-400">Wajib</span>}
+                    </label>
+                  ))}
+                  <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3">
+                    <button type="button" onClick={() => updateVisibleInvoiceColumns(DEFAULT_SALES_INVOICE_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button>
+                    <button type="button" onClick={() => updateVisibleInvoiceColumns(['number', 'customer', 'vehicle', 'total', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-blue-800 to-blue-900 text-white">
+      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} overflow-hidden border border-gray-300 bg-white shadow-sm`}>
+        <div className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
+          <table className="w-full min-w-[1160px] border-collapse">
+            <thead className="sticky top-0 z-20 bg-slate-600 text-white">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Tanggal</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Nomor #</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">ID Pelanggan</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Pelanggan</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Keterangan</th>
-                <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Umur (hr)</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Total</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Bayar</th>
-                {currentBranchId === 'ALL' && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Cabang</th>}
-                <th className="sticky right-0 bg-blue-900 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Aksi</th>
+                {isInvoiceColumnVisible('date') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Tanggal</th>}
+                {isInvoiceColumnVisible('number') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Nomor #</th>}
+                {isInvoiceColumnVisible('customer') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Pelanggan</th>}
+                {isInvoiceColumnVisible('vehicle') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Data Kendaraan</th>}
+                {isInvoiceColumnVisible('total') && <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Total</th>}
+                {currentBranchId === 'ALL' && isInvoiceColumnVisible('branch') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Cabang</th>}
+                {isInvoiceColumnVisible('actions') && <th className="sticky right-0 bg-blue-900 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={visibleColumns.filter(column => column !== 'branch' || currentBranchId === 'ALL').length} className="px-6 py-12 text-center text-gray-500">
                     <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p className="text-lg font-medium">Tidak ada data faktur</p>
                     <p className="text-sm">Silakan buat faktur baru atau pilih cabang lain</p>
@@ -623,53 +879,55 @@ export default function SalesInvoice() {
               ) : (
                 filteredInvoices.map((invoice) => (
                   <tr key={invoice.id} className="hover:bg-blue-50/50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{invoice.date}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => setViewingInvoice(invoice)}
-                        className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
-                        title="Buka detail faktur"
-                      >
-                        {invoice.invoiceNumber}
-                      </button>
-                      {invoice.woNumber && (
-                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-medium" title={`Dari ${invoice.woNumber}`}>
-                          WO
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 font-mono">{invoice.customerId}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{invoice.customerName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{invoice.vehicleInfo} / {invoice.description}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                          invoice.status === 'Lunas'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}
-                      >
-                        {invoice.status}
+                    {isInvoiceColumnVisible('date') && <td className="whitespace-nowrap border-r border-gray-200 px-3 py-2.5 text-sm text-gray-900">{formatShareDate(invoice.date)}</td>}
+                    {isInvoiceColumnVisible('number') && <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setViewingInvoice(invoice)}
+                          className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                          title="Buka detail faktur"
+                        >
+                          {invoice.invoiceNumber}
+                        </button>
+                        {invoice.woNumber && (
+                          <span className="inline-flex items-center rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700" title={`Dari ${invoice.woNumber}`}>
+                            WO
+                          </span>
+                        )}
+                      </div>
+                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoice.status === 'Lunas' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {invoice.status === 'Lunas' ? 'Lunas' : `Belum Lunas (${invoice.age} hr)`}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{invoice.age}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium whitespace-nowrap">
-                      {invoice.total.toLocaleString('id-ID')}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right whitespace-nowrap">
-                      <div>{invoice.payment.toLocaleString('id-ID')}</div>
-                      <div className="text-[10px] font-medium text-gray-500">{invoice.paymentMethod || 'Tunai'}</div>
-                    </td>
-                    {currentBranchId === 'ALL' && (
+                    </td>}
+                    {isInvoiceColumnVisible('customer') && <td className="min-w-[190px] px-4 py-2.5 text-sm text-gray-900">
+                      <strong className="block truncate font-semibold">{invoice.customerName}</strong>
+                      <span className="mt-0.5 block whitespace-nowrap text-xs text-gray-500">
+                        {invoiceCustomerPhone(invoice)} - {invoice.customerId}
+                      </span>
+                    </td>}
+                    {isInvoiceColumnVisible('vehicle') && <td className="min-w-[210px] max-w-xs px-4 py-2.5 text-sm text-gray-900">
+                      <strong className="block truncate font-semibold">{invoiceVehicleSummary(invoice).plateNumber}</strong>
+                      <span className="mt-0.5 block truncate text-xs text-gray-500">{invoiceVehicleSummary(invoice).detail}</span>
+                    </td>}
+                    {isInvoiceColumnVisible('total') && <td className="min-w-[150px] whitespace-nowrap px-4 py-2.5 text-right text-sm text-gray-900">
+                      <strong className="block font-semibold tabular-nums">Rp {invoice.total.toLocaleString('id-ID')}</strong>
+                      <span className="mt-0.5 block text-[11px] text-gray-500">Bayar Rp {invoice.payment.toLocaleString('id-ID')}</span>
+                      {invoice.payment >= invoice.total ? (
+                        <span className="block text-[10px] font-semibold text-emerald-700">Lunas</span>
+                      ) : (
+                        <span className="block text-[10px] font-semibold text-amber-700">Sisa Rp {Math.max(0, invoice.total - invoice.payment).toLocaleString('id-ID')}</span>
+                      )}
+                    </td>}
+                    {currentBranchId === 'ALL' && isInvoiceColumnVisible('branch') && (
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
                         <span className="rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700">
                           {data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}
                         </span>
                       </td>
                     )}
-                    <td className="sticky right-0 bg-white group-hover:bg-blue-50 px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)]">
-                      <div className="flex items-center justify-center gap-2">
+                    {isInvoiceColumnVisible('actions') && <td className="sticky right-0 bg-white group-hover:bg-blue-50 px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)]">
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => void copyInvoice(invoice)}
@@ -678,34 +936,7 @@ export default function SalesInvoice() {
                         >
                           <Copy className="h-3.5 w-3.5" /><span className="lg:hidden">Salin</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => shareInvoiceToWhatsApp(invoice)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                          title="Bagikan invoice ke WhatsApp"
-                        >
-                          <MessageCircle className="h-3.5 w-3.5" /><span className="lg:hidden">WhatsApp</span>
-                        </button>
-                        {hasPermission('invoice:edit') && (
-                          <button
-                            onClick={() => handleOpenModal(invoice)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors shadow-sm"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                        )}
-                        {hasPermission('invoice:edit') && invoice.payment > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => void handleDeletePayment(invoice)}
-                            className="rounded-lg p-1.5 text-orange-600 shadow-sm transition-colors hover:bg-orange-100"
-                            title="Hapus pembayaran"
-                          >
-                            <Receipt className="h-4 w-4" />
-                          </button>
-                        )}
-                        {hasPermission('invoice:delete') && (
+                        {hasPermission('invoice:delete') && invoice.payment <= 0 && (
                           <button
                             onClick={() => void handleDelete(invoice)}
                             className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors shadow-sm"
@@ -715,7 +946,7 @@ export default function SalesInvoice() {
                           </button>
                         )}
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))
               )}
@@ -733,72 +964,140 @@ export default function SalesInvoice() {
         const invoice = viewingInvoice;
         const branchName = data.branches.find(branch => branch.id === invoice.branchId)?.name || '-';
         const customer = data.customers.find(item => item.id === invoice.customerRefId || item.customerCode === invoice.customerId);
+        const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
         const remaining = Math.max(0, invoice.total - invoice.payment);
-        const items = invoice.items || [];
+        const items = invoice.items?.length ? invoice.items : linkedWO?.services || [];
+        const visibleItems = items.filter(item => !isPackageMemberItem(item));
+        const itemsSubtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+        const displayedSubtotal = itemsSubtotal > 0 ? itemsSubtotal : invoice.total;
+        const displayedDiscount = Math.max(0, displayedSubtotal - invoice.total);
         return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-0 sm:p-4">
-            <section className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-label={`Detail faktur ${invoice.invoiceNumber}`}>
-              <header className="flex items-start justify-between border-b border-gray-200 bg-gradient-to-r from-blue-700 to-blue-900 px-5 py-4 text-white sm:px-6">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-0 sm:p-3 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
+            <section className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50 shadow-2xl sm:h-[94vh] sm:max-w-6xl sm:rounded-xl sm:border sm:border-gray-300 lg:h-auto lg:max-w-none lg:rounded-md lg:shadow-sm" role="dialog" aria-modal="true" aria-label={`Detail faktur ${invoice.invoiceNumber}`}>
+              <header className="flex flex-shrink-0 items-center justify-between border-b border-blue-900 bg-slate-700 px-4 py-3 text-white sm:px-5 lg:hidden">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-blue-100">Detail Faktur Penjualan</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <h2 className="text-xl font-bold">{invoice.invoiceNumber}</h2>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${invoice.status === 'Lunas' ? 'bg-emerald-400/20 text-emerald-100' : 'bg-amber-300/20 text-amber-100'}`}>{invoice.status}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-blue-100">{formatShareDate(invoice.date)} - {branchName}</p>
+                  <h3 className="text-lg font-semibold">Faktur Penjualan {invoice.invoiceNumber}</h3>
+                  <p className="text-xs text-slate-200">Mode lihat · data transaksi terkunci</p>
                 </div>
-                <button type="button" onClick={() => setViewingInvoice(null)} className="rounded-lg p-2 text-blue-100 hover:bg-white/15 hover:text-white" aria-label="Tutup detail faktur">
+                <button type="button" onClick={() => setViewingInvoice(null)} className="rounded p-2 hover:bg-white/10" aria-label="Tutup detail faktur">
                   <X className="h-5 w-5" />
                 </button>
               </header>
 
-              <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
-                <div className="grid gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 sm:grid-cols-2">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Pelanggan</span>
-                    <p className="font-bold text-gray-900">{invoice.customerName}</p>
-                    <p className="text-sm text-gray-600">{customer?.phone || invoice.customerId}</p>
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4">
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  <div className="order-first mr-auto flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
+                    <span>Nomor: <strong className="text-gray-800">{invoice.invoiceNumber}</strong></span>
+                    <span>Cabang: <strong className="text-gray-800">{branchName}</strong></span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${invoice.status === 'Lunas' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{invoice.status}</span>
                   </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Kendaraan</span>
-                    <p className="font-semibold text-gray-900">{invoice.vehicleInfo || '-'}</p>
-                    {invoice.woNumber && <p className="text-sm font-medium text-orange-700">Referensi {invoice.woNumber}</p>}
+                  <button type="button" disabled title="Ambil hanya tersedia pada faktur baru" className="h-9 rounded border border-gray-300 bg-gray-100 px-3 text-sm font-semibold text-gray-400">Ambil <ChevronDown className="ml-1 inline h-4 w-4"/></button>
+                  <div className="relative">
+                    <button type="button" onClick={() => setFormActionMenu(menu => menu === 'proses' ? null : 'proses')} className="h-9 rounded border border-blue-500 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">Proses <ChevronDown className="ml-1 inline h-4 w-4"/></button>
+                    {formActionMenu === 'proses' && <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded border bg-white p-1 shadow-xl">
+                      <button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(invoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Eye className="h-4 w-4"/>Lihat Riwayat Pembayaran</button>
+                      <button type="button" disabled={remaining <= 0} onClick={() => remaining > 0 && window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(invoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"><Receipt className="h-4 w-4"/>Tambah Pembayaran</button>
+                      <button type="button" onClick={() => { setFormActionMenu(null); void copyInvoice(invoice); }} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Copy className="h-4 w-4"/>Salin Faktur</button>
+                      <button type="button" onClick={() => { setFormActionMenu(null); shareInvoiceToWhatsApp(invoice); }} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-emerald-50"><MessageCircle className="h-4 w-4 text-emerald-600"/>Kirim WhatsApp</button>
+                    </div>}
                   </div>
+                  {hasPermission('invoice:edit') ? <button type="button" onClick={() => { setViewingInvoice(null); handleOpenModal(invoice); }} className="inline-flex h-9 items-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800"><Edit className="h-4 w-4"/>Edit</button> : <button type="button" disabled className="inline-flex h-9 items-center gap-2 rounded bg-gray-300 px-4 text-sm font-semibold text-gray-500"><Save className="h-4 w-4"/>Terkunci</button>}
                 </div>
 
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="font-bold text-gray-900">Rincian Barang &amp; Jasa</h3>
-                    <span className="text-xs text-gray-500">{items.filter(item => !isPackageMemberItem(item)).length} item</span>
+                <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_220px]">
+                  <div>
+                    <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><User className="h-4 w-4 text-blue-600"/>Data Pelanggan</label>
+                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm text-gray-700"><span className="truncate font-semibold">{invoice.customerName}</span><span className="ml-2 truncate text-xs text-gray-500">{customer?.phone || invoice.customerId}</span></div>
                   </div>
-                  <div className="overflow-hidden rounded-xl border border-gray-200">
+                  <div>
+                    <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><Car className="h-4 w-4 text-orange-600"/>Data Kendaraan</label>
+                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm font-semibold text-gray-700"><span className="truncate">{invoice.vehicleInfo || '-'}</span>{invoice.woNumber && <span className="ml-2 shrink-0 text-xs text-orange-700">· {invoice.woNumber}</span>}</div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal</label>
+                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm text-gray-600">{invoice.date}</div>
+                  </div>
+                </section>
+
+                <section className="relative min-h-[320px] space-y-2 border border-gray-300 bg-white p-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="relative w-full max-w-xl"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300"/><input disabled placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 bg-gray-100 pl-9 pr-10 text-sm text-gray-400"/><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-300"/></div>
+                    <strong className="shrink-0 text-sm text-gray-700">{visibleItems.length} Barang/Jasa</strong>
+                  </div>
+                  <div className="hidden min-w-[980px] grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid"><span className="text-center">No</span><span>Nama Barang/Jasa</span><span>Barcode / Kode</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span></div>
+                  <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-auto border border-gray-200 p-1">
                     {items.length > 0 ? items.map((item, index) => {
                       if (isPackageMemberItem(item)) return null;
                       const members = isPackageHeaderItem(item) ? packageMembersAfter(items, index) : [];
                       return (
-                        <div key={`${item.id}-${index}`} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0">
+                        <div key={`${item.id}-${index}`} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                          <div className="hidden text-center text-xs text-gray-400 lg:block">{items.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1}</div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-gray-900">{item.description || item.name}</p>
-                            <p className="text-xs text-gray-500">{item.code || 'Jasa'} - {item.qty} x Rp {item.price.toLocaleString('id-ID')}</p>
-                            {members.length > 0 && <p className="mt-1 text-xs text-purple-700">Isi paket: {members.map(member => member.name.replace(/^\s*-\s*/, '')).join(' - ')}</p>}
+                            <p className="truncate font-medium">{invoiceItemReceiptName(item)}</p>
+                            <p className="truncate font-mono text-[10px] text-gray-500">{invoiceItemCode(item)}</p>
+                            {members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{invoiceItemCode(member)}</span> · {invoiceItemReceiptName(member)} ×{member.qty}</p>)}</div>}
                           </div>
-                          <strong className="whitespace-nowrap text-gray-900">Rp {(item.qty * item.price).toLocaleString('id-ID')}</strong>
+                          <div className="hidden truncate font-mono text-xs text-gray-600 lg:block" title={invoiceItemBarcodeOrCode(item)}>{invoiceItemBarcodeOrCode(item)}</div>
+                          <div className="rounded border border-gray-200 bg-gray-100 px-2 py-1 text-center text-gray-600">{item.qty}</div>
+                          <div className="rounded border border-gray-200 bg-gray-100 px-2 py-1 text-right text-gray-600">{item.price.toLocaleString('id-ID')}</div>
+                          <strong className="hidden text-right tabular-nums lg:block">{(item.price * item.qty).toLocaleString('id-ID')}</strong>
+                          <div className="flex justify-center"><span className="rounded p-1 text-gray-400" title="Rincian terkunci pada mode lihat"><Eye className="h-4 w-4"/></span></div>
                         </div>
                       );
                     }) : (
-                      <div className="px-4 py-6 text-center text-sm text-gray-500">{invoice.description || 'Tidak ada rincian item.'}</div>
+                      <div className="flex min-h-[220px] flex-col items-center justify-center px-4 text-center"><FileText className="mb-2 h-9 w-9 text-gray-300"/><p className="text-sm font-medium text-gray-500">Rincian transaksi lama tidak tersedia</p><p className="mt-1 max-w-md text-xs text-gray-400">Total faktur tetap tercatat. Rincian barang/jasa tidak tersimpan pada data faktur maupun WO terkait.</p></div>
                     )}
                   </div>
-                </div>
+                </section>
 
-                <div className="ml-auto w-full space-y-2 rounded-xl bg-gray-50 p-4 sm:max-w-md">
-                  <div className="flex justify-between text-sm"><span className="text-gray-600">Total</span><strong>Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
-                  <div className="flex justify-between text-sm"><span className="text-gray-600">Dibayar ({invoice.paymentMethod || 'Tunai'})</span><strong className="text-emerald-700">Rp {invoice.payment.toLocaleString('id-ID')}</strong></div>
-                  <div className="flex justify-between border-t border-gray-200 pt-2"><span className="font-semibold text-gray-700">Sisa</span><strong className={remaining > 0 ? 'text-amber-700' : 'text-emerald-700'}>Rp {remaining.toLocaleString('id-ID')}</strong></div>
-                </div>
+                <section className="grid overflow-hidden rounded border border-gray-300 bg-white shadow-sm lg:grid-cols-2">
+                  <div className="border-b border-gray-200 p-3 lg:border-b-0 lg:border-r">
+                    <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-blue-700"><FileText className="h-5 w-5" />Informasi Faktur</h3>
+                    <dl className="overflow-hidden rounded border border-gray-300 text-sm">
+                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Total</dt><dd className="font-semibold tabular-nums">Rp {invoice.total.toLocaleString('id-ID')}</dd></div>
+                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Pembayaran</dt><dd className="font-semibold tabular-nums text-emerald-700">Rp {invoice.payment.toLocaleString('id-ID')}</dd></div>
+                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Piutang / Sisa</dt><dd className={`font-semibold tabular-nums ${remaining > 0 ? 'text-amber-700' : 'text-gray-900'}`}>Rp {remaining.toLocaleString('id-ID')}</dd></div>
+                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Status</dt><dd><span className={`inline-flex rounded border px-2 py-0.5 text-xs font-semibold ${remaining <= 0 && invoice.total > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{remaining <= 0 && invoice.total > 0 ? 'Lunas' : 'Belum Lunas'}</span></dd></div>
+                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Tanggal Faktur</dt><dd className="font-medium">{formatShareDate(invoice.date)}</dd></div>
+                      <div className="flex items-center justify-between gap-4 px-3 py-2"><dt>Metode Terakhir</dt><dd className="font-medium">{invoice.payment > 0 ? invoice.paymentMethod || 'Tunai' : '-'}</dd></div>
+                    </dl>
+                  </div>
+                  <div className="relative min-h-[250px] p-3">
+                    <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-blue-700"><Receipt className="h-5 w-5" />Riwayat Pembayaran</h3>
+                    <div className="relative z-[1] max-h-40 space-y-2 overflow-y-auto pr-1">
+                      {invoicePaymentHistoryLoading ? (
+                        <div className="flex items-center justify-center rounded border border-dashed border-gray-300 py-6 text-sm text-gray-500"><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Memuat riwayat pembayaran...</div>
+                      ) : invoicePaymentHistory.length > 0 ? invoicePaymentHistory.map(payment => (
+                        <div key={payment.id} className="rounded border border-gray-300 bg-white px-3 py-2 text-sm">
+                          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><strong className="block truncate text-blue-700">{payment.paymentNumber}</strong><span className="text-[11px] text-gray-500">{formatShareDate(payment.date)} · {payment.paymentMethod || payment.accountName || '-'}</span></div><strong className="whitespace-nowrap tabular-nums">Rp {Number(payment.amount || 0).toLocaleString('id-ID')}</strong></div>
+                          {(payment.accountName || payment.createdByName) && <p className="mt-1 truncate text-[11px] text-gray-500">{payment.accountName || '-'}{payment.createdByName ? ` · Input: ${payment.createdByName}` : ''}</p>}
+                        </div>
+                      )) : invoice.payment > 0 ? (
+                        <div className="rounded border border-gray-300 bg-white px-3 py-2 text-sm"><div className="flex items-start justify-between gap-3"><div><strong className="block text-blue-700">Pembayaran tercatat</strong><span className="text-[11px] text-gray-500">{formatShareDate(invoice.paymentDate || invoice.date)} · {invoice.paymentMethod || 'Tunai'}</span></div><strong className="whitespace-nowrap tabular-nums">Rp {invoice.payment.toLocaleString('id-ID')}</strong></div></div>
+                      ) : (
+                        <div className="rounded border border-dashed border-gray-300 py-6 text-center text-sm text-gray-500">Belum ada pembayaran.</div>
+                      )}
+                    </div>
+                    {remaining <= 0 && invoice.total > 0 && (
+                      <div className="pointer-events-none absolute bottom-4 left-4 flex h-28 w-28 -rotate-12 items-center justify-center rounded-full border-[4px] border-emerald-500/25 text-emerald-500/30">
+                        <div className="absolute h-20 w-20 rounded-full border-2 border-emerald-500/25" />
+                        <div className="relative z-[1] w-[120%] -rotate-0 border-y-[3px] border-emerald-500/25 bg-white/70 py-1 text-center text-xl font-black tracking-widest">LUNAS</div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(460px,560px)]">
+                  <div className="h-[88px] rounded border border-gray-300 bg-white px-3 py-2"><p className="line-clamp-2 text-sm uppercase leading-5 text-gray-700">{invoice.description || linkedWO?.description || 'TIDAK ADA KETERANGAN SERVICE'}</p>{invoice.payment > 0 && <p className="mt-1 text-xs text-emerald-700">Dibayar {invoice.paymentMethod || 'Tunai'}: Rp {invoice.payment.toLocaleString('id-ID')} · Sisa Rp {remaining.toLocaleString('id-ID')}</p>}</div>
+                  <div className="grid h-[88px] grid-cols-3 rounded border border-gray-300 bg-white p-2 shadow-sm">
+                    <div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Sub Total</span><strong className="text-right text-lg tabular-nums">Rp {displayedSubtotal.toLocaleString('id-ID')}</strong></div>
+                    <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Diskon</span><div className="flex h-9 items-center rounded border border-gray-300 bg-gray-100"><span className="border-r border-gray-200 px-2 text-gray-400">Rp</span><span className="min-w-0 flex-1 px-2 text-right font-semibold tabular-nums text-gray-600">{displayedDiscount.toLocaleString('id-ID')}</span></div></div>
+                    <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
+                  </div>
+                </section>
               </div>
 
-              <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
+              <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 lg:hidden">
                 <button type="button" onClick={() => void copyInvoice(invoice)} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Copy className="h-4 w-4" /> Salin</button>
                 <button type="button" onClick={() => shareInvoiceToWhatsApp(invoice)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><MessageCircle className="h-4 w-4" /> WhatsApp</button>
                 {hasPermission('invoice:edit') && <button type="button" onClick={() => { setViewingInvoice(null); handleOpenModal(invoice); }} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"><Edit className="h-4 w-4" /> Edit</button>}
@@ -811,64 +1110,72 @@ export default function SalesInvoice() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-3 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
+          <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50 shadow-2xl sm:h-[94vh] sm:max-w-6xl sm:rounded-xl sm:border sm:border-gray-300 lg:h-auto lg:max-w-none lg:rounded-md lg:shadow-sm">
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-blue-900 bg-slate-700 px-4 py-3 text-white sm:px-5 lg:hidden">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {editingInvoice ? 'Edit Faktur' : 'Buat Faktur Baru'}
+                <h3 className="text-lg font-semibold">
+                  {editingInvoice ? 'Edit Faktur Penjualan' : 'Data Baru Faktur Penjualan'}
                 </h3>
-                <p className="text-sm text-gray-500">Isi data faktur penjualan</p>
+                <p className="text-xs text-slate-200">Isi identitas, rincian barang/jasa, dan pembayaran</p>
               </div>
               <button
                 onClick={handleCloseModal}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="rounded p-2 hover:bg-white/10"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className="h-5 w-5 text-white" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'ambil' ? null : 'ambil')} className="h-9 rounded border border-blue-500 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">Ambil <ChevronDown className="ml-1 inline h-4 w-4"/></button>{formActionMenu === 'ambil' && <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => { setFormActionMenu(null); setShowModal(false); handleOpenWOPicker(); }} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Wrench className="h-4 w-4 text-emerald-600"/>Ambil dari Order Kerja</button></div>}</div>
+                <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'proses' ? null : 'proses')} className="h-9 rounded border border-blue-500 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">Proses <ChevronDown className="ml-1 inline h-4 w-4"/></button>{formActionMenu === 'proses' && <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded border bg-white p-1 shadow-xl">{editingInvoice ? <><button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Eye className="h-4 w-4"/>Lihat Riwayat Pembayaran</button><button type="button" disabled={formGrandTotal <= editingInvoice.payment} onClick={() => formGrandTotal > editingInvoice.payment && window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"><Receipt className="h-4 w-4"/>Tambah Pembayaran</button></> : <p className="px-3 py-2 text-xs text-gray-400">Simpan faktur terlebih dahulu.</p>}</div>}</div>
+                <div className="order-first mr-auto flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
+                  <span>Nomor: <strong className="text-gray-800">{editingInvoice?.invoiceNumber || 'Otomatis saat disimpan'}</strong></span>
+                  <span>Cabang: <strong className="text-gray-800">{currentBranchId === 'ALL' ? 'Wajib pilih cabang' : data.branches.find(branch => branch.id === currentBranchId)?.name || '-'}</strong></span>
+                </div>
+                <button type="submit" disabled={!manualInvoiceReady} title="Simpan Faktur" className="inline-flex h-9 items-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4"/>Simpan</button>
+              </div>
+              <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_220px]">
               {/* Tanggal */}
-              <div>
+              <div className="lg:order-3">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Tanggal <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
-                  required
-                  max={localDateKey()}
-                  disabled={!invoiceDateUnlocked}
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-                <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} className="mt-1 text-xs font-semibold text-blue-600">
-                  {invoiceDateUnlocked ? 'Kunci tanggal' : 'Buka tanggal mundur'}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    required
+                    max={localDateKey()}
+                    disabled={!invoiceDateUnlocked}
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="h-10 min-w-0 flex-1 rounded border border-gray-300 px-3 disabled:bg-gray-100 disabled:text-gray-500 focus:border-blue-500 outline-none"
+                  />
+                  <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} title={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} aria-label={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} className={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded border ${invoiceDateUnlocked ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}>
+                    <Edit className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              {data.settings.security.requireBackdateReason !== false && (formData.date < localDateKey() || (formData.payment > 0 && formData.paymentDate < localDateKey())) && (
-                <input required value={formData.backdateReason} onChange={(e) => setFormData({ ...formData, backdateReason: e.target.value })} placeholder="Alasan transaksi tanggal mundur" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" />
-              )}
-
               {/* Pelanggan & Kendaraan Picker */}
-              <div className="space-y-4">
-                {editingInvoice?.woId ? (
-                  <div className="grid grid-cols-1 gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:grid-cols-3">
+              <div className="contents">
+                {editingInvoice ? (
+                  <div className="grid grid-cols-1 gap-3 border border-blue-200 bg-blue-50 p-4 sm:grid-cols-3 lg:col-span-2">
                     <div><span className="block text-[10px] font-bold uppercase text-blue-500">Pelanggan · terkunci</span><strong>{editingInvoice.customerName}</strong></div>
-                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Referensi · terkunci</span><strong>{editingInvoice.woNumber}</strong></div>
+                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Referensi · terkunci</span><strong>{editingInvoice.woNumber || 'Faktur manual'}</strong></div>
                     <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{editingInvoice.vehicleInfo}</strong></div>
                   </div>
                 ) : (
                   <>
-                    <div>
+                    <div className="lg:order-1">
                       <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                         <User className="w-4 h-4 text-blue-600" />
                         Data Pelanggan <span className="text-red-500">*</span>
                       </label>
                       <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} />
                     </div>
-                    <div>
+                    <div className="lg:order-2">
                       <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                         <Car className="w-4 h-4 text-orange-600" />
                         Data Kendaraan <span className="text-red-500">*</span>
@@ -878,132 +1185,79 @@ export default function SalesInvoice() {
                   </>
                 )}
               </div>
+              </section>
+              {data.settings.security.requireBackdateReason !== false && (formData.date < localDateKey() || (formData.payment > 0 && formData.paymentDate < localDateKey())) && (
+                <input required value={formData.backdateReason} onChange={(e) => setFormData({ ...formData, backdateReason: e.target.value })} placeholder="Alasan transaksi tanggal mundur" className="w-full rounded border border-amber-400 bg-amber-50 px-4 py-2.5 lg:col-span-2" />
+              )}
 
-              <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <div className="flex items-center justify-between"><label className="text-sm font-semibold text-gray-800">Barang/Jasa Invoice</label><span className="text-xs text-gray-500">Tidak mengubah barang/jasa WO</span></div>
-                <div className="flex gap-2">
-                  <select value={formItemToAdd} onChange={(e) => setFormItemToAdd(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
-                    <option value="">Pilih barang atau jasa...</option>
-                    {data.items.filter((item) => item.isActive && item.type !== 'Group').map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
-                  </select>
-                  <button type="button" disabled={!formItemToAdd} onClick={addFormItem} className="rounded-lg bg-blue-600 px-3 py-2 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
+              <section className="relative min-h-[320px] space-y-2 border border-gray-300 bg-white p-3">
+                {editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"><div className="-rotate-12 rounded-full border-[5px] border-emerald-500/25 px-7 py-4 text-4xl font-black tracking-widest text-emerald-500/25">LUNAS</div></div>}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="relative w-full max-w-xl" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setItemSearchOpen(false); }}>
+                    <Search className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400"/>
+                    <input id="invoice-item-search" value={formItemSearch} onFocus={() => setItemSearchOpen(true)} onChange={event => { setFormItemSearch(event.target.value); setItemSearchOpen(true); }} onKeyDown={event => { if (event.key === 'Escape') setItemSearchOpen(false); if (event.key === 'Enter' && searchableItems[0]) { event.preventDefault(); addItemDirectly(searchableItems[0].id); } }} placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 pl-9 pr-10 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/>
+                    <button type="button" onClick={() => setItemSearchOpen(current => !current)} className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-blue-700"><Search className="h-5 w-5"/></button>
+                    {itemSearchOpen && formItemSearch.trim() && <div className="absolute left-0 top-full z-40 mt-1 max-h-72 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-2xl">
+                      {searchableItems.slice(0, 20).map(item => { const stock = item.type === 'Persediaan' ? (item.branchStocks?.[currentBranchId]?.sellableStock ?? item.sellableStock) : null; return <button key={item.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => addItemDirectly(item.id)} className="block w-full border-b border-gray-100 px-3 py-2 text-left hover:bg-blue-50"><strong className="block text-sm text-gray-900">{item.name}</strong><span className="flex justify-between gap-2 text-xs text-gray-500"><span>{item.code} · {item.type} · {item.unit}</span><span>{stock === null ? 'Jasa' : `Stok ${stock}`} · Rp {item.sellingPrice.toLocaleString('id-ID')}</span></span></button>; })}
+                      {!searchableItems.length && <p className="p-4 text-center text-sm text-gray-400">Barang atau jasa tidak ditemukan.</p>}
+                    </div>}
+                  </div>
+                  <strong className="shrink-0 text-sm text-gray-700">{visibleInvoiceItems.length} Barang/Jasa</strong>
                 </div>
-                <div className="max-h-56 space-y-2 overflow-y-auto">
+                <div className="hidden gap-2 sm:grid-cols-[minmax(180px,.7fr)_minmax(240px,1fr)_44px]">
+                  <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"/><input value={formItemSearch} onChange={event => { setFormItemSearch(event.target.value); setFormItemToAdd(''); }} placeholder="Cari kode atau nama barang/jasa..." className="h-10 w-full rounded border border-gray-300 pl-9 pr-3 text-sm outline-none focus:border-blue-500"/></div>
+                  <select value={formItemToAdd} onChange={(e) => setFormItemToAdd(e.target.value)} className="min-w-0 rounded border border-gray-300 bg-white px-3 py-2 text-sm">
+                    <option value="">Pilih barang atau jasa...</option>
+                    {searchableItems.map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
+                  </select>
+                  <button type="button" disabled={!formItemToAdd} onClick={addFormItem} className="rounded bg-blue-700 px-4 py-2 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
+                </div>
+                <div className="hidden min-w-[980px] grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid">
+                  <span className="text-center">No</span><span>Nama Barang/Jasa</span><span>Barcode / Kode</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span>
+                </div>
+                <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-auto border border-gray-200 p-1">
                   {formItems.map((item, index) => {
                     if (isPackageMemberItem(item)) return null;
                     const members = isPackageHeaderItem(item) ? packageMembersAfter(formItems, index) : [];
                     return (
-                      <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_64px_110px_32px] items-center gap-2 rounded-lg border p-2 text-sm ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                      <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                        <div className="hidden text-center text-xs text-gray-400 lg:block">{formItems.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1}</div>
                         <div className="min-w-0">
-                          <p className="truncate font-medium">{item.name}</p>
-                          <p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa'} · {item.description}</p>
-                          {members.length > 0 && <p className="mt-1 text-[10px] text-purple-700"><strong>Isi paket:</strong> {members.map(member => member.name.replace(/^\s*-\s*/, '')).join(' • ')}</p>}
+                          <p className="truncate font-medium">{invoiceItemReceiptName(item)}</p>
+                          <p className="truncate font-mono text-[10px] text-gray-500">{invoiceItemCode(item)}</p>
+                          {members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{invoiceItemCode(member)}</span> · {invoiceItemReceiptName(member)} ×{member.qty}</p>)}</div>}
                         </div>
+                        <div className="hidden truncate font-mono text-xs text-gray-600 lg:block" title={invoiceItemBarcodeOrCode(item)}>{invoiceItemBarcodeOrCode(item)}</div>
                         <input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(e) => updateFormItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
                         <input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(e) => updateFormItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
-                        <button type="button" onClick={() => removeFormItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                        <strong className="hidden text-right tabular-nums lg:block">{(item.price * item.qty).toLocaleString('id-ID')}</strong>
+                        <div className="flex items-center justify-center gap-1"><button type="button" onClick={() => openItemDetail(item.id)} className="rounded p-1 text-slate-600 hover:bg-blue-50 hover:text-blue-700" title="Lihat/Edit rincian"><Eye className="h-4 w-4" /></button><button type="button" onClick={() => removeFormItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50" title="Hapus"><Trash2 className="h-4 w-4" /></button></div>
                       </div>
                     );
                   })}
                   {formItems.length === 0 && <p className="py-4 text-center text-xs text-gray-500">Belum ada barang atau jasa.</p>}
                 </div>
-              </div>
+              </section>
 
-              {/* Keterangan & Pembayaran */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Keterangan Service <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
+              <section className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(460px,560px)]">
+                <div className="h-[88px]">
+                  <textarea
+                    rows={2}
                     required
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value.toUpperCase() })}
-                    placeholder="Deskripsi service AC yang dilakukan"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none uppercase"
+                    placeholder="Keterangan service *"
+                    className="h-full w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm leading-5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Total (Rp) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    readOnly
-                    value={formItemsTotal}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-gray-100 font-semibold outline-none"
-                  />
+                <div className="grid h-[88px] grid-cols-3 rounded border border-gray-300 bg-white p-2 shadow-sm">
+                  <div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Sub Total</span><strong className="text-right text-lg tabular-nums">Rp {formItemsTotal.toLocaleString('id-ID')}</strong></div>
+                  <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Diskon</span><div className="flex h-9 items-center rounded border border-gray-300 bg-white"><span className="border-r border-gray-200 px-2 text-gray-400">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(formDiscount)} onChange={event => setFormDiscount(Math.min(formItemsTotal, parsePaymentInput(event.target.value)))} className="min-w-0 flex-1 px-2 text-right font-semibold tabular-nums outline-none"/></div></div>
+                  <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {formGrandTotal.toLocaleString('id-ID')}</strong></div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pembayaran (Rp) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    required
-                    value={formatPaymentInput(formData.payment)}
-                    onChange={(e) => {
-                      const payment = parsePaymentInput(e.target.value);
-                      setFormData({
-                        ...formData,
-                        payment,
-                        status: payment >= formItemsTotal ? 'Lunas' : 'Belum Lunas',
-                      });
-                    }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Metode Pembayaran</label>
-                  <select
-                    value={formData.paymentMethod}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      paymentMethod: e.target.value as 'Tunai' | 'Transfer',
-                    })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="Tunai">Tunai</option>
-                    <option value="Transfer">Transfer</option>
-                  </select>
-                </div>
-                {formData.payment > 0 && <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Pembayaran</label>
-                  <input type="date" min={formData.date} max={localDateKey()} disabled={!paymentDateUnlocked} value={formData.paymentDate} onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })} className="w-full px-4 py-2.5 border rounded-lg disabled:bg-gray-100" />
-                  <button type="button" onClick={() => hasPermission('payment:backdate') ? setPaymentDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal pembayaran.')} className="mt-1 text-xs font-semibold text-blue-600">Buka tanggal pembayaran</button>
-                </div>}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="status"
-                        value="Lunas"
-                        checked={formData.status === 'Lunas'}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Lunas' })}
-                        className="w-4 h-4 text-green-600"
-                      />
-                      <span className="text-sm text-gray-700">Lunas</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="status"
-                        value="Belum Lunas"
-                        checked={formData.status === 'Belum Lunas'}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Belum Lunas' })}
-                        className="w-4 h-4 text-yellow-600"
-                      />
-                      <span className="text-sm text-gray-700">Belum Lunas</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
+              </section>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-end gap-3 border-t border-gray-300 bg-gray-100 px-4 py-2 lg:hidden">
                 <button
                   type="button"
                   onClick={handleCloseModal}
@@ -1013,13 +1267,72 @@ export default function SalesInvoice() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
+                  disabled={!manualInvoiceReady}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none"
                 >
                   <Save className="w-4 h-4" />
                   {editingInvoice ? 'Simpan Perubahan' : 'Simpan Faktur'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {detailItem && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-2 sm:p-4" role="dialog" aria-modal="true" aria-label={`Rincian ${detailItem.name}`}>
+          <div className="flex h-[480px] max-h-[96vh] w-full max-w-2xl flex-col overflow-hidden rounded-sm bg-white shadow-2xl">
+            <header className="flex shrink-0 items-center justify-between bg-[#12376b] px-4 py-2 text-white sm:py-2">
+              <div className="flex items-center gap-2"><Edit className="h-4 w-4"/><h3 className="text-base font-semibold">Rincian Barang</h3></div>
+              <button type="button" onClick={() => setDetailItemId('')} className="rounded p-1 hover:bg-white/10" aria-label="Tutup"><X className="h-4 w-4"/></button>
+            </header>
+
+            <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-gray-300 px-3 pt-1">
+              <button type="button" onClick={() => setDetailActiveTab('detail')} className={`whitespace-nowrap border-b-2 px-3 py-1.5 text-sm ${detailActiveTab === 'detail' ? 'border-red-500 font-medium text-red-600' : 'border-transparent text-gray-500'}`}>Rincian Barang</button>
+              <button type="button" onClick={() => setDetailActiveTab('info')} className={`whitespace-nowrap border-b-2 px-3 py-1.5 text-sm ${detailActiveTab === 'info' ? 'border-red-500 font-medium text-red-600' : 'border-transparent text-gray-500'}`}>Info lainnya</button>
+              <button type="button" onClick={() => setDetailActiveTab('image')} className={`whitespace-nowrap border-b-2 px-3 py-1.5 text-sm ${detailActiveTab === 'image' ? 'border-red-500 font-medium text-red-600' : 'border-transparent text-gray-500'}`}>Gambar</button>
+            </nav>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:px-4 sm:py-3">
+              {detailActiveTab === 'detail' && <div className="space-y-2">
+                <div className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)_140px] sm:gap-2">
+                  <span className="text-sm text-gray-800">Kode #</span>
+                  <strong className="text-base font-medium text-sky-500">{detailItem.code}</strong>
+                  {detailItem.type === 'Persediaan' ? <span className="text-right text-sm">Bisa dijual : <strong className={detailWarehouseStock > 0 ? 'text-orange-500' : 'text-red-600'}>{detailWarehouseStock}</strong></span> : <span className="text-right text-sm font-medium text-green-600">Jasa</span>}
+                </div>
+                <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Nama Barang</span><input value={detailItem.name} readOnly className="h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm font-medium outline-none sm:h-9"/></label>
+                <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Kuantitas</span><div className="grid grid-cols-[minmax(0,1fr)_110px]"><input type="number" min="1" max={detailItem.type === 'Persediaan' ? Math.max(1, detailWarehouseStock) : undefined} value={detailQty} onChange={event => setDetailQty(Math.max(1, Number(event.target.value) || 1))} className="h-10 min-w-0 rounded-l border border-gray-300 px-3 text-right text-sm font-medium outline-none focus:border-blue-500 sm:h-9"/><div className="flex h-10 items-center justify-between rounded-r border border-l-0 border-gray-300 px-3 text-sm sm:h-9"><span className="text-blue-700">{detailItem.unit}</span><Search className="h-4 w-4"/></div></div></label>
+                <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">@Harga</span><div className="flex h-10 overflow-hidden rounded border border-gray-300 sm:h-9"><span className="flex items-center border-r bg-gray-50 px-3 text-sm text-gray-500">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(detailPrice)} onChange={event => setDetailPrice(parsePaymentInput(event.target.value))} className="min-w-0 flex-1 px-3 text-right text-sm font-medium outline-none"/></div></label>
+                <div className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Diskon</span><div className="grid gap-2 sm:grid-cols-2"><div className="flex h-10 overflow-hidden rounded border border-gray-300 sm:h-9"><span className="flex items-center border-r bg-gray-50 px-3 text-sm text-gray-500">%</span><input type="number" min="0" max="100" value={detailDiscountPercent} onChange={event => setDetailDiscountPercent(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} className="min-w-0 flex-1 px-3 text-right text-sm outline-none"/></div><div className="flex h-10 overflow-hidden rounded border border-gray-300 sm:h-9"><span className="flex items-center border-r bg-gray-50 px-3 text-sm text-gray-500">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(detailDiscountAmount)} onChange={event => setDetailDiscountAmount(Math.min(detailGrossTotal, parsePaymentInput(event.target.value)))} className="min-w-0 flex-1 px-3 text-right text-sm outline-none"/></div></div></div>
+                <div className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Total Harga</span><div className="flex h-10 items-center justify-end rounded border border-gray-300 bg-gray-50 px-3 sm:h-9"><strong className="text-base tabular-nums text-gray-700">Rp {detailFinalTotal.toLocaleString('id-ID')}</strong></div></div>
+                {detailItem.type === 'Persediaan' && <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)_100px] sm:gap-2"><span className="text-sm text-gray-800">Gudang <span className="text-red-500">*</span></span><select value={detailWarehouseId} onChange={event => setDetailWarehouseId(event.target.value)} className="h-10 min-w-0 rounded border border-gray-300 bg-white px-3 text-sm outline-none sm:h-9"><option value="">Pilih gudang...</option>{availableWarehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select><span className="text-sm">Stok : <strong className={detailWarehouseStock > 0 ? 'text-orange-500' : 'text-red-600'}>{detailWarehouseStock}</strong></span></label>}
+                <div className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Penjual</span><div className="flex h-10 items-center rounded border border-gray-300 bg-gray-50 px-3 text-sm text-gray-600 sm:h-9">{currentUser?.name || '-'}</div></div>
+              </div>}
+              {detailActiveTab === 'info' && <div className="grid min-h-full content-start gap-3 sm:grid-cols-2"><div className="rounded border p-3"><p className="text-xs text-gray-500">Kategori</p><strong>{detailItem.categoryName}</strong></div><div className="rounded border p-3"><p className="text-xs text-gray-500">Merek</p><strong>{detailItem.brand || '-'}</strong></div><div className="rounded border p-3 sm:col-span-2"><p className="text-xs text-gray-500">Keterangan</p><p className="mt-1">{detailItem.description || 'Belum ada keterangan.'}</p></div></div>}
+              {detailActiveTab === 'image' && <div className="flex min-h-full flex-col items-center justify-center rounded border border-dashed bg-gray-50 text-gray-400"><FileText className="mb-2 h-10 w-10"/><p>Belum ada gambar barang.</p></div>}
+            </div>
+            <footer className="flex shrink-0 justify-end border-t border-gray-300 bg-white px-4 py-2.5"><button type="button" onClick={confirmItemDetail} className="rounded bg-[#1756a9] px-6 py-2 text-sm font-semibold text-white shadow hover:bg-blue-800">Simpan</button></footer>
+          </div>
+        </div>
+      )}
+
+      {/* Rincian versi lama dinonaktifkan; tampilan Accurate digunakan di atas. */}
+      {false && detailItem && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-3" role="dialog" aria-modal="true" aria-label={`Rincian ${detailItem.name}`}>
+          <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <header className="flex items-center justify-between bg-blue-900 px-5 py-3 text-white"><div><h3 className="font-semibold">Rincian Barang/Jasa</h3><p className="text-xs text-blue-200">{detailItem.code} · {detailItem.type}</p></div><button type="button" onClick={() => setDetailItemId('')} className="rounded p-2 hover:bg-white/10"><X className="h-5 w-5"/></button></header>
+            <div className="space-y-4 p-5">
+              <div className="flex items-start justify-between gap-4"><div><p className="text-xs text-gray-500">Nama</p><h4 className="font-bold text-gray-900">{detailItem.name}</h4><p className="text-xs text-gray-500">{detailItem.description || detailItem.categoryName}</p></div>{detailItem.type === 'Persediaan' && <div className="text-right"><p className="text-xs text-gray-500">Bisa dijual</p><strong className={detailWarehouseStock > 0 ? 'text-green-700' : 'text-red-600'}>{detailWarehouseStock} {detailItem.unit}</strong></div>}</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm text-gray-700">Kuantitas<div className="mt-1 flex h-10"><input type="number" min="1" max={detailItem.type === 'Persediaan' ? Math.max(1, detailWarehouseStock) : undefined} value={detailQty} onChange={event => setDetailQty(Math.max(1, Number(event.target.value) || 1))} className="min-w-0 flex-1 rounded-l border px-3 text-right font-semibold"/><span className="flex items-center rounded-r border border-l-0 bg-gray-50 px-3">{detailItem.unit}</span></div></label>
+                <label className="text-sm text-gray-700">Harga<input type="text" inputMode="numeric" value={formatPaymentInput(detailPrice)} onChange={event => setDetailPrice(parsePaymentInput(event.target.value))} className="mt-1 h-10 w-full rounded border px-3 text-right font-semibold"/></label>
+                <label className="text-sm text-gray-700">Diskon (%)<input type="number" min="0" max="100" value={detailDiscountPercent} onChange={event => setDetailDiscountPercent(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} className="mt-1 h-10 w-full rounded border px-3 text-right"/></label>
+                <label className="text-sm text-gray-700">Diskon (Rp)<input type="text" inputMode="numeric" value={formatPaymentInput(detailDiscountAmount)} onChange={event => setDetailDiscountAmount(Math.min(detailGrossTotal, parsePaymentInput(event.target.value)))} className="mt-1 h-10 w-full rounded border px-3 text-right"/></label>
+                {detailItem.type === 'Persediaan' && <label className="text-sm text-gray-700 sm:col-span-2">Gudang <span className="text-red-500">*</span><select value={detailWarehouseId} onChange={event => setDetailWarehouseId(event.target.value)} className="mt-1 h-10 w-full rounded border bg-white px-3"><option value="">Pilih gudang...</option>{availableWarehouses.map(warehouse => { const stock = data.warehouseStocks.find(row => row.warehouseId === warehouse.id && row.itemId === detailItem.id)?.quantity || 0; return <option key={warehouse.id} value={warehouse.id}>{warehouse.name} · Stok {stock} {detailItem.unit}</option>; })}</select></label>}
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-blue-50 p-4"><span className="font-semibold text-blue-800">Total Harga</span><strong className="text-xl tabular-nums text-blue-800">Rp {detailFinalTotal.toLocaleString('id-ID')}</strong></div>
+            </div>
+            <footer className="flex justify-end gap-2 border-t bg-gray-50 px-5 py-3"><button type="button" onClick={() => setDetailItemId('')} className="rounded border px-4 py-2 text-sm">Batal</button><button type="button" onClick={confirmItemDetail} className="rounded bg-blue-700 px-5 py-2 text-sm font-semibold text-white">Lanjut</button></footer>
           </div>
         </div>
       )}

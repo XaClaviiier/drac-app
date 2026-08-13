@@ -5,6 +5,7 @@ const allPermissions: any[] = [
   'dashboard:view',
   'ai:view',
   'invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete',
+  'payment:view', 'payment:create', 'payment:edit', 'payment:delete', 'payment:backdate',
   'wo:view', 'wo:create', 'wo:edit', 'wo:delete',
   'customer:view', 'customer:create', 'customer:edit', 'customer:delete',
   'vehicle:view', 'vehicle:create', 'vehicle:edit', 'vehicle:delete',
@@ -21,8 +22,23 @@ const allPermissions: any[] = [
 ];
 
 export const demoData: AppData = {
-  warehouses: [],
-  warehouseStocks: [],
+  warehouses: [
+    { id: 'WH-001', code: 'GD-PERINTIS', name: 'GUDANG PERINTIS', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isDefault: true, isSellable: true, isActive: true },
+    { id: 'WH-002', code: 'GD-CAKALANG', name: 'GUDANG CAKALANG', branchId: 'BR-002', branchName: 'CABANG CAKALANG', isDefault: true, isSellable: true, isActive: true },
+    { id: 'WH-003', code: 'GD-MAMUJU', name: 'GUDANG MAMUJU', branchId: 'BR-003', branchName: 'CABANG MAMUJU', isDefault: true, isSellable: true, isActive: true },
+  ],
+  warehouseStocks: [
+    { warehouseId: 'WH-001', itemId: '1', quantity: 12, reservedQuantity: 0 },
+    { warehouseId: 'WH-001', itemId: '2', quantity: 8, reservedQuantity: 0 },
+    { warehouseId: 'WH-001', itemId: '7', quantity: 15, reservedQuantity: 1 },
+    { warehouseId: 'WH-001', itemId: '8', quantity: 6, reservedQuantity: 0 },
+    { warehouseId: 'WH-001', itemId: '9', quantity: 10, reservedQuantity: 0 },
+    { warehouseId: 'WH-002', itemId: '1', quantity: 5, reservedQuantity: 0 },
+    { warehouseId: 'WH-002', itemId: '2', quantity: 4, reservedQuantity: 0 },
+    { warehouseId: 'WH-002', itemId: '7', quantity: 7, reservedQuantity: 0 },
+    { warehouseId: 'WH-003', itemId: '1', quantity: 3, reservedQuantity: 0 },
+    { warehouseId: 'WH-003', itemId: '8', quantity: 2, reservedQuantity: 0 },
+  ],
   stockMovements: [],
   settings: {
     company: {
@@ -65,7 +81,7 @@ export const demoData: AppData = {
     { id: '4', code: 'TKN', name: 'Teknisi', permissions: ['dashboard:view','ai:view','wo:view','wo:create','wo:edit','customer:view','customer:create','vehicle:view','vehicle:create','item:view'], description: 'Teknisi', isActive: true },
   ],
   users: [
-    { id: '1', username: 'demo-owner', name: 'OWNER DEMO', email: '', password: '', roleId: '1', roleName: 'Owner', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01', isOwner: true, isProtected: true },
+    { id: '1', username: 'demo-owner', name: 'OWNER DEMO', email: '', password: 'demo', roleId: '1', roleName: 'Owner', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01', isOwner: true, isProtected: true },
     { id: '2', username: 'demo-kasir', name: 'KASIR DEMO', email: '', password: '', roleId: '3', roleName: 'Kasir', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-15' },
     { id: '3', username: 'demo-teknisi', name: 'TEKNISI DEMO', email: '', password: '', roleId: '4', roleName: 'Teknisi', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-02-01' },
     { id: '4', username: 'demo-supervisor', name: 'SUPERVISOR DEMO', email: '', password: '', roleId: '2', roleName: 'Supervisor', branchId: 'BR-002', branchName: 'CABANG CAKALANG', isActive: true, createdAt: '2026-01-10' },
@@ -92,10 +108,15 @@ export const demoData: AppData = {
     { id: '3', code: 'KAT-003', name: 'Jasa Service AC', type: 'Jasa', description: 'Jasa teknisi', isActive: true },
   ],
   items: [
-    { id: '1', code: 'BF-1055', name: 'AC CLEANER WURTH', categoryId: '2', categoryName: 'Chemical & Freon', type: 'Persediaan', brand: 'Wurth', unit: 'CAN', stock: 8, sellableStock: 8, purchasePrice: 65000, sellingPrice: 95000, isActive: true, isQuickService: false, description: '', branchId: 'BR-001' },
-    { id: '2', code: 'FR-R134A', name: 'FREON R134A', categoryId: '2', categoryName: 'Chemical & Freon', type: 'Persediaan', brand: 'Dupont', unit: 'PCS', stock: 18, sellableStock: 18, purchasePrice: 85000, sellingPrice: 150000, isActive: true, isQuickService: true, description: '', branchId: 'BR-001' },
+    { id: '1', code: 'BF-1055', name: 'AC CLEANER WURTH + SELANG 250ML', categoryId: '2', categoryName: 'Chemical & Freon', type: 'Persediaan', brand: 'Wurth', unit: 'CAN', stock: 20, sellableStock: 20, purchasePrice: 65000, sellingPrice: 95000, isActive: true, isQuickService: false, description: 'Pembersih evaporator AC mobil berikut selang aplikasi', branchId: 'BR-001', branchStocks: { 'BR-001': { stock: 12, sellableStock: 12 }, 'BR-002': { stock: 5, sellableStock: 5 }, 'BR-003': { stock: 3, sellableStock: 3 } } },
+    { id: '2', code: 'FR-R134A', name: 'FREON R134A', categoryId: '2', categoryName: 'Chemical & Freon', type: 'Persediaan', brand: 'Dupont', unit: 'KG', stock: 12, sellableStock: 12, purchasePrice: 85000, sellingPrice: 150000, isActive: true, isQuickService: true, description: 'Refrigerant R134A untuk AC kendaraan', branchId: 'BR-001', branchStocks: { 'BR-001': { stock: 8, sellableStock: 8 }, 'BR-002': { stock: 4, sellableStock: 4 }, 'BR-003': { stock: 0, sellableStock: 0 } } },
+    { id: '7', code: 'FLT-AVZ-01', name: 'FILTER CABIN TOYOTA AVANZA', categoryId: '1', categoryName: 'Sparepart AC', type: 'Persediaan', brand: 'Denso', unit: 'PCS', stock: 22, sellableStock: 21, purchasePrice: 55000, sellingPrice: 95000, isActive: true, isQuickService: false, description: 'Filter kabin untuk Toyota Avanza dan Daihatsu Xenia', branchId: 'BR-001', branchStocks: { 'BR-001': { stock: 15, sellableStock: 14 }, 'BR-002': { stock: 7, sellableStock: 7 }, 'BR-003': { stock: 0, sellableStock: 0 } } },
+    { id: '8', code: 'BLW-001', name: 'MOTOR BLOWER AC UNIVERSAL', categoryId: '1', categoryName: 'Sparepart AC', type: 'Persediaan', brand: 'Denso', unit: 'PCS', stock: 8, sellableStock: 8, purchasePrice: 425000, sellingPrice: 650000, isActive: true, isQuickService: false, description: 'Motor blower AC mobil universal', branchId: 'BR-001', branchStocks: { 'BR-001': { stock: 6, sellableStock: 6 }, 'BR-002': { stock: 0, sellableStock: 0 }, 'BR-003': { stock: 2, sellableStock: 2 } } },
+    { id: '9', code: 'OLI-AC-100', name: 'OLI KOMPRESOR AC 100ML', categoryId: '2', categoryName: 'Chemical & Freon', type: 'Persediaan', brand: 'ND Oil', unit: 'BOTOL', stock: 10, sellableStock: 10, purchasePrice: 45000, sellingPrice: 85000, isActive: true, isQuickService: false, description: 'Oli pelumas kompresor AC mobil', branchId: 'BR-001', branchStocks: { 'BR-001': { stock: 10, sellableStock: 10 }, 'BR-002': { stock: 0, sellableStock: 0 }, 'BR-003': { stock: 0, sellableStock: 0 } } },
     { id: '5', code: 'JSA-001', name: 'JASA SERVICE AC', categoryId: '3', categoryName: 'Jasa Service AC', type: 'Jasa', brand: '-', unit: 'JASA', stock: 0, sellableStock: 0, purchasePrice: 0, sellingPrice: 200000, isActive: true, isQuickService: true, description: '', branchId: 'BR-001' },
     { id: '6', code: 'JSA-002', name: 'FLUSHING AC', categoryId: '3', categoryName: 'Jasa Service AC', type: 'Jasa', brand: '-', unit: 'JASA', stock: 0, sellableStock: 0, purchasePrice: 0, sellingPrice: 500000, isActive: true, isQuickService: true, description: '', branchId: 'BR-001' },
+    { id: '10', code: 'JSA-010', name: 'CUCI EVAPORATOR', categoryId: '3', categoryName: 'Jasa Service AC', type: 'Jasa', brand: '-', unit: 'JASA', stock: 0, sellableStock: 0, purchasePrice: 0, sellingPrice: 350000, isActive: true, isQuickService: true, description: 'Pembersihan evaporator dan saluran AC', branchId: 'BR-001' },
+    { id: '11', code: 'JSA-011', name: 'BONGKAR PASANG DASHBOARD', categoryId: '3', categoryName: 'Jasa Service AC', type: 'Jasa', brand: '-', unit: 'JASA', stock: 0, sellableStock: 0, purchasePrice: 0, sellingPrice: 750000, isActive: true, isQuickService: false, description: 'Jasa bongkar dan pasang dashboard kendaraan', branchId: 'BR-001' },
     {
       id: '15', code: 'GRP-0001', name: 'PAKET SERVICE AC LENGKAP', categoryId: '3', categoryName: 'Jasa Service AC', type: 'Group', brand: '-', unit: 'PAKET', stock: 0, sellableStock: 0, purchasePrice: 0, sellingPrice: 1200000, isActive: true, isQuickService: true,
       description: 'Paket lengkap',

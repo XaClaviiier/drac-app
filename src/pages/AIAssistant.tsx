@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Send, KeyRound, Sparkles, Car, Users, Package,
-  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2, Building2, Grid2X2, Plus,
+  AlertTriangle, ExternalLink, X, Zap, Database, Loader2, Wrench, CheckCircle2, History, Share2, Building2, Grid2X2, Plus, Palette, Edit, Trash2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
@@ -87,7 +87,7 @@ const canonicalVehicleInfo = (brand: string, model: string, year?: number, color
 type AIVehicleCatalogGeneration = { id: string; name: string; aliases?: string; isActive: boolean; engineCcs?: number[] };
 type AIVehicleCatalogModel = { id: string; name: string; isActive: boolean; usageCount?: number; generations?: AIVehicleCatalogGeneration[] };
 type AIVehicleCatalogBrand = { id: string; name: string; isActive: boolean; usageCount?: number; models: AIVehicleCatalogModel[] };
-type AIVehicleCatalogColor = { id: string; name: string; isActive: boolean };
+type AIVehicleCatalogColor = { id: string; name: string; isActive: boolean; usageCount?: number };
 type AIVehicleCatalog = { brands: AIVehicleCatalogBrand[]; colors?: AIVehicleCatalogColor[] };
 
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -142,12 +142,22 @@ type InlineRegistrationIdentity = {
   description: string;
 };
 
+// Teks perintah bukan bagian dari identitas pelanggan. Normalisasi ini dipakai
+// di seluruh jalur registrasi (form bertahap, parser cepat, dan hasil model AI)
+// agar input seperti "reg wo WO,Budiman ..." tetap tersimpan sebagai BUDIMAN.
+const sanitizeRegistrationCustomerName = (value: unknown) => String(value || '')
+  .trim()
+  .replace(/^(?:(?:reginv|reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/i, '')
+  .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
+  .replace(/\s+/g, ' ')
+  .toUpperCase();
+
 const parseInlineRegistrationIdentity = (text: string): InlineRegistrationIdentity | null => {
   const source = text.trim();
   const match = source.match(/^reg(?:\s+wo)?\s+(.+?)\s+(08[\d\s-]{6,14})(?=\s|,|$)/i);
   if (!match) return null;
 
-  const customerName = match[1].replace(/[,;]+$/g, '').trim();
+  const customerName = sanitizeRegistrationCustomerName(match[1]);
   const phone = match[2].replace(/\D/g, '');
   if (!customerName || phone.length < 8) return null;
 
@@ -166,7 +176,7 @@ const parseInlineRegistrationIdentity = (text: string): InlineRegistrationIdenti
   const vehicleMatch = vehicleSegment.match(/^([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3})\s*(.*)$/i);
 
   return {
-    customerName: customerName.toUpperCase(),
+    customerName,
     phone,
     address,
     plateNumber: vehicleMatch?.[1]?.replace(/\s+/g, '').toUpperCase() || '',
@@ -185,7 +195,7 @@ const render = (t: string) =>
 export default function AIAssistant() {
   const {
     data, currentUser, currentBranchId, setCurrentBranchId,
-    addWorkOrder, addCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
+    addWorkOrder, addCustomer, updateCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
     hasPermission, refreshData,
   } = useApp();
 
@@ -1070,7 +1080,7 @@ export default function AIAssistant() {
 
     if (registrationDraft.step === 'customerName') {
       if (value.length < 3) return 'Nama pelanggan minimal 3 karakter.';
-      setRegistrationDraft({ ...registrationDraft, step: 'phone', customerName: value.toUpperCase() });
+      setRegistrationDraft({ ...registrationDraft, step: 'phone', customerName: sanitizeRegistrationCustomerName(value) });
       return `Nama pelanggan: **${value.toUpperCase()}**\n\nMasukkan nomor telepon pelanggan.`;
     }
 
@@ -1296,6 +1306,8 @@ ${buildSmartContext(userMsgText)}`;
   };
 
   const executeCreateWO = async (a: any, selectedBranchId: string) => {
+    const normalizedCustomerName = sanitizeRegistrationCustomerName(a.customerName);
+    a = { ...a, customerName: normalizedCustomerName };
     const branchId = selectedBranchId;
     const branchName = data.branches.find(b => b.id === branchId)?.name || branchId;
     const suppliedDate = String(a.date || '');
@@ -1316,13 +1328,25 @@ ${buildSmartContext(userMsgText)}`;
       customer = await addCustomer({
         id: Date.now().toString(),
         customerCode: generateCustomerCode(),
-        name: String(a.customerName).toUpperCase(),
+        name: normalizedCustomerName,
         phone: a.phone || '',
         address: String(a.address || '').trim(),
         email: '',
         createdAt: transactionDate,
         branchId,
       });
+    } else if (customer) {
+      // REG WO boleh melengkapi data pelanggan lama. Nilai kosong dari parser/AI
+      // tidak boleh menghapus telepon atau alamat yang sudah tersimpan.
+      const suppliedPhone = String(a.phone || '').replace(/\D/g, '');
+      const suppliedAddress = String(a.address || '').trim();
+      const nextPhone = suppliedPhone || customer.phone || '';
+      const nextAddress = suppliedAddress || customer.address || '';
+      if (nextPhone !== (customer.phone || '') || nextAddress !== (customer.address || '')) {
+        const updatedCustomer = { ...customer, phone: nextPhone, address: nextAddress };
+        await updateCustomer(customer.id, updatedCustomer);
+        customer = updatedCustomer;
+      }
     }
 
     // 2. Kendaraan
@@ -1401,8 +1425,15 @@ ${buildSmartContext(userMsgText)}`;
       };
       await addVehicle(newV);
       vehicle = newV;
-    } else if (vehicle && customer && vehicle.customerRefId !== customer.id) {
+    } else if (vehicle && customer && (
+      vehicle.customerRefId !== customer.id
+      || vehicle.phone !== customer.phone
+      || vehicle.address !== customer.address
+      || vehicle.customerName !== customer.name
+      || vehicle.customerId !== customer.customerCode
+    )) {
       // Setelah aksi dikonfirmasi, pelanggan yang dipilih menjadi pemilik aktif.
+      // Telepon dan alamat juga selalu disinkronkan walau pemiliknya tetap sama.
       const updatedVehicle = {
         ...vehicle,
         customerRefId: customer.id,
@@ -1535,6 +1566,74 @@ ${buildSmartContext(userMsgText)}`;
 
     if (lowerContent === 'clear') {
       startNewChat();
+      return;
+    }
+
+    const colorCommand = content.match(/^(list|daftar|tambah|edit|ubah|hapus)\s+warna(?:\s+(.+?))?(?:\s+(?:menjadi|jadi|ke)\s+(.+))?$/i);
+    if (colorCommand) {
+      const command = colorCommand[1].toLowerCase();
+      let firstName = (colorCommand[2] || '').trim();
+      let nextName = (colorCommand[3] || '').trim();
+      if ((command === 'edit' || command === 'ubah') && !nextName) {
+        const renameMatch = firstName.match(/^(.+?)\s+(?:menjadi|jadi|ke)\s+(.+)$/i);
+        if (renameMatch) { firstName = renameMatch[1].trim(); nextName = renameMatch[2].trim(); }
+      }
+      const canEditColors = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('vehicle:create') || hasPermission('vehicle:edit'));
+      const canDeleteColors = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('vehicle:delete'));
+      const reply = (message: string, error = false) => {
+        setInput('');
+        setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: message, error, time: now() }]);
+      };
+      setBusy(true);
+      try {
+        const catalogResponse = await api.get<AIVehicleCatalog>('vehicle-catalog');
+        if (!catalogResponse.success || !catalogResponse.data) throw new Error(catalogResponse.message || 'Master warna tidak dapat dibaca.');
+        const colors = catalogResponse.data.colors || [];
+        const findColor = (name: string) => colors.find(color => color.name.localeCompare(name, 'id', { sensitivity: 'base' }) === 0);
+
+        if (command === 'list' || command === 'daftar') {
+          const active = colors.filter(color => color.isActive);
+          const inactive = colors.filter(color => !color.isActive);
+          reply(`**Master Warna Kendaraan**\n\nAktif (${active.length}): ${active.map(color => color.name).join(', ') || '-'}${inactive.length ? `\n\nNonaktif (${inactive.length}): ${inactive.map(color => color.name).join(', ')}` : ''}\n\nPerintah: **tambah warna [nama]**, **ubah warna [lama] menjadi [baru]**, atau **hapus warna [nama]**.`);
+          return;
+        }
+        if (!canEditColors) { reply('Anda tidak memiliki hak untuk mengubah Master Warna. Hubungi Owner atau Administrator.', true); return; }
+        if (!firstName) { reply(`Nama warna wajib diisi. Contoh: **${command} warna Champagne**.`, true); return; }
+
+        if (command === 'tambah') {
+          if (findColor(firstName)) { reply(`Warna **${firstName}** sudah tersedia di Master Warna.`, true); return; }
+          const response = await api.create('vehicle-catalog', { entity: 'color', name: titleCaseVehicleName(firstName) });
+          if (!response.success) throw new Error(response.message || 'Gagal menambahkan warna.');
+          await refreshData();
+          reply(`✅ Warna **${titleCaseVehicleName(firstName)}** berhasil ditambahkan dan sudah dapat dipilih pada form kendaraan.`);
+          return;
+        }
+
+        const color = findColor(firstName);
+        if (!color) { reply(`Warna **${firstName}** tidak ditemukan. Ketik **list warna** untuk melihat pilihan yang tersedia.`, true); return; }
+        if (command === 'edit' || command === 'ubah') {
+          if (!nextName) { reply('Nama warna baru wajib diisi. Contoh: **ubah warna Abu Abu menjadi Abu-abu**.', true); return; }
+          const duplicate = findColor(nextName);
+          if (duplicate && duplicate.id !== color.id) { reply(`Warna **${nextName}** sudah tersedia. Gunakan fitur Gabungkan pada Master Kendaraan bila datanya duplikat.`, true); return; }
+          const response = await api.update('vehicle-catalog', color.id, { entity: 'color', name: titleCaseVehicleName(nextName), isActive: color.isActive });
+          if (!response.success) throw new Error(response.message || 'Gagal mengubah warna.');
+          await refreshData();
+          reply(`✅ Warna **${color.name}** berhasil diubah menjadi **${titleCaseVehicleName(nextName)}**. Kendaraan lama ikut diperbarui.`);
+          return;
+        }
+
+        if (!canDeleteColors) { reply('Hanya Owner atau Administrator dengan hak hapus kendaraan yang dapat menghapus warna.', true); return; }
+        if ((color.usageCount || 0) > 0) { reply(`Warna **${color.name}** tidak dapat dihapus karena digunakan oleh **${color.usageCount} kendaraan**. Nonaktifkan atau gabungkan melalui Master Kendaraan agar histori tetap aman.`, true); return; }
+        if (!window.confirm(`Hapus permanen warna "${color.name}"? Tindakan ini tidak dapat dibatalkan.`)) { reply(`Penghapusan warna **${color.name}** dibatalkan.`); return; }
+        const response = await api.deleteVehicleCatalogItem(color.id, 'color');
+        if (!response.success) throw new Error(response.message || 'Gagal menghapus warna.');
+        await refreshData();
+        reply(`✅ Warna **${color.name}** berhasil dihapus dari Master Warna.`);
+      } catch (error: any) {
+        reply(`Gagal mengelola warna: ${error?.message || 'Terjadi kesalahan.'}`, true);
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     if (lowerContent === 'history') {
@@ -2085,9 +2184,11 @@ ${buildSmartContext(userMsgText)}`;
     { label: 'Daftar Kendaraan', icon: Database, command: 'list merek kendaraan', direct: true, tone: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' },
     { label: 'Tambah Merek', icon: Plus, command: 'tambah merek ', direct: false, tone: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' },
     { label: 'Tambah Tipe', icon: Plus, command: 'tambah tipe ', direct: false, tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+    { label: 'Daftar Warna', icon: Palette, command: 'list warna', direct: true, tone: 'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300' },
+    { label: 'Tambah Warna', icon: Plus, command: 'tambah warna ', direct: false, tone: 'border-pink-500/30 bg-pink-500/10 text-pink-300' },
+    { label: 'Ubah Warna', icon: Edit, command: 'ubah warna ', direct: false, tone: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
+    { label: 'Hapus Warna', icon: Trash2, command: 'hapus warna ', direct: false, tone: 'border-red-500/30 bg-red-500/10 text-red-300' },
   ];
-  const frontActions = [...primaryFrontActions, ...secondaryFrontActions];
-
   const runFrontAction = (command: string, direct: boolean) => {
     setShowStarterMenu(false);
     setShowMoreActions(false);

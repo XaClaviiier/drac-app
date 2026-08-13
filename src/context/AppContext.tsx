@@ -32,7 +32,7 @@ interface AppContextType {
   addInvoice: (invoice: SalesInvoice) => Promise<void>;
   updateInvoice: (id: string, invoice: SalesInvoice) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
-  addWorkOrder: (wo: WorkOrder) => Promise<void>;
+  addWorkOrder: (wo: WorkOrder) => Promise<WorkOrder>;
   updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
   continueWorkOrder: (
@@ -88,7 +88,7 @@ const emptyData: AppData = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 // Demo tidak boleh aktif hanya karena backend gagal. Pengembang harus
 // mengaktifkannya secara eksplisit dan build produksi tetap selalu memakai API.
-const allowDemoMode = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_MODE === 'true';
+const allowDemoMode = import.meta.env.DEV;
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData);
@@ -519,16 +519,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ===== WORK ORDERS =====
-  const addWorkOrder = async (wo: WorkOrder) => {
+  const addWorkOrder = async (wo: WorkOrder): Promise<WorkOrder> => {
     const createdWorkOrder: WorkOrder = {
       ...wo,
       createdBy: wo.createdBy || currentUser?.id,
       createdByName: wo.createdByName || currentUser?.name,
     };
-    await executeCRUD(
-      () => api.create('work-orders', createdWorkOrder),
-      () => setData(prev => ({ ...prev, workOrders: [...prev.workOrders, createdWorkOrder] }))
-    );
+    if (isDemoMode) {
+      setData(prev => ({ ...prev, workOrders: [...prev.workOrders, createdWorkOrder] }));
+      return createdWorkOrder;
+    }
+    const result = await api.create('work-orders', createdWorkOrder);
+    if (!result?.success) {
+      throw new Error(result?.message || result?.error || 'WO gagal disimpan');
+    }
+    const savedWorkOrder: WorkOrder = {
+      ...createdWorkOrder,
+      id: result.data?.id || createdWorkOrder.id,
+      woNumber: result.data?.woNumber || createdWorkOrder.woNumber,
+      status: 'Register',
+    };
+    await refreshData();
+    return savedWorkOrder;
   };
   const updateWorkOrder = async (id: string, wo: WorkOrder) => {
     await executeCRUD(
@@ -562,7 +574,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const forward: Record<WOStatus, WOStatus[]> = {
       Register: ['Proses', 'Closed'],
       Proses: ['Selesai', 'Closed'],
-      Selesai: ['Closed'],
+      Selesai: ['Proses', 'Closed'],
       Closed: ['Proses'],
     };
     return forward[from]?.includes(to) ?? false;
@@ -605,9 +617,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     // Lost Sales wajib punya alasan.
-    const needsReason = nextStatus === 'Closed';
+    const isReopen = wo.status === 'Selesai' && nextStatus === 'Proses';
+    const needsReason = nextStatus === 'Closed' || isReopen;
     if (needsReason && !reason?.trim()) {
-      return { ok: false, message: 'Alasan wajib diisi untuk perubahan ini.' };
+      return { ok: false, message: isReopen ? 'Alasan mengembalikan WO ke Dikerjakan wajib diisi.' : 'Alasan wajib diisi untuk perubahan ini.' };
     }
 
     const now = new Date().toISOString();
@@ -703,20 +716,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       continuedFromBranchName: srcBranch?.name || '-',
     };
 
-    await addWorkOrder(newWo);
+    const createdWorkOrder = await addWorkOrder(newWo);
     await updateWorkOrder(src.id, {
       ...src,
-      continuedToWoId: newId,
-      continuedToWoNumber: newWoNumber,
+      continuedToWoId: createdWorkOrder.id,
+      continuedToWoNumber: createdWorkOrder.woNumber,
       continuedToBranchName: tgtBranch.name,
       continuedAt: new Date().toISOString(),
       continuedBy: currentUser?.id,
       continuedByName: currentUser?.name,
       continuedBranchId: targetBranchId,
-      notes: `${src.notes || ''}\n[${today}] Dilanjutkan di ${newWoNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
+      notes: `${src.notes || ''}\n[${today}] Dilanjutkan di ${createdWorkOrder.woNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
     });
 
-    return newWo;
+    return createdWorkOrder;
   };
 
   const createInvoiceFromWO = async (
