@@ -44,6 +44,13 @@ const COMPLETION_NOTE_TEMPLATES = [
 ];
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
+const itemCodePart = (value: string, fallback: string) => {
+  const normalized = value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const digits = normalized.replace(/\D/g, '');
+  if (digits) return digits.slice(-2).padStart(2, '0');
+  const words = normalized.split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? `${words[0][0]}${words[1][0]}` : (words[0] || fallback).slice(0, 2)).padEnd(2, 'X');
+};
 const localTimeKey = (date = new Date()) =>
   `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 const formatAuditTime = (value?: string) => {
@@ -367,7 +374,7 @@ export default function WorkOrders() {
     localStorage.setItem('dokterac_wo_quick_services', 'closed');
   };
 
-  const handleQuickAddItem = () => {
+  const handleQuickAddItem = async () => {
     if (!quickItemForm.name) { window.alert('Nama barang/jasa harus diisi'); return; }
 
     // Nama barang/jasa wajib unik
@@ -384,9 +391,14 @@ export default function WorkOrders() {
       quickItemForm.categoryId = firstCat.id;
     }
     const category = data.itemCategories.find(c => c.id === quickItemForm.categoryId);
-    const prefix = quickItemForm.type === 'Jasa' ? 'JSA' : quickItemForm.type === 'Non Persediaan' ? 'NP' : 'BRG';
-    const count = data.items.filter(item => item.code.startsWith(prefix)).length + 1;
-    const newCode = `${prefix}-${String(count).padStart(4, '0')}`;
+    const categoryPart = itemCodePart(category?.code || category?.name || '', '00');
+    const brandPart = itemCodePart('', quickItemForm.type === 'Jasa' ? 'JS' : quickItemForm.type === 'Non Persediaan' ? 'NP' : 'NA');
+    const prefix = `${categoryPart}${brandPart}`;
+    const maxSequence = data.items.reduce((max, item) => {
+      const match = item.code.toUpperCase().match(new RegExp(`^${prefix}-(\\d{4})$`));
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    const newCode = `${prefix}-${String(maxSequence + 1).padStart(4, '0')}`;
 
     const newItem = {
       id: Date.now().toString(),
@@ -405,8 +417,15 @@ export default function WorkOrders() {
       isQuickService: false,
       description: '',
       branchId: resolveBranchId(),
+      autoCode: true,
     };
-    addItem(newItem);
+    let createdItem;
+    try {
+      createdItem = await addItem(newItem);
+    } catch (error: any) {
+      window.alert(error?.message || 'Barang/Jasa gagal disimpan.');
+      return;
+    }
 
     // Auto-add to current WO services
     setFormData(prev => ({
@@ -415,11 +434,11 @@ export default function WorkOrders() {
         ...prev.services,
         {
           id: Date.now().toString() + '-svc',
-          itemId: newItem.id,
-          code: newItem.code,
-          name: newItem.name,
+          itemId: createdItem.id,
+          code: createdItem.code,
+          name: createdItem.name,
           description: '',
-          price: newItem.sellingPrice,
+          price: createdItem.sellingPrice,
           qty: 1,
         },
       ],

@@ -45,7 +45,7 @@ interface AppContextType {
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
   createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
-  addItem: (item: Item) => Promise<void>;
+  addItem: (item: Item & { autoCode?: boolean }) => Promise<Item>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   addItemCategory: (category: ItemCategory) => Promise<void>;
@@ -781,8 +781,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ===== ITEMS =====
-  const addItem = async (item: Item) => {
-    await executeCRUD(() => api.create('items', item), () => setData(prev => ({ ...prev, items: [...prev.items, item] })));
+  const addItem = async (item: Item & { autoCode?: boolean }): Promise<Item> => {
+    if (isDemoMode) {
+      setData(prev => ({ ...prev, items: [...prev.items, item] }));
+      return item;
+    }
+    const result = await api.create('items', item);
+    if (!result?.success) throw new Error(result?.message || result?.error || 'Barang/Jasa gagal disimpan');
+    const created = { ...item, id: result.data?.id || item.id, code: result.data?.code || item.code };
+    await refreshData();
+    return created;
   };
   const updateItem = async (id: string, item: Item) => {
     await executeCRUD(() => api.update('items', id, item), () => setData(prev => ({ ...prev, items: prev.items.map(x => x.id === id ? item : x) })));

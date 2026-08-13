@@ -1,4 +1,28 @@
 <?php
+function itemCodeSegment(string $value, string $fallback): string {
+    $normalized = strtoupper(trim((string)preg_replace('/[^A-Z0-9]+/i', ' ', $value)));
+    $digits = preg_replace('/\D/', '', $normalized);
+    if ($digits !== '') return str_pad(substr($digits, -2), 2, '0', STR_PAD_LEFT);
+    $words = array_values(array_filter(preg_split('/\s+/', $normalized) ?: []));
+    $code = count($words) > 1 ? substr($words[0],0,1).substr($words[1],0,1) : substr($words[0] ?? $fallback,0,2);
+    return str_pad($code, 2, 'X');
+}
+
+function nextAutomaticItemCode(PDO $pdo, string $categoryCode, string $categoryName, string $brand, string $type): string {
+    $categoryPart = itemCodeSegment($categoryCode !== '' ? $categoryCode : $categoryName, '00');
+    $fallback = $type === 'Jasa' ? 'JS' : ($type === 'Group' ? 'GP' : ($type === 'Non Persediaan' ? 'NP' : 'NA'));
+    $brandPart = itemCodeSegment($brand, $fallback);
+    $prefix = $categoryPart.$brandPart;
+    $stmt = $pdo->prepare("SELECT code FROM items WHERE code LIKE ? FOR UPDATE");
+    $stmt->execute([$prefix.'-%']);
+    $max = 0;
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $code) {
+        if (preg_match('/^'.preg_quote($prefix,'/').'-(\d{4})$/', strtoupper((string)$code), $match)) $max=max($max,(int)$match[1]);
+    }
+    if ($max >= 9999) throw new InvalidArgumentException("Urutan kode {$prefix} sudah mencapai batas 9999");
+    return $prefix.'-'.str_pad((string)($max+1),4,'0',STR_PAD_LEFT);
+}
+
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
@@ -54,7 +78,7 @@ switch ($method) {
         requireAccessibleBranch($pdo, $actor, $branchId);
         $type = (string)($d['type'] ?? '');
         if (!in_array($type, ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'], true)) respondError('Jenis barang/jasa tidak valid', 422);
-        if (trim((string)($d['code'] ?? '')) === '' || trim((string)($d['name'] ?? '')) === '') respondError('Kode dan nama wajib diisi', 422);
+        if (trim((string)($d['name'] ?? '')) === '') respondError('Nama wajib diisi', 422);
         $barcode = trim((string)($d['barcode'] ?? ''));
         if ($barcode !== '') {
             $check = $pdo->prepare("SELECT id, name FROM items WHERE barcode = ? LIMIT 1");
@@ -63,17 +87,31 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
+            $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=? FOR UPDATE");
+            $categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
+            if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
+            $name=strtoupper(trim((string)$d['name']));$brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
+            $unit=$type==='Jasa'?'JASA':($type==='Group'?'PAKET':strtoupper(trim((string)($d['unit']??'PCS'))));
+            $quickService=in_array($type,['Jasa','Group'],true)?(int)!empty($d['isQuickService']):0;
+            $normalizedBarcode=in_array($type,['Jasa','Group'],true)?null:($barcode!==''?$barcode:null);
+            $nameCheck=$pdo->prepare("SELECT id FROM items WHERE UPPER(TRIM(name))=? LIMIT 1");$nameCheck->execute([$name]);
+            if($nameCheck->fetch())throw new InvalidArgumentException("Nama {$name} sudah digunakan");
+            $code=!empty($d['autoCode'])?nextAutomaticItemCode($pdo,(string)$category['code'],(string)$category['name'],$brand,$type):strtoupper(trim((string)($d['code']??'')));
+            if($code==='')throw new InvalidArgumentException('Kode barang/jasa wajib diisi');
+            $codeCheck=$pdo->prepare("SELECT id FROM items WHERE code=? LIMIT 1");$codeCheck->execute([$code]);
+            if($codeCheck->fetch())throw new InvalidArgumentException("Kode {$code} sudah digunakan");
+            if($type==='Group'&&empty($d['groupMembers']))throw new InvalidArgumentException('Group/Paket wajib memiliki minimal satu komponen');
             $itemId = $d['id'] ?? generateId();
             $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, unit, stock, sellable_stock, purchase_price, selling_price, is_active, is_quick_service, description, receipt_description, barcode, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
-                $itemId, $d['code'], $d['name'],
-                ($d['categoryId'] ?? '') ?: null, $d['categoryName'] ?? '',
-                $type, $d['brand'] ?? '', $d['unit'] ?? 'PCS',
+                $itemId, $code, $name,
+                $category['id'], $category['name'],
+                $type, $brand, $unit,
                 0, 0,
                 0, max(0, (float)($d['sellingPrice'] ?? 0)),
-                $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
+                $d['isActive'] ?? 1, $quickService,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
-                !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
+                $normalizedBarcode,
                 $branchId
             ]);
 
@@ -109,7 +147,7 @@ switch ($method) {
                 }
             }
             $pdo->commit();
-            respondSuccess(['id' => $itemId], 'Barang/Jasa ditambahkan');
+            respondSuccess(['id' => $itemId, 'code'=>$code], 'Barang/Jasa ditambahkan');
         } catch (InvalidArgumentException $e) {
             $pdo->rollBack();
             respondError($e->getMessage(), 422);
@@ -133,17 +171,33 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
+            $currentStmt=$pdo->prepare("SELECT * FROM items WHERE id=? FOR UPDATE");$currentStmt->execute([$id]);$current=$currentStmt->fetch();
+            if(!$current)throw new InvalidArgumentException('Barang/Jasa tidak ditemukan');
+            $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=?");$categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
+            if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
+            $name=strtoupper(trim((string)$d['name']));$brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
+            $unit=$type==='Jasa'?'JASA':($type==='Group'?'PAKET':strtoupper(trim((string)($d['unit']??'PCS'))));
+            $quickService=in_array($type,['Jasa','Group'],true)?(int)!empty($d['isQuickService']):0;
+            $normalizedBarcode=in_array($type,['Jasa','Group'],true)?null:($barcode!==''?$barcode:null);
+            $nameCheck=$pdo->prepare("SELECT id FROM items WHERE UPPER(TRIM(name))=? AND id<>? LIMIT 1");$nameCheck->execute([$name,$id]);
+            if($nameCheck->fetch())throw new InvalidArgumentException("Nama {$name} sudah digunakan");
+            if($type==='Group'&&empty($d['groupMembers']))throw new InvalidArgumentException('Group/Paket wajib memiliki minimal satu komponen');
+            if($type!==(string)$current['type']){
+                $usageSql="SELECT (SELECT COUNT(*) FROM work_order_services WHERE item_id=?)+(SELECT COUNT(*) FROM sales_invoice_items WHERE item_id=?)+(SELECT COUNT(*) FROM goods_receipt_items WHERE item_id=?)+(SELECT COUNT(*) FROM purchase_invoice_items WHERE item_id=?)+(SELECT COUNT(*) FROM item_group_members WHERE member_item_id=?)+(SELECT COUNT(*) FROM branch_item_stocks WHERE item_id=? AND stock<>0)+(SELECT COUNT(*) FROM warehouse_stocks WHERE item_id=? AND quantity<>0)";
+                $usage=$pdo->prepare($usageSql);$usage->execute([$id,$id,$id,$id,$id,$id,$id]);
+                if((int)$usage->fetchColumn()>0)throw new InvalidArgumentException('Jenis item tidak dapat diubah karena sudah memiliki stok atau histori transaksi');
+            }
             // Harga beli dan saldo stok hanya boleh berubah melalui transaksi
             // penerimaan, pembelian, atau penyesuaian persediaan.
             $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=? WHERE id=?");
             $stmt->execute([
-                $d['code'], $d['name'],
-                ($d['categoryId'] ?? '') ?: null, $d['categoryName'] ?? '',
-                $type, $d['brand'] ?? '', $d['unit'] ?? 'PCS',
+                $current['code'], $name,
+                $category['id'], $category['name'],
+                $type, $brand, $unit,
                 max(0, (float)($d['sellingPrice'] ?? 0)),
-                $d['isActive'] ?? 1, $d['isQuickService'] ?? 0,
+                $d['isActive'] ?? 1, $quickService,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
-                !empty(trim((string)($d['barcode'] ?? ''))) ? trim((string)$d['barcode']) : null,
+                $normalizedBarcode,
                 $id
             ]);
 

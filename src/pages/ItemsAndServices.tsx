@@ -8,6 +8,22 @@ import { localDateKey } from '../lib/date';
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
 
+const twoDigitSegment = (value: string, fallback: string) => {
+  const normalized = value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const digits = normalized.replace(/\D/g, '');
+  if (digits) return digits.slice(-2).padStart(2, '0');
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const code = words.length > 1 ? `${words[0][0]}${words[1][0]}` : (words[0] || fallback).slice(0, 2);
+  return code.padEnd(2, 'X');
+};
+
+const brandSegment = (brand: string, type: ItemType) => twoDigitSegment(
+  brand,
+  type === 'Jasa' ? 'JS' : type === 'Group' ? 'GP' : type === 'Non Persediaan' ? 'NP' : 'NA'
+);
+const formatNumericInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
+const parseNumericInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
+
 const emptyItem = {
   code: '',
   name: '',
@@ -117,6 +133,7 @@ export default function ItemsAndServices() {
 
   // Group member picker state
   const [memberSearch, setMemberSearch] = useState('');
+  const [isSavingItem, setIsSavingItem] = useState(false);
 
   const brands = useMemo(
     () => [...new Set(data.items.map((item) => item.brand).filter((b) => b && b !== '-'))],
@@ -160,15 +177,29 @@ export default function ItemsAndServices() {
     });
   }, [data.items, editingItem, memberSearch]);
 
-  const nextItemCode = (type: ItemType) => {
-    const prefix = type === 'Jasa' ? 'JSA' : type === 'Non Persediaan' ? 'NP' : type === 'Group' ? 'GRP' : 'BRG';
-    const count = data.items.filter((item) => item.code.startsWith(prefix)).length + 1;
-    return `${prefix}-${String(count).padStart(4, '0')}`;
+  const nextItemCode = (type: ItemType, categoryId = itemForm.categoryId, brand = itemForm.brand) => {
+    const category = data.itemCategories.find(item => item.id === categoryId);
+    const categoryCode = twoDigitSegment(category?.code || category?.name || '', '00');
+    const prefix = `${categoryCode}${brandSegment(brand, type)}`;
+    const maxSequence = data.items.reduce((max, item) => {
+      const match = item.code.toUpperCase().match(new RegExp(`^${prefix}-(\\d{4})$`));
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `${prefix}-${String(maxSequence + 1).padStart(4, '0')}`;
   };
 
   const nextCategoryCode = () => `KAT-${String(data.itemCategories.length + 1).padStart(3, '0')}`;
 
   const memberSubtotal = (members: GroupMember[]) => members.reduce((sum, m) => sum + m.unitPrice * m.qty, 0);
+
+  const itemTypeLocked = editingItem ? (
+    Object.values(editingItem.branchStocks || {}).some(stock => Number(stock.stock) !== 0)
+    || data.workOrders.some(wo => wo.services.some(service => service.itemId === editingItem.id))
+    || data.invoices.some(invoice => invoice.items?.some(line => line.itemId === editingItem.id))
+    || data.goodsReceipts.some(receipt => receipt.items.some(line => line.itemId === editingItem.id))
+    || data.purchaseInvoices.some(invoice => invoice.items.some(line => line.itemId === editingItem.id))
+    || data.items.some(item => item.groupMembers?.some(member => member.itemId === editingItem.id))
+  ) : false;
 
   const openItemModal = (item?: Item) => {
     if (item) {
@@ -192,7 +223,8 @@ export default function ItemsAndServices() {
       });
     } else {
       setEditingItem(null);
-      setItemForm({ ...emptyItem, code: nextItemCode('Persediaan'), groupMembers: [] });
+      const defaultCategory = data.itemCategories.find(category => category.isActive);
+      setItemForm({ ...emptyItem, categoryId: defaultCategory?.id || '', code: '', groupMembers: [] });
     }
     setMemberSearch('');
     setShowItemModal(true);
@@ -221,10 +253,13 @@ export default function ItemsAndServices() {
     setItemForm((prev) => ({
       ...prev,
       type,
-      code: editingItem ? prev.code : nextItemCode(type),
+      code: editingItem ? prev.code : '',
       unit: isGroup ? 'PAKET' : isJasa ? 'JASA' : prev.unit === 'JASA' || prev.unit === 'PAKET' ? 'PCS' : prev.unit,
       stock: isGroup || isJasa ? 0 : prev.stock,
       purchasePrice: isGroup || isJasa ? 0 : prev.purchasePrice,
+      brand: isGroup || isJasa ? '' : prev.brand,
+      barcode: isGroup || isJasa ? '' : prev.barcode,
+      isQuickService: isGroup || isJasa ? prev.isQuickService : false,
       groupMembers: isGroup ? prev.groupMembers : [],
     }));
   };
@@ -244,7 +279,7 @@ export default function ItemsAndServices() {
     setMemberSearch('');
   };
 
-  const updateMember = (itemId: string, field: 'qty' | 'unitPrice', value: number) => {
+  const updateMember = (itemId: string, field: 'qty', value: number) => {
     setItemForm((prev) => ({
       ...prev,
       groupMembers: prev.groupMembers.map((m) => m.itemId === itemId ? { ...m, [field]: value } : m),
@@ -258,10 +293,10 @@ export default function ItemsAndServices() {
     }));
   };
 
-  const saveItem = (e: React.FormEvent) => {
+  const saveItem = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const code = itemForm.code.trim().toUpperCase();
+    const code = editingItem?.code || nextItemCode(itemForm.type);
     const name = itemForm.name.trim().toUpperCase();
 
     if (!code || !name) {
@@ -298,6 +333,10 @@ export default function ItemsAndServices() {
 
     const category = data.itemCategories.find((cat) => cat.id === itemForm.categoryId);
     const isGroup = itemForm.type === 'Group';
+    if (isGroup && itemForm.groupMembers.length === 0) {
+      window.alert('Group/Paket wajib memiliki minimal satu barang atau jasa.');
+      return;
+    }
     const payload: Item = {
       id: editingItem?.id || Date.now().toString(),
       code,
@@ -322,10 +361,16 @@ export default function ItemsAndServices() {
       branchId: editingItem?.branchId || resolveBranchId(),
     };
 
-    if (editingItem) updateItem(editingItem.id, payload);
-    else addItem(payload);
-
-    setShowItemModal(false);
+    setIsSavingItem(true);
+    try {
+      if (editingItem) await updateItem(editingItem.id, payload);
+      else await addItem({ ...payload, autoCode: true } as Item & { autoCode: boolean });
+      setShowItemModal(false);
+    } catch (error: any) {
+      window.alert(error?.message || 'Barang/Jasa gagal disimpan.');
+    } finally {
+      setIsSavingItem(false);
+    }
   };
 
   const saveCategory = (e: React.FormEvent) => {
@@ -1113,26 +1158,28 @@ export default function ItemsAndServices() {
       {/* ========== Item Modal ========== */}
       {showItemModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 rounded-t-xl">
+          <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
+            <div className="z-10 flex flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3 sm:px-6 sm:py-4 rounded-t-xl">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{editingItem ? 'Edit Barang/Jasa' : 'Barang/Jasa Baru'}</h3>
                 <p className="text-sm text-gray-500">Isi identitas item dan harga jual opsional. Stok serta harga beli berasal dari transaksi pembelian.</p>
               </div>
               <button onClick={() => setShowItemModal(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
             </div>
-            <form onSubmit={saveItem} className="space-y-5 p-6">
+            <form onSubmit={saveItem} className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
               {/* Basic info */}
-              <div>
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Kode Barang/Jasa *</label>
-                  <input required value={itemForm.code} onChange={(e) => setItemForm({ ...itemForm, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <input readOnly value={editingItem ? itemForm.code : nextItemCode(itemForm.type)} className="w-full rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 font-mono font-semibold uppercase text-blue-700" />
+                  <p className="mt-1 text-xs text-gray-500">Otomatis: kategori 2 digit + merek 2 digit + urutan 4 digit.</p>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Jenis Barang *</label>
-                  <select value={itemForm.type} onChange={(e) => handleItemTypeChange(e.target.value as ItemType)} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
+                  <select disabled={itemTypeLocked} value={itemForm.type} onChange={(e) => handleItemTypeChange(e.target.value as ItemType)} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100">
                     {allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}
                   </select>
+                  {itemTypeLocked && <p className="mt-1 text-xs text-amber-700">Jenis dikunci karena item sudah memiliki stok atau histori transaksi.</p>}
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-gray-700">Nama Barang/Jasa *</label>
@@ -1143,11 +1190,11 @@ export default function ItemsAndServices() {
                   <input value={itemForm.receiptDescription} onChange={(e) => setItemForm({ ...itemForm, receiptDescription: e.target.value })} placeholder="Nama/keterangan yang dicetak pada WO dan faktur" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   <p className="mt-1 text-xs text-gray-500">Jika kosong, sistem menggunakan Nama Barang/Jasa.</p>
                 </div>
-                <div className="md:col-span-2">
+                {itemForm.type !== 'Jasa' && itemForm.type !== 'Group' && <div className="md:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-gray-700">Barcode Asli</label>
                   <input value={itemForm.barcode} onChange={(e) => setItemForm({ ...itemForm, barcode: e.target.value.trim() })} placeholder="Scan atau ketik barcode pabrik/supplier" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   <p className="mt-1 text-xs text-gray-500">Harus unik jika diisi; boleh kosong untuk jasa dan paket.</p>
-                </div>
+                </div>}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Kategori *</label>
                   <select required value={itemForm.categoryId} onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
@@ -1155,10 +1202,10 @@ export default function ItemsAndServices() {
                     {data.itemCategories.filter((cat) => cat.isActive).map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                   </select>
                 </div>
-                <div>
+                {itemForm.type !== 'Jasa' && itemForm.type !== 'Group' && <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Merek</label>
-                  <input value={itemForm.brand} onChange={(e) => setItemForm({ ...itemForm, brand: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
-                </div>
+                  <input value={itemForm.brand} onChange={(e) => setItemForm({ ...itemForm, brand: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                </div>}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Satuan *</label>
                   <select value={itemForm.unit} onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
@@ -1169,7 +1216,7 @@ export default function ItemsAndServices() {
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     {itemForm.type === 'Group' ? 'Harga 1 Group (Opsional)' : 'Harga Jual (Opsional)'}
                   </label>
-                  <input type="number" min="0" value={itemForm.sellingPrice} onChange={(e) => setItemForm({ ...itemForm, sellingPrice: parseInt(e.target.value) || 0 })} placeholder="Boleh kosong, dapat ditentukan saat transaksi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-right outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">Rp</span><input type="text" inputMode="numeric" value={formatNumericInput(itemForm.sellingPrice)} onChange={(e) => setItemForm({ ...itemForm, sellingPrice: parseNumericInput(e.target.value) })} placeholder="0" className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-right font-semibold tabular-nums outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" /></div>
                   <p className="mt-1 text-xs text-gray-500">Boleh dikosongkan. Harga dapat ditentukan saat membuat WO atau faktur.</p>
                   {itemForm.type === 'Group' && itemForm.groupMembers.length > 0 && (
                     <p className="mt-1 text-xs text-gray-500">
@@ -1262,7 +1309,7 @@ export default function ItemsAndServices() {
                                 <input type="number" min="1" value={member.qty} onChange={(e) => updateMember(member.itemId, 'qty', parseInt(e.target.value) || 1)} className="w-full rounded border border-gray-300 px-2 py-1 text-center text-sm outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
                               </td>
                               <td className="px-3 py-2">
-                                <input type="number" min="0" value={member.unitPrice} onChange={(e) => updateMember(member.itemId, 'unitPrice', parseInt(e.target.value) || 0)} className="w-full rounded border border-gray-300 px-2 py-1 text-right text-sm outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
+                                <div className="text-right font-medium text-gray-700">{formatCurrency(member.unitPrice)}</div>
                               </td>
                               <td className="px-3 py-2 text-right font-medium text-gray-900">{formatCurrency(member.unitPrice * member.qty)}</td>
                               <td className="px-3 py-2">
@@ -1297,18 +1344,18 @@ export default function ItemsAndServices() {
               )}
 
               <div className="flex gap-6">
-                <label className="flex items-center gap-2 text-sm text-gray-700">
+                {(itemForm.type === 'Jasa' || itemForm.type === 'Group') && <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input type="checkbox" checked={itemForm.isActive} onChange={(e) => setItemForm({ ...itemForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
                   Aktif
-                </label>
+                </label>}
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input type="checkbox" checked={itemForm.isQuickService} onChange={(e) => setItemForm({ ...itemForm, isQuickService: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
                   Layanan Cepat (Template)
                 </label>
               </div>
-              <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+              <div className="sticky bottom-0 z-10 -mx-4 flex justify-end gap-3 border-t border-gray-200 bg-white px-4 pb-1 pt-3 sm:-mx-6 sm:px-6">
                 <button type="button" onClick={() => setShowItemModal(false)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
-                <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"><Save className="h-4 w-4" /> Simpan</button>
+                <button type="submit" disabled={isSavingItem} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"><Save className="h-4 w-4" /> {isSavingItem ? 'Menyimpan...' : 'Simpan'}</button>
               </div>
             </form>
           </div>
