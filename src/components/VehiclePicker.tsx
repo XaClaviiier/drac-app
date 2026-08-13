@@ -15,11 +15,12 @@ interface VehiclePickerProps {
   value: string;
   onChange: (vehicleId: string) => void;
   onNewVehicleCreated?: (vehicle: Vehicle) => void;
+  locked?: boolean;
 }
 
 const normalizePlate = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
-export default function VehiclePicker({ customer, value, onChange, onNewVehicleCreated }: VehiclePickerProps) {
+export default function VehiclePicker({ customer, value, onChange, onNewVehicleCreated, locked = false }: VehiclePickerProps) {
   const { data, addVehicle, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
   const [open, setOpen] = useState(false);
@@ -194,7 +195,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     }
   };
 
-  const disabled = !customer;
+  const disabled = !customer || locked;
 
   // Apakah plat yang diketik belum ada di daftar kendaraan pelanggan ini?
   const plateTyped = inputText.trim().toUpperCase();
@@ -215,7 +216,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={disabled ? 'Pilih pelanggan terlebih dahulu' : 'Ketik nomor plat kendaraan...'}
+          placeholder={!customer ? 'Pilih pelanggan terlebih dahulu' : locked ? 'Kendaraan sudah teregister' : 'Ketik nomor plat kendaraan...'}
           autoComplete="off"
           className={`w-full pl-9 pr-10 py-2.5 border rounded-lg outline-none transition-colors text-sm font-mono ${
             disabled
@@ -225,7 +226,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
               : 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 uppercase'
           }`}
         />
-        {selectedVehicle && (
+        {selectedVehicle && !locked && (
           <button
             type="button"
             onClick={() => {

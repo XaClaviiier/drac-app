@@ -32,7 +32,7 @@ interface AppContextType {
   addInvoice: (invoice: SalesInvoice) => Promise<void>;
   updateInvoice: (id: string, invoice: SalesInvoice) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
-  addWorkOrder: (wo: WorkOrder) => Promise<void>;
+  addWorkOrder: (wo: WorkOrder) => Promise<WorkOrder>;
   updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
   continueWorkOrder: (
@@ -519,16 +519,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ===== WORK ORDERS =====
-  const addWorkOrder = async (wo: WorkOrder) => {
+  const addWorkOrder = async (wo: WorkOrder): Promise<WorkOrder> => {
     const createdWorkOrder: WorkOrder = {
       ...wo,
       createdBy: wo.createdBy || currentUser?.id,
       createdByName: wo.createdByName || currentUser?.name,
     };
-    await executeCRUD(
-      () => api.create('work-orders', createdWorkOrder),
-      () => setData(prev => ({ ...prev, workOrders: [...prev.workOrders, createdWorkOrder] }))
-    );
+    if (isDemoMode) {
+      setData(prev => ({ ...prev, workOrders: [...prev.workOrders, createdWorkOrder] }));
+      return createdWorkOrder;
+    }
+    const result = await api.create('work-orders', createdWorkOrder);
+    if (!result?.success) {
+      throw new Error(result?.message || result?.error || 'WO gagal disimpan');
+    }
+    const savedWorkOrder: WorkOrder = {
+      ...createdWorkOrder,
+      id: result.data?.id || createdWorkOrder.id,
+      woNumber: result.data?.woNumber || createdWorkOrder.woNumber,
+      status: 'Register',
+    };
+    await refreshData();
+    return savedWorkOrder;
   };
   const updateWorkOrder = async (id: string, wo: WorkOrder) => {
     await executeCRUD(
@@ -704,20 +716,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       continuedFromBranchName: srcBranch?.name || '-',
     };
 
-    await addWorkOrder(newWo);
+    const createdWorkOrder = await addWorkOrder(newWo);
     await updateWorkOrder(src.id, {
       ...src,
-      continuedToWoId: newId,
-      continuedToWoNumber: newWoNumber,
+      continuedToWoId: createdWorkOrder.id,
+      continuedToWoNumber: createdWorkOrder.woNumber,
       continuedToBranchName: tgtBranch.name,
       continuedAt: new Date().toISOString(),
       continuedBy: currentUser?.id,
       continuedByName: currentUser?.name,
       continuedBranchId: targetBranchId,
-      notes: `${src.notes || ''}\n[${today}] Dilanjutkan di ${newWoNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
+      notes: `${src.notes || ''}\n[${today}] Dilanjutkan di ${createdWorkOrder.woNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
     });
 
-    return newWo;
+    return createdWorkOrder;
   };
 
   const createInvoiceFromWO = async (

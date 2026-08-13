@@ -96,6 +96,9 @@ export default function WorkOrders() {
   const lostSalesReason = useRef('');
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
+  const [isAutoRegisteredDraft, setIsAutoRegisteredDraft] = useState(false);
+  const [isAutoRegistering, setIsAutoRegistering] = useState(false);
+  const autoRegisteringRef = useRef(false);
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
   const [statusDialog, setStatusDialog] = useState<{ wo: WorkOrder; next: WorkOrder['status'] } | null>(null);
   const [completionWO, setCompletionWO] = useState<WorkOrder | null>(null);
@@ -211,7 +214,11 @@ export default function WorkOrders() {
     setShowQuickServices(true);
   };
 
-  const takePreviousServicesIntoForm = () => {
+  const takePreviousServicesIntoForm = async () => {
+    if (!customerVehicleReady) {
+      window.alert('Pilih atau daftarkan pelanggan dan kendaraan terlebih dahulu.');
+      return;
+    }
     const previous = data.workOrders
       .filter(candidate => candidate.id !== editingWO?.id && (
         (formData.vehicleRefId && candidate.vehicleRefId === formData.vehicleRefId)
@@ -222,9 +229,11 @@ export default function WorkOrders() {
       window.alert('Pilih pelanggan dan kendaraan terlebih dahulu. Kendaraan ini belum memiliki layanan WO sebelumnya.');
       return;
     }
-    setFormData(current => ({ ...current, services: previous.services.map((service, index) => ({ ...service, id: `svc-copy-${Date.now()}-${index}` })) }));
-    setSuccessMsg(`Layanan dari ${previous.woNumber} sudah diambil. Periksa kembali sebelum disimpan.`);
-    setTimeout(() => setSuccessMsg(''), 5000);
+    const copiedServices = previous.services.map((service, index) => ({ ...service, id: `svc-copy-${Date.now()}-${index}` }));
+    if (await persistServicesAfterAdd(copiedServices)) {
+      setSuccessMsg(`Layanan dari ${previous.woNumber} sudah diambil ke ${editingWO?.woNumber || 'WO baru'}.`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+    }
   };
 
   const handleActionMenuToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
@@ -468,7 +477,11 @@ export default function WorkOrders() {
     localStorage.setItem('dokterac_wo_quick_services', 'closed');
   };
 
-  const handleQuickAddItem = () => {
+  const handleQuickAddItem = async () => {
+    if (!customerVehicleReady) {
+      window.alert('Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.');
+      return;
+    }
     if (!quickItemForm.name) { window.alert('Nama barang/jasa harus diisi'); return; }
 
     // Nama barang/jasa wajib unik
@@ -507,30 +520,28 @@ export default function WorkOrders() {
       description: '',
       branchId: resolveBranchId(),
     };
-    addItem(newItem);
+    await addItem(newItem);
 
-    // Auto-add to current WO services
-    setFormData(prev => ({
-      ...prev,
-      services: [
-        ...prev.services,
-        {
-          id: Date.now().toString() + '-svc',
-          itemId: newItem.id,
-          code: newItem.code,
-          name: newItem.name,
-          description: '',
-          price: newItem.sellingPrice,
-          qty: 1,
-        },
-      ],
-    }));
+    await persistServicesAfterAdd([
+      ...formData.services,
+      {
+        id: Date.now().toString() + '-svc',
+        itemId: newItem.id,
+        code: newItem.code,
+        name: newItem.name,
+        description: '',
+        price: newItem.sellingPrice,
+        qty: 1,
+      },
+    ]);
 
     setQuickItemForm({ name: '', type: 'Jasa', unit: 'JASA', sellingPrice: 0, categoryId: '' });
     setShowQuickAddItem(false);
   };
 
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
+  const customerVehicleReady = Boolean(formData.customerRefId && formData.vehicleRefId);
+  const customerVehicleLocked = Boolean(isAutoRegistering || (editingWO && (editingWO.services.length > 0 || formData.services.length > 0)));
 
   const handleCustomerSelect = (customerRefId: string) => {
     const customer = data.customers.find((item) => item.id === customerRefId);
@@ -713,6 +724,9 @@ export default function WorkOrders() {
     setShowServiceForm(true);
     setServiceSearch('');
     setEditingWO(null);
+    setIsAutoRegisteredDraft(false);
+    setIsAutoRegistering(false);
+    autoRegisteringRef.current = false;
     setWoDateUnlocked(false);
     setWoBackdateReason('');
   };
@@ -721,6 +735,7 @@ export default function WorkOrders() {
     setDetailWO(null);
     setDiagnosisMode(false);
     setServiceEditMode(Boolean(wo && servicesOnly));
+    setIsAutoRegisteredDraft(false);
     if (wo) {
       setEditingWO(wo);
       const matchedVehicle = data.vehicles.find(
@@ -875,8 +890,69 @@ export default function WorkOrders() {
 
   const isItemAdded = (itemId: string) => getDuplicateServices(itemId).length > 0;
 
+  const persistServicesAfterAdd = async (nextServices: WorkOrderService[]) => {
+    if (!customerVehicleReady) {
+      window.alert('Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.');
+      return false;
+    }
+    if (!editingWO && currentBranchId === 'ALL') {
+      window.alert('Pilih cabang aktif sebelum menambahkan layanan.');
+      return false;
+    }
+    if (autoRegisteringRef.current) return false;
+
+    const previousServices = formData.services;
+    const nextTotal = nextServices.reduce((sum, service) => sum + service.price * service.qty, 0);
+    setFormData(previous => ({ ...previous, services: nextServices }));
+    autoRegisteringRef.current = true;
+    setIsAutoRegistering(true);
+    try {
+      if (editingWO) {
+        const updatedWorkOrder: WorkOrder = {
+          ...editingWO,
+          ...formData,
+          services: nextServices,
+          total: nextTotal,
+          estimateTotal: nextTotal > 0 ? nextTotal : editingWO.estimateTotal,
+        };
+        await updateWorkOrder(editingWO.id, updatedWorkOrder);
+        setEditingWO(updatedWorkOrder);
+        setSuccessMsg(`${editingWO.woNumber} diperbarui.`);
+      } else {
+        const targetBranch = resolveBranchId();
+        const provisionalNumber = generateDocumentNumber('workOrder', targetBranch, new Date(`${formData.date}T12:00:00`));
+        const created = await addWorkOrder({
+          id: `wo-${Date.now()}`,
+          woNumber: provisionalNumber,
+          ...formData,
+          services: nextServices,
+          total: nextTotal,
+          estimateTotal: nextTotal > 0 ? nextTotal : undefined,
+          status: 'Register',
+          branchId: targetBranch,
+        });
+        setEditingWO(created);
+        setIsAutoRegisteredDraft(true);
+        setSuccessMsg(`${created.woNumber} berhasil diregistrasikan.`);
+      }
+      window.setTimeout(() => setSuccessMsg(''), 3500);
+      return true;
+    } catch (error: any) {
+      setFormData(previous => ({ ...previous, services: previousServices }));
+      window.alert(`Gagal meregistrasikan layanan: ${error?.message || 'terjadi kesalahan'}`);
+      return false;
+    } finally {
+      autoRegisteringRef.current = false;
+      setIsAutoRegistering(false);
+    }
+  };
+
   // Klik item/favorit langsung menambah satu baris. Panel tetap terbuka agar bisa tambah banyak.
-  const handleUseItem = (itemId: string) => {
+  const handleUseItem = async (itemId: string) => {
+    if (!customerVehicleReady) {
+      window.alert('Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.');
+      return;
+    }
     const item = data.items.find((entry) => entry.id === itemId);
     if (!item) return;
 
@@ -910,10 +986,7 @@ export default function WorkOrders() {
         qty: member.qty,
       }));
 
-      setFormData((prev) => ({
-        ...prev,
-        services: [...prev.services, groupHeader, ...memberLines],
-      }));
+      await persistServicesAfterAdd([...formData.services, groupHeader, ...memberLines]);
       return;
     }
 
@@ -927,7 +1000,7 @@ export default function WorkOrders() {
       qty: 1,
     };
 
-    setFormData(prev => ({ ...prev, services: [...prev.services, service] }));
+    await persistServicesAfterAdd([...formData.services, service]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1642,7 +1715,8 @@ export default function WorkOrders() {
           </button>
         ) : showModal && editingWO ? (
           <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
-            <Edit className="h-4 w-4" /> Edit {editingWO.woNumber}
+            {isAutoRegisteredDraft ? <FileText className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+            {isAutoRegisteredDraft ? editingWO.woNumber : `Edit ${editingWO.woNumber}`}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && hasPermission('wo:create') ? (
@@ -2661,7 +2735,7 @@ export default function WorkOrders() {
                 </div>
               ) : <>
               {/* Pelanggan dan tanggal */}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(210px,1fr)_minmax(210px,1fr)_230px]">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(210px,1fr)_minmax(210px,1fr)_310px]">
                 <div>
                   <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700">
                     <User className="h-4 w-4 text-blue-600" />
@@ -2671,6 +2745,7 @@ export default function WorkOrders() {
                     value={formData.customerRefId}
                     onChange={handleCustomerSelect}
                     onNewCustomerCreated={handleNewCustomerCreated}
+                    disabled={customerVehicleLocked}
                   />
                 </div>
                 <div>
@@ -2683,13 +2758,14 @@ export default function WorkOrders() {
                     value={formData.vehicleRefId}
                     onChange={handleVehicleSelect}
                     onNewVehicleCreated={handleNewVehicleCreated}
+                    locked={customerVehicleLocked}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Tanggal & Waktu <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
+                  <div className="grid grid-cols-[minmax(150px,1fr)_92px_40px] gap-2">
                     <input
                       type="date"
                       required
@@ -2697,7 +2773,7 @@ export default function WorkOrders() {
                       disabled={!woDateUnlocked}
                       value={formData.date}
                       onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
                     />
                     <input
                       type="time"
@@ -2705,18 +2781,38 @@ export default function WorkOrders() {
                       disabled={!woDateUnlocked}
                       value={formData.transactionTime}
                       onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                      className="w-full rounded-lg border border-gray-300 px-2 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
                       aria-label="Waktu WO"
                     />
+                    <button
+                      type="button"
+                      onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(value => {
+                        const next = !value;
+                        if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
+                        return next;
+                      }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
+                      className={`inline-flex h-[42px] w-10 items-center justify-center rounded-lg border transition-colors ${woDateUnlocked ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}
+                      title={woDateUnlocked ? 'Kunci ke tanggal dan waktu sekarang' : 'Buka tanggal dan waktu mundur'}
+                      aria-label={woDateUnlocked ? 'Kunci tanggal dan waktu WO' : 'Buka tanggal dan waktu mundur'}
+                    >
+                      {woDateUnlocked ? <LockKeyhole className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
+                    </button>
                   </div>
-                  <button type="button" onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(v => {
-                    const next = !v;
-                    if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
-                    return next;
-                  }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')} className="mt-1 text-xs font-semibold text-blue-600">
-                    {woDateUnlocked ? 'Kunci ke tanggal & waktu sekarang' : 'Buka tanggal/waktu mundur'}
-                  </button>
                 </div>
+              </div>
+              <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                customerVehicleLocked
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : customerVehicleReady
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-amber-200 bg-amber-50 text-amber-700'
+              }`}>
+                {customerVehicleLocked ? <LockKeyhole className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                {customerVehicleLocked
+                  ? `Pelanggan dan kendaraan sudah teregister${editingWO ? ` pada ${editingWO.woNumber}` : ''}.`
+                  : customerVehicleReady
+                    ? 'Pelanggan dan kendaraan siap diregistrasikan saat layanan pertama ditambahkan.'
+                    : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.'}
               </div>
               {data.settings.security.requireBackdateReason !== false && formData.date < localDateKey() && (
                 <div className="grid grid-cols-1 md:grid-cols-2"><span /><input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" /></div>
@@ -2737,7 +2833,7 @@ export default function WorkOrders() {
                   />
                 </div>
 
-                <div className={editingWO ? '' : 'hidden'}>
+                <div className={editingWO && !isAutoRegisteredDraft ? '' : 'hidden'}>
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <label className="block text-sm font-medium text-gray-700">
                       Keterangan / Keluhan
@@ -2794,10 +2890,10 @@ export default function WorkOrders() {
               </div>
               </>}
 
-              {(diagnosisMode || serviceEditMode || !editingWO) && <>
+              {(diagnosisMode || serviceEditMode || !editingWO || isAutoRegisteredDraft) && <>
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
               <div>
-                <div className={editingWO ? 'mb-3' : 'hidden'}>
+                <div className={editingWO && !isAutoRegisteredDraft ? 'mb-3' : 'hidden'}>
                   <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Pekerjaan / Layanan WO'}</label>
                 </div>
 
@@ -2807,6 +2903,7 @@ export default function WorkOrders() {
                       <button
                         type="button"
                         onClick={toggleQuickServices}
+                        disabled={!customerVehicleReady || isAutoRegistering}
                         className={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border transition-colors ${showQuickServices ? 'border-amber-400 bg-amber-100 text-amber-600' : 'border-gray-300 bg-white text-gray-500 hover:border-amber-300 hover:text-amber-500'}`}
                         title={showQuickServices ? 'Sembunyikan Quick Select' : 'Tampilkan Quick Select'}
                       >
@@ -2842,8 +2939,9 @@ export default function WorkOrders() {
                           }
                         }}
                         autoFocus
-                        placeholder="Cari/Pilih Barang dan Jasa"
-                        className="w-full rounded-lg border border-blue-400 py-2.5 pl-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                        disabled={!customerVehicleReady || isAutoRegistering}
+                        placeholder={customerVehicleReady ? (isAutoRegistering ? 'Meregistrasikan WO...' : 'Cari/Pilih Barang dan Jasa') : 'Pilih pelanggan dan kendaraan terlebih dahulu'}
+                        className="w-full rounded-lg border border-blue-400 py-2.5 pl-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-100 disabled:text-gray-500"
                       />
                       {isServiceSearching ? (
                         <RefreshCw className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-600" />
@@ -2885,7 +2983,7 @@ export default function WorkOrders() {
                       )}
                       </div>
                       {hasPermission('item:create') && (
-                        <button type="button" onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center gap-1 rounded-lg border border-green-300 text-sm font-medium text-green-700 hover:bg-green-50 sm:w-auto sm:px-3">
+                        <button type="button" disabled={!customerVehicleReady || isAutoRegistering} onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center gap-1 rounded-lg border border-green-300 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 sm:w-auto sm:px-3">
                           <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Baru</span>
                         </button>
                       )}
@@ -3257,7 +3355,7 @@ export default function WorkOrders() {
                 )}
               </div>
 
-              {!editingWO && (
+              {(!editingWO || isAutoRegisteredDraft) && (
                 <div className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(360px,460px)]">
                   <textarea
                     rows={2}
