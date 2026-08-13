@@ -25,7 +25,9 @@ if (!$visionModel || str_contains($visionModel, 'llama-4-scout')) {
 $requestData = [
     'model' => $visionModel,
     'temperature' => 0,
-    'max_tokens' => 1000,
+    // Model reasoning dapat memakai sebagian token sebelum menulis JSON.
+    // Batas yang terlalu kecil membuat message.content kosong meski foto terbaca.
+    'max_tokens' => 2500,
     'response_format' => ['type' => 'json_object'],
     'messages' => [[
         'role' => 'user',
@@ -48,29 +50,64 @@ function requestReceiptOcr(array $requestData, string $apiKey): array {
     return [$status, json_decode($body, true) ?: []];
 }
 
+function receiptOcrText($value): string {
+    if (is_string($value)) return trim($value);
+    if (!is_array($value)) return '';
+    if (isset($value['text']) && is_string($value['text'])) return trim($value['text']);
+    $parts = [];
+    foreach ($value as $part) {
+        $text = receiptOcrText($part);
+        if ($text !== '') $parts[] = $text;
+    }
+    return trim(implode("\n", $parts));
+}
+
+function extractReceiptOcrResult(array $decoded): ?array {
+    $message = $decoded['choices'][0]['message'] ?? [];
+    $candidates = [
+        $message['content'] ?? '',
+        $message['reasoning_content'] ?? '',
+        $message['reasoning'] ?? '',
+        // Groq dapat menyertakan keluaran model di sini ketika validasi JSON gagal.
+        $decoded['error']['failed_generation'] ?? '',
+    ];
+
+    foreach ($candidates as $candidate) {
+        $content = receiptOcrText($candidate);
+        if ($content === '') continue;
+        $content = html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $content = preg_replace('/<think>.*?<\/think>/is', '', $content) ?? $content;
+        if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/is', $content, $match)) $content = $match[1];
+        $result = json_decode(trim($content), true);
+        if (is_array($result)) return $result;
+
+        $start = strpos($content, '{');
+        $end = strrpos($content, '}');
+        if ($start === false || $end === false || $end <= $start) continue;
+        $result = json_decode(substr($content, $start, $end - $start + 1), true);
+        if (is_array($result)) return $result;
+    }
+    return null;
+}
+
 $apiKey = decryptSecret($config['encrypted_api_key']);
 [$status, $decoded] = requestReceiptOcr($requestData, $apiKey);
+$result = extractReceiptOcrResult($decoded);
 // Beberapa model vision Groq sesekali gagal memvalidasi JSON meskipun isi hasilnya
 // dapat dibaca. Ulangi sekali tanpa response_format agar upload tidak berhenti.
 $errorCode = strtolower((string)($decoded['error']['code'] ?? ''));
 $errorMessage = strtolower((string)($decoded['error']['message'] ?? ''));
-if ($status >= 400 && ($errorCode === 'json_validate_failed' || str_contains($errorMessage, 'failed to validate json'))) {
+if (!$result && $status >= 400 && ($errorCode === 'json_validate_failed' || str_contains($errorMessage, 'failed to validate json'))) {
     unset($requestData['response_format']);
     [$status, $decoded] = requestReceiptOcr($requestData, $apiKey);
+    $result = extractReceiptOcrResult($decoded);
 }
-if ($status < 200 || $status >= 300) {
+if (!$result && ($status < 200 || $status >= 300)) {
     $msg = $decoded['error']['message'] ?? 'Groq gagal membaca nota';
     if ($status === 401) $msg = 'Groq Key Input Cepat ditolak atau sudah tidak aktif. Tempel key baru pada halaman Input Cepat Historis.';
     if ($status === 429) $msg = 'Kuota Groq sedang habis atau terkena batas. Ganti key atau coba kembali nanti.';
     if (stripos($msg, 'model') !== false && (stripos($msg, 'does not exist') !== false || stripos($msg, 'access') !== false)) $msg = 'Model OCR Groq tidak tersedia untuk key ini. Model sudah diperbarui ke qwen/qwen3.6-27b; silakan coba upload kembali.';
     respondError($msg, $status === 429 ? 429 : 502);
 }
-$content = trim((string)($decoded['choices'][0]['message']['content'] ?? ''));
-if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/is', $content, $match)) $content = $match[1];
-if (!str_starts_with($content, '{')) {
-    $start = strpos($content, '{'); $end = strrpos($content, '}');
-    if ($start !== false && $end !== false && $end > $start) $content = substr($content, $start, $end - $start + 1);
-}
-$result = json_decode($content, true);
-if (!is_array($result)) respondError('Hasil pembacaan nota tidak valid. Coba foto ulang dengan posisi lebih lurus dan terang.', 422);
+if (!$result) respondError('Groq belum menghasilkan data nota yang lengkap. Coba upload ulang; bila tetap gagal, ganti Key OCR.', 422);
 respondSuccess($result, 'Nota berhasil dibaca. Periksa kembali hasilnya sebelum disimpan.');
