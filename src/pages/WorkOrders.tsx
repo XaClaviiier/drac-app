@@ -44,13 +44,6 @@ const COMPLETION_NOTE_TEMPLATES = [
 ];
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
-const itemCodePart = (value: string, fallback: string) => {
-  const normalized = value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
-  const digits = normalized.replace(/\D/g, '');
-  if (digits) return digits.slice(-2).padStart(2, '0');
-  const words = normalized.split(/\s+/).filter(Boolean);
-  return (words.length > 1 ? `${words[0][0]}${words[1][0]}` : (words[0] || fallback).slice(0, 2)).padEnd(2, 'X');
-};
 const localTimeKey = (date = new Date()) =>
   `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 const formatAuditTime = (value?: string) => {
@@ -526,14 +519,9 @@ export default function WorkOrders() {
       quickItemForm.categoryId = firstCat.id;
     }
     const category = data.itemCategories.find(c => c.id === quickItemForm.categoryId);
-    const categoryPart = itemCodePart(category?.code || category?.name || '', '00');
-    const brandPart = itemCodePart('', quickItemForm.type === 'Jasa' ? 'JS' : quickItemForm.type === 'Non Persediaan' ? 'NP' : 'NA');
-    const prefix = `${categoryPart}${brandPart}`;
-    const maxSequence = data.items.reduce((max, item) => {
-      const match = item.code.toUpperCase().match(new RegExp(`^${prefix}-(\\d{4})$`));
-      return match ? Math.max(max, Number(match[1])) : max;
-    }, 0);
-    const newCode = `${prefix}-${String(maxSequence + 1).padStart(4, '0')}`;
+    const prefix = quickItemForm.type === 'Jasa' ? 'JSA' : quickItemForm.type === 'Non Persediaan' ? 'NP' : 'BRG';
+    const count = data.items.filter(item => item.code.startsWith(prefix)).length + 1;
+    const newCode = `${prefix}-${String(count).padStart(4, '0')}`;
 
     const newItem = {
       id: Date.now().toString(),
@@ -552,25 +540,18 @@ export default function WorkOrders() {
       isQuickService: false,
       description: '',
       branchId: resolveBranchId(),
-      autoCode: true,
     };
-    let createdItem;
-    try {
-      createdItem = await addItem(newItem);
-    } catch (error: any) {
-      window.alert(error?.message || 'Barang/Jasa gagal disimpan.');
-      return;
-    }
+    await addItem(newItem);
 
     await persistServicesAfterAdd([
       ...formData.services,
       {
         id: Date.now().toString() + '-svc',
-        itemId: createdItem.id,
-        code: createdItem.code,
-        name: createdItem.name,
+        itemId: newItem.id,
+        code: newItem.code,
+        name: newItem.name,
         description: '',
-        price: createdItem.sellingPrice,
+        price: newItem.sellingPrice,
         qty: 1,
       },
     ]);
@@ -3330,14 +3311,12 @@ export default function WorkOrders() {
                 )}
               </div>
 
-              {/* Teknisi, pengukuran, komentar, dan total dalam satu baris ringkas */}
-              <div className={!editingWO ? 'hidden' : 'grid items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_360px]'}>
-                <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3">
-                  <p className="text-sm font-semibold text-cyan-950">{diagnosisMode ? 'Teknisi & Hasil Pekerjaan' : 'Teknisi & Catatan Internal'}</p>
-                  {diagnosisMode && <p className="mb-2 text-[11px] text-cyan-700">Isi Suhu, LP, dan HP lengkap, atau isi catatan hasil pekerjaan.</p>}
-                  <div className={`grid gap-2 ${diagnosisMode ? 'sm:grid-cols-[minmax(180px,1.5fr)_90px_90px_90px]' : 'grid-cols-1'}`}>
+              {/* Ringkasan dua baris dalam tiga kelompok yang terpisah */}
+              <div className={!editingWO ? 'hidden' : `grid items-stretch gap-3 ${diagnosisMode ? 'lg:grid-cols-[minmax(0,55fr)_minmax(210px,25fr)_minmax(190px,20fr)]' : 'lg:grid-cols-[minmax(0,1fr)_300px]'}`}>
+                <div className="grid min-h-[148px] grid-rows-2 gap-2 rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+                  <div className="grid grid-cols-1 gap-2">
                     <label className="text-[11px] font-semibold text-slate-600">
-                      Teknisi <span className="text-red-500">*</span>
+                      Teknisi penanggung jawab <span className="text-red-500">*</span>
                       <select required value={formData.technicianId} onChange={(event) => {
                         const technician = data.users.find(user => user.id === event.target.value);
                         setFormData(previous => ({ ...previous, technicianId: event.target.value, technicianName: technician?.name || '' }));
@@ -3348,17 +3327,21 @@ export default function WorkOrders() {
                         ))}
                       </select>
                     </label>
-                    {diagnosisMode && <>
-                      <label className="text-[11px] font-semibold text-slate-600">Suhu (°C)<input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
-                      <label className="text-[11px] font-semibold text-slate-600">LP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
-                      <label className="text-[11px] font-semibold text-slate-600">HP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
-                    </>}
                   </div>
-                  <textarea value={diagnosisMode ? formData.findings : formData.notes} onChange={(event) => setFormData(previous => diagnosisMode ? { ...previous, findings: event.target.value } : { ...previous, notes: event.target.value })} placeholder={diagnosisMode ? 'Catatan hasil pekerjaan...' : 'Catatan internal teknisi (sparepart, kendala, dll)...'} rows={2} className="mt-2 min-h-[58px] w-full resize-none rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+                  <label className="flex min-h-0 flex-col text-[11px] font-semibold text-slate-600">Catatan hasil pekerjaan
+                    <textarea value={diagnosisMode ? formData.findings : formData.notes} onChange={(event) => setFormData(previous => diagnosisMode ? { ...previous, findings: event.target.value } : { ...previous, notes: event.target.value })} placeholder={diagnosisMode ? 'Catatan hasil pekerjaan...' : 'Catatan internal teknisi...'} rows={1} className="mt-1 min-h-0 flex-1 resize-none rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+                  </label>
                 </div>
-                <div className="grid min-h-[148px] grid-cols-2 rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
-                  <div className="flex flex-col justify-between px-3 py-2"><span className="text-sm text-gray-600">Jumlah Item</span><strong className="text-right text-2xl tabular-nums">{formData.services.filter(service => !isPackageMemberService(service)).length}</strong></div>
-                  <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-2"><span className="text-sm text-gray-600">Total Estimasi</span><strong className="text-right text-xl tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong></div>
+                {diagnosisMode && <div className="grid min-h-[148px] grid-rows-2 gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[11px] font-semibold text-slate-600">LP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                    <label className="text-[11px] font-semibold text-slate-600">HP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                  </div>
+                  <label className="text-[11px] font-semibold text-slate-600">Suhu (°C)<input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                </div>}
+                <div className="grid min-h-[148px] grid-rows-2 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-sm">
+                  <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-gray-600">Jumlah Item</span><strong className="text-xl tabular-nums">{formData.services.filter(service => !isPackageMemberService(service)).length}</strong></div>
+                  <div className="flex items-center justify-between border-t border-gray-200 px-4 py-2"><span className="text-sm text-gray-600">Total Estimasi</span><strong className="text-lg tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong></div>
                 </div>
               </div>
               </>}
