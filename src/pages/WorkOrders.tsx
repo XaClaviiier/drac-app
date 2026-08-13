@@ -442,6 +442,27 @@ export default function WorkOrders() {
   const isPackageMemberService = (service: WorkOrderService) => (
     service.name.startsWith('   -') || /^Isi dari paket:/i.test(service.description || '')
   );
+  const cleanPackageLabel = (value: string) => value.replace(/^(?:\s*\[PAKET\]\s*)+/i, '').trim();
+  const masterItemForService = (service: WorkOrderService) => data.items.find(item => item.id === service.itemId);
+  const serviceReceiptName = (service: WorkOrderService) => {
+    const master = masterItemForService(service);
+    const description = master?.receiptDescription?.trim();
+    const storedReceiptName = !/^Isi dari paket:/i.test(service.description || '') ? service.description?.trim() : '';
+    const fallback = storedReceiptName || master?.name?.trim() || service.name.replace(/^\s*-\s*/, '').trim();
+    return cleanPackageLabel(description || fallback);
+  };
+  const serviceBarcodeOrCode = (service: WorkOrderService) => {
+    const master = masterItemForService(service);
+    return master?.barcode?.trim() || service.code || master?.code || '-';
+  };
+  const serviceItemCode = (service: WorkOrderService) => service.code || masterItemForService(service)?.code || '-';
+  const packageMembersAfterService = (services: WorkOrderService[], index: number) => {
+    const members: WorkOrderService[] = [];
+    for (let cursor = index + 1; cursor < services.length && isPackageMemberService(services[cursor]); cursor += 1) {
+      members.push(services[cursor]);
+    }
+    return members;
+  };
 
   // Quick-add Item modal state
   const [showQuickAddItem, setShowQuickAddItem] = useState(false);
@@ -925,7 +946,7 @@ export default function WorkOrders() {
         id: `head-${stamp}`,
         itemId: item.id,
         code: item.code,
-        name: `[PAKET] ${item.name}`,
+        name: `[PAKET] ${cleanPackageLabel(item.name)}`,
         description: item.receiptDescription || item.name,
         price: item.sellingPrice,
         qty: 1,
@@ -2432,19 +2453,21 @@ export default function WorkOrders() {
                 </div>
                 <div className="overflow-hidden rounded border border-gray-200">
                 <div className="divide-y divide-gray-100 sm:hidden">
-                  {detailWO.services.map(service => (
+                  {detailWO.services.filter(service => !isPackageMemberService(service)).map(service => (
                     <div key={service.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                      <span><strong>{service.name}</strong> <span className="text-gray-500">×{service.qty}</span></span>
+                      <span><strong>{serviceReceiptName(service)}</strong> <span className="text-gray-500">×{service.qty}</span></span>
                       <span className="font-medium">Rp {(service.price * service.qty).toLocaleString('id-ID')}</span>
                     </div>
                   ))}
                 </div>
                 <table className="hidden w-full min-w-[720px] text-sm sm:table">
-                  <thead className="bg-slate-600 text-xs uppercase text-white"><tr><th className="w-12 px-3 py-2.5 text-center">#</th><th className="px-3 py-2.5 text-left">Layanan / Barang</th><th className="w-24 px-3 py-2.5 text-center">Qty</th><th className="w-40 px-3 py-2.5 text-right">Harga Satuan</th><th className="w-40 px-3 py-2.5 text-right">Subtotal</th><th className="w-14 px-3 py-2.5 text-center">Aksi</th></tr></thead>
+                  <thead className="bg-slate-600 text-xs uppercase text-white"><tr><th className="w-12 px-3 py-2.5 text-center">No</th><th className="px-3 py-2.5 text-left">Nama Barang/Jasa</th><th className="w-40 px-3 py-2.5 text-left">Barcode / Kode</th><th className="w-24 px-3 py-2.5 text-center">Qty</th><th className="w-40 px-3 py-2.5 text-right">Harga</th><th className="w-40 px-3 py-2.5 text-right">Total Harga</th><th className="w-14 px-3 py-2.5 text-center">Aksi</th></tr></thead>
                   <tbody className="divide-y divide-gray-100">
-                    {detailWO.services.length > 0 ? detailWO.services.map((service, index) => (
-                      <tr key={service.id} className="hover:bg-blue-50/40"><td className="px-3 py-2.5 text-center text-xs text-gray-400">{index + 1}</td><td className="px-3 py-2.5"><strong className="text-gray-900">{service.name}</strong>{service.description && service.description !== service.name && <p className="text-xs text-gray-500">{service.description}</p>}</td><td className="px-3 py-2.5 text-center">{service.qty}</td><td className="px-3 py-2.5 text-right">Rp {service.price.toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-right font-semibold">Rp {(service.price * service.qty).toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-center">{hasPermission('wo:edit') && detailWO.status !== 'Closed' && !detailWO.invoiceId && <button type="button" onClick={() => handleOpenModal(detailWO, true)} className="rounded p-1.5 text-blue-600 hover:bg-blue-50" title="Edit layanan"><Edit className="h-4 w-4" /></button>}</td></tr>
-                    )) : <tr><td colSpan={6} className="h-40 text-center text-sm text-gray-400">Belum ada layanan atau barang.</td></tr>}
+                    {detailWO.services.length > 0 ? detailWO.services.map((service, index) => {
+                      if (isPackageMemberService(service)) return null;
+                      const members = isPackageHeaderService(service) ? packageMembersAfterService(detailWO.services, index) : [];
+                      return <tr key={service.id} className={members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}><td className="px-3 py-2.5 text-center text-xs text-gray-400">{detailWO.services.slice(0, index).filter(row => !isPackageMemberService(row)).length + 1}</td><td className="px-3 py-2.5"><strong className="text-gray-900">{serviceReceiptName(service)}</strong><p className="font-mono text-[10px] text-gray-400">{serviceItemCode(service)}</p>{members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</p>)}</div>}</td><td className="px-3 py-2.5 font-mono text-xs text-gray-600">{serviceBarcodeOrCode(service)}</td><td className="px-3 py-2.5 text-center">{service.qty}</td><td className="px-3 py-2.5 text-right">Rp {service.price.toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-right font-semibold">Rp {(service.price * service.qty).toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-center">{hasPermission('wo:edit') && detailWO.status !== 'Closed' && !detailWO.invoiceId && <button type="button" onClick={() => handleOpenModal(detailWO, true)} className="rounded p-1.5 text-blue-600 hover:bg-blue-50" title="Edit layanan"><Edit className="h-4 w-4" /></button>}</td></tr>;
+                    }) : <tr><td colSpan={7} className="h-40 text-center text-sm text-gray-400">Belum ada layanan atau barang.</td></tr>}
                   </tbody>
                 </table></div>
               </div>
@@ -3144,7 +3167,7 @@ export default function WorkOrders() {
                             <span className="mt-0.5 text-xs text-gray-400">{visibleIndex}</span>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <p className={`break-words text-sm font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>{service.name}</p>
+                                <p className={`break-words text-sm font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>{serviceReceiptName(service)}</p>
                                 {isGroupHeader && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-700">Harga Paket</span>}
                               </div>
                               {service.code && <p className="font-mono text-[10px] text-gray-400">{service.code}</p>}
@@ -3153,17 +3176,9 @@ export default function WorkOrders() {
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
-                          <input
-                            type="text"
-                            value={service.description || ''}
-                            onChange={(event) => handleUpdateService(service.id, 'description', event.target.value)}
-                            placeholder="Keterangan (opsional)"
-                            className="mt-2 w-full border-b border-dashed border-gray-200 bg-transparent py-1 text-xs text-gray-500 outline-none focus:border-blue-500"
-                          />
                           {packageMembers.length > 0 && (
-                            <div className="mt-2 rounded-lg bg-white/70 px-2.5 py-2 text-[10px] text-slate-600">
-                              <span className="font-semibold text-purple-600">Isi paket: </span>
-                              {packageMembers.map(member => member.name.replace(/^\s*-\s*/, '')).join(' · ')}
+                            <div className="mt-2 space-y-0.5 rounded-lg bg-white/70 px-2.5 py-2 text-[10px] text-slate-600">
+                              {packageMembers.map(member => <p key={member.id}><span className="font-mono text-purple-500">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</p>)}
                             </div>
                           )}
                           <div className="mt-3 grid grid-cols-[4.25rem_minmax(0,1fr)_auto] items-end gap-2">
@@ -3206,11 +3221,12 @@ export default function WorkOrders() {
                     </div>}
                   </div>
                   <div className="hidden overflow-x-auto rounded border border-gray-200 bg-white sm:block">
-                    <table className="min-w-[720px] w-full text-sm">
+                    <table className="min-w-[920px] w-full text-sm">
                       <thead className={editingWO ? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'}>
                         <tr>
-                          <th className="w-10 px-3 py-2.5 text-center font-medium">#</th>
-                          <th className="px-3 py-2.5 text-left font-medium">Layanan / Barang</th>
+                          <th className="w-10 px-3 py-2.5 text-center font-medium">No</th>
+                          <th className="px-3 py-2.5 text-left font-medium">Nama Barang/Jasa</th>
+                          <th className="w-40 px-3 py-2.5 text-left font-medium">Barcode / Kode</th>
                           <th className="w-24 px-3 py-2.5 text-center font-medium">Qty</th>
                           <th className="w-40 px-3 py-2.5 text-right font-medium">Harga Satuan</th>
                           <th className="w-36 px-3 py-2.5 text-right font-medium">Subtotal</th>
@@ -3236,34 +3252,22 @@ export default function WorkOrders() {
                                 <div className="flex items-start gap-2">
                                   <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center gap-1.5">
-                                      <p className={`font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>{service.name}</p>
+                                      <p className={`font-semibold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>{serviceReceiptName(service)}</p>
                                       {isGroupHeader && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">Harga Paket</span>}
                                     </div>
-                                    {service.code && <p className="font-mono text-[10px] text-gray-400">{service.code}</p>}
-                                    <input
-                                      type="text"
-                                      value={service.description || ''}
-                                      onChange={(e) => handleUpdateService(service.id, 'description', e.target.value)}
-                                      placeholder="Keterangan (opsional)"
-                                      className="mt-1 w-full border-b border-dashed border-gray-200 bg-transparent py-0.5 text-xs text-gray-500 outline-none focus:border-blue-500"
-                                    />
+                                    <p className="font-mono text-[10px] text-gray-400">{serviceItemCode(service)}</p>
                                     {packageMembers.length > 0 && (
                                       <div className="mt-1.5 border-l-2 border-purple-200 pl-2 text-[11px] text-slate-600">
                                         <span className="mr-2 font-semibold text-purple-600">Isi paket:</span>
                                         <span className="inline-flex flex-wrap gap-x-3 gap-y-0.5">
-                                          {packageMembers.map(member => (
-                                            <span key={member.id} className="inline-flex min-w-0 items-center gap-1">
-                                              <span className="text-purple-400">•</span>
-                                              <span>{member.name.replace(/^\s*-\s*/, '')}</span>
-                                              {member.code && <span className="font-mono text-[9px] text-slate-400">{member.code}</span>}
-                                            </span>
-                                          ))}
+                                          {packageMembers.map(member => <span key={member.id} className="inline-flex min-w-0 items-center gap-1"><span className="font-mono text-[9px] text-purple-500">{serviceItemCode(member)}</span><span>· {serviceReceiptName(member)} ×{member.qty}</span></span>)}
                                         </span>
                                       </div>
                                     )}
                                   </div>
                                 </div>
                               </td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-600">{serviceBarcodeOrCode(service)}</td>
                               <td className="px-3 py-2">
                                 <input
                                   type="number"
@@ -3298,7 +3302,7 @@ export default function WorkOrders() {
                         })}
                         {formData.services.filter(service => !isPackageMemberService(service)).length === 0 && (
                           <tr>
-                            <td colSpan={6} className="h-48 px-4 text-center text-sm text-gray-400">
+                            <td colSpan={7} className="h-48 px-4 text-center text-sm text-gray-400">
                               Belum ada layanan atau barang.
                             </td>
                           </tr>
@@ -3306,7 +3310,7 @@ export default function WorkOrders() {
                       </tbody>
                       {editingWO && <tfoot>
                         <tr className="border-t-2 border-blue-300 bg-blue-50">
-                          <td colSpan={4} className="px-3 py-3 text-right font-semibold text-gray-900">TOTAL ESTIMASI</td>
+                          <td colSpan={5} className="px-3 py-3 text-right font-semibold text-gray-900">TOTAL ESTIMASI</td>
                           <td className="px-3 py-3 text-right text-lg font-bold text-blue-700 whitespace-nowrap">Rp {totalServices.toLocaleString('id-ID')}</td>
                           <td></td>
                         </tr>

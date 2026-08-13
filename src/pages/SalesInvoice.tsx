@@ -161,6 +161,15 @@ export default function SalesInvoice() {
     }
     return members;
   };
+  const cleanPackageLabel = (value: string) => value.replace(/^(?:\s*\[PAKET\]\s*)+/i, '').trim();
+  const masterItemForInvoiceItem = (item: InvoiceItem) => data.items.find(master => master.id === item.itemId);
+  const invoiceItemReceiptName = (item: InvoiceItem) => {
+    const master = masterItemForInvoiceItem(item);
+    const storedReceiptName = !/^Isi dari paket:/i.test(item.description || '') ? item.description?.trim() : '';
+    return cleanPackageLabel(master?.receiptDescription?.trim() || storedReceiptName || master?.name?.trim() || item.name.replace(/^\s*-\s*/, '').trim());
+  };
+  const invoiceItemCode = (item: InvoiceItem) => item.code || masterItemForInvoiceItem(item)?.code || '-';
+  const invoiceItemBarcodeOrCode = (item: InvoiceItem) => masterItemForInvoiceItem(item)?.barcode?.trim() || invoiceItemCode(item);
   const updateInvoiceItems = (items: InvoiceItem[], id: string, field: 'qty' | 'price', value: number) => {
     const targetIndex = items.findIndex(item => item.id === id);
     if (targetIndex < 0) return items;
@@ -1015,18 +1024,20 @@ export default function SalesInvoice() {
                     <div className="relative w-full max-w-xl"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300"/><input disabled placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 bg-gray-100 pl-9 pr-10 text-sm text-gray-400"/><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-300"/></div>
                     <strong className="shrink-0 text-sm text-gray-700">{visibleItems.length} Barang/Jasa</strong>
                   </div>
-                  <div className="hidden grid-cols-[minmax(260px,1fr)_90px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid"><span>Nama Barang/Jasa</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span></div>
-                  <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-y-auto border border-gray-200 p-1">
+                  <div className="hidden min-w-[980px] grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid"><span className="text-center">No</span><span>Nama Barang/Jasa</span><span>Barcode / Kode</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span></div>
+                  <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-auto border border-gray-200 p-1">
                     {items.length > 0 ? items.map((item, index) => {
                       if (isPackageMemberItem(item)) return null;
                       const members = isPackageHeaderItem(item) ? packageMembersAfter(items, index) : [];
                       return (
-                        <div key={`${item.id}-${index}`} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:grid-cols-[minmax(260px,1fr)_90px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                        <div key={`${item.id}-${index}`} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                          <div className="hidden text-center text-xs text-gray-400 lg:block">{items.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1}</div>
                           <div className="min-w-0">
-                            <p className="truncate font-medium">{item.name}</p>
-                            <p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa'} · {item.description}</p>
-                            {members.length > 0 && <p className="mt-1 text-[10px] text-purple-700"><strong>Isi paket:</strong> {members.map(member => member.name.replace(/^\s*-\s*/, '')).join(' · ')}</p>}
+                            <p className="truncate font-medium">{invoiceItemReceiptName(item)}</p>
+                            <p className="truncate font-mono text-[10px] text-gray-500">{invoiceItemCode(item)}</p>
+                            {members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{invoiceItemCode(member)}</span> · {invoiceItemReceiptName(member)} ×{member.qty}</p>)}</div>}
                           </div>
+                          <div className="hidden truncate font-mono text-xs text-gray-600 lg:block" title={invoiceItemBarcodeOrCode(item)}>{invoiceItemBarcodeOrCode(item)}</div>
                           <div className="rounded border border-gray-200 bg-gray-100 px-2 py-1 text-center text-gray-600">{item.qty}</div>
                           <div className="rounded border border-gray-200 bg-gray-100 px-2 py-1 text-right text-gray-600">{item.price.toLocaleString('id-ID')}</div>
                           <strong className="hidden text-right tabular-nums lg:block">{(item.price * item.qty).toLocaleString('id-ID')}</strong>
@@ -1201,20 +1212,22 @@ export default function SalesInvoice() {
                   </select>
                   <button type="button" disabled={!formItemToAdd} onClick={addFormItem} className="rounded bg-blue-700 px-4 py-2 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
                 </div>
-                <div className="hidden grid-cols-[minmax(260px,1fr)_90px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid">
-                  <span>Nama Barang/Jasa</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span>
+                <div className="hidden min-w-[980px] grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid">
+                  <span className="text-center">No</span><span>Nama Barang/Jasa</span><span>Barcode / Kode</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span>
                 </div>
-                <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-y-auto border border-gray-200 p-1">
+                <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-auto border border-gray-200 p-1">
                   {formItems.map((item, index) => {
                     if (isPackageMemberItem(item)) return null;
                     const members = isPackageHeaderItem(item) ? packageMembersAfter(formItems, index) : [];
                     return (
-                      <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:grid-cols-[minmax(260px,1fr)_90px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                      <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                        <div className="hidden text-center text-xs text-gray-400 lg:block">{formItems.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1}</div>
                         <div className="min-w-0">
-                          <p className="truncate font-medium">{item.name}</p>
-                          <p className="truncate text-[10px] text-gray-500">{item.code || 'Jasa'} · {item.description}</p>
-                          {members.length > 0 && <p className="mt-1 text-[10px] text-purple-700"><strong>Isi paket:</strong> {members.map(member => member.name.replace(/^\s*-\s*/, '')).join(' • ')}</p>}
+                          <p className="truncate font-medium">{invoiceItemReceiptName(item)}</p>
+                          <p className="truncate font-mono text-[10px] text-gray-500">{invoiceItemCode(item)}</p>
+                          {members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{invoiceItemCode(member)}</span> · {invoiceItemReceiptName(member)} ×{member.qty}</p>)}</div>}
                         </div>
+                        <div className="hidden truncate font-mono text-xs text-gray-600 lg:block" title={invoiceItemBarcodeOrCode(item)}>{invoiceItemBarcodeOrCode(item)}</div>
                         <input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(e) => updateFormItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
                         <input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(e) => updateFormItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
                         <strong className="hidden text-right tabular-nums lg:block">{(item.price * item.qty).toLocaleString('id-ID')}</strong>
