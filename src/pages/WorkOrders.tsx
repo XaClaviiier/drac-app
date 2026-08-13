@@ -114,13 +114,13 @@ export default function WorkOrders() {
   const [savingPendingTemplates, setSavingPendingTemplates] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterCustomer, setFilterCustomer] = useState('');
   const [periodFilter, setPeriodFilter] = useState<WorkOrderPeriod>('all');
   // State lama dipertahankan sementara agar tampilan mobile lama tetap kompatibel.
   const [todayOnly, setTodayOnly] = useState(false);
   const [activeBranchOnly, setActiveBranchOnly] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<WorkOrderColumnKey[]>(DEFAULT_WORK_ORDER_COLUMNS);
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
@@ -648,8 +648,7 @@ export default function WorkOrders() {
           (data.customers.find(customer => customer.id === wo.customerRefId || customer.customerCode === wo.customerId)?.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           wo.plateNumber.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = !filterStatus || wo.status === filterStatus;
-        const matchesCustomer = !filterCustomer || wo.customerName === filterCustomer;
-        return matchesSearch && matchesStatus && matchesCustomer;
+        return matchesSearch && matchesStatus;
       })
       .sort((a, b) => {
         // Newest first: compare by date desc, then by WO number desc (for same-day records)
@@ -662,19 +661,19 @@ export default function WorkOrders() {
     data.customers,
     searchTerm,
     filterStatus,
-    filterCustomer,
     isAllBranchDropdown,
     activeBranchIds,
     selectedBranchId,
     periodRange,
   ]);
 
-  const workOrderCustomers = useMemo(() => Array.from(new Set(
-    data.workOrders
-      .filter(wo => isAllBranchDropdown ? activeBranchIds.includes(wo.branchId) : wo.branchId === selectedBranchId)
-      .map(wo => wo.customerName)
-      .filter(Boolean)
-  )).sort((left, right) => left.localeCompare(right)), [data.workOrders, isAllBranchDropdown, activeBranchIds, selectedBranchId]);
+  const activeFilterCount = (filterStatus ? 1 : 0) + (periodFilter !== 'all' ? 1 : 0);
+  const resetWorkOrderFilters = () => {
+    setFilterStatus('');
+    setPeriodFilter('all');
+    setDateFrom('');
+    setDateTo('');
+  };
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
   const newWOReadyForProcess = Boolean(
@@ -1674,6 +1673,11 @@ export default function WorkOrders() {
           </div>
         )}
         <div className="ml-auto flex h-11 items-center gap-3 border-b-0 px-2 text-xs font-medium text-gray-500">
+          <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex items-center gap-1.5 font-semibold ${activeFilterCount > 0 ? 'text-emerald-700' : 'text-gray-500'}`} title="Buka filter Order Kerja">
+            <span className={`h-2 w-2 rounded-full ${activeFilterCount > 0 ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+            {activeFilterCount > 0 ? `Filter Aktif (${activeFilterCount})` : 'Tanpa Filter'}
+          </button>
+          <span className="text-gray-300">â€¢</span>
           <span className="font-semibold text-gray-700">{branchScopeLabel}</span>
           <span className="text-gray-300">•</span>
           <span className="font-semibold text-blue-700">{filteredWOs.length} WO</span>
@@ -1702,39 +1706,28 @@ export default function WorkOrders() {
               className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
-          <select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className="h-10 min-w-[175px] flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[190px]">
-            <option value="">Pelanggan: Semua</option>
-            {workOrderCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}
-          </select>
-          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="h-10 min-w-[145px] flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[155px]">
-            <option value="">Status: Semua</option>
-            <option value="Register">Register</option>
-            <option value="Proses">Dikerjakan</option>
-            <option value="Selesai">Selesai</option>
-            <option value="Closed">Lost Sales</option>
-          </select>
-          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="h-10 min-w-[140px] flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[150px]">
-            <option value="all">Semua Tanggal</option>
-            <option value="today">Hari Ini</option>
-            <option value="7days">7 Hari</option>
-            <option value="thisMonth">Bulan Ini</option>
-            <option value="lastMonth">Bulan Lalu</option>
-            <option value="custom">Pilih Tanggal</option>
-          </select>
           {periodFilter === 'custom' && (
-            <div className="flex items-center gap-1">
+            <div className="hidden items-center gap-1">
               <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
               <span className="text-gray-400">–</span>
               <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
             </div>
           )}
-          <button type="button" onClick={() => { setSearchTerm(''); setFilterCustomer(''); setFilterStatus(''); setPeriodFilter('all'); setDateFrom(''); setDateTo(''); }} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-lg border border-blue-500 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100" title="Kosongkan semua filter"><Filter className="h-4 w-4"/><span className="hidden 2xl:inline">Reset</span></button>
-          <div className="ml-auto flex flex-wrap items-center gap-2 xl:ml-0 xl:flex-nowrap">
           {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4" /><span className="hidden xl:inline">WO Baru</span></button>}
-          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="inline-flex h-10 flex-shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
+          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
           </button>
+          <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
+            <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
+            {showFilterPanel && <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+              <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Order Kerja</strong><button type="button" onClick={resetWorkOrderFilters} className="text-xs font-semibold text-blue-700 hover:underline">Reset</button></div>
+              <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal text-gray-800"><option value="">Semua Status</option><option value="Register">Register</option><option value="Proses">Dikerjakan</option><option value="Selesai">Selesai</option><option value="Closed">Lost Sales</option></select></label>
+              <label className="mt-3 block text-xs font-semibold text-gray-600">Tanggal<select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal text-gray-800"><option value="all">Semua Tanggal</option><option value="today">Hari Ini</option><option value="7days">7 Hari Terakhir</option><option value="thisMonth">Bulan Ini</option><option value="lastMonth">Bulan Lalu</option><option value="custom">Pilih Tanggal</option></select></label>
+              {periodFilter === 'custom' && <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs text-gray-600">Dari<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-2 text-xs" /></label><label className="text-xs text-gray-600">Sampai<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-2 text-xs" /></label></div>}
+              <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
+            </div>}
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2 xl:flex-nowrap">
           <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download"><Download className="h-4 w-4" /></button>
           <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Print"><Printer className="h-4 w-4" /></button>
           <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnPicker(false); }}>
