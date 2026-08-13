@@ -3,7 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import {
   Banknote,
   CalendarDays,
+  Edit3,
   Landmark,
+  LockKeyhole,
   MessageCircle,
   Plus,
   RefreshCw,
@@ -34,6 +36,8 @@ type PaymentRow = {
   accountName?: string;
   branchId: string;
   createdByName?: string;
+  notes?: string;
+  isDeposited?: boolean;
 };
 type CashAccount = {
   id: string;
@@ -67,6 +71,7 @@ export default function CustomerPayments() {
     [search, setSearch] = useState(""),
     [showForm, setShowForm] = useState(false),
     [invoiceSearch, setInvoiceSearch] = useState("");
+  const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
   const [period, setPeriod] = useState<Period>("this_month"),
     [dateFrom, setDateFrom] = useState(""),
     [dateTo, setDateTo] = useState("");
@@ -82,6 +87,7 @@ export default function CustomerPayments() {
     paymentMethod: "Tunai",
     accountId: "",
     notes: "",
+    reason: "",
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -108,7 +114,8 @@ export default function CustomerPayments() {
       (currentBranchId === "ALL" || i.branchId === currentBranchId),
   );
   const invoice = data.invoices.find((i) => i.id === form.invoiceId),
-    outstanding = invoice ? Math.max(0, invoice.total - invoice.payment) : 0;
+    outstanding = invoice ? Math.max(0, invoice.total - invoice.payment) : 0,
+    maximumEditableAmount = outstanding + (editingPayment?.amount || 0);
   const invoiceChoices = useMemo(() => {
     const q = invoiceSearch.trim().toLowerCase();
     return unpaid
@@ -155,6 +162,7 @@ export default function CustomerPayments() {
       paymentMethod: "Tunai",
       accountId: "",
       notes: "",
+      reason: "",
     });
     setShowForm(true);
     setSearchParams({}, { replace: true });
@@ -228,17 +236,24 @@ export default function CustomerPayments() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!invoice || form.amount <= 0 || form.amount > outstanding)
+    const maximum = editingPayment ? maximumEditableAmount : outstanding;
+    if (!invoice || form.amount <= 0 || form.amount > maximum)
       return window.alert("Periksa faktur dan nominal pembayaran.");
-    const r = await api.create("customer-payments", form);
+    if (editingPayment && !form.reason.trim())
+      return window.alert("Alasan perubahan pembayaran wajib diisi.");
+    const r = editingPayment
+      ? await api.update("customer-payments", editingPayment.id, form)
+      : await api.create("customer-payments", form);
     if (!r.success) return window.alert(r.message);
     await refreshData();
     await load();
-    setShowForm(false);
-    setInvoiceSearch("");
-    setForm(emptyForm);
+    closeForm();
   };
   const remove = async (row: PaymentRow) => {
+    if (row.isDeposited)
+      return window.alert(
+        "Pembayaran sudah masuk setoran cabang. Batalkan setoran terlebih dahulu.",
+      );
     const reason = window.prompt(`Alasan menghapus ${row.paymentNumber}:`);
     if (reason === null) return;
     if (!reason.trim()) return window.alert("Alasan penghapusan wajib diisi.");
@@ -282,9 +297,34 @@ export default function CustomerPayments() {
     );
   };
   const openForm = () => {
+    setEditingPayment(null);
     setForm(emptyForm);
     setInvoiceSearch("");
     setShowForm(true);
+  };
+  const openEdit = (row: PaymentRow) => {
+    if (row.isDeposited)
+      return window.alert(
+        "Pembayaran sudah masuk setoran cabang. Batalkan setoran terlebih dahulu.",
+      );
+    setEditingPayment(row);
+    setInvoiceSearch("");
+    setForm({
+      invoiceId: row.invoiceId,
+      date: row.date,
+      amount: row.amount,
+      paymentMethod: row.paymentMethod === "Transfer" ? "Transfer" : "Tunai",
+      accountId: row.accountId || "",
+      notes: row.notes || "",
+      reason: "",
+    });
+    setShowForm(true);
+  };
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingPayment(null);
+    setInvoiceSearch("");
+    setForm(emptyForm);
   };
 
   return (
@@ -475,6 +515,16 @@ export default function CustomerPayments() {
                 <td className="px-3">{r.createdByName || "-"}</td>
                 <td className="px-3">
                   <div className="flex items-center gap-1">
+                    {hasPermission("payment:edit") && (
+                      <button
+                        onClick={() => openEdit(r)}
+                        title={r.isDeposited ? "Terkunci karena sudah masuk setoran" : "Edit pembayaran"}
+                        disabled={r.isDeposited}
+                        className="rounded p-1.5 text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300"
+                      >
+                        {r.isDeposited ? <LockKeyhole className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                      </button>
+                    )}
                     <button
                       onClick={() => sendWhatsApp(r)}
                       title={customerPhone(r) ? "Kirim konfirmasi via WhatsApp" : "Nomor WhatsApp belum tersedia"}
@@ -486,8 +536,9 @@ export default function CustomerPayments() {
                     {hasPermission("payment:delete") && (
                       <button
                         onClick={() => void remove(r)}
-                        title="Hapus pembayaran"
-                        className="rounded p-2 text-red-600 hover:bg-red-50"
+                        title={r.isDeposited ? "Terkunci karena sudah masuk setoran" : "Hapus pembayaran"}
+                        disabled={r.isDeposited}
+                        className="rounded p-2 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-gray-300"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -520,6 +571,16 @@ export default function CustomerPayments() {
                 </p>
               </div>
               <div className="flex items-start gap-2">
+                {hasPermission("payment:edit") && (
+                  <button
+                    onClick={() => openEdit(r)}
+                    disabled={r.isDeposited}
+                    title={r.isDeposited ? "Terkunci karena sudah masuk setoran" : "Edit pembayaran"}
+                    className="rounded-lg bg-blue-50 p-1.5 text-blue-600 disabled:bg-gray-50 disabled:text-gray-300"
+                  >
+                    {r.isDeposited ? <LockKeyhole className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                  </button>
+                )}
                 <button
                   onClick={() => sendWhatsApp(r)}
                   disabled={!customerPhone(r)}
@@ -556,10 +617,11 @@ export default function CustomerPayments() {
             {hasPermission("payment:delete") && (
               <button
                 onClick={() => void remove(r)}
-                className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-red-200 py-2 text-xs font-semibold text-red-600"
+                disabled={r.isDeposited}
+                className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-red-200 py-2 text-xs font-semibold text-red-600 disabled:border-gray-200 disabled:text-gray-400"
               >
-                <Trash2 className="h-3.5 w-3.5" />
-                Hapus Pembayaran
+                {r.isDeposited ? <LockKeyhole className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+                {r.isDeposited ? "Sudah Masuk Setoran" : "Hapus Pembayaran"}
               </button>
             )}
           </article>
@@ -580,26 +642,29 @@ export default function CustomerPayments() {
             <header className="sticky top-0 z-10 flex justify-between border-b bg-white p-4">
               <b className="flex items-center gap-2">
                 <Banknote />
-                Pembayaran Pelanggan
+                {editingPayment ? `Edit ${editingPayment.paymentNumber}` : "Pembayaran Pelanggan"}
               </b>
-              <button type="button" onClick={() => setShowForm(false)}>
+              <button type="button" onClick={closeForm}>
                 <X />
               </button>
             </header>
             <div className="space-y-4 p-5">
-              <label className="block text-sm">
-                Cari Faktur
-                <input
-                  value={invoiceSearch}
-                  onChange={(e) => setInvoiceSearch(e.target.value)}
-                  placeholder="Nomor faktur, pelanggan, HP, atau kendaraan"
-                  className="mt-1 w-full rounded-lg border p-2.5"
-                />
-              </label>
+              {!editingPayment && (
+                <label className="block text-sm">
+                  Cari Faktur
+                  <input
+                    value={invoiceSearch}
+                    onChange={(e) => setInvoiceSearch(e.target.value)}
+                    placeholder="Nomor faktur, pelanggan, HP, atau kendaraan"
+                    className="mt-1 w-full rounded-lg border p-2.5"
+                  />
+                </label>
+              )}
               <label className="block text-sm">
                 Faktur
                 <select
                   required
+                  disabled={!!editingPayment}
                   value={form.invoiceId}
                   onChange={(e) => {
                     const selected = data.invoices.find(
@@ -612,12 +677,12 @@ export default function CustomerPayments() {
                       accountId: "",
                     });
                   }}
-                  className="mt-1 w-full rounded-lg border p-2.5"
+                  className="mt-1 w-full rounded-lg border p-2.5 disabled:bg-gray-100"
                 >
                   <option value="">
                     Pilih faktur ({invoiceChoices.length})
                   </option>
-                  {invoiceChoices.map((i) => (
+                  {(editingPayment && invoice ? [invoice] : invoiceChoices).map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.invoiceNumber} · {i.customerName} ·{" "}
                       {rupiah(i.total - i.payment)}
@@ -635,12 +700,12 @@ export default function CustomerPayments() {
                   <span>
                     Dibayar
                     <br />
-                    <b>{rupiah(invoice.payment)}</b>
+                    <b>{rupiah(editingPayment ? Math.max(0, invoice.payment - editingPayment.amount) : invoice.payment)}</b>
                   </span>
                   <span>
                     Sisa
                     <br />
-                    <b className="text-red-600">{rupiah(outstanding)}</b>
+                    <b className="text-red-600">{rupiah(editingPayment ? maximumEditableAmount : outstanding)}</b>
                   </span>
                 </div>
               )}
@@ -699,7 +764,7 @@ export default function CustomerPayments() {
                 <input
                   type="number"
                   min="1"
-                  max={outstanding}
+                  max={editingPayment ? maximumEditableAmount : outstanding}
                   value={form.amount || ""}
                   onChange={(e) =>
                     setForm({ ...form, amount: Number(e.target.value) })
@@ -715,17 +780,30 @@ export default function CustomerPayments() {
                   className="mt-1 w-full rounded-lg border p-2.5"
                 />
               </label>
+              {editingPayment && (
+                <label className="block text-sm font-medium text-amber-800">
+                  Alasan Perubahan *
+                  <textarea
+                    required
+                    value={form.reason}
+                    onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                    placeholder="Contoh: salah pilih metode pembayaran"
+                    className="mt-1 w-full rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-gray-900"
+                  />
+                  <small className="font-normal">Perubahan sebelum dan sesudah disimpan ke audit.</small>
+                </label>
+              )}
             </div>
             <footer className="sticky bottom-0 flex justify-end gap-2 border-t bg-white p-4">
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={closeForm}
                 className="rounded-lg border px-4 py-2"
               >
                 Batal
               </button>
               <button className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white">
-                Simpan Pembayaran
+                {editingPayment ? "Simpan Perubahan" : "Simpan Pembayaran"}
               </button>
             </footer>
           </form>

@@ -65,11 +65,26 @@ function writePaymentAudit(PDO $pdo, array $payment, string $action, string $rea
         ->execute([$payment['id'] ?? null,$payment['payment_number'] ?? '',$payment['invoice_id'] ?? '',$action,substr($reason,0,255),json_encode($payment),$user['id'] ?? null,$user['name'] ?? $user['username'] ?? null]);
 }
 
+// Setoran cabang saat ini bersifat agregat, belum menunjuk pembayaran satu per satu.
+// Karena itu pembayaran dikunci secara konservatif bila akun tunai yang sama sudah
+// memiliki setoran aktif pada tanggal pembayaran atau setelahnya.
+function paymentIsIncludedInDeposit(PDO $pdo, array $payment): bool {
+    if (empty($payment['account_id'])) return false;
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM branch_deposits
+        WHERE branch_id=? AND source_account_id=?
+          AND status IN ('Dikirim','Terverifikasi') AND date>=?");
+    $stmt->execute([$payment['branch_id'],$payment['account_id'],$payment['date']]);
+    return (int)$stmt->fetchColumn() > 0;
+}
+
 switch ($method) {
 case 'GET':
     $user = requireUserPermission($pdo, 'payment:view');
     $rows = $pdo->query("SELECT p.*,i.invoice_number,i.customer_name,i.customer_id,i.vehicle_info,
-                i.total invoice_total,i.payment invoice_paid,i.status invoice_status
+                i.total invoice_total,i.payment invoice_paid,i.status invoice_status,
+                EXISTS(SELECT 1 FROM branch_deposits d
+                    WHERE d.branch_id=p.branch_id AND d.source_account_id=p.account_id
+                      AND d.status IN ('Dikirim','Terverifikasi') AND d.date>=p.date) is_deposited
         FROM customer_payments p JOIN sales_invoices i ON i.id=p.invoice_id
         ORDER BY p.invoice_id,p.date ASC,p.created_at ASC,p.id ASC")->fetchAll();
     $running = [];$result = [];
@@ -84,6 +99,7 @@ case 'GET':
         $row['paymentStatus']=$row['balanceAfter']<=0?'Lunas':'Cicilan';
         $row['paymentMethod']=$row['payment_method'];$row['accountId']=$row['account_id'];$row['accountName']=$row['account_name'];
         $row['branchId']=$row['branch_id'];$row['createdByName']=$row['created_by_name'];$row['createdAt']=$row['created_at'];
+        $row['notes']=$row['notes']??'';$row['isDeposited']=(bool)($row['is_deposited']??false);
         $result[]=$row;
     }
     usort($result,fn($a,$b)=>strcmp(($b['date']??'').' '.($b['created_at']??''),($a['date']??'').' '.($a['created_at']??'')));
@@ -124,6 +140,48 @@ case 'POST':
         recalculateCustomerInvoice($pdo,$invoiceId);$pdo->commit();respondSuccess(['id'=>$paymentId,'paymentNumber'=>$number],'Pembayaran pelanggan disimpan');
     }catch(Exception $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}break;
 
+case 'PUT':
+    $user=requireUserPermission($pdo,'payment:edit');$d=getInput();$pdo->beginTransaction();
+    try {
+        if(!$id)throw new Exception('ID pembayaran wajib diisi');
+        $stmt=$pdo->prepare("SELECT * FROM customer_payments WHERE id=? FOR UPDATE");$stmt->execute([$id]);$payment=$stmt->fetch();
+        if(!$payment)throw new Exception('Pembayaran tidak ditemukan');
+        if(!paymentUserCanAccessBranch($pdo,$user,(string)$payment['branch_id']))throw new Exception('Tidak memiliki akses ke cabang pembayaran');
+        if(paymentIsIncludedInDeposit($pdo,$payment))throw new Exception('Pembayaran sudah masuk setoran cabang. Batalkan setoran terlebih dahulu sebelum mengedit.');
+        $reason=trim((string)($d['reason']??''));if($reason==='')throw new Exception('Alasan perubahan pembayaran wajib diisi');
+        $invoiceId=(string)$payment['invoice_id'];
+        $invoiceStmt=$pdo->prepare("SELECT * FROM sales_invoices WHERE id=? FOR UPDATE");$invoiceStmt->execute([$invoiceId]);$invoice=$invoiceStmt->fetch();
+        if(!$invoice)throw new Exception('Faktur tidak ditemukan');
+        $otherStmt=$pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE invoice_id=? AND id<>?");
+        $otherStmt->execute([$invoiceId,$id]);$otherPaid=(float)$otherStmt->fetchColumn();
+        $amount=(float)($d['amount']??0);$maximum=max(0,(float)$invoice['total']-$otherPaid);
+        if($amount<=0)throw new Exception('Nominal pembayaran harus lebih dari Rp0');
+        if($amount>$maximum)throw new Exception('Nominal pembayaran melebihi sisa tagihan setelah pembayaran lain');
+        $date=(string)($d['date']??$payment['date']);
+        if($date<$invoice['date'])throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
+        if($date>date('Y-m-d'))throw new Exception('Tanggal pembayaran tidak boleh melewati hari ini');
+        if($date!==$payment['date']&&$date<date('Y-m-d'))requireUserPermission($pdo,'payment:backdate');
+        $methodName=(string)($d['paymentMethod']??$payment['payment_method']);
+        if(!in_array($methodName,['Tunai','Transfer'],true))throw new Exception('Metode pembayaran wajib Tunai atau Transfer');
+        $accountId=(string)($d['accountId']??'');
+        if($accountId===''){
+            $column=$methodName==='Tunai'?'cash_account_id':'bank_account_id';
+            $default=$pdo->prepare("SELECT {$column} FROM branch_account_settings WHERE branch_id=?");$default->execute([$invoice['branch_id']]);
+            $accountId=(string)($default->fetchColumn()?:'');
+        }
+        $accountStmt=$pdo->prepare("SELECT id,name,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1");$accountStmt->execute([$accountId]);$account=$accountStmt->fetch();
+        if(!$account)throw new Exception('Akun penerimaan belum diatur untuk cabang faktur');
+        $expected=$methodName==='Tunai'?'cash':'bank';
+        if($account['account_type']!==$expected)throw new Exception('Jenis akun penerimaan tidak sesuai metode pembayaran');
+        if($account['branch_id']&&$account['branch_id']!==$invoice['branch_id'])throw new Exception('Akun tujuan harus sesuai cabang faktur');
+        writePaymentAudit($pdo,$payment,'edit_before',$reason,$user);
+        $pdo->prepare("UPDATE customer_payments SET date=?,amount=?,payment_method=?,account_id=?,account_name=?,notes=? WHERE id=?")
+            ->execute([$date,$amount,$methodName,$account['id'],$account['name'],trim((string)($d['notes']??''))?:null,$id]);
+        $afterStmt=$pdo->prepare("SELECT * FROM customer_payments WHERE id=?");$afterStmt->execute([$id]);$after=$afterStmt->fetch();
+        writePaymentAudit($pdo,$after?:$payment,'edit_after',$reason,$user);
+        recalculateCustomerInvoice($pdo,$invoiceId);$pdo->commit();respondSuccess(null,'Pembayaran diperbarui dan saldo faktur dihitung ulang');
+    }catch(Exception $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}break;
+
 case 'DELETE':
     $user=requireUserPermission($pdo,'payment:delete');$d=getInput();$pdo->beginTransaction();
     try {
@@ -131,13 +189,14 @@ case 'DELETE':
         if($id==='invoice'){
             $invoiceId=(string)($action??'');if($invoiceId==='')throw new Exception('ID faktur wajib diisi');
             $items=$pdo->prepare("SELECT * FROM customer_payments WHERE invoice_id=? FOR UPDATE");$items->execute([$invoiceId]);$payments=$items->fetchAll();
-            foreach($payments as $payment){if(!paymentUserCanAccessBranch($pdo,$user,(string)$payment['branch_id']))throw new Exception('Tidak memiliki akses ke cabang pembayaran');writePaymentAudit($pdo,$payment,'delete','Faktur terkait dihapus',$user);}
+            foreach($payments as $payment){if(!paymentUserCanAccessBranch($pdo,$user,(string)$payment['branch_id']))throw new Exception('Tidak memiliki akses ke cabang pembayaran');if(paymentIsIncludedInDeposit($pdo,$payment))throw new Exception('Pembayaran sudah masuk setoran cabang. Batalkan setoran terlebih dahulu.');writePaymentAudit($pdo,$payment,'delete','Faktur terkait dihapus',$user);}
             $pdo->prepare("DELETE FROM customer_payments WHERE invoice_id=?")->execute([$invoiceId]);recalculateCustomerInvoice($pdo,$invoiceId);
             $pdo->commit();respondSuccess(null,'Seluruh pembayaran dihapus dan faktur kembali terutang');break;
         }
         $stmt=$pdo->prepare("SELECT * FROM customer_payments WHERE id=? FOR UPDATE");$stmt->execute([$id]);$payment=$stmt->fetch();
         if(!$payment)throw new Exception('Pembayaran tidak ditemukan');
         if(!paymentUserCanAccessBranch($pdo,$user,(string)$payment['branch_id']))throw new Exception('Tidak memiliki akses ke cabang pembayaran');
+        if(paymentIsIncludedInDeposit($pdo,$payment))throw new Exception('Pembayaran sudah masuk setoran cabang. Batalkan setoran terlebih dahulu sebelum menghapus.');
         $reason=trim((string)($d['reason']??''));if($reason==='')throw new Exception('Alasan penghapusan pembayaran wajib diisi');
         writePaymentAudit($pdo,$payment,'delete',$reason,$user);$pdo->prepare("DELETE FROM customer_payments WHERE id=?")->execute([$id]);
         recalculateCustomerInvoice($pdo,(string)$payment['invoice_id']);$pdo->commit();respondSuccess(null,'Pembayaran dihapus dan saldo faktur dihitung ulang');

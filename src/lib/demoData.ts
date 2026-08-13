@@ -5,6 +5,7 @@ const allPermissions: any[] = [
   'dashboard:view',
   'ai:view',
   'invoice:view', 'invoice:create', 'invoice:edit', 'invoice:delete',
+  'payment:view', 'payment:create', 'payment:edit', 'payment:delete', 'payment:backdate',
   'wo:view', 'wo:create', 'wo:edit', 'wo:delete',
   'customer:view', 'customer:create', 'customer:edit', 'customer:delete',
   'vehicle:view', 'vehicle:create', 'vehicle:edit', 'vehicle:delete',

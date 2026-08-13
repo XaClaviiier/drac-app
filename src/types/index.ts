@@ -247,7 +247,7 @@ export type Permission =
   | 'invoice:view' | 'invoice:create' | 'invoice:edit' | 'invoice:delete'
   | 'invoice:backdate'
   | 'wo:view' | 'wo:create' | 'wo:edit' | 'wo:delete' | 'wo:backdate'
-  | 'payment:view' | 'payment:create' | 'payment:delete' | 'payment:backdate'
+  | 'payment:view' | 'payment:create' | 'payment:edit' | 'payment:delete' | 'payment:backdate'
   | 'customer:view' | 'customer:create' | 'customer:edit' | 'customer:delete'
   | 'vehicle:view' | 'vehicle:create' | 'vehicle:edit' | 'vehicle:delete'
   | 'item:view' | 'item:create' | 'item:edit' | 'item:delete'
