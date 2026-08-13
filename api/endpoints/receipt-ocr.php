@@ -15,8 +15,15 @@ Baca nota bengkel kendaraan pada foto. Jangan mengarang nilai yang tidak terliha
 {"date":"DD/MM/YYYY","customerName":"","phone":"","address":"","plate":"","brand":"","model":"","color":"","complaint":"","items":[{"name":"","qty":1,"price":0}],"total":0}
 Aturan: alamat bukan keluhan; merek dan model hanya diisi jika tertulis; angka Panjar bukan total; item yang dicentang dianggap dipilih; harga tanpa nama dipasangkan ke item dicentang terdekat. Gunakan string kosong atau 0 jika tidak terbaca.
 PROMPT;
+$visionModel = trim((string)($config['model'] ?? ''));
+if (!$visionModel || str_contains($visionModel, 'llama-4-scout')) {
+    $visionModel = 'qwen/qwen3.6-27b';
+    // Migrasi transparan: pertahankan key, hanya perbarui model OCR yang sudah dihentikan Groq.
+    $stmt = $pdo->prepare("UPDATE ai_config SET model = ? WHERE id = 2");
+    $stmt->execute([$visionModel]);
+}
 $payload = json_encode([
-    'model' => $config['model'] ?: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    'model' => $visionModel,
     'temperature' => 0,
     'max_tokens' => 1000,
     'response_format' => ['type' => 'json_object'],
@@ -42,6 +49,7 @@ if ($status < 200 || $status >= 300) {
     $msg = $decoded['error']['message'] ?? 'Groq gagal membaca nota';
     if ($status === 401) $msg = 'Groq Key Input Cepat ditolak atau sudah tidak aktif. Tempel key baru pada halaman Input Cepat Historis.';
     if ($status === 429) $msg = 'Kuota Groq sedang habis atau terkena batas. Ganti key atau coba kembali nanti.';
+    if (stripos($msg, 'model') !== false && (stripos($msg, 'does not exist') !== false || stripos($msg, 'access') !== false)) $msg = 'Model OCR Groq tidak tersedia untuk key ini. Model sudah diperbarui ke qwen/qwen3.6-27b; silakan coba upload kembali.';
     respondError($msg, $status === 429 ? 429 : 502);
 }
 $content = $decoded['choices'][0]['message']['content'] ?? '';

@@ -21,9 +21,9 @@ export default function HistoricalQuickEntry(){
   const [accountMaps,setAccountMaps]=useState<AccountMap[]>([]); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
   const [readingReceipt,setReadingReceipt]=useState(false);
   const [receiptStatus,setReceiptStatus]=useState('');
-  const [groqKey,setGroqKey]=useState(''); const [groqModel,setGroqModel]=useState('meta-llama/llama-4-scout-17b-16e-instruct'); const [savingKey,setSavingKey]=useState(false); const [aiConfigured,setAiConfigured]=useState(false);
+  const [groqKey,setGroqKey]=useState(''); const [groqModel,setGroqModel]=useState('qwen/qwen3.6-27b'); const [savingKey,setSavingKey]=useState(false); const [aiConfigured,setAiConfigured]=useState(false);
   useEffect(()=>{ api.get<AccountMap[]>('branch-account-settings').then(r=>setAccountMaps(r.data||[])); },[]);
-  useEffect(()=>{ api.getReceiptAISettings().then(r=>{if(r.success&&r.data){setAiConfigured(!!r.data.configured);setGroqModel(r.data.model||'meta-llama/llama-4-scout-17b-16e-instruct');}}); },[]);
+  useEffect(()=>{ api.getReceiptAISettings().then(r=>{if(r.success&&r.data){setAiConfigured(!!r.data.configured);setGroqModel(r.data.model||'qwen/qwen3.6-27b');}}); },[]);
   useEffect(()=>{ if(branchId) setCurrentBranchId(branchId); },[branchId]);
   const vehicles = useMemo(()=>customer ? data.vehicles.filter(v=>v.customerRefId===customer.id) : data.vehicles,[data.vehicles,customer]);
   const customerResults = customerQuery.length<2?[]:data.customers.filter(c=>`${c.customerCode} ${c.name} ${c.phone}`.toLowerCase().includes(customerQuery.toLowerCase())).slice(0,8);
