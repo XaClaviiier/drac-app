@@ -90,6 +90,9 @@ export const api = {
     request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}`, {
       method: 'POST', body: JSON.stringify({ confirmation }),
     }),
+  exportTransactionBackup: () => request('/transaction-backup', { method: 'GET' }),
+  previewTransactionRestore: (sheets: Record<string, any[]>) => request('/transaction-backup/preview', { method: 'POST', body: JSON.stringify({ sheets }) }),
+  importTransactionRestore: (sheets: Record<string, any[]>, mode: 'insert' | 'upsert') => request('/transaction-backup/import', { method: 'POST', body: JSON.stringify({ sheets, mode }) }),
 
   // ========== GENERIC CRUD ==========
   get: <T = any>(resource: string) => request<T>(`/${resource}`, { method: 'GET' }),

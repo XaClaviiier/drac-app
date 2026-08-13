@@ -3,12 +3,13 @@ import {
   Building2, MapPin, Hash, ShieldCheck, Bot, Save, KeyRound,
   CheckCircle2, AlertTriangle, BookOpenCheck, ClipboardCheck, Wrench, FileText, WalletCards, Database, Trash2,
   GitBranch, Plus, ChevronUp, ChevronDown, Power,
+  Download, Upload, FileSpreadsheet, RotateCcw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 
-type Tab = 'company' | 'branches' | 'documents' | 'workflow' | 'security' | 'ai' | 'guide' | 'maintenance';
+type Tab = 'company' | 'branches' | 'documents' | 'workflow' | 'security' | 'ai' | 'guide' | 'backup' | 'maintenance';
 
 const tabs = [
   { id: 'company' as const, label: 'Profil Perusahaan', icon: Building2 },
@@ -18,8 +19,11 @@ const tabs = [
   { id: 'security' as const, label: 'Keamanan', icon: ShieldCheck },
   { id: 'ai' as const, label: 'Integrasi AI', icon: Bot },
   { id: 'guide' as const, label: 'Panduan Sistem', icon: BookOpenCheck },
+  { id: 'backup' as const, label: 'Backup & Restore', icon: FileSpreadsheet },
   { id: 'maintenance' as const, label: 'Pemeliharaan Data', icon: Database },
 ];
+
+const backupSheetNames = ['Pelanggan', 'Kendaraan', 'WO', 'Detail_WO', 'Faktur', 'Detail_Faktur', 'Pembayaran'] as const;
 
 const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 const labelClass = 'space-y-1.5 text-sm font-medium text-gray-700';
@@ -45,6 +49,11 @@ export default function SettingsPage() {
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceConfirmation, setMaintenanceConfirmation] = useState('');
   const [maintenanceResult, setMaintenanceResult] = useState<any>(null);
+  const [restoreSheets, setRestoreSheets] = useState<Record<string, any[]> | null>(null);
+  const [restoreFileName, setRestoreFileName] = useState('');
+  const [restorePreview, setRestorePreview] = useState<any>(null);
+  const [restoreMode, setRestoreMode] = useState<'insert' | 'upsert'>('insert');
+  const [backupBusy, setBackupBusy] = useState(false);
   const [newLostSalesReason, setNewLostSalesReason] = useState('');
   const canEdit = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator');
   const maintenanceBranch = data.branches.find(branch => branch.id === maintenanceBranchId);
@@ -174,6 +183,97 @@ export default function SettingsPage() {
     }
   };
 
+  const exportBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const result = await api.exportTransactionBackup();
+      if (!result.success || !result.data?.sheets) throw new Error(result.message || 'Gagal mengambil data backup');
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      for (const sheetName of backupSheetNames) {
+        const rows = result.data.sheets[sheetName] || [];
+        const sheet = workbook.addWorksheet(sheetName);
+        const columns = rows.length ? Object.keys(rows[0]) : [];
+        sheet.columns = columns.map(key => ({ header: key, key, width: Math.min(36, Math.max(12, key.length + 2)) }));
+        rows.forEach((row: any) => sheet.addRow(row));
+        sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        sheet.getRow(1).font = { bold: true };
+      }
+      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const url = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `backup-transaksi-drac-${stamp}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      window.alert(error?.message || 'Gagal membuat backup Excel');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const selectRestoreFile = async (file?: File) => {
+    if (!file) return;
+    setBackupBusy(true);
+    setRestorePreview(null);
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const sheets: Record<string, any[]> = {};
+      for (const name of backupSheetNames) {
+        const sheet = workbook.getWorksheet(name);
+        if (!sheet) throw new Error(`Sheet ${name} tidak ditemukan.`);
+        const headers = (sheet.getRow(1).values as any[]).slice(1).map(value => String(value || '').trim());
+        sheets[name] = [];
+        sheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
+          const record: Record<string, any> = {};
+          headers.forEach((header, index) => {
+            if (!header) return;
+            const cellValue: any = row.getCell(index + 1).value;
+            record[header] = cellValue && typeof cellValue === 'object' && 'text' in cellValue ? cellValue.text : (cellValue ?? '');
+          });
+          if (Object.values(record).some(value => value !== '')) sheets[name].push(record);
+        });
+      }
+      const result = await api.previewTransactionRestore(sheets);
+      if (!result.success) throw new Error(result.message || 'Validasi file gagal');
+      setRestoreSheets(sheets);
+      setRestoreFileName(file.name);
+      setRestorePreview(result.data);
+    } catch (error: any) {
+      setRestoreSheets(null);
+      setRestoreFileName('');
+      window.alert(error?.message || 'File backup tidak valid');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const runRestore = async () => {
+    if (!restoreSheets || !restorePreview) return;
+    const warning = restoreMode === 'upsert'
+      ? 'Data dengan ID yang sama akan diperbarui. Data lain tetap dipertahankan.'
+      : 'Restore hanya akan menambah data. ID yang sudah ada akan menyebabkan proses dibatalkan.';
+    if (!window.confirm(`Restore ${restoreFileName}?\n\n${warning}\n\nSistem akan membuat snapshot otomatis sebelum perubahan.`)) return;
+    setBackupBusy(true);
+    try {
+      const result = await api.importTransactionRestore(restoreSheets, restoreMode);
+      if (!result.success) throw new Error(result.message || 'Restore gagal');
+      window.alert(`Restore berhasil. Snapshot: ${result.data?.snapshotId || '-'}\n${result.data?.totalRows || 0} baris diproses.`);
+      setRestoreSheets(null);
+      setRestoreFileName('');
+      setRestorePreview(null);
+    } catch (error: any) {
+      window.alert(error?.message || 'Restore gagal dan seluruh perubahan dibatalkan');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   if (!canEdit) {
     return (
       <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
@@ -194,7 +294,7 @@ export default function SettingsPage() {
 
       <div className="space-y-0">
         <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm">
-          {tabs.filter(item => item.id !== 'maintenance' || currentUser?.isOwner).map(item => {
+          {tabs.filter(item => !['backup', 'maintenance'].includes(item.id) || currentUser?.isOwner).map(item => {
             const Icon = item.icon;
             return (
               <button
@@ -210,7 +310,7 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        <section className={`grid items-start gap-3 pt-0.5 ${tab === 'guide' ? '' : 'lg:grid-cols-[minmax(0,1fr)_120px]'}`}>
+        <section className={`grid items-start gap-3 pt-0.5 ${['guide', 'backup', 'maintenance'].includes(tab) ? '' : 'lg:grid-cols-[minmax(0,1fr)_120px]'}`}>
           {tab === 'company' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Profil Perusahaan" description="Informasi yang tampil pada dokumen dan laporan." />
@@ -365,6 +465,38 @@ export default function SettingsPage() {
 
           {tab === 'guide' && <SystemGuide />}
 
+          {tab === 'backup' && currentUser?.isOwner && (
+            <div className="space-y-5 rounded-md border border-blue-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-3 border-b border-blue-100 pb-4">
+                <span className="rounded-xl bg-blue-100 p-3 text-blue-700"><FileSpreadsheet className="h-7 w-7" /></span>
+                <div><h2 className="text-xl font-bold text-gray-900">Backup & Restore Transaksi</h2><p className="mt-1 text-sm text-gray-500">Pindahkan pelanggan, kendaraan, WO, faktur, dan pembayaran dalam satu Excel yang tetap saling terhubung.</p></div>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex gap-3"><Download className="h-6 w-6 text-emerald-700" /><div><h3 className="font-bold text-emerald-900">Backup ke Excel</h3><p className="mt-1 text-sm text-emerald-700">Unduh seluruh transaksi dalam 7 sheet berelasi.</p></div></div>
+                  <div className="mt-4 flex flex-wrap gap-1.5">{backupSheetNames.map(name => <span key={name} className="rounded-full border border-emerald-200 bg-white px-2 py-1 text-xs font-medium text-emerald-700">{name}</span>)}</div>
+                  <button type="button" onClick={exportBackup} disabled={backupBusy} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:bg-gray-300"><Download className="h-4 w-4" />{backupBusy ? 'Memproses...' : 'Download Backup XLSX'}</button>
+                </section>
+                <section className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex gap-3"><Upload className="h-6 w-6 text-blue-700" /><div><h3 className="font-bold text-blue-900">Restore dari Excel</h3><p className="mt-1 text-sm text-blue-700">Validasi dahulu, lalu restore secara atomik.</p></div></div>
+                  <label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-blue-300 bg-white px-4 py-5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><FileSpreadsheet className="h-5 w-5" />{restoreFileName || 'Pilih file backup .xlsx'}<input type="file" accept=".xlsx" className="hidden" disabled={backupBusy} onChange={event => selectRestoreFile(event.target.files?.[0])} /></label>
+                </section>
+              </div>
+              {restorePreview && (
+                <section className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <div className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-emerald-600" /><div><h3 className="font-bold text-gray-900">File siap dipulihkan</h3><p className="text-xs text-gray-600">{restoreFileName}</p></div></div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">{backupSheetNames.map(name => <div key={name} className="rounded-lg border border-amber-200 bg-white p-2"><p className="truncate text-[11px] text-gray-500">{name}</p><p className="text-lg font-bold">{restorePreview.counts?.[name] || 0}</p></div>)}</div>
+                  {restorePreview.existingTotal > 0 && <p className="mt-3 rounded-lg border border-amber-200 bg-white p-3 text-sm text-amber-800"><AlertTriangle className="mr-1 inline h-4 w-4" />{restorePreview.existingTotal} ID sudah ada di database.</p>}
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <label className={labelClass}><span>Mode restore</span><select className={inputClass} value={restoreMode} onChange={event => setRestoreMode(event.target.value as 'insert' | 'upsert')}><option value="insert">Tambah baru saja (paling aman)</option><option value="upsert">Tambah + perbarui ID yang sama</option></select></label>
+                    <div className="flex gap-2"><button type="button" onClick={() => { setRestoreSheets(null); setRestorePreview(null); setRestoreFileName(''); }} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold"><RotateCcw className="h-4 w-4" />Batal</button><button type="button" onClick={runRestore} disabled={backupBusy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-gray-300"><Upload className="h-4 w-4" />{backupBusy ? 'Memulihkan...' : 'Jalankan Restore'}</button></div>
+                  </div>
+                </section>
+              )}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600"><strong>Pengaman:</strong> hanya Owner; relasi divalidasi, snapshot otomatis dibuat, dan kegagalan membatalkan seluruh perubahan.</div>
+            </div>
+          )}
+
           {tab === 'maintenance' && currentUser?.isOwner && (
             <div className="space-y-4 rounded-md border border-red-200 bg-white p-5 shadow-sm">
               <div className="flex items-start gap-3 border-b border-red-100 pb-4">
@@ -412,11 +544,11 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {tab !== 'guide' && tab !== 'maintenance' && <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+          {tab !== 'guide' && tab !== 'backup' && tab !== 'maintenance' && <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
             <Save className="h-12 w-12" />
           </button>}
 
-          {tab !== 'guide' && tab !== 'maintenance' && <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
+          {tab !== 'guide' && tab !== 'backup' && tab !== 'maintenance' && <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
             <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <Save className="h-4 w-4" /> {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>

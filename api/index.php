@@ -75,6 +75,9 @@ if ($requestUser && $resource === 'quick-invoices') {
 if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
     requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
 }
+if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is_owner'])) {
+    respondError('Backup dan restore transaksi hanya dapat dilakukan Owner', 403);
+}
 
 // ==========================================================
 // ROUTING
@@ -176,6 +179,9 @@ try {
             break;
         case 'data-maintenance':
             require 'endpoints/data-maintenance.php';
+            break;
+        case 'transaction-backup':
+            require 'endpoints/transaction-backup.php';
             break;
 
         // ----- GOODS RECEIPTS -----
