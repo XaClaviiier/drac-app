@@ -195,7 +195,7 @@ const render = (t: string) =>
 export default function AIAssistant() {
   const {
     data, currentUser, currentBranchId, setCurrentBranchId,
-    addWorkOrder, addCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
+    addWorkOrder, addCustomer, updateCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
     hasPermission, refreshData,
   } = useApp();
 
@@ -1335,6 +1335,18 @@ ${buildSmartContext(userMsgText)}`;
         createdAt: transactionDate,
         branchId,
       });
+    } else if (customer) {
+      // REG WO boleh melengkapi data pelanggan lama. Nilai kosong dari parser/AI
+      // tidak boleh menghapus telepon atau alamat yang sudah tersimpan.
+      const suppliedPhone = String(a.phone || '').replace(/\D/g, '');
+      const suppliedAddress = String(a.address || '').trim();
+      const nextPhone = suppliedPhone || customer.phone || '';
+      const nextAddress = suppliedAddress || customer.address || '';
+      if (nextPhone !== (customer.phone || '') || nextAddress !== (customer.address || '')) {
+        const updatedCustomer = { ...customer, phone: nextPhone, address: nextAddress };
+        await updateCustomer(customer.id, updatedCustomer);
+        customer = updatedCustomer;
+      }
     }
 
     // 2. Kendaraan
@@ -1413,8 +1425,15 @@ ${buildSmartContext(userMsgText)}`;
       };
       await addVehicle(newV);
       vehicle = newV;
-    } else if (vehicle && customer && vehicle.customerRefId !== customer.id) {
+    } else if (vehicle && customer && (
+      vehicle.customerRefId !== customer.id
+      || vehicle.phone !== customer.phone
+      || vehicle.address !== customer.address
+      || vehicle.customerName !== customer.name
+      || vehicle.customerId !== customer.customerCode
+    )) {
       // Setelah aksi dikonfirmasi, pelanggan yang dipilih menjadi pemilik aktif.
+      // Telepon dan alamat juga selalu disinkronkan walau pemiliknya tetap sama.
       const updatedVehicle = {
         ...vehicle,
         customerRefId: customer.id,
