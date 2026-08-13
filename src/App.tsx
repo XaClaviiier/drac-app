@@ -28,6 +28,7 @@ import SalesReport from './pages/SalesReport';
 import PurchaseReport from './pages/PurchaseReport';
 import InventoryReport from './pages/InventoryReport';
 import CashBankReport from './pages/CashBankReport';
+import HistoricalQuickEntry from './pages/HistoricalQuickEntry';
 import type { Permission } from './types';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -77,6 +78,7 @@ function AppRoutes() {
         <Route path="customers" element={protectedPage('customer:view', <Customers />)} />
         <Route path="workorders" element={protectedPage('wo:view', <WorkOrders />)} />
         <Route path="workorders/timeline" element={protectedPage('wo:view', <WorkOrderTimeline />)} />
+        <Route path="historical-entry" element={protectedPage('invoice:create', <HistoricalQuickEntry />)} />
         <Route path="reports/workorders" element={protectedPage('report:view', <WorkOrderReport />)} />
         <Route path="reports/sales" element={protectedPage('report:view', <SalesReport />)} />
         <Route path="reports/purchases" element={protectedPage('report:view', <PurchaseReport />)} />

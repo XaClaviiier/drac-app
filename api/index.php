@@ -72,6 +72,9 @@ if ($requestUser && $resource === 'ai-chat') {
 if ($requestUser && $resource === 'quick-invoices') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
 }
+if ($requestUser && $resource === 'historical-entries') {
+    requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
+}
 if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
     requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
 }
@@ -161,6 +164,9 @@ try {
             break;
         case 'quick-invoices':
             require 'endpoints/quick-invoices.php';
+            break;
+        case 'historical-entries':
+            require 'endpoints/historical-entries.php';
             break;
         case 'cash-accounts':
             require 'endpoints/cash-accounts.php';

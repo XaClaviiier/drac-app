@@ -1,0 +1,60 @@
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarClock, CheckCircle2, FileText, Search, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { api } from '../lib/apiClient';
+import type { Customer, Item, Vehicle } from '../types';
+
+type Line = { item: Item; qty: number; price: number };
+type AccountMap = { branchId: string; bankAccountId: string };
+const today = () => new Date().toISOString().slice(0,10);
+const normalize = (v:string) => v.toUpperCase().replace(/[^A-Z0-9]/g,'');
+
+export default function HistoricalQuickEntry(){
+  const { data, currentBranchId, setCurrentBranchId, currentUser, refreshData } = useApp();
+  const allowedBranches = data.branches.filter(b => b.isActive && (currentUser?.isOwner || currentUser?.permissions?.includes('branch:all') || currentUser?.branchIds?.includes(b.id) || currentUser?.branchId===b.id));
+  const [mode,setMode]=useState<'text'|'form'>('text');
+  const [branchId,setBranchId]=useState(currentBranchId==='ALL' ? (allowedBranches[0]?.id||'') : currentBranchId);
+  const [date,setDate]=useState(today()); const [customer,setCustomer]=useState<Customer|null>(null); const [vehicle,setVehicle]=useState<Vehicle|null>(null);
+  const [customerQuery,setCustomerQuery]=useState(''); const [vehicleQuery,setVehicleQuery]=useState(''); const [itemQuery,setItemQuery]=useState('');
+  const [lines,setLines]=useState<Line[]>([]); const [description,setDescription]=useState('Transaksi historis');
+  const [text,setText]=useState('Tanggal: 2/1/26\nPelanggan: ALEXANDER\nKendaraan: DD1234AB\nItem: JSA-001 x1 @200000');
+  const [accountMaps,setAccountMaps]=useState<AccountMap[]>([]); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
+  useEffect(()=>{ api.get<AccountMap[]>('branch-account-settings').then(r=>setAccountMaps(r.data||[])); },[]);
+  useEffect(()=>{ if(branchId) setCurrentBranchId(branchId); },[branchId]);
+  const vehicles = useMemo(()=>customer ? data.vehicles.filter(v=>v.customerRefId===customer.id) : data.vehicles,[data.vehicles,customer]);
+  const customerResults = customerQuery.length<2?[]:data.customers.filter(c=>`${c.customerCode} ${c.name} ${c.phone}`.toLowerCase().includes(customerQuery.toLowerCase())).slice(0,8);
+  const vehicleResults = vehicleQuery.length<2?[]:vehicles.filter(v=>normalize(`${v.plateNumber}${v.brand}${v.model}`).includes(normalize(vehicleQuery))).slice(0,8);
+  const itemResults = itemQuery.length<2?[]:data.items.filter(i=>i.isActive && normalize(`${i.code}${i.barcode||''}${i.name}`).includes(normalize(itemQuery))).slice(0,10);
+  const total=lines.reduce((s,l)=>s+l.qty*l.price,0); const mapped=accountMaps.some(m=>m.branchId===branchId&&m.bankAccountId);
+  const chooseCustomer=(c:Customer)=>{setCustomer(c);setCustomerQuery(`${c.name} • ${c.phone}`);setVehicle(null);setVehicleQuery('');};
+  const chooseVehicle=(v:Vehicle)=>{setVehicle(v);setVehicleQuery(`${v.plateNumber} • ${v.brand} ${v.model}`);};
+  const addItem=(i:Item)=>{setLines(x=>x.some(l=>l.item.id===i.id)?x:x.concat({item:i,qty:1,price:i.sellingPrice}));setItemQuery('');};
+  const parseDate=(raw:string)=>{const p=raw.trim().split(/[\/\-]/).map(Number);if(!p[0])return '';const now=new Date();const y=p[2]?(p[2]<100?2000+p[2]:p[2]):now.getFullYear();const m=p[1]||now.getMonth()+1;return `${y}-${String(m).padStart(2,'0')}-${String(p[0]).padStart(2,'0')}`;};
+  const parseText=()=>{
+    const rows=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean); let foundCustomer:Customer|undefined, foundVehicle:Vehicle|undefined; const parsed:Line[]=[];
+    for(const row of rows){const [label,...rest]=row.split(':');const value=rest.join(':').trim();
+      if(/tanggal/i.test(label)){const d=parseDate(value);if(d)setDate(d);}
+      else if(/pelanggan/i.test(label)){const q=normalize(value);foundCustomer=data.customers.find(c=>normalize(`${c.customerCode}${c.name}${c.phone}`).includes(q));}
+      else if(/kendaraan|plat|nopol/i.test(label)){const q=normalize(value);foundVehicle=data.vehicles.find(v=>normalize(v.plateNumber)===q)||data.vehicles.find(v=>normalize(v.plateNumber).includes(q));}
+      else if(/item|layanan|barang/i.test(label)){const m=value.match(/^(.+?)(?:\s+x([\d.,]+))?(?:\s+@([\d.,]+))?$/i);if(m){const key=normalize(m[1]);const i=data.items.find(x=>normalize(x.code)===key)||data.items.find(x=>normalize(x.name).includes(key));if(i)parsed.push({item:i,qty:Number((m[2]||'1').replace(',','.')),price:m[3]?Number(m[3].replace(/\D/g,'')):i.sellingPrice});}}
+      else if(/keluhan|keterangan/i.test(label))setDescription(value);
+    }
+    if(foundVehicle&&!foundCustomer)foundCustomer=data.customers.find(c=>c.id===foundVehicle!.customerRefId);
+    if(foundCustomer)chooseCustomer(foundCustomer); if(foundVehicle){setVehicle(foundVehicle);setVehicleQuery(`${foundVehicle.plateNumber} • ${foundVehicle.brand} ${foundVehicle.model}`);} if(parsed.length)setLines(parsed);
+    setMessage(foundCustomer&&foundVehicle&&parsed.length?'Teks berhasil dibaca. Periksa ringkasan lalu simpan.':'Sebagian data belum cocok. Lengkapi melalui Form Cepat.');
+  };
+  const save=async()=>{if(!branchId||!customer||!vehicle||!lines.length||total<=0)return setMessage('Lengkapi cabang, pelanggan, kendaraan, dan item dengan total lebih dari Rp0.');setSaving(true);setMessage('');const r=await api.create('historical-entries',{branchId,date,customerId:customer.id,vehicleId:vehicle.id,description,items:lines.map(l=>({itemId:l.item.id,qty:l.qty,price:l.price}))});setSaving(false);if(!r.success)return setMessage(r.message||'Gagal menyimpan.');setMessage(`${r.message}: ${r.data?.woNumber} • ${r.data?.invoiceNumber} • ${r.data?.paymentNumber}`);setLines([]);await refreshData();};
+  const Picker=({results,onPick}:{results:any[],onPick:(x:any)=>void})=>results.length?<div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border bg-white shadow-xl">{results.map(x=><button key={x.id} type="button" onClick={()=>onPick(x)} className="block w-full border-b px-3 py-2 text-left text-sm hover:bg-blue-50">{x.name||x.plateNumber} <span className="text-gray-500">{x.phone||`${x.brand} ${x.model}`}</span></button>)}</div>:null;
+  return <div className="mx-auto max-w-7xl p-4">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h1 className="text-xl font-bold">Input Cepat Historis</h1><p className="text-sm text-gray-500">WO → Faktur lunas → Pembayaran transfer, tanpa mengurangi stok.</p></div><div className="flex gap-2"><button onClick={()=>setMode('text')} className={`rounded-lg px-4 py-2 ${mode==='text'?'bg-blue-600 text-white':'border bg-white'}`}>Ketik Cepat</button><button onClick={()=>setMode('form')} className={`rounded-lg px-4 py-2 ${mode==='form'?'bg-blue-600 text-white':'border bg-white'}`}>Form Cepat</button></div></div>
+    <div className="rounded-xl border bg-white p-4 shadow-sm">
+      <div className="mb-4 grid gap-3 md:grid-cols-3"><label className="text-sm">Cabang<select value={branchId} onChange={e=>setBranchId(e.target.value)} className="mt-1 w-full rounded-lg border p-2">{allowedBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label className="text-sm">Tanggal transaksi<input type="date" max={today()} value={date} onChange={e=>setDate(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label><div className={`rounded-lg border p-3 text-sm ${mapped?'border-green-200 bg-green-50 text-green-700':'border-red-200 bg-red-50 text-red-700'}`}><ShieldCheck className="mr-1 inline h-4 w-4"/>{mapped?'Transfer ke rekening bank cabang':'Rekening bank cabang belum dipetakan'}</div></div>
+      {mode==='text'&&<div className="mb-4 rounded-xl bg-slate-900 p-3 text-white"><div className="mb-2 flex items-center gap-2 font-semibold"><FileText className="h-4 w-4"/>Format tanpa AI/token</div><textarea value={text} onChange={e=>setText(e.target.value)} rows={6} className="w-full rounded-lg border border-slate-600 bg-slate-800 p-3 font-mono text-sm"/><button onClick={parseText} className="mt-2 rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950"><Send className="mr-2 inline h-4 w-4"/>Baca Data</button></div>}
+      <div className="grid gap-3 md:grid-cols-2"><div className="relative"><label className="text-sm">Cari pelanggan</label><input value={customerQuery} onChange={e=>{setCustomerQuery(e.target.value);setCustomer(null)}} placeholder="Nama, kode, atau nomor HP" className="mt-1 w-full rounded-lg border p-2"/><Picker results={customerResults} onPick={chooseCustomer}/></div><div className="relative"><label className="text-sm">Cari kendaraan</label><input value={vehicleQuery} onChange={e=>{setVehicleQuery(e.target.value);setVehicle(null)}} placeholder="Nomor plat, merek, atau tipe" className="mt-1 w-full rounded-lg border p-2"/><Picker results={vehicleResults} onPick={chooseVehicle}/></div></div>
+      <label className="mt-3 block text-sm">Keterangan<input value={description} onChange={e=>setDescription(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label>
+      <div className="relative mt-3"><label className="text-sm">Cari barang / jasa</label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={itemQuery} onChange={e=>setItemQuery(e.target.value)} placeholder="Kode, barcode, atau nama" className="mt-1 w-full rounded-lg border py-2 pl-9 pr-3"/></div><Picker results={itemResults} onPick={addItem}/></div>
+      <div className="mt-3 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr><th className="p-2 text-left">Barang/Jasa</th><th>Qty</th><th>Harga historis</th><th>Subtotal</th><th/></tr></thead><tbody>{lines.map((l,i)=><tr key={l.item.id} className="border-t"><td className="p-2 font-medium">{l.item.code} — {l.item.name}</td><td><input type="number" min="1" value={l.qty} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,qty:Number(e.target.value)}:v))} className="w-20 rounded border p-1"/></td><td><input type="number" min="0" value={l.price} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,price:Number(e.target.value)}:v))} className="w-32 rounded border p-1"/></td><td className="whitespace-nowrap p-2 font-semibold">Rp {(l.qty*l.price).toLocaleString('id-ID')}</td><td><button onClick={()=>setLines(x=>x.filter((_,n)=>n!==i))} className="p-2 text-red-500"><Trash2 className="h-4 w-4"/></button></td></tr>)}</tbody></table>{!lines.length&&<div className="p-8 text-center text-sm text-gray-400">Belum ada barang atau jasa.</div>}</div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div>{message&&<span className="text-sm font-medium text-blue-700">{message}</span>}<p className="text-xs text-amber-700">Barang tetap tercatat di faktur, tetapi stok gudang tidak berubah.</p></div><div className="flex items-center gap-4"><strong>Total Rp {total.toLocaleString('id-ID')}</strong><button disabled={saving||!mapped} onClick={save} className="rounded-lg bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-40"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{saving?'Menyimpan...':'Simpan Lengkap'}</button></div></div>
+    </div>
+  </div>;
+}

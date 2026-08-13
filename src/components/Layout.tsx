@@ -4,7 +4,7 @@ import {
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, CirclePlus,
   ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
-  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Coins,
+  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Coins, CalendarClock,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
@@ -64,6 +64,7 @@ const pageTitles: Record<string, string> = {
   '/branch-deposits': 'Setoran Cabang',
   '/chart-of-accounts': 'Akun Perkiraan',
   '/performance-bonus': 'Kinerja & Bonus',
+  '/historical-entry': 'Input Cepat Historis',
 };
 
 type DesktopMenuItem = {
@@ -93,6 +94,7 @@ const desktopGroups = [
   { id: 'sales', label: 'SERVIS ORDER', icon: CrossedToolsIcon, items: [
     { label: 'Daftar WO', path: '/workorders', icon: Wrench, perm: 'wo:view', tone: 'green' },
     { label: 'WO Timeline', path: '/workorders/timeline', icon: Activity, perm: 'wo:view', tone: 'blue' },
+    { label: 'Input Cepat Historis', path: '/historical-entry', icon: CalendarClock, perm: 'invoice:create', tone: 'orange' },
     { label: 'Faktur Penjualan', path: '/invoices', icon: FileText, perm: 'invoice:view', tone: 'green' },
     { label: 'Pembayaran Pelanggan', path: '/customer-payments', icon: Banknote, perm: 'payment:view', tone: 'green' },
     { label: 'Pelanggan', path: '/customers', icon: Users, perm: 'customer:view', tone: 'blue' },
