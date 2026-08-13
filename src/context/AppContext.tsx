@@ -88,7 +88,7 @@ const emptyData: AppData = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 // Demo tidak boleh aktif hanya karena backend gagal. Pengembang harus
 // mengaktifkannya secara eksplisit dan build produksi tetap selalu memakai API.
-const allowDemoMode = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_MODE === 'true';
+const allowDemoMode = import.meta.env.DEV;
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData);

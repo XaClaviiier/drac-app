@@ -2086,8 +2086,6 @@ ${buildSmartContext(userMsgText)}`;
     { label: 'Tambah Merek', icon: Plus, command: 'tambah merek ', direct: false, tone: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' },
     { label: 'Tambah Tipe', icon: Plus, command: 'tambah tipe ', direct: false, tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
   ];
-  const frontActions = [...primaryFrontActions, ...secondaryFrontActions];
-
   const runFrontAction = (command: string, direct: boolean) => {
     setShowStarterMenu(false);
     setShowMoreActions(false);

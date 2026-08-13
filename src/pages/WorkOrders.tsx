@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch, AlertTriangle, Undo2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch, AlertTriangle, Undo2, LockKeyhole, Download, Printer, Filter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, LegacyWOStatus, Vehicle, WorkOrder, WorkOrderService, WOStatus } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -92,7 +92,7 @@ export default function WorkOrders() {
   const [showModal, setShowModal] = useState(false);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [serviceEditMode, setServiceEditMode] = useState(false);
-  const diagnosisSubmitAction = useRef<'save' | 'invoice' | 'lost'>('save');
+  const diagnosisSubmitAction = useRef<'save' | 'process' | 'invoice' | 'lost'>('save');
   const lostSalesReason = useRef('');
   const [continueWO, setContinueWO] = useState<WorkOrder | null>(null);
   const [editingWO, setEditingWO] = useState<WorkOrder | null>(null);
@@ -114,6 +114,7 @@ export default function WorkOrders() {
   const [savingPendingTemplates, setSavingPendingTemplates] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterCustomer, setFilterCustomer] = useState('');
   const [periodFilter, setPeriodFilter] = useState<WorkOrderPeriod>('all');
   // State lama dipertahankan sementara agar tampilan mobile lama tetap kompatibel.
   const [todayOnly, setTodayOnly] = useState(false);
@@ -135,6 +136,7 @@ export default function WorkOrders() {
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
+  const [detailTabIds, setDetailTabIds] = useState<string[]>([]);
   const [financialTimeline, setFinancialTimeline] = useState<WorkOrderFinancialTimeline>(EMPTY_FINANCIAL_TIMELINE);
   const [financialTimelineLoading, setFinancialTimelineLoading] = useState(false);
   const [lostSalesFollowUp, setLostSalesFollowUp] = useState<WorkOrder | null>(null);
@@ -164,6 +166,104 @@ export default function WorkOrders() {
     return DEFAULT_COMPLAINT_TEMPLATES;
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
+
+  const openDetailTab = (wo: WorkOrder) => {
+    setDetailTabIds(previous => previous.includes(wo.id) ? previous : [...previous, wo.id]);
+    setDetailWO(wo);
+  };
+
+  const closeDetailTab = (woId: string) => {
+    const closingIndex = detailTabIds.indexOf(woId);
+    const remainingTabs = detailTabIds.filter(id => id !== woId);
+    setDetailTabIds(remainingTabs);
+    if (detailWO?.id !== woId) return;
+    const fallbackId = remainingTabs[Math.min(Math.max(closingIndex - 1, 0), remainingTabs.length - 1)];
+    setDetailWO(data.workOrders.find(wo => wo.id === fallbackId) || null);
+  };
+
+  const previousWorkOrderFor = (wo: WorkOrder) => data.workOrders
+    .filter(candidate => candidate.id !== wo.id && (
+      (candidate.vehicleRefId && candidate.vehicleRefId === wo.vehicleRefId)
+      || candidate.plateNumber.trim().toLowerCase() === wo.plateNumber.trim().toLowerCase()
+    ))
+    .sort((left, right) => `${right.date} ${right.transactionTime || ''}`.localeCompare(`${left.date} ${left.transactionTime || ''}`))[0];
+
+  const takeServicesFromPreviousWO = (wo: WorkOrder) => {
+    const previous = previousWorkOrderFor(wo);
+    if (!previous || previous.services.length === 0) {
+      window.alert(`Belum ada layanan WO sebelumnya untuk kendaraan ${wo.plateNumber}.`);
+      return;
+    }
+    handleOpenModal(wo, true);
+    setFormData(current => ({
+      ...current,
+      services: previous.services.map((service, index) => ({
+        ...service,
+        id: `svc-copy-${Date.now()}-${index}`,
+      })),
+    }));
+    setSuccessMsg(`Layanan dari ${previous.woNumber} sudah diambil. Periksa kembali sebelum disimpan.`);
+    setTimeout(() => setSuccessMsg(''), 5000);
+  };
+
+  const openFavoriteServicesForWO = (wo: WorkOrder) => {
+    handleOpenModal(wo, true);
+    setShowQuickServices(true);
+  };
+
+  const takePreviousServicesIntoForm = () => {
+    const previous = data.workOrders
+      .filter(candidate => candidate.id !== editingWO?.id && (
+        (formData.vehicleRefId && candidate.vehicleRefId === formData.vehicleRefId)
+        || (formData.plateNumber && candidate.plateNumber.trim().toLowerCase() === formData.plateNumber.trim().toLowerCase())
+      ) && candidate.services.length > 0)
+      .sort((left, right) => `${right.date} ${right.transactionTime || ''}`.localeCompare(`${left.date} ${left.transactionTime || ''}`))[0];
+    if (!previous) {
+      window.alert('Pilih pelanggan dan kendaraan terlebih dahulu. Kendaraan ini belum memiliki layanan WO sebelumnya.');
+      return;
+    }
+    setFormData(current => ({ ...current, services: previous.services.map((service, index) => ({ ...service, id: `svc-copy-${Date.now()}-${index}` })) }));
+    setSuccessMsg(`Layanan dari ${previous.woNumber} sudah diambil. Periksa kembali sebelum disimpan.`);
+    setTimeout(() => setSuccessMsg(''), 5000);
+  };
+
+  const handleActionMenuToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    const currentMenu = event.currentTarget;
+    if (!currentMenu.open) return;
+    document.querySelectorAll<HTMLDetailsElement>('details[data-wo-action-menu][open]').forEach(menu => {
+      if (menu !== currentMenu) menu.open = false;
+    });
+  };
+
+  const handleActionMenuBlur = (event: React.FocusEvent<HTMLDetailsElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+      event.currentTarget.open = false;
+    }
+  };
+
+  const handleActionMenuKeyDown = (event: React.KeyboardEvent<HTMLDetailsElement>) => {
+    if (event.key !== 'Escape') return;
+    event.currentTarget.open = false;
+    event.currentTarget.querySelector<HTMLElement>('summary')?.focus();
+  };
+
+  const closeActionMenuAfterChoice = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(event.target as HTMLElement).closest('button')) return;
+    const menu = event.currentTarget.closest('details') as HTMLDetailsElement | null;
+    if (menu) menu.open = false;
+  };
+
+  useEffect(() => {
+    const closeMenusFromOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      document.querySelectorAll<HTMLDetailsElement>('details[data-wo-action-menu][open]').forEach(menu => {
+        if (!target || !menu.contains(target)) menu.open = false;
+      });
+    };
+    document.addEventListener('pointerdown', closeMenusFromOutsideClick);
+    return () => document.removeEventListener('pointerdown', closeMenusFromOutsideClick);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -548,7 +648,8 @@ export default function WorkOrders() {
           (data.customers.find(customer => customer.id === wo.customerRefId || customer.customerCode === wo.customerId)?.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           wo.plateNumber.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = !filterStatus || wo.status === filterStatus;
-        return matchesSearch && matchesStatus;
+        const matchesCustomer = !filterCustomer || wo.customerName === filterCustomer;
+        return matchesSearch && matchesStatus && matchesCustomer;
       })
       .sort((a, b) => {
         // Newest first: compare by date desc, then by WO number desc (for same-day records)
@@ -561,13 +662,30 @@ export default function WorkOrders() {
     data.customers,
     searchTerm,
     filterStatus,
+    filterCustomer,
     isAllBranchDropdown,
     activeBranchIds,
     selectedBranchId,
     periodRange,
   ]);
 
+  const workOrderCustomers = useMemo(() => Array.from(new Set(
+    data.workOrders
+      .filter(wo => isAllBranchDropdown ? activeBranchIds.includes(wo.branchId) : wo.branchId === selectedBranchId)
+      .map(wo => wo.customerName)
+      .filter(Boolean)
+  )).sort((left, right) => left.localeCompare(right)), [data.workOrders, isAllBranchDropdown, activeBranchIds, selectedBranchId]);
+
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
+  const newWOReadyForProcess = Boolean(
+    !editingWO
+    && currentBranchId !== 'ALL'
+    && formData.customerRefId
+    && formData.vehicleRefId
+    && formData.description.trim()
+    && formData.services.length > 0
+    && totalServices > 0
+  );
 
   const resetForm = () => {
     setFormData({
@@ -601,6 +719,7 @@ export default function WorkOrders() {
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false) => {
+    setDetailWO(null);
     setDiagnosisMode(false);
     setServiceEditMode(Boolean(wo && servicesOnly));
     if (wo) {
@@ -679,7 +798,7 @@ export default function WorkOrders() {
 
     const lockedByInvoice = Boolean(targetWO.invoiceId);
     if (requestedViewWO || lockedByInvoice || !hasPermission('wo:edit')) {
-      setDetailWO(targetWO);
+      openDetailTab(targetWO);
       if (lockedByInvoice && requestedEditWO) {
         window.alert(`WO ${targetWO.woNumber} sudah memiliki faktur dan dibuka dalam mode lihat.`);
       }
@@ -819,6 +938,8 @@ export default function WorkOrders() {
     if (e.target !== e.currentTarget) return;
     const shouldCreateInvoice = diagnosisMode && diagnosisSubmitAction.current === 'invoice';
     const shouldMarkLostSales = diagnosisSubmitAction.current === 'lost';
+    const shouldProcessNew = !editingWO && diagnosisSubmitAction.current === 'process';
+    const shouldProcessEditing = Boolean(editingWO && editingWO.status === 'Register' && diagnosisSubmitAction.current === 'process');
     diagnosisSubmitAction.current = 'save';
 
     if (editingWO?.invoiceId) {
@@ -836,11 +957,15 @@ export default function WorkOrders() {
       window.alert('Kendaraan wajib dipilih dari data kendaraan.');
       return;
     }
-    if ((diagnosisMode || serviceEditMode) && formData.services.length === 0) {
+    if (!editingWO && !formData.description.trim()) {
+      window.alert('Keluhan atau keterangan service wajib diisi.');
+      return;
+    }
+    if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length === 0) {
       window.alert('Tambahkan minimal 1 layanan/barang sebelum menyimpan.');
       return;
     }
-    if ((diagnosisMode || serviceEditMode) && totalServices <= 0) {
+    if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && totalServices <= 0) {
       window.alert('Total estimasi harus lebih dari Rp0. Isi harga minimal satu layanan/barang sebelum menyimpan diagnosa.');
       return;
     }
@@ -922,6 +1047,23 @@ export default function WorkOrders() {
             reason: 'Lost Sales ditindaklanjuti untuk masalah yang sama setelah estimasi dilengkapi.',
           }],
         } : savedWorkOrder;
+        if (shouldProcessEditing) {
+          finalWorkOrder = {
+            ...savedWorkOrder,
+            status: 'Proses',
+            statusLog: [
+              ...(editingWO.statusLog || []),
+              {
+                from: editingWO.status,
+                to: 'Proses',
+                at: new Date().toISOString(),
+                byUserId: currentUser?.id || '-',
+                byUserName: currentUser?.name || 'System',
+                reason: 'Estimasi disetujui dan pekerjaan mulai dikerjakan.',
+              },
+            ],
+          };
+        }
         if (shouldCreateInvoice) {
           const actor = {
             byUserId: currentUser?.id || '-',
@@ -982,7 +1124,15 @@ export default function WorkOrders() {
           setSuccessMsg(`${editingWO.woNumber} berhasil disimpan sebagai Lost Sales.`);
         }
         if (serviceEditMode) await refreshData();
-        if (!shouldMarkLostSales) setSuccessMsg(resumeLostSalesAfterEstimate ? `${editingWO.woNumber} berhasil dilengkapi dan masuk status Dikerjakan.` : diagnosisMode ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.` : `${editingWO.woNumber} berhasil diperbarui.`);
+        if (!shouldMarkLostSales) setSuccessMsg(
+          shouldProcessEditing
+            ? `${editingWO.woNumber} berhasil disimpan dan masuk status Dikerjakan.`
+            : resumeLostSalesAfterEstimate
+              ? `${editingWO.woNumber} berhasil dilengkapi dan masuk status Dikerjakan.`
+              : diagnosisMode
+                ? `Diagnosa ${editingWO.woNumber} berhasil disimpan.`
+                : `${editingWO.woNumber} berhasil diperbarui.`,
+        );
         if (shouldCreateInvoice) {
           handleCloseModal();
           handleOpenInvoiceModal(finalWorkOrder);
@@ -993,13 +1143,22 @@ export default function WorkOrders() {
           id: Date.now().toString(),
           woNumber,
           ...formData,
+          status: shouldProcessNew ? 'Proses' : 'Register',
+          statusLog: shouldProcessNew ? [{
+            from: 'Register',
+            to: 'Proses',
+            at: new Date().toISOString(),
+            byUserId: currentUser?.id || '-',
+            byUserName: currentUser?.name || 'System',
+            reason: 'WO dibuat dan langsung diproses.',
+          }] : undefined,
           backdateReason: woBackdateReason.trim() || undefined,
           total: totalServices,
           estimateTotal: totalServices > 0 ? totalServices : undefined,
           branchId: targetBranch,
         });
         const bName = data.branches.find(b => b.id === targetBranch)?.name || targetBranch;
-        setSuccessMsg(`${woNumber} berhasil dibuat di ${bName}.`);
+        setSuccessMsg(`${woNumber} berhasil dibuat di ${bName}${shouldProcessNew ? ' dan langsung Dikerjakan' : ''}.`);
       }
       setTimeout(() => setSuccessMsg(''), 4000);
       handleCloseModal();
@@ -1126,6 +1285,7 @@ export default function WorkOrders() {
       setCancelStep(1);
       setCancelReasonChoice('');
       setCancelReasonNotes('');
+      setDetailWO(current => current?.id === wo.id ? { ...current, status: next } : current);
     } catch (error: any) {
       window.alert(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
     }
@@ -1150,6 +1310,7 @@ export default function WorkOrders() {
       }
       setSuccessMsg(`${wo.woNumber} dikembalikan ke Dikerjakan.`);
       setTimeout(() => setSuccessMsg(''), 4000);
+      setDetailWO(current => current?.id === wo.id ? { ...current, status: 'Proses' } : current);
     } catch (error: any) {
       window.alert(`Gagal mengembalikan WO: ${error?.message || 'server tidak merespons'}`);
     }
@@ -1176,7 +1337,7 @@ export default function WorkOrders() {
     const sameBranch = wo.branchId === resolveBranchId();
 
     if (!sameBranch) {
-      setDetailWO(wo);
+      openDetailTab(wo);
       return;
     }
 
@@ -1193,7 +1354,7 @@ export default function WorkOrders() {
       return;
     }
 
-    setDetailWO(wo);
+    openDetailTab(wo);
   };
 
   const activeWorkOrderActionLabel = (wo: WorkOrder, sameBranch: boolean) => {
@@ -1418,7 +1579,7 @@ export default function WorkOrders() {
     if (activeWO && activeWO.id !== lostSalesFollowUp.id) {
       window.alert(`Kendaraan ${lostSalesFollowUp.plateNumber} sudah memiliki WO aktif ${activeWO.woNumber}.`);
       setLostSalesFollowUp(null);
-      setDetailWO(activeWO);
+      openDetailTab(activeWO);
       return;
     }
     setIsFollowingUpLostSales(true);
@@ -1464,7 +1625,7 @@ export default function WorkOrders() {
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
       <div className="flex items-end gap-0.5 border-b border-blue-600 bg-gray-100 px-1">
-        <button type="button" onClick={requestCloseEditor} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
+        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal && !detailWO ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
         {showModal && diagnosisMode && editingWO ? (
@@ -1487,23 +1648,39 @@ export default function WorkOrders() {
           </button>
         ) : showModal && hasPermission('wo:create') ? (
           <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
-            Register Baru
+            Data Baru
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
           </button>
         ) : null}
+        {!showModal && (
+          <div className="hidden min-w-0 items-end gap-0.5 overflow-x-auto lg:flex">
+            {detailTabIds.map(tabId => {
+              const tabWO = data.workOrders.find(wo => wo.id === tabId);
+              if (!tabWO) return null;
+              const active = detailWO?.id === tabId;
+              return (
+                <button
+                  key={tabId}
+                  type="button"
+                  onClick={() => setDetailWO(tabWO)}
+                  className={`flex h-11 max-w-[230px] flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${active ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  title={tabWO.woNumber}
+                >
+                  <span className="truncate font-mono">{tabWO.woNumber}</span>
+                  <X className="h-4 w-4 flex-shrink-0" onClick={(event) => { event.stopPropagation(); closeDetailTab(tabId); }} />
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="ml-auto flex h-11 items-center gap-3 border-b-0 px-2 text-xs font-medium text-gray-500">
-          {!showModal && hasPermission('wo:create') && (
-            <button type="button" onClick={openNewRegistration} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-              <Plus className="h-4 w-4" /> Register Baru
-            </button>
-          )}
           <span className="font-semibold text-gray-700">{branchScopeLabel}</span>
           <span className="text-gray-300">•</span>
           <span className="font-semibold text-blue-700">{filteredWOs.length} WO</span>
         </div>
       </div>
 
-      {!showModal && <>
+      {!showModal && !detailWO && <>
       {/* Success Message */}
       {successMsg && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 animate-pulse">
@@ -1513,9 +1690,9 @@ export default function WorkOrders() {
       )}
 
       {/* Filters */}
-      <div className="px-3 py-1">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-          <div className="relative min-w-0 flex-1">
+      <div className="border-y border-gray-200 bg-gray-50 px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+          <div className="relative min-w-[260px] flex-[1_1_360px] xl:min-w-[300px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -1525,7 +1702,18 @@ export default function WorkOrders() {
               className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
-          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 lg:w-40">
+          <select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className="h-10 min-w-[175px] flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[190px]">
+            <option value="">Pelanggan: Semua</option>
+            {workOrderCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}
+          </select>
+          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="h-10 min-w-[145px] flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[155px]">
+            <option value="">Status: Semua</option>
+            <option value="Register">Register</option>
+            <option value="Proses">Dikerjakan</option>
+            <option value="Selesai">Selesai</option>
+            <option value="Closed">Lost Sales</option>
+          </select>
+          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="h-10 min-w-[140px] flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[150px]">
             <option value="all">Semua Tanggal</option>
             <option value="today">Hari Ini</option>
             <option value="7days">7 Hari</option>
@@ -1540,17 +1728,16 @@ export default function WorkOrders() {
               <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
             </div>
           )}
-          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 lg:w-44">
-            <option value="">Semua Status</option>
-            <option value="Register">Register</option>
-            <option value="Proses">Dikerjakan</option>
-            <option value="Selesai">Selesai</option>
-            <option value="Closed">Lost Sales</option>
-          </select>
-          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
+          <button type="button" onClick={() => { setSearchTerm(''); setFilterCustomer(''); setFilterStatus(''); setPeriodFilter('all'); setDateFrom(''); setDateTo(''); }} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-lg border border-blue-500 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100" title="Kosongkan semua filter"><Filter className="h-4 w-4"/><span className="hidden 2xl:inline">Reset</span></button>
+          <div className="ml-auto flex flex-wrap items-center gap-2 xl:ml-0 xl:flex-nowrap">
+          {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4" /><span className="hidden xl:inline">WO Baru</span></button>}
+          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="inline-flex h-10 flex-shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
           </button>
-          <div className="relative hidden flex-shrink-0 lg:block">
+          <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download"><Download className="h-4 w-4" /></button>
+          <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Print"><Printer className="h-4 w-4" /></button>
+          <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnPicker(false); }}>
             <button type="button" onClick={() => setShowColumnPicker(value => !value)} className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Pilih kolom">
               <Settings2 className="h-4 w-4" />
             </button>
@@ -1561,12 +1748,14 @@ export default function WorkOrders() {
                   <label key={column.key} className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${column.locked ? 'cursor-not-allowed bg-gray-50 text-gray-500' : 'cursor-pointer hover:bg-blue-50'}`}>
                     <input type="checkbox" checked={isColumnVisible(column.key)} disabled={column.locked} onChange={() => toggleColumn(column.key)} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
                     <span>{column.label}</span>
+                    {column.locked && <span className="ml-auto text-[10px] font-semibold uppercase text-gray-400">Wajib</span>}
                   </label>
                 ))}
+                <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3"><button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button><button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'vehicle', 'status', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button></div>
               </div>
             )}
           </div>
-          <span className="whitespace-nowrap text-xs font-semibold text-gray-600 lg:min-w-16 lg:text-right">{filteredWOs.length} WO</span>
+          </div>
         </div>
       </div>
       <div className="hidden px-3 py-0.5">
@@ -1766,7 +1955,7 @@ export default function WorkOrders() {
                 {filteredWOs.map((wo) => (
                   <tr key={wo.id} className="transition-colors hover:bg-blue-50/50">
                     {isColumnVisible('number') && <td className="px-4 py-3">
-                      <button type="button" onClick={() => setDetailWO(wo)} className="text-left">
+                      <button type="button" onClick={() => openDetailTab(wo)} className="text-left">
                         <span className="block font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span>
                         <span className="mt-0.5 block text-xs text-gray-500">
                           {wo.date}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
@@ -1815,7 +2004,7 @@ export default function WorkOrders() {
                         >
                           <MessageCircle className="h-4 w-4" />
                         </button>
-                        <button onClick={() => setDetailWO(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
+                        <button onClick={() => openDetailTab(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
                           <Eye className="h-4 w-4" />
                         </button>
                         {canShowAdminRowActions && hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
@@ -1866,7 +2055,7 @@ export default function WorkOrders() {
           const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name.replace('CABANG ', '');
           return (
             <article key={`compact-${wo.id}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <button type="button" onClick={() => setDetailWO(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
+              <button type="button" onClick={() => openDetailTab(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
                 <div className="flex items-start justify-between gap-3">
                   <span className="font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span>
                   <span className="whitespace-nowrap text-[11px] text-gray-500">
@@ -1886,7 +2075,7 @@ export default function WorkOrders() {
                 {canViewAllBranches && <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>}
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
-                <button type="button" onClick={() => setDetailWO(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Lihat detail ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
+                <button type="button" onClick={() => openDetailTab(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Lihat detail ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
                 {canShowAdminRowActions && hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
                   <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>
                 )}
@@ -2035,7 +2224,7 @@ export default function WorkOrders() {
                     </button>}
                     <button
                       type="button"
-                      onClick={() => setDetailWO(wo)}
+                      onClick={() => openDetailTab(wo)}
                       className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700"
                       title={wo.status === 'Closed' ? 'Lihat detail Lost Sales' : 'Lihat detail WO'}
                       aria-label={`Lihat detail ${wo.woNumber}`}
@@ -2152,50 +2341,63 @@ export default function WorkOrders() {
         )}
       </div>
 
-      {/* Detail WO: layar penuh di HP, drawer dari kanan di desktop */}
+      </>}
+
+      {/* Detail WO: layar penuh di HP, subtab penuh di desktop. */}
       {detailWO && (
-        <div className="fixed inset-0 z-50 block" role="dialog" aria-modal="true">
-          <button type="button" aria-label="Tutup detail" onClick={() => setDetailWO(null)} className="absolute inset-0 hidden bg-gray-950/35 lg:block" />
-          <aside className="absolute inset-0 flex w-full flex-col bg-white shadow-2xl lg:inset-y-0 lg:left-auto lg:right-0 lg:max-w-xl">
-            <div className="flex flex-shrink-0 items-start justify-between border-b border-gray-200 px-4 py-4 sm:px-6 sm:py-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Detail Order Kerja</p>
-                <h3 className="mt-1 font-mono text-xl font-bold text-gray-900">{detailWO.woNumber}</h3>
-                <p className="mt-1 text-sm text-gray-500">{detailWO.date} · {data.branches.find(b => b.id === detailWO.branchId)?.name}</p>
+        <div className="fixed inset-0 z-50 block lg:static lg:z-auto lg:px-3 lg:pb-3" role="dialog" aria-modal="true">
+          <aside className="absolute inset-0 flex w-full flex-col bg-white shadow-2xl lg:static lg:max-h-[calc(100vh-205px)] lg:min-h-[560px] lg:overflow-hidden lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-6 lg:px-3 lg:py-2.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1">
+                <span className="text-xs text-gray-500">Nomor: <strong className="font-mono text-gray-900">{detailWO.woNumber}</strong></span>
+                <span className="text-xs text-gray-500">Cabang: <strong className="text-gray-900">{data.branches.find(b => b.id === detailWO.branchId)?.name}</strong></span>
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
               </div>
-              <button onClick={() => setDetailWO(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+              <div className="hidden shrink-0 items-center gap-2 lg:flex">
+                <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                  <summary className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Ambil <span className="text-xs">⌄</span></summary>
+                  <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+                    <button type="button" onClick={() => takeServicesFromPreviousWO(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Layanan WO Sebelumnya</strong><span className="text-xs text-gray-500">Salin layanan kendaraan ini</span></button>
+                    <button type="button" onClick={() => openFavoriteServicesForWO(detailWO)} className="block w-full border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Paket / Layanan Favorit</strong><span className="text-xs text-gray-500">Pilih dari quick service</span></button>
+                  </div>
+                </details>
+                <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                  <summary className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Proses <span className="text-xs">⌄</span></summary>
+                  <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+                    {detailWO.status === 'Register' && <><button type="button" disabled={!detailWO.services.length || detailWO.total <= 0} onClick={() => requestStatusChange(detailWO, 'Proses')} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 disabled:text-gray-300">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                    {detailWO.status === 'Proses' && <><button type="button" onClick={() => openCompletionModal(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Tandai Selesai</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button></>}
+                    {detailWO.status === 'Selesai' && !detailWO.invoiceId && <>{hasPermission('invoice:create') && detailWO.total > 0 && <button type="button" onClick={() => handleOpenInvoiceModal(detailWO)} className="block w-full px-3 py-2 text-left text-sm font-medium text-emerald-700 hover:bg-emerald-50">Buat Faktur</button>}<button type="button" onClick={() => void handleReopenCompletedWorkOrder(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-orange-700 hover:bg-orange-50">Kembali ke Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                    {detailWO.invoiceId && <><button type="button" onClick={() => window.alert(`Faktur ${detailWO.invoiceNumber || ''} sudah terhubung ke WO ini.`)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Lihat Faktur</button><button type="button" onClick={() => window.alert('Lanjutkan penerimaan pembayaran melalui menu Pembayaran/Faktur Penjualan.')} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Proses Pembayaran</button></>}
+                    {detailWO.status === 'Closed' && <button type="button" onClick={() => setLostSalesFollowUp(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
+                  </div>
+                </details>
+                <button type="button" disabled={Boolean(detailWO.invoiceId) || detailWO.status === 'Closed' || !hasPermission('wo:edit')} onClick={() => handleOpenModal(detailWO, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"><Save className="h-4 w-4" /> Simpan</button>
+                <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Tutup tab WO"><X className="h-5 w-5" /></button>
+              </div>
+              <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden" title="Tutup tab WO"><X className="h-5 w-5" /></button>
             </div>
-            <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
-                <span className="text-xl font-bold text-blue-700">Rp {detailWO.total.toLocaleString('id-ID')}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4 rounded-xl border border-gray-200 p-4">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-6 lg:p-3">
+              <div className="grid grid-cols-1 gap-3 rounded border border-gray-200 p-3 lg:grid-cols-[minmax(210px,1fr)_minmax(210px,1fr)_230px]">
                 <div>
-                  <p className="text-xs text-gray-500">Pelanggan</p>
-                  <p className="mt-1 font-semibold text-gray-900">{detailWO.customerName}</p>
-                  <p className="text-xs text-gray-500">{customerPhoneForWO(detailWO)}</p>
+                  <p className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><User className="h-4 w-4 text-blue-600" /> Data Pelanggan <LockKeyhole className="ml-auto h-3.5 w-3.5 text-gray-400" /></p>
+                  <div className="flex h-[42px] items-center rounded-lg border border-gray-300 bg-gray-100 px-3 text-sm text-gray-700"><span className="min-w-0 truncate"><strong>{detailWO.customerName}</strong>{customerPhoneForWO(detailWO) && <span className="ml-2 text-xs text-gray-500">{customerPhoneForWO(detailWO)}</span>}</span></div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Nomor Plat</p>
-                  <p className="mt-1 font-semibold text-gray-900">{detailWO.plateNumber}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-xs text-gray-500">Kendaraan</p>
-                  <p className="mt-1 text-sm text-gray-900">{detailWO.vehicleInfo}</p>
+                  <p className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><Car className="h-4 w-4 text-orange-600" /> Data Kendaraan <LockKeyhole className="ml-auto h-3.5 w-3.5 text-gray-400" /></p>
+                  <div className="flex h-[42px] items-center rounded-lg border border-gray-300 bg-gray-100 px-3 text-sm text-gray-700"><span className="min-w-0 truncate"><strong>{detailWO.plateNumber}</strong><span className="ml-2 text-xs text-gray-500">{detailWO.vehicleInfo}</span></span></div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Tanggal transaksi WO</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">{formatBusinessDate(detailWO.date)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Waktu input server</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">{formatAuditTime(detailWO.createdAt)}</p>
+                  <p className="mb-1 block text-sm font-medium text-gray-700">Tanggal &amp; Waktu</p>
+                  <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2"><div className="flex h-[42px] items-center rounded-lg border border-gray-300 bg-gray-50 px-3 text-sm font-medium text-gray-700">{detailWO.date}</div><div className="flex h-[42px] items-center rounded-lg border border-gray-300 bg-gray-50 px-3 text-sm font-medium text-gray-700">{detailWO.transactionTime?.slice(0, 5) || '-'}</div></div>
                 </div>
               </div>
-              <div>
-                <h4 className="mb-2 font-semibold text-gray-900">Layanan ({detailWO.services.length})</h4>
-                <div className="divide-y divide-gray-100 rounded-xl border border-gray-200">
+              <div className="rounded border border-gray-200 bg-white p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <button type="button" disabled={!hasPermission('wo:edit') || detailWO.status === 'Closed' || Boolean(detailWO.invoiceId)} onClick={() => handleOpenModal(detailWO, true)} className="relative max-w-xl flex-1 text-left disabled:cursor-default"><span className="flex h-10 w-full items-center rounded-lg border border-gray-300 bg-white py-2.5 pl-3 pr-10 text-sm text-gray-500">Cari/Pilih Barang dan Jasa</span><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /></button>
+                  <strong className="ml-auto shrink-0 text-sm text-gray-700">{detailWO.services.length} Barang/Jasa</strong>
+                </div>
+                <div className="overflow-hidden rounded border border-gray-200">
+                <div className="divide-y divide-gray-100 sm:hidden">
                   {detailWO.services.map(service => (
                     <div key={service.id} className="flex items-center justify-between px-4 py-3 text-sm">
                       <span><strong>{service.name}</strong> <span className="text-gray-500">×{service.qty}</span></span>
@@ -2203,6 +2405,14 @@ export default function WorkOrders() {
                     </div>
                   ))}
                 </div>
+                <table className="hidden w-full min-w-[720px] text-sm sm:table">
+                  <thead className="bg-slate-600 text-xs uppercase text-white"><tr><th className="w-12 px-3 py-2.5 text-center">#</th><th className="px-3 py-2.5 text-left">Layanan / Barang</th><th className="w-24 px-3 py-2.5 text-center">Qty</th><th className="w-40 px-3 py-2.5 text-right">Harga Satuan</th><th className="w-40 px-3 py-2.5 text-right">Subtotal</th><th className="w-14 px-3 py-2.5 text-center">Aksi</th></tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {detailWO.services.length > 0 ? detailWO.services.map((service, index) => (
+                      <tr key={service.id} className="hover:bg-blue-50/40"><td className="px-3 py-2.5 text-center text-xs text-gray-400">{index + 1}</td><td className="px-3 py-2.5"><strong className="text-gray-900">{service.name}</strong>{service.description && service.description !== service.name && <p className="text-xs text-gray-500">{service.description}</p>}</td><td className="px-3 py-2.5 text-center">{service.qty}</td><td className="px-3 py-2.5 text-right">Rp {service.price.toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-right font-semibold">Rp {(service.price * service.qty).toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-center">{hasPermission('wo:edit') && detailWO.status !== 'Closed' && !detailWO.invoiceId && <button type="button" onClick={() => handleOpenModal(detailWO, true)} className="rounded p-1.5 text-blue-600 hover:bg-blue-50" title="Edit layanan"><Edit className="h-4 w-4" /></button>}</td></tr>
+                    )) : <tr><td colSpan={6} className="h-40 text-center text-sm text-gray-400">Belum ada layanan atau barang.</td></tr>}
+                  </tbody>
+                </table></div>
               </div>
               {(detailWO.findings || diagnosisMeasurementLabel(detailWO)) && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
@@ -2211,15 +2421,18 @@ export default function WorkOrders() {
                   {detailWO.findings && <p className="mt-2 whitespace-pre-wrap text-sm text-cyan-900">{detailWO.findings}</p>}
                 </div>
               )}
-              {detailWO.description && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><strong>Keluhan/Keterangan:</strong><br />{detailWO.description}</div>}
-              {detailWO.notes && <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700"><strong>Catatan:</strong><br />{detailWO.notes}</div>}
-              <div className="rounded-xl border border-gray-200 p-4">
-                <div className="mb-4 flex items-center gap-2">
+              <div className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(360px,460px)]">
+                <textarea readOnly rows={2} value={detailWO.description || ''} placeholder="Keluhan / keterangan service" className="h-[88px] w-full resize-none rounded border border-gray-300 bg-white px-3 py-2 text-sm leading-5 text-gray-700 outline-none" />
+                <div className="grid h-[88px] grid-cols-2 rounded border border-gray-300 bg-white p-2 shadow-sm"><div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Jumlah Item</span><strong className="text-right text-lg tabular-nums">{detailWO.services.length}</strong></div><div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total Estimasi</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {detailWO.total.toLocaleString('id-ID')}</strong></div></div>
+              </div>
+              {detailWO.notes && <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700"><strong>Catatan:</strong> {detailWO.notes}</div>}
+              <details className="rounded border border-gray-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center gap-2 p-3 font-semibold text-gray-900">
                   <Clock3 className="h-5 w-5 text-blue-600" />
-                  <h4 className="font-semibold text-gray-900">Timeline WO</h4>
+                  <span>Timeline WO</span>
                   {financialTimelineLoading && <span className="ml-auto text-xs text-gray-400">Memuat transaksi…</span>}
-                </div>
-                <div className="relative ml-2 border-l-2 border-gray-200 pl-6">
+                </summary>
+                <div className="relative mx-4 mb-4 ml-6 border-l-2 border-gray-200 pl-6">
                   {workOrderAuditTimeline(detailWO).map((event, index) => (
                     <div key={`${event.at}-${event.title}-${index}`} className="relative pb-5 last:pb-0">
                       <span className={`absolute -left-[31px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${event.tone}`} />
@@ -2230,9 +2443,9 @@ export default function WorkOrders() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </details>
             </div>
-            <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6 sm:py-4">
+            <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6 sm:py-4 lg:hidden">
               {hasPermission('wo:edit') && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
                 <>
                   <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{detailWO.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
@@ -2262,7 +2475,7 @@ export default function WorkOrders() {
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Register' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
-              <button onClick={() => setDetailWO(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
+              <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
               {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
                 <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-white text-orange-700 hover:bg-orange-50" title="Kembali ke Dikerjakan" aria-label={`Kembalikan ${detailWO.woNumber} ke Dikerjakan`}><Undo2 className="h-5 w-5" /></button>
               )}
@@ -2310,8 +2523,6 @@ export default function WorkOrders() {
           </div>
         </div>
       )}
-      </>}
-
       {/* Data Baru / Edit: subtab penuh pada desktop, modal pada mobile */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-0 sm:items-center sm:p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-3 lg:pb-3 lg:pt-0">
@@ -2331,7 +2542,86 @@ export default function WorkOrders() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:overflow-visible">
+            <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-3">
+              <div className="hidden items-center justify-between gap-4 border-b border-gray-200 pb-2 lg:flex">
+                <div className="flex min-w-0 items-center gap-5 text-xs text-gray-500">
+                  <span>Nomor: <strong className="text-gray-900">{editingWO?.woNumber || 'Otomatis saat disimpan'}</strong></span>
+                  <span>Cabang: <strong className="text-gray-900">{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || 'Pilih cabang'}</strong></span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                      Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+                      <button type="button" onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                        Layanan WO Sebelumnya
+                      </button>
+                      <button type="button" onClick={() => setShowQuickServices(true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                        Paket/Layanan Favorit
+                      </button>
+                    </div>
+                  </details>
+
+                  <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                      Proses <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+                      {!editingWO && (
+                        <button
+                          type="submit"
+                          disabled={!newWOReadyForProcess}
+                          onClick={() => { diagnosisSubmitAction.current = 'process'; }}
+                          className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                        >
+                          Simpan &amp; Mulai Dikerjakan
+                        </button>
+                      )}
+                      {editingWO?.status === 'Register' && (
+                        <>
+                          <button
+                            type="submit"
+                            onClick={() => { diagnosisSubmitAction.current = 'process'; }}
+                            className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            Mulai Dikerjakan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => requestStatusChange(editingWO, 'Closed')}
+                            className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50"
+                          >
+                            Batalkan / Lost Sales
+                          </button>
+                        </>
+                      )}
+                      {editingWO?.status === 'Proses' && (
+                        <>
+                          <button type="button" onClick={() => openCompletionModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Tandai Selesai</button>
+                          <button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button>
+                        </>
+                      )}
+                      {editingWO?.status === 'Selesai' && !editingWO.invoiceId && (
+                        <>
+                          <button type="button" onClick={() => handleOpenInvoiceModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Buat Faktur</button>
+                          <button type="button" onClick={() => handleReopenCompletedWorkOrder(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Kembali ke Dikerjakan</button>
+                          <button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button>
+                        </>
+                      )}
+                    </div>
+                  </details>
+
+                  <button
+                    type="submit"
+                    onClick={() => { diagnosisSubmitAction.current = 'save'; }}
+                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    disabled={currentBranchId === 'ALL' && !editingWO}
+                  >
+                    <Save className="h-4 w-4" /> Simpan
+                  </button>
+                </div>
+              </div>
               {/* Blok simpan jika masih Semua Cabang */}
               {currentBranchId === 'ALL' && !editingWO && (
                 <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 flex items-start gap-3">
@@ -2378,7 +2668,7 @@ export default function WorkOrders() {
                 </div>
               ) : <>
               {/* Pelanggan dan tanggal */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(210px,1fr)_minmax(210px,1fr)_230px]">
                 <div>
                   <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700">
                     <User className="h-4 w-4 text-blue-600" />
@@ -2391,10 +2681,22 @@ export default function WorkOrders() {
                   />
                 </div>
                 <div>
+                  <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <Car className="h-4 w-4 text-orange-600" />
+                    Data Kendaraan <span className="text-red-500">*</span>
+                  </label>
+                  <VehiclePicker
+                    customer={selectedCustomer}
+                    value={formData.vehicleRefId}
+                    onChange={handleVehicleSelect}
+                    onNewVehicleCreated={handleNewVehicleCreated}
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Tanggal & Waktu <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-[minmax(0,1fr)_130px] gap-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
                     <input
                       type="date"
                       required
@@ -2429,7 +2731,7 @@ export default function WorkOrders() {
 
               {/* Kendaraan mengikuti pelanggan yang dipilih */}
               <div className="space-y-4">
-                <div>
+                <div className="hidden">
                   <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                     <Car className="w-4 h-4 text-orange-600" />
                     Data Kendaraan <span className="text-red-500">*</span>
@@ -2442,7 +2744,7 @@ export default function WorkOrders() {
                   />
                 </div>
 
-                <div>
+                <div className={editingWO ? '' : 'hidden'}>
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <label className="block text-sm font-medium text-gray-700">
                       Keterangan / Keluhan
@@ -2499,10 +2801,10 @@ export default function WorkOrders() {
               </div>
               </>}
 
-              {(diagnosisMode || serviceEditMode) && <>
-              {/* Services hanya diisi pada tahap diagnosa, bukan saat registrasi */}
+              {(diagnosisMode || serviceEditMode || !editingWO) && <>
+              {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
               <div>
-                <div className="mb-3">
+                <div className={editingWO ? 'mb-3' : 'hidden'}>
                   <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Pekerjaan / Layanan WO'}</label>
                 </div>
 
@@ -2594,6 +2896,7 @@ export default function WorkOrders() {
                           <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Baru</span>
                         </button>
                       )}
+                      {!editingWO && <strong className="hidden shrink-0 text-sm text-gray-700 lg:block">{formData.services.filter(service => !isPackageMemberService(service)).length} Barang/Jasa</strong>}
                     </div>
                     {showQuickServices && (
                       <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
@@ -2755,9 +3058,14 @@ export default function WorkOrders() {
                   </div>
                 )}
 
-                {formData.services.length > 0 ? (
+                {formData.services.length > 0 || !editingWO ? (
                   <>
                   <div className="space-y-2 sm:hidden">
+                    {formData.services.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                        Belum ada layanan atau barang.
+                      </div>
+                    )}
                     {formData.services.map((service, index) => {
                       const isGroupHeader = isPackageHeaderService(service);
                       const isGroupMember = isPackageMemberService(service);
@@ -2831,14 +3139,14 @@ export default function WorkOrders() {
                         </div>
                       );
                     })}
-                    <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
+                    {editingWO && <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
                       <span className="text-xs font-semibold text-gray-700">TOTAL ESTIMASI</span>
                       <span className="text-base font-bold text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</span>
-                    </div>
+                    </div>}
                   </div>
-                  <div className="hidden overflow-x-auto rounded-xl border border-gray-200 bg-white sm:block">
+                  <div className="hidden overflow-x-auto rounded border border-gray-200 bg-white sm:block">
                     <table className="min-w-[720px] w-full text-sm">
-                      <thead className="bg-slate-100 text-xs text-slate-600">
+                      <thead className={editingWO ? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'}>
                         <tr>
                           <th className="w-10 px-3 py-2.5 text-center font-medium">#</th>
                           <th className="px-3 py-2.5 text-left font-medium">Layanan / Barang</th>
@@ -2927,14 +3235,21 @@ export default function WorkOrders() {
                             </tr>
                           );
                         })}
+                        {formData.services.filter(service => !isPackageMemberService(service)).length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="h-48 px-4 text-center text-sm text-gray-400">
+                              Belum ada layanan atau barang.
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
-                      <tfoot>
+                      {editingWO && <tfoot>
                         <tr className="border-t-2 border-blue-300 bg-blue-50">
                           <td colSpan={4} className="px-3 py-3 text-right font-semibold text-gray-900">TOTAL ESTIMASI</td>
                           <td className="px-3 py-3 text-right text-lg font-bold text-blue-700 whitespace-nowrap">Rp {totalServices.toLocaleString('id-ID')}</td>
                           <td></td>
                         </tr>
-                      </tfoot>
+                      </tfoot>}
                     </table>
                   </div>
                   </>
@@ -2949,8 +3264,24 @@ export default function WorkOrders() {
                 )}
               </div>
 
+              {!editingWO && (
+                <div className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(360px,460px)]">
+                  <textarea
+                    rows={2}
+                    value={formData.description}
+                    onChange={(event) => setFormData(previous => ({ ...previous, description: event.target.value }))}
+                    placeholder="Keluhan / keterangan service *"
+                    className="h-[88px] w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm leading-5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  <div className="grid h-[88px] grid-cols-2 rounded border border-gray-300 bg-white p-2 shadow-sm">
+                    <div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Jumlah Item</span><strong className="text-right text-lg tabular-nums">{formData.services.filter(service => !isPackageMemberService(service)).length}</strong></div>
+                    <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total Estimasi</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong></div>
+                  </div>
+                </div>
+              )}
+
               {/* Catatan Internal / Hasil diagnosa */}
-              <div>
+              <div className={!editingWO ? 'hidden' : ''}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{diagnosisMode ? 'Hasil Diagnosa' : 'Catatan Internal Bengkel'}</label>
                 {diagnosisMode && (
                   <div className="mb-3 grid grid-cols-3 gap-2">
@@ -2986,7 +3317,7 @@ export default function WorkOrders() {
               </>}
 
               {/* Actions */}
-              <div className="sticky bottom-0 z-30 -mx-4 flex items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] sm:-mx-6 sm:gap-3 sm:px-6 sm:pb-0 sm:pt-4 sm:shadow-none lg:static">
+              <div className="sticky bottom-0 z-30 -mx-4 flex items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] sm:-mx-6 sm:gap-3 sm:px-6 sm:pb-0 sm:pt-4 sm:shadow-none lg:hidden">
                 <button
                   type="button"
                   onClick={handleCloseModal}
@@ -3017,8 +3348,20 @@ export default function WorkOrders() {
                   className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
                 >
                   <Save className="w-4 h-4" />
-                  {resumeLostSalesAfterEstimate ? 'Setuju · Dikerjakan' : diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan Registrasi'}
+                  {resumeLostSalesAfterEstimate ? 'Setuju · Dikerjakan' : diagnosisMode ? 'Simpan' : editingWO ? 'Simpan Perubahan' : 'Simpan'}
                 </button>
+                {!editingWO && (
+                  <button
+                    type="submit"
+                    disabled={!newWOReadyForProcess}
+                    onClick={() => { diagnosisSubmitAction.current = 'process'; }}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
+                    title={!newWOReadyForProcess ? 'Pilih cabang, pelanggan, kendaraan, isi keterangan, dan tambahkan layanan berharga.' : 'Simpan WO dan langsung masuk status Dikerjakan'}
+                  >
+                    <Wrench className="h-4 w-4" />
+                    Proses
+                  </button>
+                )}
                 {diagnosisMode && editingWO && hasPermission('invoice:create') && !editingWO.invoiceId && (
                   <button
                     type="submit"

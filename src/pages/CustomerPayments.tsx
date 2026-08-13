@@ -133,6 +133,16 @@ export default function CustomerPayments() {
   );
 
   useEffect(() => {
+    const viewInvoiceId = searchParams.get("viewInvoiceId");
+    if (viewInvoiceId) {
+      const selected = data.invoices.find((item) => item.id === viewInvoiceId);
+      if (selected) {
+        setPeriod("all");
+        setSearch(selected.invoiceNumber);
+      }
+      setSearchParams({}, { replace: true });
+      return;
+    }
     const invoiceId = searchParams.get("invoiceId");
     if (!invoiceId) return;
     const selected = data.invoices.find((item) => item.id === invoiceId);
