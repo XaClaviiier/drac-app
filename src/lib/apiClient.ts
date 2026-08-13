@@ -82,6 +82,9 @@ export const api = {
   getAISettings: () => request('/ai-settings', { method: 'GET' }),
   updateAISettings: (apiKey: string, model: string) =>
     request('/ai-settings', { method: 'PUT', body: JSON.stringify({ apiKey, model }) }),
+  getReceiptAISettings: () => request('/receipt-ai-settings', { method: 'GET' }),
+  updateReceiptAISettings: (apiKey: string, model: string) =>
+    request('/receipt-ai-settings', { method: 'PUT', body: JSON.stringify({ apiKey, model }) }),
   aiChat: (messages: Array<{ role: string; content: string }>) =>
     request('/ai-chat', { method: 'POST', body: JSON.stringify({ messages }) }),
   readReceipt: (image: string) =>

@@ -2,8 +2,8 @@
 $user = requireAuthenticatedUser($pdo);
 if ($method !== 'POST') respondError('Method not allowed', 405);
 
-$config = $pdo->query("SELECT encrypted_api_key, is_active FROM ai_config WHERE id = 1")->fetch();
-if (!$config || !(bool)$config['is_active']) respondError('Groq Key belum diatur. Owner perlu menempel key di Pengaturan > Integrasi AI.', 503);
+$config = $pdo->query("SELECT encrypted_api_key, model, is_active FROM ai_config WHERE id = 2")->fetch();
+if (!$config || !(bool)$config['is_active']) respondError('Groq Key Input Cepat belum diatur. Owner perlu menempel key pada halaman Input Cepat Historis.', 503);
 
 $input = getInput();
 $image = trim((string)($input['image'] ?? ''));
@@ -16,7 +16,7 @@ Baca nota bengkel kendaraan pada foto. Jangan mengarang nilai yang tidak terliha
 Aturan: alamat bukan keluhan; merek dan model hanya diisi jika tertulis; angka Panjar bukan total; item yang dicentang dianggap dipilih; harga tanpa nama dipasangkan ke item dicentang terdekat. Gunakan string kosong atau 0 jika tidak terbaca.
 PROMPT;
 $payload = json_encode([
-    'model' => 'meta-llama/llama-4-scout-17b-16e-instruct',
+    'model' => $config['model'] ?: 'meta-llama/llama-4-scout-17b-16e-instruct',
     'temperature' => 0,
     'max_tokens' => 1000,
     'response_format' => ['type' => 'json_object'],
@@ -40,7 +40,7 @@ if ($body === false) respondError('Tidak dapat menghubungi Groq', 502, $curlErro
 $decoded = json_decode($body, true);
 if ($status < 200 || $status >= 300) {
     $msg = $decoded['error']['message'] ?? 'Groq gagal membaca nota';
-    if ($status === 401) $msg = 'Groq Key ditolak atau sudah tidak aktif. Tempel key baru di Pengaturan > Integrasi AI.';
+    if ($status === 401) $msg = 'Groq Key Input Cepat ditolak atau sudah tidak aktif. Tempel key baru pada halaman Input Cepat Historis.';
     if ($status === 429) $msg = 'Kuota Groq sedang habis atau terkena batas. Ganti key atau coba kembali nanti.';
     respondError($msg, $status === 429 ? 429 : 502);
 }
