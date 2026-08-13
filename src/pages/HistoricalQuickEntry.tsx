@@ -20,6 +20,7 @@ export default function HistoricalQuickEntry(){
   const [text,setText]=useState('Tanggal: 2/1/26\nPelanggan: ALEXANDER\nKendaraan: DD1234AB\nItem: JSA-001 x1 @200000');
   const [accountMaps,setAccountMaps]=useState<AccountMap[]>([]); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
   const [readingReceipt,setReadingReceipt]=useState(false);
+  const [receiptStatus,setReceiptStatus]=useState('');
   const [groqKey,setGroqKey]=useState(''); const [groqModel,setGroqModel]=useState('meta-llama/llama-4-scout-17b-16e-instruct'); const [savingKey,setSavingKey]=useState(false); const [aiConfigured,setAiConfigured]=useState(false);
   useEffect(()=>{ api.get<AccountMap[]>('branch-account-settings').then(r=>setAccountMaps(r.data||[])); },[]);
   useEffect(()=>{ api.getReceiptAISettings().then(r=>{if(r.success&&r.data){setAiConfigured(!!r.data.configured);setGroqModel(r.data.model||'meta-llama/llama-4-scout-17b-16e-instruct');}}); },[]);
@@ -86,14 +87,31 @@ export default function HistoricalQuickEntry(){
     const missing=[!foundCustomer&&'pelanggan',!foundVehicle&&'kendaraan',!parsed.length&&'barang/jasa'].filter(Boolean).join(', ');
     setMessage(!missing?'Teks berhasil dibaca. Periksa ringkasan lalu simpan.':`Data terbaca, tetapi master ${missing} belum cocok. Cari/pilih data tersebut secara manual.`);
   };
+  const imageToDataUrl=(file:File)=>new Promise<string>((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('File foto tidak dapat dibaca.'));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('Format gambar tidak dapat diproses.'));
+      img.onload=()=>{
+        const maxSide=1800; const scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+        const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(img.width*scale)); canvas.height=Math.max(1,Math.round(img.height*scale));
+        const ctx=canvas.getContext('2d'); if(!ctx)return reject(new Error('Gagal menyiapkan gambar.'));
+        ctx.drawImage(img,0,0,canvas.width,canvas.height); resolve(canvas.toDataURL('image/jpeg',0.82));
+      };
+      img.src=String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
   const readReceipt=async(file?:File)=>{
     if(!file)return;
-    if(!/^image\/(jpeg|png|webp)$/.test(file.type))return setMessage('Pilih foto nota JPG, PNG, atau WebP.');
-    if(file.size>6*1024*1024)return setMessage('Ukuran foto maksimal 6 MB.');
-    setReadingReceipt(true); setMessage('Membaca foto nota...');
-    const image=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(file);});
-    const response=await api.readReceipt(image); setReadingReceipt(false);
-    if(!response.success||!response.data)return setMessage(response.message||'Nota gagal dibaca.');
+    if(!/^image\/(jpeg|png|webp)$/.test(file.type)){setReceiptStatus('Gagal: pilih foto JPG, PNG, atau WebP.');return;}
+    setReadingReceipt(true); setReceiptStatus(`Menyiapkan ${file.name}...`); setMessage('');
+    try {
+    const image=await imageToDataUrl(file);
+    setReceiptStatus('Mengirim dan membaca foto nota...');
+    const response=await api.readReceipt(image);
+    if(!response.success||!response.data){const error=response.message||'Nota gagal dibaca.';setReceiptStatus(`Gagal: ${error}`);setMessage(error);return;}
     const r:any=response.data;
     const d=parseDate(r.date||''); if(d)setDate(d);
     const matchedCustomer=findCustomer(r.customerName||'',r.phone||'');
@@ -106,7 +124,12 @@ export default function HistoricalQuickEntry(){
     const receiptLines=(Array.isArray(r.items)?r.items:[]).map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${Number(x.price)||0}`)).filter((x:any):x is Line=>!!x);
     setLines(receiptLines);
     const missing=[!matchedCustomer&&'pelanggan',!matchedVehicle&&'kendaraan',!receiptLines.length&&'barang/jasa'].filter(Boolean).join(', ');
-    setMessage(`${response.message||'Nota berhasil dibaca.'}${missing?` Master ${missing} belum cocok; pilih secara manual.`:''}`);
+    const resultMessage=`${response.message||'Nota berhasil dibaca.'}${missing?` Master ${missing} belum cocok; pilih secara manual.`:''}`;
+    setReceiptStatus(resultMessage); setMessage(resultMessage);
+    } catch(error:any) {
+      const errorMessage=error?.message||'Terjadi kesalahan saat memproses foto.';
+      setReceiptStatus(`Gagal: ${errorMessage}`); setMessage(errorMessage);
+    } finally { setReadingReceipt(false); }
   };
   const saveGroqKey=async()=>{
     const clean=groqKey.trim();
@@ -122,7 +145,7 @@ export default function HistoricalQuickEntry(){
     <div className="rounded-xl border bg-white p-4 shadow-sm">
       <div className="mb-4 grid gap-3 md:grid-cols-3"><label className="text-sm">Cabang<select value={branchId} onChange={e=>setBranchId(e.target.value)} className="mt-1 w-full rounded-lg border p-2">{allowedBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label className="text-sm">Tanggal transaksi<input type="date" max={today()} value={date} onChange={e=>setDate(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label><div className={`rounded-lg border p-3 text-sm ${mapped?'border-green-200 bg-green-50 text-green-700':'border-red-200 bg-red-50 text-red-700'}`}><ShieldCheck className="mr-1 inline h-4 w-4"/>{mapped?'Transfer ke rekening bank cabang':'Rekening bank cabang belum dipetakan'}</div></div>
       {currentUser?.isOwner&&<div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3"><div className="mb-2 flex items-center justify-between gap-2"><div><div className="flex items-center gap-2 font-semibold text-violet-900"><KeyRound className="h-4 w-4"/>Groq Key Khusus Input Cepat</div><p className="text-xs text-violet-700">{aiConfigured?'Key OCR nota sudah aktif dan terpisah dari key utama Asisten AI.':'Belum ada key khusus OCR nota. Key ini tidak memengaruhi Asisten AI.'}</p></div><span className={`rounded-full px-2 py-1 text-xs font-semibold ${aiConfigured?'bg-green-100 text-green-700':'bg-amber-100 text-amber-700'}`}>{aiConfigured?'Aktif':'Belum aktif'}</span></div><div className="flex flex-col gap-2 sm:flex-row"><input type="password" autoComplete="new-password" value={groqKey} onChange={e=>setGroqKey(e.target.value)} placeholder="Tempel Groq Key khusus Input Cepat: gsk_..." className="min-w-0 flex-1 rounded-lg border border-violet-200 bg-white px-3 py-2 font-mono text-sm"/><button type="button" disabled={savingKey||!groqKey.trim()} onClick={()=>void saveGroqKey()} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{savingKey?'Menyimpan...':aiConfigured?'Ganti Key OCR':'Simpan Key OCR'}</button></div><p className="mt-1.5 text-xs text-slate-500">Disimpan terenkripsi pada konfigurasi terpisah. Mengganti key ini tidak mengubah key utama sistem.</p></div>}
-      {mode==='text'&&<div className="mb-4 rounded-xl bg-slate-900 p-3 text-white"><div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 font-semibold"><FileText className="h-4 w-4"/>Format tanpa AI/token</div><label className={`cursor-pointer rounded-lg border border-cyan-400 px-3 py-1.5 text-sm font-semibold text-cyan-300 hover:bg-cyan-950 ${readingReceipt?'pointer-events-none opacity-50':''}`}><Camera className="mr-1.5 inline h-4 w-4"/>{readingReceipt?'Membaca...':'Upload Foto Nota'}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={e=>{void readReceipt(e.target.files?.[0]);e.currentTarget.value='';}}/></label></div><textarea value={text} onChange={e=>setText(e.target.value)} rows={6} className="w-full rounded-lg border border-slate-600 bg-slate-800 p-3 font-mono text-sm"/><button onClick={parseText} className="mt-2 rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950"><Send className="mr-2 inline h-4 w-4"/>Baca Data</button></div>}
+      {mode==='text'&&<div className="mb-4 rounded-xl bg-slate-900 p-3 text-white"><div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 font-semibold"><FileText className="h-4 w-4"/>Format tanpa AI/token</div><label className={`cursor-pointer rounded-lg border border-cyan-400 px-3 py-1.5 text-sm font-semibold text-cyan-300 hover:bg-cyan-950 ${readingReceipt?'pointer-events-none opacity-50':''}`}><Camera className={`mr-1.5 inline h-4 w-4 ${readingReceipt?'animate-pulse':''}`}/>{readingReceipt?'Membaca Nota...':'Upload Foto Nota'}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={e=>{const file=e.target.files?.[0];e.currentTarget.value='';void readReceipt(file);}}/></label></div>{receiptStatus&&<div className={`mb-2 rounded-lg border px-3 py-2 text-sm ${receiptStatus.startsWith('Gagal')?'border-red-400 bg-red-950/50 text-red-200':readingReceipt?'border-amber-400 bg-amber-950/40 text-amber-200':'border-emerald-400 bg-emerald-950/40 text-emerald-200'}`}>{readingReceipt&&<span className="mr-2 inline-block animate-spin">◌</span>}{receiptStatus}</div>}<textarea value={text} onChange={e=>setText(e.target.value)} rows={6} className="w-full rounded-lg border border-slate-600 bg-slate-800 p-3 font-mono text-sm"/><button onClick={parseText} className="mt-2 rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950"><Send className="mr-2 inline h-4 w-4"/>Baca Data</button></div>}
       <div className="grid gap-3 md:grid-cols-2"><div className="relative"><label className="text-sm">Cari pelanggan</label><input value={customerQuery} onChange={e=>{setCustomerQuery(e.target.value);setCustomer(null)}} placeholder="Nama, kode, atau nomor HP" className="mt-1 w-full rounded-lg border p-2"/><Picker results={customerResults} onPick={chooseCustomer}/></div><div className="relative"><label className="text-sm">Cari kendaraan</label><input value={vehicleQuery} onChange={e=>{setVehicleQuery(e.target.value);setVehicle(null)}} placeholder="Nomor plat, merek, atau tipe" className="mt-1 w-full rounded-lg border p-2"/><Picker results={vehicleResults} onPick={chooseVehicle}/></div></div>
       <label className="mt-3 block text-sm">Keterangan<input value={description} onChange={e=>setDescription(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label>
       <div className="relative mt-3"><label className="text-sm">Cari barang / jasa</label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={itemQuery} onChange={e=>setItemQuery(e.target.value)} placeholder="Kode, barcode, atau nama" className="mt-1 w-full rounded-lg border py-2 pl-9 pr-3"/></div><Picker results={itemResults} onPick={addItem}/></div>
