@@ -1018,10 +1018,16 @@ export default function WorkOrders() {
       window.alert('Total estimasi harus lebih dari Rp0. Isi harga minimal satu layanan/barang sebelum menyimpan diagnosa.');
       return;
     }
+    const diagnosisMeasurements = [formData.diagnosisTemperature, formData.diagnosisLp, formData.diagnosisHp];
+    const hasAnyMeasurement = diagnosisMeasurements.some(value => value !== undefined && value !== null);
+    const hasCompleteMeasurements = diagnosisMeasurements
+      .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
+    if (diagnosisMode && hasAnyMeasurement && !hasCompleteMeasurements) {
+      window.alert('Data pengukuran belum lengkap. Jika salah satu diisi, Suhu, LP, dan HP wajib diisi semuanya.');
+      return;
+    }
     if (shouldCreateInvoice) {
-      const hasCompleteMeasurements = [formData.diagnosisTemperature, formData.diagnosisLp, formData.diagnosisHp]
-        .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
-      const hasCompletionNote = Boolean(formData.findings.trim() || formData.notes.trim());
+      const hasCompletionNote = Boolean(formData.findings.trim());
       if (!hasCompleteMeasurements && !hasCompletionNote) {
         window.alert('Pekerjaan belum dapat diselesaikan. Isi Suhu, LP, dan HP secara lengkap atau tuliskan catatan hasil pekerjaan.');
         return;
@@ -2600,7 +2606,7 @@ export default function WorkOrders() {
             </div>
 
             <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-3">
-              <div className="hidden items-center justify-between gap-4 border-b border-gray-200 pb-2 lg:flex">
+              <div className="hidden items-center justify-between gap-4 border-b border-gray-200 bg-white pb-2 lg:sticky lg:top-0 lg:z-40 lg:flex">
                 <div className="flex min-w-0 items-center gap-5 text-xs text-gray-500">
                   <span>Nomor: <strong className="text-gray-900">{editingWO?.woNumber || 'Otomatis saat Register'}</strong></span>
                   <span>Cabang: <strong className="text-gray-900">{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || 'Pilih cabang'}</strong></span>
@@ -2689,30 +2695,13 @@ export default function WorkOrders() {
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
-                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Keluhan awal</span><strong>{editingWO.description || '-'}</strong></div>
+                    <div className="md:col-span-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"><span className="block text-xs font-semibold uppercase text-blue-600">Keluhan awal</span><strong className="mt-0.5 block whitespace-pre-wrap text-slate-900">{editingWO.description || '-'}</strong></div>
                     {serviceEditMode && (
                       <button type="button" onClick={() => setServiceEditMode(false)} className="absolute right-3 top-3 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
                         Edit Data Registrasi
                       </button>
                     )}
                   </div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Teknisi penanggung jawab <span className="text-red-500">*</span>
-                    <select
-                      required
-                      value={formData.technicianId}
-                      onChange={(event) => {
-                        const technician = data.users.find(user => user.id === event.target.value);
-                        setFormData(previous => ({ ...previous, technicianId: event.target.value, technicianName: technician?.name || '' }));
-                      }}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                    >
-                      <option value="">Pilih teknisi yang menangani</option>
-                      {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO.branchId) || user.branchId === editingWO.branchId)).map(user => (
-                        <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
-                      ))}
-                    </select>
-                  </label>
                 </div>
               ) : <>
               {/* Pelanggan dan tanggal */}
@@ -3308,7 +3297,7 @@ export default function WorkOrders() {
                           </tr>
                         )}
                       </tbody>
-                      {editingWO && <tfoot>
+                      {editingWO && !diagnosisMode && <tfoot>
                         <tr className="border-t-2 border-blue-300 bg-blue-50">
                           <td colSpan={5} className="px-3 py-3 text-right font-semibold text-gray-900">TOTAL ESTIMASI</td>
                           <td className="px-3 py-3 text-right text-lg font-bold text-blue-700 whitespace-nowrap">Rp {totalServices.toLocaleString('id-ID')}</td>
@@ -3342,39 +3331,36 @@ export default function WorkOrders() {
                 </div>
               )}
 
-              {/* Catatan Internal / Hasil diagnosa */}
-              <div className={!editingWO ? 'hidden' : ''}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{diagnosisMode ? 'Hasil Diagnosa' : 'Catatan Internal Bengkel'}</label>
-                {diagnosisMode && (
-                  <div className="mb-3 grid grid-cols-3 gap-2">
-                    <label className="text-xs font-semibold text-gray-600">
-                      Suhu (°C)
-                      <input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+              {/* Teknisi, pengukuran, komentar, dan total dalam satu baris ringkas */}
+              <div className={!editingWO ? 'hidden' : 'grid items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_360px]'}>
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+                  <p className="text-sm font-semibold text-cyan-950">{diagnosisMode ? 'Teknisi & Hasil Pekerjaan' : 'Teknisi & Catatan Internal'}</p>
+                  {diagnosisMode && <p className="mb-2 text-[11px] text-cyan-700">Isi Suhu, LP, dan HP lengkap, atau isi catatan hasil pekerjaan.</p>}
+                  <div className={`grid gap-2 ${diagnosisMode ? 'sm:grid-cols-[minmax(180px,1.5fr)_90px_90px_90px]' : 'grid-cols-1'}`}>
+                    <label className="text-[11px] font-semibold text-slate-600">
+                      Teknisi <span className="text-red-500">*</span>
+                      <select required value={formData.technicianId} onChange={(event) => {
+                        const technician = data.users.find(user => user.id === event.target.value);
+                        setFormData(previous => ({ ...previous, technicianId: event.target.value, technicianName: technician?.name || '' }));
+                      }} className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-xs font-normal outline-none focus:border-blue-500">
+                        <option value="">Pilih teknisi</option>
+                        {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO.branchId) || user.branchId === editingWO.branchId)).map(user => (
+                          <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
+                        ))}
+                      </select>
                     </label>
-                    <label className="text-xs font-semibold text-gray-600">
-                      LP (PSI)
-                      <input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
-                    </label>
-                    <label className="text-xs font-semibold text-gray-600">
-                      HP (PSI)
-                      <input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
-                    </label>
+                    {diagnosisMode && <>
+                      <label className="text-[11px] font-semibold text-slate-600">Suhu (°C)<input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                      <label className="text-[11px] font-semibold text-slate-600">LP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                      <label className="text-[11px] font-semibold text-slate-600">HP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                    </>}
                   </div>
-                )}
-                {editingWO && (editingWO.findings || diagnosisMeasurementLabel(editingWO)) && (
-                  <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">
-                    <p className="font-semibold">Hasil Diagnosa</p>
-                    {diagnosisMeasurementLabel(editingWO) && <p className="mt-1 font-medium">{diagnosisMeasurementLabel(editingWO)}</p>}
-                    {editingWO.findings && <p className="mt-1 whitespace-pre-wrap">{editingWO.findings}</p>}
-                  </div>
-                )}
-                <textarea
-                  value={diagnosisMode ? formData.findings : formData.notes}
-                  onChange={(e) => setFormData(prev => diagnosisMode ? { ...prev, findings: e.target.value } : { ...prev, notes: e.target.value })}
-                  placeholder={diagnosisMode ? 'Tuliskan hasil pemeriksaan teknisi…' : 'Catatan internal teknisi (sparepart, kendala, dll)...'}
-                  rows={2}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                />
+                  <textarea value={diagnosisMode ? formData.findings : formData.notes} onChange={(event) => setFormData(previous => diagnosisMode ? { ...previous, findings: event.target.value } : { ...previous, notes: event.target.value })} placeholder={diagnosisMode ? 'Catatan hasil pekerjaan...' : 'Catatan internal teknisi (sparepart, kendala, dll)...'} rows={2} className="mt-2 min-h-[58px] w-full resize-none rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+                <div className="grid min-h-[148px] grid-cols-2 rounded-xl border border-gray-300 bg-white p-3 shadow-sm">
+                  <div className="flex flex-col justify-between px-3 py-2"><span className="text-sm text-gray-600">Jumlah Item</span><strong className="text-right text-2xl tabular-nums">{formData.services.filter(service => !isPackageMemberService(service)).length}</strong></div>
+                  <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-2"><span className="text-sm text-gray-600">Total Estimasi</span><strong className="text-right text-xl tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong></div>
+                </div>
               </div>
               </>}
 
