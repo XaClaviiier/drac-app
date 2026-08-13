@@ -8,6 +8,11 @@ type Line = { item: Item; qty: number; price: number };
 type AccountMap = { branchId: string; bankAccountId: string };
 const today = () => new Date().toISOString().slice(0,10);
 const normalize = (v:string) => v.toUpperCase().replace(/[^A-Z0-9]/g,'');
+const parseMoney = (value:unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const digits = String(value ?? '').replace(/[^0-9-]/g, '');
+  return digits ? Number(digits) : 0;
+};
 
 export default function HistoricalQuickEntry(){
   const { data, currentBranchId, setCurrentBranchId, currentUser, refreshData } = useApp();
@@ -16,7 +21,7 @@ export default function HistoricalQuickEntry(){
   const [branchId,setBranchId]=useState(currentBranchId==='ALL' ? (allowedBranches[0]?.id||'') : currentBranchId);
   const [date,setDate]=useState(today()); const [customer,setCustomer]=useState<Customer|null>(null); const [vehicle,setVehicle]=useState<Vehicle|null>(null);
   const [customerQuery,setCustomerQuery]=useState(''); const [vehicleQuery,setVehicleQuery]=useState(''); const [itemQuery,setItemQuery]=useState('');
-  const [lines,setLines]=useState<Line[]>([]); const [description,setDescription]=useState('Transaksi historis');
+  const [lines,setLines]=useState<Line[]>([]); const [description,setDescription]=useState('Transaksi historis'); const [receiptTotal,setReceiptTotal]=useState(0);
   const [text,setText]=useState('Tanggal: 2/1/26\nPelanggan: ALEXANDER\nKendaraan: DD1234AB\nItem: JSA-001 x1 @200000');
   const [accountMaps,setAccountMaps]=useState<AccountMap[]>([]); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
   const [readingReceipt,setReadingReceipt]=useState(false);
@@ -29,7 +34,7 @@ export default function HistoricalQuickEntry(){
   const customerResults = customerQuery.length<2?[]:data.customers.filter(c=>`${c.customerCode} ${c.name} ${c.phone}`.toLowerCase().includes(customerQuery.toLowerCase())).slice(0,8);
   const vehicleResults = vehicleQuery.length<2?[]:vehicles.filter(v=>normalize(`${v.plateNumber}${v.brand}${v.model}`).includes(normalize(vehicleQuery))).slice(0,8);
   const itemResults = itemQuery.length<2?[]:data.items.filter(i=>i.isActive && normalize(`${i.code}${i.barcode||''}${i.name}`).includes(normalize(itemQuery))).slice(0,10);
-  const total=lines.reduce((s,l)=>s+l.qty*l.price,0); const mapped=accountMaps.some(m=>m.branchId===branchId&&m.bankAccountId);
+  const total=lines.reduce((s,l)=>s+l.qty*l.price,0); const paymentTotal=receiptTotal||total; const difference=paymentTotal-total; const mapped=accountMaps.some(m=>m.branchId===branchId&&m.bankAccountId);
   const chooseCustomer=(c:Customer)=>{setCustomer(c);setCustomerQuery(`${c.name} • ${c.phone}`);setVehicle(null);setVehicleQuery('');};
   const chooseVehicle=(v:Vehicle)=>{setVehicle(v);setVehicleQuery(`${v.plateNumber} • ${v.brand} ${v.model}`);};
   const addItem=(i:Item)=>{setLines(x=>x.some(l=>l.item.id===i.id)?x:x.concat({item:i,qty:1,price:i.sellingPrice}));setItemQuery('');};
@@ -83,7 +88,7 @@ export default function HistoricalQuickEntry(){
     if(foundVehicle&&!foundCustomer)foundCustomer=data.customers.find(c=>c.id===foundVehicle!.customerRefId);
     if(foundCustomer)chooseCustomer(foundCustomer);
     if(foundVehicle){setVehicle(foundVehicle);setVehicleQuery(`${foundVehicle.plateNumber} • ${foundVehicle.brand} ${foundVehicle.model}`);}
-    setLines(parsed);
+    setLines(parsed); setReceiptTotal(parsed.reduce((sum,line)=>sum+line.qty*line.price,0));
     const missing=[!foundCustomer&&'pelanggan',!foundVehicle&&'kendaraan',!parsed.length&&'barang/jasa'].filter(Boolean).join(', ');
     setMessage(!missing?'Teks berhasil dibaca. Periksa ringkasan lalu simpan.':`Data terbaca, tetapi master ${missing} belum cocok. Cari/pilih data tersebut secara manual.`);
   };
@@ -121,8 +126,16 @@ export default function HistoricalQuickEntry(){
     if(matchedCustomer)chooseCustomer(matchedCustomer); else setCustomer(null);
     if(matchedVehicle){setVehicle(matchedVehicle);setVehicleQuery(`${matchedVehicle.plateNumber} • ${matchedVehicle.brand} ${matchedVehicle.model}`);}else setVehicle(null);
     setDescription(r.complaint||'Transaksi historis');
-    const receiptLines=(Array.isArray(r.items)?r.items:[]).map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${Number(x.price)||0}`)).filter((x:any):x is Line=>!!x);
-    setLines(receiptLines);
+    const receiptLines=(Array.isArray(r.items)?r.items:[]).map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${parseMoney(x.price)}`)).filter((x:any):x is Line=>!!x);
+    const ocrTotal=parseMoney(r.total);
+    const detailedTotal=receiptLines.reduce((sum,line)=>sum+line.qty*line.price,0);
+    if(ocrTotal>0&&receiptLines.length&&detailedTotal!==ocrTotal){
+      const zeroIndex=receiptLines.findIndex(line=>line.price<=0);
+      const index=zeroIndex>=0?zeroIndex:0;
+      const remainder=ocrTotal-detailedTotal;
+      if(remainder>0)receiptLines[index]={...receiptLines[index],price:receiptLines[index].price+(remainder/receiptLines[index].qty)};
+    }
+    setLines(receiptLines); setReceiptTotal(ocrTotal||receiptLines.reduce((sum,line)=>sum+line.qty*line.price,0));
     const missing=[!matchedCustomer&&'pelanggan',!matchedVehicle&&'kendaraan',!receiptLines.length&&'barang/jasa'].filter(Boolean).join(', ');
     const resultMessage=`${response.message||'Nota berhasil dibaca.'}${missing?` Master ${missing} belum cocok; pilih secara manual.`:''}`;
     setReceiptStatus(resultMessage); setMessage(resultMessage);
@@ -138,7 +151,7 @@ export default function HistoricalQuickEntry(){
     if(!r.success)return setMessage(r.message||'Gagal menyimpan Groq Key.');
     setGroqKey(''); setAiConfigured(true); setMessage('Groq Key berhasil disimpan dan siap digunakan untuk membaca nota.');
   };
-  const save=async()=>{if(!branchId||!customer||!vehicle||!lines.length||total<=0)return setMessage('Lengkapi cabang, pelanggan, kendaraan, dan item dengan total lebih dari Rp0.');setSaving(true);setMessage('');const r=await api.create('historical-entries',{branchId,date,customerId:customer.id,vehicleId:vehicle.id,description,items:lines.map(l=>({itemId:l.item.id,qty:l.qty,price:l.price}))});setSaving(false);if(!r.success)return setMessage(r.message||'Gagal menyimpan.');setMessage(`${r.message}: ${r.data?.woNumber} • ${r.data?.invoiceNumber} • ${r.data?.paymentNumber}`);setLines([]);await refreshData();};
+  const save=async()=>{if(!branchId||!customer||!vehicle||!lines.length||total<=0)return setMessage('Lengkapi cabang, pelanggan, kendaraan, dan item dengan total lebih dari Rp0.');if(Math.abs(difference)>0.01)return setMessage('Total rincian harus sama dengan Total Nota/Pembayaran. Koreksi harga item atau total nota terlebih dahulu.');setSaving(true);setMessage('');const r=await api.create('historical-entries',{branchId,date,customerId:customer.id,vehicleId:vehicle.id,description,paymentTotal,items:lines.map(l=>({itemId:l.item.id,qty:l.qty,price:l.price}))});setSaving(false);if(!r.success)return setMessage(r.message||'Gagal menyimpan.');setMessage(`${r.message}: ${r.data?.woNumber} • ${r.data?.invoiceNumber} • ${r.data?.paymentNumber}`);setLines([]);setReceiptTotal(0);await refreshData();};
   const Picker=({results,onPick}:{results:any[],onPick:(x:any)=>void})=>results.length?<div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-lg border bg-white shadow-xl">{results.map(x=><button key={x.id} type="button" onClick={()=>onPick(x)} className="block w-full border-b px-3 py-2 text-left text-sm hover:bg-blue-50">{x.name||x.plateNumber} <span className="text-gray-500">{x.phone||`${x.brand} ${x.model}`}</span></button>)}</div>:null;
   return <div className="mx-auto max-w-7xl p-4">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h1 className="text-xl font-bold">Input Cepat Historis</h1><p className="text-sm text-gray-500">WO → Faktur lunas → Pembayaran transfer, tanpa mengurangi stok.</p></div><div className="flex gap-2"><button onClick={()=>setMode('text')} className={`rounded-lg px-4 py-2 ${mode==='text'?'bg-blue-600 text-white':'border bg-white'}`}>Ketik Cepat</button><button onClick={()=>setMode('form')} className={`rounded-lg px-4 py-2 ${mode==='form'?'bg-blue-600 text-white':'border bg-white'}`}>Form Cepat</button></div></div>
@@ -150,7 +163,8 @@ export default function HistoricalQuickEntry(){
       <label className="mt-3 block text-sm">Keterangan<input value={description} onChange={e=>setDescription(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label>
       <div className="relative mt-3"><label className="text-sm">Cari barang / jasa</label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={itemQuery} onChange={e=>setItemQuery(e.target.value)} placeholder="Kode, barcode, atau nama" className="mt-1 w-full rounded-lg border py-2 pl-9 pr-3"/></div><Picker results={itemResults} onPick={addItem}/></div>
       <div className="mt-3 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr><th className="p-2 text-left">Barang/Jasa</th><th>Qty</th><th>Harga historis</th><th>Subtotal</th><th/></tr></thead><tbody>{lines.map((l,i)=><tr key={l.item.id} className="border-t"><td className="p-2 font-medium">{l.item.code} — {l.item.name}</td><td><input type="number" min="1" value={l.qty} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,qty:Number(e.target.value)}:v))} className="w-20 rounded border p-1"/></td><td><input type="number" min="0" value={l.price} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,price:Number(e.target.value)}:v))} className="w-32 rounded border p-1"/></td><td className="whitespace-nowrap p-2 font-semibold">Rp {(l.qty*l.price).toLocaleString('id-ID')}</td><td><button onClick={()=>setLines(x=>x.filter((_,n)=>n!==i))} className="p-2 text-red-500"><Trash2 className="h-4 w-4"/></button></td></tr>)}</tbody></table>{!lines.length&&<div className="p-8 text-center text-sm text-gray-400">Belum ada barang atau jasa.</div>}</div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div>{message&&<span className="text-sm font-medium text-blue-700">{message}</span>}<p className="text-xs text-amber-700">Barang tetap tercatat di faktur, tetapi stok gudang tidak berubah.</p></div><div className="flex items-center gap-4"><strong>Total Rp {total.toLocaleString('id-ID')}</strong><button disabled={saving||!mapped} onClick={save} className="rounded-lg bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-40"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{saving?'Menyimpan...':'Simpan Lengkap'}</button></div></div>
+      <div className="mt-3 grid gap-3 rounded-lg border bg-slate-50 p-3 sm:grid-cols-3"><div><span className="text-xs text-slate-500">Total rincian item</span><div className="font-semibold">Rp {total.toLocaleString('id-ID')}</div></div><label className="text-xs text-slate-500">Total Nota/Pembayaran (Rp)<input type="number" min="0" value={paymentTotal||''} onChange={e=>setReceiptTotal(Math.max(0,Number(e.target.value)||0))} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-base font-bold text-green-700"/></label><div><span className="text-xs text-slate-500">Selisih</span><div className={`font-bold ${Math.abs(difference)<0.01?'text-green-600':'text-red-600'}`}>Rp {difference.toLocaleString('id-ID')}</div><p className="text-xs text-slate-500">Harus Rp0 sebelum disimpan.</p></div></div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div>{message&&<span className="text-sm font-medium text-blue-700">{message}</span>}<p className="text-xs text-amber-700">Barang tetap tercatat di faktur, tetapi stok gudang tidak berubah.</p></div><div className="flex items-center gap-4"><strong>Total pembayaran Rp {paymentTotal.toLocaleString('id-ID')}</strong><button disabled={saving||!mapped||paymentTotal<=0||Math.abs(difference)>0.01} onClick={save} className="rounded-lg bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-40"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{saving?'Menyimpan...':'Simpan Lengkap'}</button></div></div>
     </div>
   </div>;
 }

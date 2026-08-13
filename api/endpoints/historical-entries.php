@@ -43,6 +43,8 @@ try {
     }
     $total = array_sum(array_column($items, 'subtotal'));
     if ($total <= 0) throw new InvalidArgumentException('Total transaksi historis harus lebih dari Rp0.');
+    $paymentTotal = max(0, (float)($d['paymentTotal'] ?? $total));
+    if (abs($paymentTotal - $total) > 0.01) throw new InvalidArgumentException('Total nota/pembayaran harus sama dengan total rincian barang dan jasa.');
 
     $accountStmt = $pdo->prepare('SELECT s.bank_account_id,a.name,a.account_type,a.branch_id FROM branch_account_settings s LEFT JOIN cash_accounts a ON a.id=s.bank_account_id WHERE s.branch_id=? AND a.is_active=1');
     $accountStmt->execute([$branchId]); $account = $accountStmt->fetch();

@@ -13,7 +13,7 @@ if (strlen($image) > 9 * 1024 * 1024) respondError('Foto terlalu besar. Maksimal
 $instruction = <<<'PROMPT'
 Baca nota bengkel kendaraan pada foto. Jangan mengarang nilai yang tidak terlihat. Kembalikan JSON murni dengan struktur:
 {"date":"DD/MM/YYYY","customerName":"","phone":"","address":"","plate":"","brand":"","model":"","color":"","complaint":"","items":[{"name":"","qty":1,"price":0}],"total":0}
-Aturan: alamat bukan keluhan; merek dan model hanya diisi jika tertulis; angka Panjar bukan total; item yang dicentang dianggap dipilih; harga tanpa nama dipasangkan ke item dicentang terdekat. Gunakan string kosong atau 0 jika tidak terbaca.
+Aturan: alamat bukan keluhan; merek dan model hanya diisi jika tertulis; angka Panjar bukan total; total harus diambil dari Total Biaya/Total/Grand Total; item yang dicentang dianggap dipilih; harga tanpa nama dipasangkan ke item dicentang terdekat. Jika hanya ada satu harga layanan yang terbaca dan sama dengan total, gunakan harga itu pada layanan terkait. Gunakan string kosong atau 0 jika tidak terbaca.
 PROMPT;
 $visionModel = trim((string)($config['model'] ?? ''));
 if (!$visionModel || str_contains($visionModel, 'llama-4-scout')) {
