@@ -66,6 +66,20 @@ body { margin: 0; background: #f3f4f6; }
 .goods-receipt-entry input,
 .goods-receipt-entry select {
   background-color: #ffffff;
+  border-color: #bfc5cc;
+  outline-color: #bfc5cc;
+}
+
+.goods-receipt-entry input:focus,
+.goods-receipt-entry select:focus {
+  border-color: #9aa3ad;
+  outline: none;
+  box-shadow: 0 0 0 1px #cbd0d6;
+}
+
+/* Pencarian dan tabel menyatu tanpa garis tambahan di atas header tabel. */
+.goods-receipt-entry .mx-2.mt-1 > .border-b {
+  border-bottom-width: 0;
 }
 
 .goods-receipt-entry .overflow-x-auto {
