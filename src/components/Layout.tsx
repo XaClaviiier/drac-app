@@ -460,7 +460,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <div className="relative hidden h-10 flex-shrink-0 items-start bg-gray-100 px-2 after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-blue-600 lg:flex">
+        <div className="relative hidden h-10 flex-shrink-0 items-start bg-gray-100 px-2 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-20 after:h-px after:bg-blue-600 lg:flex">
           <div className="relative z-10 flex h-10 min-w-0 flex-1 items-start overflow-x-auto overflow-y-hidden">
             <button type="button" onClick={() => navigate('/')} className={`relative z-10 flex h-10 min-w-32 flex-shrink-0 items-center justify-between gap-3 rounded-t-lg border border-b-0 px-4 text-sm transition-colors ${location.pathname === '/' ? 'border-blue-600 bg-blue-600 font-semibold text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               <span className="truncate">Dashboard</span>
