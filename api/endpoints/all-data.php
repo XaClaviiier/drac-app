@@ -10,6 +10,10 @@ $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS received_by_id V
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_method VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number");
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_other VARCHAR(100) NULL AFTER delivery_method");
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS shipping_notes VARCHAR(500) NULL AFTER delivery_other");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_type VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER shipping_notes");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_warehouse_id VARCHAR(20) NULL AFTER source_type");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_branch_id VARCHAR(20) NULL AFTER source_warehouse_id");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS transfer_number VARCHAR(40) NULL AFTER source_branch_id");
 // ==========================================================
 // ALL DATA - Load semua data sekaligus untuk aplikasi
 // GET /api/all-data
@@ -393,6 +397,10 @@ try {
         $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
         $r['deliveryOther'] = $r['delivery_other'] ?? '';
         $r['shippingNotes'] = $r['shipping_notes'] ?? '';
+        $r['sourceType'] = $r['source_type'] ?? 'Supplier';
+        $r['sourceWarehouseId'] = $r['source_warehouse_id'] ?? null;
+        $r['sourceBranchId'] = $r['source_branch_id'] ?? null;
+        $r['transferNumber'] = $r['transfer_number'] ?? null;
         $r['branchId'] = $r['branch_id'];
         $r['warehouseId'] = $r['warehouse_id'] ?? null;
         $r['receivedBy'] = $r['received_by'];

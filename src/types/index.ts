@@ -365,6 +365,10 @@ export interface GoodsReceipt {
   deliveryMethod?: string;
   deliveryOther?: string;
   shippingNotes?: string;
+  sourceType?: 'Supplier' | 'Transfer Gudang';
+  sourceWarehouseId?: string;
+  sourceBranchId?: string;
+  transferNumber?: string;
   items: GoodsReceiptItem[];
   status: 'Draft' | 'Diterima' | 'Difakturkan' | 'Sebagian' | 'Batal';
   notes: string;

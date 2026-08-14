@@ -53,6 +53,7 @@ export default function GoodsReceiptPage() {
   const [showSuccessMsg, setShowSuccessMsg] = useState('');
 
   const openInvoicePreview = (r: GoodsReceipt) => {
+    if (r.sourceType === 'Transfer Gudang') { window.alert('Transfer antar gudang tidak membuat Faktur Pembelian.'); return; }
     if (!r.supplierId) { window.alert('Pasangkan supplier terlebih dahulu sebelum membuat Faktur Pembelian.'); return; }
     const newItems: PurchaseInvoiceItem[] = r.items
       .filter(it => it.qty - (it.qtyInvoiced || 0) > 0)
@@ -420,7 +421,7 @@ export default function GoodsReceiptPage() {
                   <tr key={r.id} className="hover:bg-blue-50/50 transition-colors group">
                     <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{r.date}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{r.receiptNumber}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{r.supplierName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{r.sourceType==='Transfer Gudang'?<><span className="font-medium text-blue-700">Transfer Gudang</span><span className="block text-xs font-mono text-gray-500">{r.transferNumber||'Manual'}</span></>:r.supplierName||'Supplier menyusul'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 font-mono">{r.doNumber || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-center">{r.items.length}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 text-center">{totalQ}</td>
@@ -465,7 +466,7 @@ export default function GoodsReceiptPage() {
                         )}
 
                         {/* Tombol Faktur (jika sudah Diterima dan belum fully invoiced) */}
-                        {r.status === 'Diterima' && invStatus !== 'Lunas' && hasPermission('purchase:create') && (
+                        {r.status === 'Diterima' && r.sourceType !== 'Transfer Gudang' && invStatus !== 'Lunas' && hasPermission('purchase:create') && (
                           <button
                             onClick={() => openInvoicePreview(r)}
                             className="rounded-lg bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 inline-flex items-center gap-1"
@@ -698,11 +699,12 @@ export default function GoodsReceiptPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div><p className="text-gray-500">Tanggal</p><p className="font-medium">{viewing.date}</p></div>
                 <div><p className="text-gray-500">Status</p><span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[viewing.status]}`}>{viewing.status}</span></div>
-                <div><p className="text-gray-500">Supplier</p><p className="font-medium">{viewing.supplierName || 'Belum ditentukan'}</p></div>
+                <div><p className="text-gray-500">Sumber Barang</p><p className="font-medium">{viewing.sourceType==='Transfer Gudang'?`${viewing.transferNumber||'Transfer manual'} · ${data.warehouses.find(w=>w.id===viewing.sourceWarehouseId)?.name||'Gudang asal'}`:viewing.supplierName||'Supplier belum ditentukan'}</p></div>
                 <div><p className="text-gray-500">No. Surat Jalan</p><p className="font-medium font-mono">{viewing.doNumber || '-'}</p></div>
                 <div><p className="text-gray-500">Cabang</p><p className="font-medium">{data.branches.find(b => b.id === viewing.branchId)?.name}</p></div>
                 <div><p className="text-gray-500">Diterima Oleh</p><p className="font-medium">{viewing.receivedBy || '-'}</p></div>
                 <div><p className="text-gray-500">Gudang</p><p className="font-medium">{data.warehouses.find(w=>w.id===viewing.warehouseId)?.name||'-'}</p></div>
+                {viewing.shippingNotes&&<div className="col-span-2"><p className="text-gray-500">Keterangan Pengiriman</p><p className="font-medium">{viewing.shippingNotes}</p></div>}
               </div>
               <div className="rounded-lg border border-gray-200 overflow-hidden">
                 <table className="w-full text-sm">
