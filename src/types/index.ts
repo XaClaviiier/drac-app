@@ -362,6 +362,9 @@ export interface GoodsReceipt {
   supplierId: string;
   supplierName: string;
   doNumber: string; // No. Surat Jalan / Delivery Order
+  deliveryMethod?: string;
+  deliveryOther?: string;
+  shippingNotes?: string;
   items: GoodsReceiptItem[];
   status: 'Draft' | 'Diterima' | 'Difakturkan' | 'Sebagian' | 'Batal';
   notes: string;

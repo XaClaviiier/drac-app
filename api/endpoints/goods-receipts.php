@@ -1,6 +1,9 @@
 <?php
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER branch_id");
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS received_by_id VARCHAR(64) NULL AFTER received_by");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_method VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_other VARCHAR(100) NULL AFTER delivery_method");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS shipping_notes VARCHAR(500) NULL AFTER delivery_other");
 $pdo->exec("UPDATE goods_receipts r JOIN warehouses w ON w.branch_id=r.branch_id AND w.is_default=1 SET r.warehouse_id=w.id WHERE r.warehouse_id IS NULL OR r.warehouse_id=''");
 switch ($method) {
     case 'GET':
@@ -15,6 +18,9 @@ switch ($method) {
             $r['supplierId'] = $r['supplier_id'];
             $r['supplierName'] = $r['supplier_name'];
             $r['doNumber'] = $r['do_number'];
+            $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
+            $r['deliveryOther'] = $r['delivery_other'] ?? '';
+            $r['shippingNotes'] = $r['shipping_notes'] ?? '';
             $r['branchId'] = $r['branch_id'];
             $r['warehouseId'] = $r['warehouse_id'];
             $r['receivedBy'] = $r['received_by'];
@@ -60,10 +66,10 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             $rId = $d['id'] ?? generateId();
-            $stmt = $pdo->prepare("INSERT INTO goods_receipts (id,receipt_number,date,supplier_id,supplier_name,do_number,status,notes,branch_id,warehouse_id,received_by,received_by_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+            $stmt = $pdo->prepare("INSERT INTO goods_receipts (id,receipt_number,date,supplier_id,supplier_name,do_number,delivery_method,delivery_other,shipping_notes,status,notes,branch_id,warehouse_id,received_by,received_by_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
                 $rId, $d['receiptNumber'], $d['date'],
-                $supplier['id'] ?? null, $supplier['name'] ?? '', $d['doNumber'] ?? '',
+                $supplier['id'] ?? null, $supplier['name'] ?? '', $d['doNumber'] ?? '', $d['deliveryMethod'] ?? 'Diantar Supplier', $d['deliveryOther'] ?? '', $d['shippingNotes'] ?? '',
                 $newStatus, $d['notes'] ?? '',
                 $branchId,$warehouseId,$actor['name'] ?? $actor['username'] ?? 'System',$actor['id'] ?? null
             ]);
@@ -107,7 +113,7 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             // Get old status untuk logic stock
-            $oldRowStmt = $pdo->prepare("SELECT status,branch_id,warehouse_id FROM goods_receipts WHERE id=? FOR UPDATE");
+            $oldRowStmt = $pdo->prepare("SELECT * FROM goods_receipts WHERE id=? FOR UPDATE");
             $oldRowStmt->execute([$id]);
             $oldRow = $oldRowStmt->fetch();
             if (!$oldRow) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
@@ -133,10 +139,10 @@ switch ($method) {
             $supplier=null;
             if(!empty($d['supplierId'])){$supplierCheck=$pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");$supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();if(!$supplier)throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');}
 
-            $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");
+            $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,delivery_method=?,delivery_other=?,shipping_notes=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");
             $stmt->execute([
                 $d['receiptNumber'], $d['date'],
-                $supplier['id']??null,$supplier['name']??'', $d['doNumber'] ?? '',
+                $supplier['id']??null,$supplier['name']??'', $d['doNumber'] ?? '', $d['deliveryMethod'] ?? ($oldRow['delivery_method']??'Diantar Supplier'), $d['deliveryOther'] ?? ($oldRow['delivery_other']??''), $d['shippingNotes'] ?? ($oldRow['shipping_notes']??''),
                 $newStatus, $d['notes'] ?? '',
                 $newBranchId,$newWarehouseId,$actor['name']??$actor['username']??'System',$actor['id']??null,
                 $id

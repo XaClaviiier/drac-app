@@ -11,6 +11,7 @@ import WorkOrderTimeline from './pages/WorkOrderTimeline';
 import ItemsAndServices from './pages/ItemsAndServices';
 import UsersAndRoles from './pages/UsersAndRoles';
 import GoodsReceiptPage from './pages/GoodsReceipt';
+import GoodsReceiptEntry from './pages/GoodsReceiptEntry';
 import Suppliers from './pages/Suppliers';
 import PurchaseInvoicesPage from './pages/PurchaseInvoices';
 import AIAssistant from './pages/AIAssistant';
@@ -89,6 +90,7 @@ function AppRoutes() {
         <Route path="items" element={protectedPage('item:view', <ItemsAndServices />)} />
         <Route path="suppliers" element={protectedPage('supplier:view', <Suppliers />)} />
         <Route path="receipts" element={protectedPage('receipt:view', <GoodsReceiptPage />)} />
+        <Route path="receipts/new" element={protectedPage('receipt:create', <GoodsReceiptEntry />)} />
         <Route path="purchase-invoices" element={protectedPage('purchase:view', <PurchaseInvoicesPage />)} />
         <Route path="categories" element={protectedPage('item:view', <Categories />)} />
         <Route path="ai" element={protectedPage('ai:view', <AIAssistant />)} />

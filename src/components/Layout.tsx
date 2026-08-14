@@ -49,6 +49,7 @@ const pageTitles: Record<string, string> = {
   '/categories': 'Kategori',
   '/suppliers': 'Supplier',
   '/receipts': 'Penerimaan Barang',
+  '/receipts/new': 'Terima Barang Baru',
   '/purchase-invoices': 'Faktur Pembelian',
   '/ai': 'Asisten AI',
   '/users': 'Pengguna & Akses',

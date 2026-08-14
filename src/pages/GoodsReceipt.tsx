@@ -307,7 +307,7 @@ export default function GoodsReceiptPage() {
             </button>
           )}
           {hasPermission('receipt:create') && (
-            <button onClick={() => openModal()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+            <button onClick={() => navigate('/receipts/new')} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
               <Plus className="h-5 w-5" /> Terima Barang
             </button>
           )}
