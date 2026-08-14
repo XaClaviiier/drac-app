@@ -72,10 +72,6 @@ body { margin: 0; background: #f3f4f6; }
   background-color: #ffffff;
 }
 
-/* Detail barang sekarang dibuka sebagai modal, bukan panel di bawah tabel. */
-.goods-receipt-entry .overflow-x-auto > div.m-3 {
-  display: none;
-}
 
 .field {
   width: 100%;
