@@ -300,8 +300,8 @@ export default function Layout() {
               <div className="p-4">
                 <div className="grid max-h-[calc(100vh-8rem)] grid-cols-3 gap-2.5 overflow-y-auto pr-1">
                   {items.map((item, index) => { const Icon = item.icon; const available = !!item.path; return (
-                    <button key={`${item.label}-${index}`} type="button" disabled={!available} onClick={() => { if (!item.path) return; navigate(item.path); setDesktopMenuOpen(null); }} className={`relative flex min-h-28 flex-col items-center justify-center gap-2.5 rounded-lg border p-3 text-center transition-all ${tones[item.tone]} ${available ? 'hover:-translate-y-0.5 hover:shadow-lg' : 'cursor-not-allowed opacity-40'}`}>
-                      <Icon className="h-9 w-9 stroke-[1.7]" /><span className="text-sm font-medium leading-snug text-gray-700">{item.label}</span>
+                    <button key={`${item.label}-${index}`} type="button" disabled={!available} onClick={() => { if (!item.path) return; navigate(item.path); setDesktopMenuOpen(null); }} className={`relative flex h-20 flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-center transition-all duration-150 ${tones[item.tone]} ${available ? 'shadow-[0_2px_7px_rgba(15,23,42,0.10)] hover:-translate-y-0.5 hover:shadow-[0_5px_12px_rgba(15,23,42,0.16)] active:translate-y-0' : 'cursor-not-allowed opacity-40 shadow-none'}`}>
+                      <Icon className="h-6 w-6 stroke-[1.8]" /><span className="text-[13px] font-medium leading-tight text-gray-700">{item.label}</span>
                     </button>
                   ); })}
                 </div>
