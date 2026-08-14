@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
@@ -63,6 +63,22 @@ const itemColumnLabels: Record<ItemColumn, string> = {
   actions: 'Aksi',
 };
 
+const defaultItemColumnWidths: Record<ItemColumn, number> = {
+  code: 140,
+  name: 360,
+  receiptDescription: 240,
+  type: 140,
+  category: 180,
+  barcode: 180,
+  price: 150,
+  stock: 100,
+  unit: 100,
+  brand: 150,
+  purchasePrice: 150,
+  status: 120,
+  actions: 100,
+};
+
 const emptyCategory = {
   code: '',
   name: '',
@@ -79,7 +95,6 @@ const typeColors: Record<string, string> = {
 };
 
 export default function ItemsAndServices() {
-  const [searchParams] = useSearchParams();
   const {
     data,
     addItem,
@@ -115,6 +130,7 @@ export default function ItemsAndServices() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const columnStorageKey = `dokterac_item_columns_${currentUser?.id || currentUser?.username || 'default'}`;
+  const columnWidthStorageKey = `dokterac_item_column_widths_${currentUser?.id || currentUser?.username || 'default'}`;
   const [visibleColumns, setVisibleColumns] = useState<ItemColumn[]>(() => {
     try {
       const saved = localStorage.getItem(`dokterac_item_columns_${currentUser?.id || currentUser?.username || 'default'}`);
@@ -122,6 +138,53 @@ export default function ItemsAndServices() {
     } catch { /* gunakan default */ }
     return defaultItemColumns;
   });
+  const [columnWidths, setColumnWidths] = useState<Record<ItemColumn, number>>(() => {
+    try {
+      const saved = localStorage.getItem(`dokterac_item_column_widths_${currentUser?.id || currentUser?.username || 'default'}`);
+      if (saved) return { ...defaultItemColumnWidths, ...JSON.parse(saved) };
+    } catch { /* gunakan default */ }
+    return defaultItemColumnWidths;
+  });
+
+  const itemTableColumns = useMemo<ItemColumn[]>(() => [
+    ...(visibleColumns.includes('code') ? ['code' as const] : []),
+    'name',
+    ...(['receiptDescription', 'type', 'category', 'barcode', 'stock', 'unit', 'brand', 'purchasePrice', 'status', 'price'] as ItemColumn[])
+      .filter((column) => visibleColumns.includes(column)),
+    'actions',
+  ], [visibleColumns]);
+
+  const tableMinWidth = useMemo(
+    () => 40 + itemTableColumns.reduce((total, column) => total + columnWidths[column], 0),
+    [itemTableColumns, columnWidths]
+  );
+
+  const beginColumnResize = (column: ItemColumn, event: ReactMouseEvent<HTMLSpanElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = columnWidths[column];
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (moveEvent: MouseEvent) => {
+      const width = Math.max(column === 'name' ? 200 : 80, startWidth + moveEvent.clientX - startX);
+      setColumnWidths((current) => ({ ...current, [column]: width }));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setColumnWidths((current) => {
+        localStorage.setItem(columnWidthStorageKey, JSON.stringify(current));
+        return current;
+      });
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const columnStyle = (column: ItemColumn) => ({ width: columnWidths[column], minWidth: columnWidths[column] });
 
   const setColumnVisible = (column: ItemColumn, visible: boolean) => {
     if (column === 'name' || column === 'actions') return;
@@ -134,8 +197,26 @@ export default function ItemsAndServices() {
 
   const resetColumns = () => {
     setVisibleColumns(defaultItemColumns);
+    setColumnWidths(defaultItemColumnWidths);
     localStorage.setItem(columnStorageKey, JSON.stringify(defaultItemColumns));
+    localStorage.setItem(columnWidthStorageKey, JSON.stringify(defaultItemColumnWidths));
   };
+
+  const resizableHeader = (column: ItemColumn, label: string, align: 'left' | 'center' | 'right' = 'left') => (
+    <div
+      key={column}
+      style={columnStyle(column)}
+      className={`relative flex-shrink-0 px-3 py-2 ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
+    >
+      <span className="block truncate">{label}</span>
+      <span
+        role="separator"
+        aria-label={`Ubah lebar kolom ${label}`}
+        onMouseDown={(event) => beginColumnResize(column, event)}
+        className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-white/30 hover:bg-white/30"
+      />
+    </div>
+  );
 
   // Group member picker state
   const [memberSearch, setMemberSearch] = useState('');
@@ -237,13 +318,6 @@ export default function ItemsAndServices() {
     setMemberSearch('');
     setShowItemModal(true);
   };
-
-  useEffect(() => {
-    const requestedItemId = searchParams.get('view');
-    if (!requestedItemId) return;
-    const requestedItem = data.items.find(item => item.id === requestedItemId);
-    if (requestedItem) openItemModal(requestedItem);
-  }, [searchParams, data.items]);
 
   const openCategoryModal = (category?: ItemCategory) => {
     if (category) {
@@ -896,14 +970,14 @@ export default function ItemsAndServices() {
   const formatCurrency = (v: number) => `Rp ${v.toLocaleString('id-ID')}`;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="lg:hidden">
           <h2 className="text-2xl font-bold text-gray-900">Barang & Jasa</h2>
           <p className="mt-1 text-gray-500">Kelola master sparepart, bahan, jasa service, group, dan kategori.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 lg:ml-auto">
           {hasPermission('item:create') && (
             <>
               <button
@@ -932,7 +1006,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5 lg:hidden">
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-sm text-gray-500">Total Item</p>
           <p className="text-2xl font-bold text-gray-900">{data.items.length}</p>
@@ -956,7 +1030,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Filters */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm lg:rounded-md lg:p-2">
         <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto_auto]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
@@ -1011,26 +1085,26 @@ export default function ItemsAndServices() {
             )}
           </div>
         </div>
-        <div className="max-h-[calc(100vh-420px)] overflow-auto">
-          <table className="w-full">
+        <div className="max-h-[calc(100vh-420px)] overflow-auto lg:max-h-[calc(100vh-265px)]">
+          <table className="w-full table-fixed" style={{ minWidth: tableMinWidth }}>
             <thead className="sticky top-0 z-10 bg-gradient-to-r from-blue-800 to-blue-900 text-white">
               <tr>
                 <th colSpan={9} className="p-0">
-                  <div className="flex items-center text-xs font-medium uppercase tracking-wider">
+                  <div className="flex items-center text-xs font-medium uppercase tracking-wider" style={{ minWidth: tableMinWidth }}>
                     <div className="w-10 flex-shrink-0 px-2 py-3"></div>
-                    {visibleColumns.includes('code') && <div className="min-w-[120px] px-4 py-3 text-left">Kode</div>}
-                    <div className="min-w-[220px] flex-1 px-4 py-3 text-left">Nama Barang/Jasa</div>
-                    {visibleColumns.includes('receiptDescription') && <div className="w-56 px-4 py-3 text-left">Deskripsi Nota</div>}
-                    {visibleColumns.includes('type') && <div className="w-32 px-4 py-3 text-left">Jenis</div>}
-                    {visibleColumns.includes('category') && <div className="w-32 px-4 py-3 text-left">Kategori</div>}
-                    {visibleColumns.includes('barcode') && <div className="w-40 px-4 py-3 text-left">Barcode</div>}
-                    {visibleColumns.includes('stock') && <div className="w-20 px-4 py-3 text-right">KTS</div>}
-                    {visibleColumns.includes('unit') && <div className="w-20 px-4 py-3 text-left">Satuan</div>}
-                    {visibleColumns.includes('brand') && <div className="w-28 px-4 py-3 text-left">Merek</div>}
-                    {visibleColumns.includes('purchasePrice') && <div className="w-32 px-4 py-3 text-right">Harga Beli</div>}
-                    {visibleColumns.includes('status') && <div className="w-24 px-4 py-3 text-center">Status</div>}
-                    {visibleColumns.includes('price') && <div className="w-32 px-4 py-3 text-right">Harga</div>}
-                    <div className="w-24 px-4 py-3 text-center">Aksi</div>
+                    {visibleColumns.includes('code') && resizableHeader('code', 'Kode')}
+                    {resizableHeader('name', 'Nama Barang/Jasa')}
+                    {visibleColumns.includes('receiptDescription') && resizableHeader('receiptDescription', 'Deskripsi Nota')}
+                    {visibleColumns.includes('type') && resizableHeader('type', 'Jenis')}
+                    {visibleColumns.includes('category') && resizableHeader('category', 'Kategori')}
+                    {visibleColumns.includes('barcode') && resizableHeader('barcode', 'Barcode')}
+                    {visibleColumns.includes('stock') && resizableHeader('stock', 'KTS', 'right')}
+                    {visibleColumns.includes('unit') && resizableHeader('unit', 'Satuan')}
+                    {visibleColumns.includes('brand') && resizableHeader('brand', 'Merek')}
+                    {visibleColumns.includes('purchasePrice') && resizableHeader('purchasePrice', 'Harga Beli', 'right')}
+                    {visibleColumns.includes('status') && resizableHeader('status', 'Status', 'center')}
+                    {visibleColumns.includes('price') && resizableHeader('price', 'Harga Jual', 'right')}
+                    {resizableHeader('actions', 'Aksi', 'center')}
                   </div>
                 </th>
               </tr>
@@ -1050,14 +1124,14 @@ export default function ItemsAndServices() {
                     <tr key={item.id} className={`group ${!item.isActive ? 'bg-red-50/50 opacity-75' : ''}`}>
                     <td colSpan={9} className="p-0">
                       {/* Main row */}
-                      <div className={`flex items-center transition-colors hover:bg-blue-50/50 ${isGroup ? 'cursor-pointer' : ''}`} onClick={isGroup ? () => toggleGroup(item.id) : undefined}>
+                      <div style={{ minWidth: tableMinWidth }} className={`flex items-center transition-colors hover:bg-blue-50/50 ${isGroup ? 'cursor-pointer' : ''}`} onClick={isGroup ? () => toggleGroup(item.id) : undefined}>
                         <div className="w-10 flex-shrink-0 px-2 py-3 text-center">
                           {isGroup ? (
                             expanded ? <ChevronUp className="mx-auto h-4 w-4 text-purple-500" /> : <ChevronDown className="mx-auto h-4 w-4 text-purple-500" />
                           ) : null}
                         </div>
-                        {visibleColumns.includes('code') && <div className="min-w-[120px] px-4 py-3 font-mono text-sm text-gray-900">{item.code}</div>}
-                        <div className="min-w-[220px] flex-1 px-4 py-3">
+                        {visibleColumns.includes('code') && <div style={columnStyle('code')} className="flex-shrink-0 px-3 py-3 font-mono text-sm text-gray-900">{item.code}</div>}
+                        <div style={columnStyle('name')} className="flex-shrink-0 overflow-hidden px-3 py-3">
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900">{item.name}</p>
                             {!item.isActive && <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">NONAKTIF</span>}
@@ -1069,21 +1143,21 @@ export default function ItemsAndServices() {
                           </div>
                           <p className="text-xs text-gray-500">{item.description || ''}</p>
                         </div>
-                        {visibleColumns.includes('receiptDescription') && <div className="w-56 truncate px-4 py-3 text-sm text-gray-700" title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</div>}
-                        {visibleColumns.includes('type') && <div className="w-32 px-4 py-3">
+                        {visibleColumns.includes('receiptDescription') && <div style={columnStyle('receiptDescription')} className="flex-shrink-0 truncate px-3 py-3 text-sm text-gray-700" title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</div>}
+                        {visibleColumns.includes('type') && <div style={columnStyle('type')} className="flex-shrink-0 px-3 py-3">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>
                             {item.type}
                           </span>
                         </div>}
-                        {visibleColumns.includes('category') && <div className="w-32 truncate px-4 py-3 text-sm text-gray-700">{item.categoryName}</div>}
-                        {visibleColumns.includes('barcode') && <div className="w-40 truncate px-4 py-3 font-mono text-xs text-gray-700" title={item.barcode}>{item.barcode || '—'}</div>}
-                        {visibleColumns.includes('stock') && <div className="w-20 px-4 py-3 text-right text-sm font-semibold text-gray-900">{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>}
-                        {visibleColumns.includes('unit') && <div className="w-20 px-4 py-3 text-sm text-gray-700">{item.unit}</div>}
-                        {visibleColumns.includes('brand') && <div className="w-28 truncate px-4 py-3 text-sm text-gray-700">{item.brand || '—'}</div>}
-                        {visibleColumns.includes('purchasePrice') && <div className="w-32 px-4 py-3 text-right text-sm text-gray-700">{formatCurrency(item.purchasePrice)}</div>}
-                        {visibleColumns.includes('status') && <div className="w-24 px-4 py-3 text-center text-xs font-semibold">{item.isActive ? <span className="text-green-700">Aktif</span> : <span className="text-red-700">Nonaktif</span>}</div>}
-                        {visibleColumns.includes('price') && <div className="w-32 px-4 py-3 text-right text-sm font-medium text-gray-900">{formatCurrency(item.sellingPrice)}</div>}
-                        <div className="w-24 px-4 py-3">
+                        {visibleColumns.includes('category') && <div style={columnStyle('category')} className="flex-shrink-0 truncate px-3 py-3 text-sm text-gray-700">{item.categoryName}</div>}
+                        {visibleColumns.includes('barcode') && <div style={columnStyle('barcode')} className="flex-shrink-0 truncate px-3 py-3 font-mono text-xs text-gray-700" title={item.barcode}>{item.barcode || '—'}</div>}
+                        {visibleColumns.includes('stock') && <div style={columnStyle('stock')} className="flex-shrink-0 px-3 py-3 text-right text-sm font-semibold text-gray-900">{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>}
+                        {visibleColumns.includes('unit') && <div style={columnStyle('unit')} className="flex-shrink-0 px-3 py-3 text-sm text-gray-700">{item.unit}</div>}
+                        {visibleColumns.includes('brand') && <div style={columnStyle('brand')} className="flex-shrink-0 truncate px-3 py-3 text-sm text-gray-700">{item.brand || '—'}</div>}
+                        {visibleColumns.includes('purchasePrice') && <div style={columnStyle('purchasePrice')} className="flex-shrink-0 px-3 py-3 text-right text-sm text-gray-700">{formatCurrency(item.purchasePrice)}</div>}
+                        {visibleColumns.includes('status') && <div style={columnStyle('status')} className="flex-shrink-0 px-3 py-3 text-center text-xs font-semibold">{item.isActive ? <span className="text-green-700">Aktif</span> : <span className="text-red-700">Nonaktif</span>}</div>}
+                        {visibleColumns.includes('price') && <div style={columnStyle('price')} className="flex-shrink-0 px-3 py-3 text-right text-sm font-medium text-gray-900">{formatCurrency(item.sellingPrice)}</div>}
+                        <div style={columnStyle('actions')} className="flex-shrink-0 px-3 py-3">
                           <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
                             {hasPermission('item:edit') && (
                               <button onClick={() => openItemModal(item)} className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-100" title="Edit"><Edit className="h-4 w-4" /></button>
