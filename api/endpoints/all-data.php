@@ -1,4 +1,12 @@
 <?php
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS merged_into_item_id VARCHAR(64) NULL AFTER verified_by");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER branch_id");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS received_by_id VARCHAR(64) NULL AFTER received_by");
 // ==========================================================
 // ALL DATA - Load semua data sekaligus untuk aplikasi
 // GET /api/all-data
@@ -229,6 +237,12 @@ try {
         $r['purchasePrice'] = (float)$r['purchase_price'];
         $r['sellingPrice'] = (float)$r['selling_price'];
         $r['isActive'] = (bool)$r['is_active'];
+        $r['vehicleBrandId'] = $r['vehicle_brand_id'] ?? null;
+        $r['vehicleBrandName'] = $r['vehicle_brand_name'] ?? '';
+        $r['verificationStatus'] = $r['verification_status'] ?? 'Verified';
+        $r['createdBy'] = $r['created_by'] ?? null;
+        $r['verifiedBy'] = $r['verified_by'] ?? null;
+        $r['mergedIntoItemId'] = $r['merged_into_item_id'] ?? null;
         $r['isQuickService'] = (bool)$r['is_quick_service'];
         $r['receiptDescription'] = $r['receipt_description'] ?? '';
         $r['branchId'] = $r['branch_id'];
@@ -374,7 +388,9 @@ try {
         $r['supplierName'] = $r['supplier_name'];
         $r['doNumber'] = $r['do_number'];
         $r['branchId'] = $r['branch_id'];
+        $r['warehouseId'] = $r['warehouse_id'] ?? null;
         $r['receivedBy'] = $r['received_by'];
+        $r['receivedById'] = $r['received_by_id'] ?? null;
         $r['createdAt'] = $r['created_at'];
         $r['items'] = $itemsByReceipt[$r['id']] ?? [];
     }

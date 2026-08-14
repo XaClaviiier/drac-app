@@ -11,7 +11,7 @@ export default function GoodsReceiptPage() {
     data, addGoodsReceipt, updateGoodsReceipt, deleteGoodsReceipt,
     generateReceiptNumber, receiveGoods,
     addPurchaseInvoice, generatePurchaseInvoiceNumber,
-    currentBranchId, hasPermission, currentUser,
+    currentBranchId, hasPermission, currentUser, addItem, refreshData,
   } = useApp();
 
   const [search, setSearch] = useState('');
@@ -29,7 +29,11 @@ export default function GoodsReceiptPage() {
     items: [] as GoodsReceiptItem[],
     notes: '',
     status: 'Draft' as GoodsReceipt['status'],
+    warehouseId: '',
   });
+  const [showQuickItem, setShowQuickItem] = useState(false);
+  const [quickItem, setQuickItem] = useState({ name: '', categoryId: '', vehicleBrandId: '', unit: 'PCS', barcode: '' });
+  const [mergeTargets, setMergeTargets] = useState<Record<string,string>>({});
 
   // Item picker
   const [itemSearch, setItemSearch] = useState('');
@@ -49,6 +53,7 @@ export default function GoodsReceiptPage() {
   const [showSuccessMsg, setShowSuccessMsg] = useState('');
 
   const openInvoicePreview = (r: GoodsReceipt) => {
+    if (!r.supplierId) { window.alert('Pasangkan supplier terlebih dahulu sebelum membuat Faktur Pembelian.'); return; }
     const newItems: PurchaseInvoiceItem[] = r.items
       .filter(it => it.qty - (it.qtyInvoiced || 0) > 0)
       .map(it => {
@@ -175,12 +180,16 @@ export default function GoodsReceiptPage() {
         items: [...receipt.items],
         notes: receipt.notes,
         status: receipt.status,
+        warehouseId: receipt.warehouseId || '',
       });
     } else {
       setEditing(null);
+      const branchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
+      const defaultWarehouse=data.warehouses.find(w=>w.branchId===branchId&&w.isActive&&w.isDefault)||data.warehouses.find(w=>w.branchId===branchId&&w.isActive);
       setForm({
         date: localDateKey(),
         supplierId: '', doNumber: '', items: [], notes: '', status: 'Draft',
+        warehouseId: defaultWarehouse?.id||'',
       });
     }
     setShowModal(true);
@@ -209,29 +218,43 @@ export default function GoodsReceiptPage() {
     setForm(prev => ({ ...prev, items: prev.items.filter(l => l.id !== id) }));
   };
 
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.items.length === 0) { window.alert('Tambahkan minimal 1 barang'); return; }
     const supplier = data.suppliers.find(s => s.id === form.supplierId);
-    if (!supplier) return;
-
     const branchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
+    const warehouseId = form.warehouseId || data.warehouses.find(w => w.branchId === branchId && w.isActive && w.isDefault)?.id || data.warehouses.find(w => w.branchId === branchId && w.isActive)?.id || '';
+    if (!warehouseId) { window.alert('Gudang tujuan wajib dipilih.'); return; }
 
     if (editing) {
       updateGoodsReceipt(editing.id, {
-        ...editing, ...form, supplierName: supplier.name,
+        ...editing, ...form, warehouseId, supplierName: supplier?.name || '',
         receivedBy: form.status === 'Diterima' ? (currentUser?.name || 'System') : editing.receivedBy,
       });
     } else {
       addGoodsReceipt({
         id: Date.now().toString(),
         receiptNumber: generateReceiptNumber(branchId),
-        ...form, supplierName: supplier.name, branchId,
+        ...form, warehouseId, supplierName: supplier?.name || '', branchId,
         receivedBy: form.status === 'Diterima' ? (currentUser?.name || 'System') : undefined,
         createdAt: localDateKey(),
       });
     }
     setShowModal(false);
+  };
+
+  const createQuickItem = async () => {
+    const category=data.itemCategories.find(c=>c.id===quickItem.categoryId);
+    if(!quickItem.name.trim()||!category){window.alert('Nama dan kategori barang wajib diisi.');return;}
+    const branchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
+    const created=await addItem({id:Date.now().toString(),code:'AUTO',name:quickItem.name,categoryId:category.id,categoryName:category.name,type:'Persediaan',brand:'',vehicleBrandId:quickItem.vehicleBrandId||undefined,unit:quickItem.unit||'PCS',stock:0,sellableStock:0,purchasePrice:0,sellingPrice:0,isActive:true,isQuickService:false,description:'Dibuat saat penerimaan barang; menunggu verifikasi admin',barcode:quickItem.barcode,branchId,autoCode:true,provisional:true});
+    addItemLine(created);setShowQuickItem(false);setQuickItem({name:'',categoryId:'',vehicleBrandId:'',unit:'PCS',barcode:''});
+  };
+
+  const verifyItem = async (itemId:string, targetItemId?:string) => {
+    const { api } = await import('../lib/apiClient');
+    await api.update('items',itemId,targetItemId?{action:'merge',targetItemId}:{action:'verify'});
+    await refreshData();
   };
 
   const handleDelete = (r: GoodsReceipt) => {
@@ -259,6 +282,10 @@ export default function GoodsReceiptPage() {
 
   const branchReceipts = data.goodsReceipts.filter(r => currentBranchId === 'ALL' || r.branchId === currentBranchId);
   const draftCount = branchReceipts.filter(r => r.status === 'Draft').length;
+  const pendingItems=data.items.filter(i=>i.verificationStatus==='Pending');
+  const canVerify=Boolean(currentUser?.isOwner)||String(currentUser?.roleName||'').toLowerCase().includes('admin');
+  const transactionBranchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
+  const activeWarehouses=data.warehouses.filter(w=>w.branchId===transactionBranchId&&w.isActive);
 
   return (
     <div className="space-y-5">
@@ -320,6 +347,17 @@ export default function GoodsReceiptPage() {
           <p className="text-2xl font-bold text-red-600">{branchReceipts.filter(r => r.status === 'Batal').length}</p>
         </div>
       </div>
+
+      {canVerify && pendingItems.length>0 && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+        <h3 className="font-semibold text-amber-900">Verifikasi Barang Baru ({pendingItems.length})</h3>
+        <p className="mb-3 text-sm text-amber-700">Sahkan jika datanya benar, atau konversi ke master lama bila ternyata duplikat.</p>
+        <div className="space-y-2">{pendingItems.map(item=><div key={item.id} className="grid gap-2 rounded-lg bg-white p-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-center">
+          <div><b>{item.code}</b> — {item.name}<div className="text-xs text-gray-500">{item.categoryName} · stok {item.stock} {item.unit}</div></div>
+          <select value={mergeTargets[item.id]||''} onChange={e=>setMergeTargets({...mergeTargets,[item.id]:e.target.value})} className="rounded-lg border px-3 py-2 text-sm"><option value="">Pilih master jika duplikat...</option>{data.items.filter(x=>x.id!==item.id&&x.isActive&&x.verificationStatus!=='Pending'&&x.type==='Persediaan').map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select>
+          <button onClick={()=>verifyItem(item.id)} className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white">Verifikasi</button>
+          <button disabled={!mergeTargets[item.id]} onClick={()=>verifyItem(item.id,mergeTargets[item.id])} className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40">Gabungkan</button>
+        </div>)}</div>
+      </div>}
 
       {/* Filter */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -526,12 +564,14 @@ export default function GoodsReceiptPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Supplier *</label>
-                  <select required value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
-                    <option value="">Pilih supplier</option>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Supplier (boleh menyusul)</label>
+                  <select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
+                    <option value="">Belum ditentukan / menyusul</option>
                     {data.suppliers.filter(s => s.isActive).map(s => <option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
                   </select>
                 </div>
+                <div><label className="mb-1 block text-sm font-medium text-gray-700">Gudang Tujuan *</label><select required value={form.warehouseId} onChange={e=>setForm({...form,warehouseId:e.target.value})} className="w-full rounded-lg border border-gray-300 px-4 py-2.5"><option value="">Pilih gudang</option>{activeWarehouses.map(w=><option key={w.id} value={w.id}>{w.code} - {w.name}{w.isDefault?' (Utama)':''}</option>)}</select></div>
+                <div><label className="mb-1 block text-sm font-medium text-gray-700">Diterima Oleh</label><input readOnly value={currentUser?.name||'-'} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5" /></div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">No. Surat Jalan (DO)</label>
                   <input value={form.doNumber} onChange={(e) => setForm({ ...form, doNumber: e.target.value })} placeholder="Mis: DO-001/2026" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
@@ -570,6 +610,8 @@ export default function GoodsReceiptPage() {
                         );
                       })}
                     </div>
+                    <button type="button" onClick={()=>setShowQuickItem(!showQuickItem)} className="mt-2 text-sm font-semibold text-blue-700">+ Barang belum ada di master</button>
+                    {showQuickItem&&<div className="mt-2 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:grid-cols-2"><input value={quickItem.name} onChange={e=>setQuickItem({...quickItem,name:e.target.value})} placeholder="Nama barang *" className="rounded border px-3 py-2"/><select value={quickItem.categoryId} onChange={e=>setQuickItem({...quickItem,categoryId:e.target.value})} className="rounded border px-3 py-2"><option value="">Kategori *</option>{data.itemCategories.filter(c=>c.isActive).map(c=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}</select><input value={quickItem.barcode} onChange={e=>setQuickItem({...quickItem,barcode:e.target.value})} placeholder="Barcode (opsional)" className="rounded border px-3 py-2"/><input value={quickItem.unit} onChange={e=>setQuickItem({...quickItem,unit:e.target.value})} placeholder="Satuan" className="rounded border px-3 py-2"/><div className="md:col-span-2 text-xs text-amber-800">Kode dibuat otomatis. Barang langsung dapat diterima, tetapi berstatus Menunggu Verifikasi Admin.</div><button type="button" onClick={createQuickItem} className="rounded bg-blue-600 px-3 py-2 text-white md:col-span-2">Buat Barang & Pilih</button></div>}
                   </div>
                 )}
 
@@ -656,10 +698,11 @@ export default function GoodsReceiptPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div><p className="text-gray-500">Tanggal</p><p className="font-medium">{viewing.date}</p></div>
                 <div><p className="text-gray-500">Status</p><span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[viewing.status]}`}>{viewing.status}</span></div>
-                <div><p className="text-gray-500">Supplier</p><p className="font-medium">{viewing.supplierName}</p></div>
+                <div><p className="text-gray-500">Supplier</p><p className="font-medium">{viewing.supplierName || 'Belum ditentukan'}</p></div>
                 <div><p className="text-gray-500">No. Surat Jalan</p><p className="font-medium font-mono">{viewing.doNumber || '-'}</p></div>
                 <div><p className="text-gray-500">Cabang</p><p className="font-medium">{data.branches.find(b => b.id === viewing.branchId)?.name}</p></div>
                 <div><p className="text-gray-500">Diterima Oleh</p><p className="font-medium">{viewing.receivedBy || '-'}</p></div>
+                <div><p className="text-gray-500">Gudang</p><p className="font-medium">{data.warehouses.find(w=>w.id===viewing.warehouseId)?.name||'-'}</p></div>
               </div>
               <div className="rounded-lg border border-gray-200 overflow-hidden">
                 <table className="w-full text-sm">

@@ -902,6 +902,24 @@ function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $item
     $sync->execute([$itemId, $branchId]);
 }
 
+function adjustWarehouseStockAllowNegative(PDO $pdo, string $warehouseId, string $branchId, string $itemId, int $delta): void {
+    $warehouseStmt = $pdo->prepare("SELECT id,branch_id,is_active FROM warehouses WHERE id=?");
+    $warehouseStmt->execute([$warehouseId]);
+    $warehouse = $warehouseStmt->fetch();
+    if (!$warehouse || !(bool)$warehouse['is_active'] || (string)$warehouse['branch_id'] !== $branchId) {
+        throw new InvalidArgumentException('Gudang tujuan tidak valid atau bukan milik cabang penerimaan');
+    }
+    $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id=?");
+    $itemStmt->execute([$itemId]);
+    if ($itemStmt->fetchColumn() !== 'Persediaan') return;
+    $pdo->prepare("INSERT INTO warehouse_stocks(warehouse_id,item_id,quantity,reserved_quantity) VALUES(?,?,?,0) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)")
+        ->execute([$warehouseId,$itemId,$delta]);
+    $pdo->prepare("INSERT INTO branch_item_stocks(branch_id,item_id,stock,sellable_stock) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE stock=stock+VALUES(stock),sellable_stock=sellable_stock+VALUES(sellable_stock)")
+        ->execute([$branchId,$itemId,$delta,$delta]);
+    $pdo->prepare("UPDATE items i JOIN branch_item_stocks s ON s.item_id COLLATE utf8mb4_unicode_ci=i.id COLLATE utf8mb4_unicode_ci AND s.branch_id COLLATE utf8mb4_unicode_ci=i.branch_id COLLATE utf8mb4_unicode_ci SET i.stock=s.stock,i.sellable_stock=s.sellable_stock WHERE i.id=? AND i.branch_id=?")
+        ->execute([$itemId,$branchId]);
+}
+
 /**
  * Perbaikan satu-kali untuk inkonsistensi relasi WO, faktur, dan pembayaran
  * yang ditemukan pada audit produksi 8 Agustus 2026.

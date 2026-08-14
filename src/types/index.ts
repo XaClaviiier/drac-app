@@ -2,6 +2,8 @@ export interface Vehicle {
   id: string;
   plateNumber: string;
   brand: string;
+  vehicleBrandId?: string;
+  vehicleBrandName?: string;
   model: string;
   brandId?: string;
   modelId?: string;
@@ -172,12 +174,18 @@ export interface Item {
   categoryName: string;
   type: ItemType;
   brand: string;
+  vehicleBrandId?: string;
+  vehicleBrandName?: string;
   unit: string;
   stock: number;
   sellableStock: number;
   purchasePrice: number;
   sellingPrice: number;
   isActive: boolean;
+  verificationStatus?: 'Pending' | 'Verified' | 'Merged';
+  createdBy?: string;
+  verifiedBy?: string;
+  mergedIntoItemId?: string;
   isQuickService: boolean;
   description: string;
   receiptDescription?: string;
@@ -358,7 +366,9 @@ export interface GoodsReceipt {
   status: 'Draft' | 'Diterima' | 'Difakturkan' | 'Sebagian' | 'Batal';
   notes: string;
   branchId: string;
+  warehouseId: string;
   receivedBy?: string;
+  receivedById?: string;
   createdAt: string;
 }
 

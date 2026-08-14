@@ -1,4 +1,7 @@
 <?php
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER branch_id");
+$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS received_by_id VARCHAR(64) NULL AFTER received_by");
+$pdo->exec("UPDATE goods_receipts r JOIN warehouses w ON w.branch_id=r.branch_id AND w.is_default=1 SET r.warehouse_id=w.id WHERE r.warehouse_id IS NULL OR r.warehouse_id=''");
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
@@ -13,7 +16,9 @@ switch ($method) {
             $r['supplierName'] = $r['supplier_name'];
             $r['doNumber'] = $r['do_number'];
             $r['branchId'] = $r['branch_id'];
+            $r['warehouseId'] = $r['warehouse_id'];
             $r['receivedBy'] = $r['received_by'];
+            $r['receivedById'] = $r['received_by_id'];
             $r['createdAt'] = $r['created_at'];
             // Load items
             $stmt = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
@@ -37,24 +42,30 @@ switch ($method) {
     case 'POST':
         $d = getInput();
         $branchId = (string)($d['branchId'] ?? '');
-        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
-        if (empty($d['supplierId'])) respondError('Supplier wajib dipilih dari master', 422);
-        $supplierCheck = $pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");
-        $supplierCheck->execute([$d['supplierId']]);
-        $supplier = $supplierCheck->fetch();
-        if (!$supplier) respondError('Supplier tidak ditemukan atau nonaktif', 422);
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        requireAccessibleBranch($pdo, $actor, $branchId);
+        $warehouseId = (string)($d['warehouseId'] ?? '');
+        if ($warehouseId === '') respondError('Gudang tujuan wajib dipilih', 422);
+        $warehouseCheck=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1");$warehouseCheck->execute([$warehouseId,$branchId]);
+        if(!$warehouseCheck->fetch())respondError('Gudang tujuan tidak valid',422);
+        $supplier = null;
+        if (!empty($d['supplierId'])) {
+            $supplierCheck = $pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");
+            $supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();
+            if (!$supplier) respondError('Supplier tidak ditemukan atau nonaktif', 422);
+        }
         if (empty($d['items']) || !is_array($d['items'])) respondError('Tambahkan minimal satu barang', 422);
         $newStatus = (string)($d['status'] ?? 'Draft');
         if (!in_array($newStatus, ['Draft', 'Diterima'], true)) respondError('Status awal penerimaan tidak valid', 422);
         $pdo->beginTransaction();
         try {
             $rId = $d['id'] ?? generateId();
-            $stmt = $pdo->prepare("INSERT INTO goods_receipts (id, receipt_number, date, supplier_id, supplier_name, do_number, status, notes, branch_id, received_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO goods_receipts (id,receipt_number,date,supplier_id,supplier_name,do_number,status,notes,branch_id,warehouse_id,received_by,received_by_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
                 $rId, $d['receiptNumber'], $d['date'],
-                $d['supplierId'], $supplier['name'], $d['doNumber'] ?? '',
+                $supplier['id'] ?? null, $supplier['name'] ?? '', $d['doNumber'] ?? '',
                 $newStatus, $d['notes'] ?? '',
-                $branchId, $d['receivedBy'] ?? null
+                $branchId,$warehouseId,$actor['name'] ?? $actor['username'] ?? 'System',$actor['id'] ?? null
             ]);
 
             if (!empty($d['items'])) {
@@ -75,7 +86,7 @@ switch ($method) {
             // Auto-increment stock jika status Diterima
             if ($newStatus === 'Diterima' && !empty($d['items'])) {
                 foreach ($d['items'] as $i) {
-                    adjustBranchStockAllowNegative($pdo, $branchId, $i['itemId'], (int)$i['qty']);
+                    adjustWarehouseStockAllowNegative($pdo,$warehouseId,$branchId,$i['itemId'],(int)$i['qty']);
                 }
             }
 
@@ -96,13 +107,15 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             // Get old status untuk logic stock
-            $oldRowStmt = $pdo->prepare("SELECT status, branch_id FROM goods_receipts WHERE id = ? FOR UPDATE");
+            $oldRowStmt = $pdo->prepare("SELECT status,branch_id,warehouse_id FROM goods_receipts WHERE id=? FOR UPDATE");
             $oldRowStmt->execute([$id]);
             $oldRow = $oldRowStmt->fetch();
             if (!$oldRow) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
             $oldStatus = $oldRow['status'] ?? '';
             $oldBranchId = $oldRow['branch_id'] ?? ($d['branchId'] ?? 'BR-001');
             $newBranchId = (string)($d['branchId'] ?? $oldBranchId);
+            $oldWarehouseId=(string)($oldRow['warehouse_id']??defaultWarehouseId($pdo,(string)$oldBranchId));
+            $newWarehouseId=(string)($d['warehouseId']??$oldWarehouseId);
             $actor = $requestUser ?? requireAuthenticatedUser($pdo);
             requireAccessibleBranch($pdo, $actor, (string)$oldBranchId);
             requireAccessibleBranch($pdo, $actor, $newBranchId);
@@ -115,18 +128,17 @@ switch ($method) {
             foreach ($oldItemsList as $oldItem) {
                 if ((int)$oldItem['qty_invoiced'] > 0) throw new DomainException('Penerimaan yang sudah difakturkan tidak boleh diubah. Koreksi atau hapus faktur pembelian terlebih dahulu.');
             }
-            if (empty($d['supplierId'])) throw new InvalidArgumentException('Supplier wajib dipilih dari master');
-            $supplierCheck = $pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");
-            $supplierCheck->execute([$d['supplierId']]);
-            $supplier = $supplierCheck->fetch();
-            if (!$supplier) throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');
+            $warehouseCheck=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1");$warehouseCheck->execute([$newWarehouseId,$newBranchId]);
+            if(!$warehouseCheck->fetch())throw new InvalidArgumentException('Gudang tujuan tidak valid');
+            $supplier=null;
+            if(!empty($d['supplierId'])){$supplierCheck=$pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");$supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();if(!$supplier)throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');}
 
-            $stmt = $pdo->prepare("UPDATE goods_receipts SET receipt_number=?, date=?, supplier_id=?, supplier_name=?, do_number=?, status=?, notes=?, branch_id=?, received_by=? WHERE id=?");
+            $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");
             $stmt->execute([
                 $d['receiptNumber'], $d['date'],
-                $d['supplierId'], $supplier['name'], $d['doNumber'] ?? '',
+                $supplier['id']??null,$supplier['name']??'', $d['doNumber'] ?? '',
                 $newStatus, $d['notes'] ?? '',
-                $newBranchId, $d['receivedBy'] ?? null,
+                $newBranchId,$newWarehouseId,$actor['name']??$actor['username']??'System',$actor['id']??null,
                 $id
             ]);
 
@@ -154,12 +166,12 @@ switch ($method) {
             // Ini juga menangani perubahan qty, item, atau cabang.
             if ($wasReceived) {
                 foreach ($oldItemsList as $i) {
-                    adjustBranchStockAllowNegative($pdo, $oldBranchId, $i['item_id'], -(int)$i['qty']);
+                    adjustWarehouseStockAllowNegative($pdo,$oldWarehouseId,$oldBranchId,$i['item_id'],-(int)$i['qty']);
                 }
             }
             if ($isReceived) {
                 foreach ($d['items'] as $i) {
-                    adjustBranchStockAllowNegative($pdo, $newBranchId, $i['itemId'], (int)$i['qty']);
+                    adjustWarehouseStockAllowNegative($pdo,$newWarehouseId,$newBranchId,$i['itemId'],(int)$i['qty']);
                 }
             }
 
@@ -178,7 +190,7 @@ switch ($method) {
         if (!$id) respondError('ID required');
         $pdo->beginTransaction();
         try {
-            $rowStmt = $pdo->prepare("SELECT status, branch_id FROM goods_receipts WHERE id = ? FOR UPDATE");
+            $rowStmt=$pdo->prepare("SELECT status,branch_id,warehouse_id FROM goods_receipts WHERE id=? FOR UPDATE");
             $rowStmt->execute([$id]);
             $row = $rowStmt->fetch();
             if (!$row) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
@@ -191,7 +203,7 @@ switch ($method) {
                 $items->execute([$id]);
                 foreach ($items->fetchAll() as $i) {
                     if (!empty($i['item_id'])) {
-                        adjustBranchStockAllowNegative($pdo, $row['branch_id'], $i['item_id'], -(int)$i['qty']);
+                        adjustWarehouseStockAllowNegative($pdo,(string)($row['warehouse_id']?:defaultWarehouseId($pdo,(string)$row['branch_id'])),(string)$row['branch_id'],$i['item_id'],-(int)$i['qty']);
                     }
                 }
             }

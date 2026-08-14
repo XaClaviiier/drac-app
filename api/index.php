@@ -54,6 +54,11 @@ if ($requestUser && isset($permissionByResource[$resource])) {
         $permission = ($resource === 'purchase-invoices' && $action === 'payments')
             ? 'purchase:pay'
             : $permissionByResource[$resource] . ':' . $operation;
+        // Petugas penerimaan boleh membuat master barang sementara. Barang ini
+        // tetap Pending sampai diverifikasi Administrator/Owner.
+        if ($resource === 'items' && $method === 'POST' && !authenticatedUserHasPermission($pdo, $requestUser, $permission)) {
+            $permission = 'receipt:create';
+        }
         requireAuthenticatedUserPermission($pdo, $requestUser, $permission);
     }
 }

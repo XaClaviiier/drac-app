@@ -8,6 +8,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_brands (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("ALTER TABLE vehicle_brands ADD COLUMN IF NOT EXISTS item_code CHAR(2) NULL AFTER name");
 $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_models (
     id VARCHAR(64) NOT NULL PRIMARY KEY,
     brand_id VARCHAR(64) NOT NULL,
@@ -121,6 +122,9 @@ foreach ($defaults as $brandName => $models) {
         $modelInsert->execute(['VM-' . substr(sha1(strtolower($brandName . '|' . $modelName)), 0, 16), $brandId, $modelName]);
     }
 }
+$universalBrandId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES(?,'Universal','01',1,0)")->execute([$universalBrandId]);
+$itemBrandCodes=['Universal'=>'01','Toyota'=>'02','Daihatsu'=>'03','Honda'=>'04','Mitsubishi'=>'05','Suzuki'=>'06','Wuling'=>'07','Nissan'=>'08','Datsun'=>'09','Isuzu'=>'10','Mazda'=>'11','Ford'=>'12','Chevrolet'=>'13','Kia'=>'14','Hyundai'=>'15'];
+foreach($itemBrandCodes as $brandName=>$itemCode){$codeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) AND (item_code IS NULL OR item_code='')");$codeUpdate->execute([$itemCode,$brandName]);}
 $colorInsert = $pdo->prepare("INSERT IGNORE INTO vehicle_colors(id,name,is_active) VALUES(?,?,1)");
 foreach (['Hitam','Putih','Silver','Abu-abu','Merah','Biru','Cokelat','Hijau','Kuning','Oranye','Ungu','Emas','Lainnya'] as $colorName) {
     $colorInsert->execute(['VC-' . substr(sha1(strtolower($colorName)), 0, 16), $colorName]);
@@ -166,7 +170,7 @@ function logVehicleCatalogChange(PDO $pdo, array $user, string $entity, ?string 
 switch ($method) {
     case 'GET':
         $catalogViewer = requireAuthenticatedUser($pdo);
-        $brands = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_brands ORDER BY sort_order,name")->fetchAll();
+        $brands = $pdo->query("SELECT id,name,item_code AS itemCode,is_active AS isActive,sort_order AS sortOrder FROM vehicle_brands ORDER BY sort_order,name")->fetchAll();
         $models = $pdo->query("SELECT id,brand_id AS brandId,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_models ORDER BY sort_order,name")->fetchAll();
         $colors = $pdo->query("SELECT id,name,is_active AS isActive,sort_order AS sortOrder FROM vehicle_colors ORDER BY sort_order,name")->fetchAll();
         $generations = $pdo->query("SELECT id,model_id AS modelId,name,aliases,year_from AS yearFrom,year_to AS yearTo,is_active AS isActive,sort_order AS sortOrder FROM vehicle_generations ORDER BY sort_order,name")->fetchAll();
@@ -216,7 +220,11 @@ switch ($method) {
         if ($name === '') respondError('Nama wajib diisi', 422);
         try {
             $newId = generateId();
-            if ($entity === 'brand') $pdo->prepare("INSERT INTO vehicle_brands(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_brands")->execute([$newId,$name]);
+            if ($entity === 'brand') {
+                $nextItemCode=(int)$pdo->query("SELECT COALESCE(MAX(CAST(item_code AS UNSIGNED)),15)+1 FROM vehicle_brands WHERE item_code REGEXP '^[0-9]{2}$'")->fetchColumn();
+                if($nextItemCode>99)throw new InvalidArgumentException('Kode merek barang sudah mencapai batas 99');
+                $pdo->prepare("INSERT INTO vehicle_brands(id,name,item_code,is_active,sort_order) SELECT ?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_brands")->execute([$newId,$name,str_pad((string)$nextItemCode,2,'0',STR_PAD_LEFT)]);
+            }
             elseif ($entity === 'model') $pdo->prepare("INSERT INTO vehicle_models(id,brand_id,name,is_active,sort_order) SELECT ?,?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_models WHERE brand_id=?")->execute([$newId,$d['brandId'] ?? '',$name,$d['brandId'] ?? '']);
             elseif ($entity === 'generation') {
                 $modelId=(string)($d['modelId']??'');
@@ -234,7 +242,8 @@ switch ($method) {
             elseif ($entity === 'color') $pdo->prepare("INSERT INTO vehicle_colors(id,name,is_active,sort_order) SELECT ?,?,1,COALESCE(MAX(sort_order),0)+10 FROM vehicle_colors")->execute([$newId,$name]);
             else respondError('Jenis master tidak valid', 422);
             logVehicleCatalogChange($pdo,$catalogUser,$entity,$newId,$name,'create',$entity === 'model' ? 'Ditambahkan ke merek ' . ($d['brandId'] ?? '-') : null);
-        } catch (PDOException $e) { respondError('Nama sudah digunakan atau data induk tidak valid', 409); }
+        } catch (InvalidArgumentException $e) { respondError($e->getMessage(),422); }
+          catch (PDOException $e) { respondError('Nama sudah digunakan atau data induk tidak valid', 409); }
         respondSuccess(null, 'Master kendaraan ditambahkan');
         break;
 

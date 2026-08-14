@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
 import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
+import { api } from '../lib/apiClient';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -30,6 +31,7 @@ const emptyItem = {
   categoryId: '',
   type: 'Persediaan' as ItemType,
   brand: '',
+  vehicleBrandId: '',
   unit: 'PCS',
   stock: 0,
   purchasePrice: 0,
@@ -105,6 +107,8 @@ export default function ItemsAndServices() {
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [editingCategory, setEditingCategory] = useState<ItemCategory | null>(null);
   const [itemForm, setItemForm] = useState(emptyItem);
+  const [vehicleBrands,setVehicleBrands]=useState<Array<{id:string;name:string;itemCode?:string;isActive:boolean}>>([]);
+  useEffect(()=>{api.get<any>('vehicle-catalog').then(res=>setVehicleBrands(res.data?.brands||[])).catch(()=>setVehicleBrands([]));},[]);
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showColumnSettings, setShowColumnSettings] = useState(false);
@@ -177,10 +181,11 @@ export default function ItemsAndServices() {
     });
   }, [data.items, editingItem, memberSearch]);
 
-  const nextItemCode = (type: ItemType, categoryId = itemForm.categoryId, brand = itemForm.brand) => {
+  const nextItemCode = (type: ItemType, categoryId = itemForm.categoryId) => {
     const category = data.itemCategories.find(item => item.id === categoryId);
     const categoryCode = twoDigitSegment(category?.code || category?.name || '', '00');
-    const prefix = `${categoryCode}${brandSegment(brand, type)}`;
+    const selectedBrand=vehicleBrands.find(brand=>brand.id===itemForm.vehicleBrandId)||vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal');
+    const prefix = `${categoryCode}${(selectedBrand?.itemCode||'01').padStart(2,'0')}`;
     const maxSequence = data.items.reduce((max, item) => {
       const match = item.code.toUpperCase().match(new RegExp(`^${prefix}-(\\d{4})$`));
       return match ? Math.max(max, Number(match[1])) : max;
@@ -210,6 +215,7 @@ export default function ItemsAndServices() {
         categoryId: item.categoryId,
         type: item.type,
         brand: item.brand,
+        vehicleBrandId: item.vehicleBrandId || vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id || '',
         unit: item.unit,
         stock: item.stock,
         purchasePrice: item.purchasePrice,
@@ -224,7 +230,7 @@ export default function ItemsAndServices() {
     } else {
       setEditingItem(null);
       const defaultCategory = data.itemCategories.find(category => category.isActive);
-      setItemForm({ ...emptyItem, categoryId: defaultCategory?.id || '', code: '', groupMembers: [] });
+      setItemForm({ ...emptyItem, categoryId: defaultCategory?.id || '', vehicleBrandId:vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id||'', code: '', groupMembers: [] });
     }
     setMemberSearch('');
     setShowItemModal(true);
@@ -345,6 +351,7 @@ export default function ItemsAndServices() {
       categoryName: category?.name || '-',
       type: itemForm.type,
       brand: itemForm.brand,
+      vehicleBrandId: itemForm.vehicleBrandId || undefined,
       unit: itemForm.unit,
       // Saldo stok dan harga beli dikelola oleh transaksi persediaan/pembelian,
       // bukan dari master Barang & Jasa.
@@ -1202,8 +1209,13 @@ export default function ItemsAndServices() {
                     {data.itemCategories.filter((cat) => cat.isActive).map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Merek Kendaraan untuk Kode *</label>
+                  <select required value={itemForm.vehicleBrandId} onChange={e=>setItemForm({...itemForm,vehicleBrandId:e.target.value})} className="w-full rounded-lg border border-gray-300 px-4 py-2.5"><option value="">Pilih merek kendaraan</option>{vehicleBrands.filter(b=>b.isActive).map(b=><option key={b.id} value={b.id}>{b.itemCode||'--'} - {b.name}</option>)}</select>
+                  <p className="mt-1 text-xs text-gray-500">Pilih Universal untuk barang yang cocok ke semua mobil.</p>
+                </div>
                 {itemForm.type !== 'Jasa' && itemForm.type !== 'Group' && <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Merek</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Merek Produk (opsional)</label>
                   <input value={itemForm.brand} onChange={(e) => setItemForm({ ...itemForm, brand: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                 </div>}
                 <div>

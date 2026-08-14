@@ -1,4 +1,15 @@
 <?php
+$pdo->exec("ALTER TABLE vehicle_brands ADD COLUMN IF NOT EXISTS item_code CHAR(2) NULL AFTER name");
+$brandCodeMap=['UNIVERSAL'=>'01','TOYOTA'=>'02','DAIHATSU'=>'03','HONDA'=>'04','MITSUBISHI'=>'05','SUZUKI'=>'06','WULING'=>'07','NISSAN'=>'08','DATSUN'=>'09','ISUZU'=>'10','MAZDA'=>'11','FORD'=>'12','CHEVROLET'=>'13','KIA'=>'14','HYUNDAI'=>'15'];
+$brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPER(name)=?");foreach($brandCodeMap as $brandName=>$brandCode){$brandCodeUpdate->execute([$brandCode,$brandName]);}
+$universalId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS merged_into_item_id VARCHAR(64) NULL AFTER verified_by");
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_verification_audit(id BIGINT AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,action VARCHAR(30) NOT NULL,target_item_id VARCHAR(64) NULL,user_id VARCHAR(64) NULL,user_name VARCHAR(150) NULL,detail TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_item_verify(item_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 function itemCodeSegment(string $value, string $fallback): string {
     $normalized = strtoupper(trim((string)preg_replace('/[^A-Z0-9]+/i', ' ', $value)));
     $digits = preg_replace('/\D/', '', $normalized);
@@ -8,10 +19,10 @@ function itemCodeSegment(string $value, string $fallback): string {
     return str_pad($code, 2, 'X');
 }
 
-function nextAutomaticItemCode(PDO $pdo, string $categoryCode, string $categoryName, string $brand, string $type): string {
+function nextAutomaticItemCode(PDO $pdo, string $categoryCode, string $categoryName, string $brandCode, string $type): string {
     $categoryPart = itemCodeSegment($categoryCode !== '' ? $categoryCode : $categoryName, '00');
-    $fallback = $type === 'Jasa' ? 'JS' : ($type === 'Group' ? 'GP' : ($type === 'Non Persediaan' ? 'NP' : 'NA'));
-    $brandPart = itemCodeSegment($brand, $fallback);
+    $fallback = '01';
+    $brandPart = itemCodeSegment($brandCode, $fallback);
     $prefix = $categoryPart.$brandPart;
     $stmt = $pdo->prepare("SELECT code FROM items WHERE code LIKE ? FOR UPDATE");
     $stmt->execute([$prefix.'-%']);
@@ -47,6 +58,12 @@ switch ($method) {
             $r['purchasePrice'] = (float)$r['purchase_price'];
             $r['sellingPrice'] = (float)$r['selling_price'];
             $r['isActive'] = (bool)$r['is_active'];
+            $r['vehicleBrandId'] = $r['vehicle_brand_id'] ?? null;
+            $r['vehicleBrandName'] = $r['vehicle_brand_name'] ?? '';
+            $r['verificationStatus'] = $r['verification_status'] ?? 'Verified';
+            $r['createdBy'] = $r['created_by'] ?? null;
+            $r['verifiedBy'] = $r['verified_by'] ?? null;
+            $r['mergedIntoItemId'] = $r['merged_into_item_id'] ?? null;
             $r['isQuickService'] = (bool)$r['is_quick_service'];
             $r['receiptDescription'] = $r['receipt_description'] ?? '';
             $r['branchId'] = $r['branch_id'];
@@ -74,6 +91,7 @@ switch ($method) {
     case 'POST':
         $d = getInput();
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        if (!authenticatedUserHasPermission($pdo,$actor,'item:create') && empty($d['provisional'])) respondError('Hak penerimaan hanya boleh membuat barang sementara',403);
         $branchId = (string)($d['branchId'] ?? '');
         requireAccessibleBranch($pdo, $actor, $branchId);
         $type = (string)($d['type'] ?? '');
@@ -91,25 +109,30 @@ switch ($method) {
             $categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
             $name=strtoupper(trim((string)$d['name']));$brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
+            $vehicleBrandId=(string)($d['vehicleBrandId']??'');
+            $vehicleBrandStmt=$pdo->prepare("SELECT id,name,item_code FROM vehicle_brands WHERE id=? AND is_active=1");
+            if($vehicleBrandId!==''){$vehicleBrandStmt->execute([$vehicleBrandId]);$vehicleBrand=$vehicleBrandStmt->fetch();}else{$vehicleBrand=$pdo->query("SELECT id,name,item_code FROM vehicle_brands WHERE UPPER(name)='UNIVERSAL' AND is_active=1 LIMIT 1")->fetch();}
+            if(!$vehicleBrand)throw new InvalidArgumentException('Merek kendaraan untuk kode barang wajib dipilih');
             $unit=$type==='Jasa'?'JASA':($type==='Group'?'PAKET':strtoupper(trim((string)($d['unit']??'PCS'))));
             $quickService=in_array($type,['Jasa','Group'],true)?(int)!empty($d['isQuickService']):0;
             $normalizedBarcode=in_array($type,['Jasa','Group'],true)?null:($barcode!==''?$barcode:null);
             $nameCheck=$pdo->prepare("SELECT id FROM items WHERE UPPER(TRIM(name))=? LIMIT 1");$nameCheck->execute([$name]);
             if($nameCheck->fetch())throw new InvalidArgumentException("Nama {$name} sudah digunakan");
-            $code=!empty($d['autoCode'])?nextAutomaticItemCode($pdo,(string)$category['code'],(string)$category['name'],$brand,$type):strtoupper(trim((string)($d['code']??'')));
+            $code=!empty($d['autoCode'])?nextAutomaticItemCode($pdo,(string)$category['code'],(string)$category['name'],(string)($vehicleBrand['item_code']??'01'),$type):strtoupper(trim((string)($d['code']??'')));
             if($code==='')throw new InvalidArgumentException('Kode barang/jasa wajib diisi');
             $codeCheck=$pdo->prepare("SELECT id FROM items WHERE code=? LIMIT 1");$codeCheck->execute([$code]);
             if($codeCheck->fetch())throw new InvalidArgumentException("Kode {$code} sudah digunakan");
             if($type==='Group'&&empty($d['groupMembers']))throw new InvalidArgumentException('Group/Paket wajib memiliki minimal satu komponen');
             $itemId = $d['id'] ?? generateId();
-            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, unit, stock, sellable_stock, purchase_price, selling_price, is_active, is_quick_service, description, receipt_description, barcode, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $isProvisional=!empty($d['provisional']);
+            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, vehicle_brand_id, vehicle_brand_name, unit, stock, sellable_stock, purchase_price, selling_price, is_active, verification_status, created_by, verified_by, is_quick_service, description, receipt_description, barcode, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $itemId, $code, $name,
                 $category['id'], $category['name'],
-                $type, $brand, $unit,
+                $type, $brand, $vehicleBrand['id'], $vehicleBrand['name'], $unit,
                 0, 0,
                 0, max(0, (float)($d['sellingPrice'] ?? 0)),
-                $d['isActive'] ?? 1, $quickService,
+                $d['isActive'] ?? 1, $isProvisional?'Pending':'Verified', $actor['id']??null, $isProvisional?null:($actor['id']??null), $quickService,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
                 $normalizedBarcode,
                 $branchId
@@ -160,6 +183,36 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        if (in_array((string)($d['action']??''), ['verify','merge'], true)) {
+            $roleStmt=$pdo->prepare("SELECT code,name FROM roles WHERE id=? LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$role=$roleStmt->fetch();
+            $isAdmin=!empty($actor['is_owner'])||strtoupper((string)($role['code']??''))==='ADM'||strtolower((string)($role['name']??''))==='administrator';
+            if(!$isAdmin)respondError('Verifikasi barang hanya untuk Owner atau Administrator',403);
+            if($d['action']==='verify'){
+                $pdo->prepare("UPDATE items SET verification_status='Verified',verified_by=? WHERE id=? AND verification_status='Pending'")->execute([$actor['id']??null,$id]);
+                $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,user_id,user_name) VALUES (?,'Verified',?,?)")->execute([$id,$actor['id']??null,$actor['name']??'']);
+                respondSuccess(null,'Barang berhasil diverifikasi');
+            }
+            $targetId=(string)($d['targetItemId']??'');
+            if($targetId===''||$targetId===$id)respondError('Barang tujuan penggabungan tidak valid',422);
+            $pdo->beginTransaction();
+            try{
+                $sourceStmt=$pdo->prepare("SELECT * FROM items WHERE id=? AND verification_status='Pending' FOR UPDATE");$sourceStmt->execute([$id]);$source=$sourceStmt->fetch();
+                $targetStmt=$pdo->prepare("SELECT * FROM items WHERE id=? AND is_active=1 AND verification_status='Verified' FOR UPDATE");$targetStmt->execute([$targetId]);$target=$targetStmt->fetch();
+                if(!$source||!$target)throw new InvalidArgumentException('Barang asal Pending atau barang tujuan terverifikasi tidak ditemukan');
+                foreach(['warehouse_stocks'=>['warehouse_id','quantity','reserved_quantity'],'branch_item_stocks'=>['branch_id','stock','sellable_stock']] as $table=>$cols){
+                    [$scope,$qty,$reserved]=$cols;$rows=$pdo->prepare("SELECT * FROM {$table} WHERE item_id=?");$rows->execute([$id]);
+                    foreach($rows->fetchAll() as $row){$up=$pdo->prepare("INSERT INTO {$table} ({$scope},item_id,{$qty},{$reserved}) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE {$qty}={$qty}+VALUES({$qty}),{$reserved}={$reserved}+VALUES({$reserved})");$up->execute([$row[$scope],$targetId,$row[$qty],$row[$reserved]]);}
+                    $pdo->prepare("DELETE FROM {$table} WHERE item_id=?")->execute([$id]);
+                }
+                foreach(['goods_receipt_items','purchase_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,item_code=?,item_name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
+                foreach(['work_order_services','sales_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,code=?,name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
+                $pdo->prepare("UPDATE items SET is_active=0,verification_status='Merged',merged_into_item_id=?,verified_by=?,stock=0,sellable_stock=0 WHERE id=?")->execute([$targetId,$actor['id']??null,$id]);
+                $pdo->prepare("UPDATE items SET stock=(SELECT COALESCE(SUM(stock),0) FROM branch_item_stocks WHERE item_id=?),sellable_stock=(SELECT COALESCE(SUM(sellable_stock),0) FROM branch_item_stocks WHERE item_id=?) WHERE id=?")->execute([$targetId,$targetId,$targetId]);
+                $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??'']);
+                $pdo->commit();respondSuccess(null,'Barang duplikat berhasil dikonversi dan stok digabungkan');
+            }catch(Exception $e){$pdo->rollBack();respondError($e->getMessage(),422);}
+        }
         $type = (string)($d['type'] ?? '');
         if (!in_array($type, ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'], true)) respondError('Jenis barang/jasa tidak valid', 422);
         if (trim((string)($d['code'] ?? '')) === '' || trim((string)($d['name'] ?? '')) === '') respondError('Kode dan nama wajib diisi', 422);

@@ -45,7 +45,7 @@ interface AppContextType {
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
   createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
-  addItem: (item: Item & { autoCode?: boolean }) => Promise<Item>;
+  addItem: (item: Item & { autoCode?: boolean; provisional?: boolean }) => Promise<Item>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   addItemCategory: (category: ItemCategory) => Promise<void>;
