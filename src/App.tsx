@@ -18,6 +18,7 @@ import AIAssistant from './pages/AIAssistant';
 import Categories from './pages/Categories';
 import SettingsPage from './pages/SettingsPage';
 import Warehouses from './pages/Warehouses';
+import WarehouseTransfers from './pages/WarehouseTransfers';
 import WorkOrderReport from './pages/WorkOrderReport';
 import ReportsIndex from './pages/ReportsIndex';
 import CustomerPayments from './pages/CustomerPayments';
@@ -97,6 +98,7 @@ function AppRoutes() {
         <Route path="users" element={protectedPage('user:view', <UsersAndRoles />)} />
         <Route path="settings" element={protectedPage('settings:view', <SettingsPage />)} />
         <Route path="warehouses" element={protectedPage('item:view', <Warehouses />)} />
+        <Route path="warehouse-transfers" element={protectedPage('item:view', <WarehouseTransfers />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

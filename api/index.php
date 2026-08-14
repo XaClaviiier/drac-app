@@ -44,6 +44,7 @@ $permissionByResource = [
     'customers' => 'customer', 'vehicles' => 'vehicle',
     'suppliers' => 'supplier', 'items' => 'item',
     'item-categories' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item',
+    'warehouse-transfers' => 'item',
     'work-orders' => 'wo', 'sales-invoices' => 'invoice',
     'goods-receipts' => 'receipt', 'purchase-invoices' => 'purchase',
 ];
@@ -128,6 +129,9 @@ try {
             break;
         case 'stock-movements':
             require 'endpoints/stock-movements.php';
+            break;
+        case 'warehouse-transfers':
+            require 'endpoints/warehouse-transfers.php';
             break;
 
         // ----- CUSTOMERS -----
