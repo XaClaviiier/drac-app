@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, CheckCircle2, FileText, KeyRound, Search, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { Camera, CheckCircle2, FileText, KeyRound, Pencil, Search, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import type { Customer, Item, Vehicle } from '../types';
 
-type Line = { item: Item; qty: number; price: number; selected: boolean };
+type Line = { item: Item; qty: number; price: number; selected: boolean; templateLabel?: string };
 type AccountMap = { branchId: string; bankAccountId: string };
 type ReceiptTemplate = { label: string; aliases: string[]; kind: 'Jasa'|'Barang'; preferredAliases?: string[] };
 const receiptTemplates: ReceiptTemplate[] = [
@@ -41,6 +41,7 @@ export default function HistoricalQuickEntry(){
   const [accountMaps,setAccountMaps]=useState<AccountMap[]>([]); const [saving,setSaving]=useState(false); const [message,setMessage]=useState('');
   const [readingReceipt,setReadingReceipt]=useState(false);
   const [receiptStatus,setReceiptStatus]=useState('');
+  const [editingTemplate,setEditingTemplate]=useState<string|null>(null);
   const fixedListInitialized=useRef(false);
   const [groqKey,setGroqKey]=useState(''); const [groqModel,setGroqModel]=useState('qwen/qwen3.6-27b'); const [savingKey,setSavingKey]=useState(false); const [aiConfigured,setAiConfigured]=useState(false);
   useEffect(()=>{ api.get<AccountMap[]>('branch-account-settings').then(r=>setAccountMaps(r.data||[])); },[]);
@@ -67,7 +68,7 @@ export default function HistoricalQuickEntry(){
     return templateScore(template,item)>0;
   }).sort((a,b)=>templateScore(template,b)-templateScore(template,a)||a.name.localeCompare(b.name));
   const templateLine=(template:ReceiptTemplate)=>lines
-    .filter(line=>templateScore(template,line.item)>0)
+    .filter(line=>line.templateLabel===template.label||templateScore(template,line.item)>0)
     .sort((a,b)=>templateScore(template,b.item)-templateScore(template,a.item))[0];
   const mergeWithFixedServices=(source:Line[])=>{
     const merged:Line[]=[]; const used=new Set<string>();
@@ -76,7 +77,7 @@ export default function HistoricalQuickEntry(){
       const candidate=uploaded?.item||templateCandidates(template)[0];
       if(!candidate||used.has(candidate.id))return;
       const sourceLine=source.find(line=>line.item.id===candidate.id)||uploaded;
-      merged.push(sourceLine||{item:candidate,qty:1,price:candidate.sellingPrice,selected:false});
+      merged.push(sourceLine?{...sourceLine,templateLabel:template.label}:{item:candidate,qty:1,price:candidate.sellingPrice,selected:false,templateLabel:template.label});
       used.add(candidate.id);
     });
     source.forEach(line=>{if(!used.has(line.item.id)){merged.push(line);used.add(line.item.id);}});
@@ -100,11 +101,16 @@ export default function HistoricalQuickEntry(){
     const selected=current?.selected??true;
     const replacement=data.items.find(item=>item.id===itemId);
     setLines(rows=>{
-      const without=current?rows.filter(row=>row.item.id!==current.item.id):rows;
+      const without=current?rows.filter(row=>row!==current):rows;
       if(!replacement)return without;
-      const existing=without.find(row=>row.item.id===replacement.id);
-      return existing?without.map(row=>row.item.id===replacement.id?{...row,selected:true}:row):without.concat({item:replacement,qty:1,price:replacement.sellingPrice,selected});
+      const next={item:replacement,qty:current?.qty||1,price:current?.price||replacement.sellingPrice,selected,templateLabel:template.label};
+      const currentIndex=current?rows.indexOf(current):-1;
+      if(currentIndex<0)return without.concat(next);
+      const result=[...without];
+      result.splice(Math.min(currentIndex,result.length),0,next);
+      return result;
     });
+    setEditingTemplate(null);
   };
   const parseDate=(raw:string)=>{const p=raw.trim().split(/[\/\-]/).map(Number);if(!p[0])return '';const now=new Date();const y=p[2]?(p[2]<100?2000+p[2]:p[2]):now.getFullYear();const m=p[1]||now.getMonth()+1;return `${y}-${String(m).padStart(2,'0')}-${String(p[0]).padStart(2,'0')}`;};
   const findCustomer=(name:string,phone='')=>{
@@ -234,28 +240,11 @@ export default function HistoricalQuickEntry(){
       {mode==='text'&&<div className="mb-4 rounded-xl bg-slate-900 p-3 text-white"><div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 font-semibold"><FileText className="h-4 w-4"/>Format tanpa AI/token</div><label className={`cursor-pointer rounded-lg border border-cyan-400 px-3 py-1.5 text-sm font-semibold text-cyan-300 hover:bg-cyan-950 ${readingReceipt?'pointer-events-none opacity-50':''}`}><Camera className={`mr-1.5 inline h-4 w-4 ${readingReceipt?'animate-pulse':''}`}/>{readingReceipt?'Membaca Nota...':'Upload Foto Nota'}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={e=>{const file=e.target.files?.[0];e.currentTarget.value='';void readReceipt(file);}}/></label></div>{receiptStatus&&<div className={`mb-2 rounded-lg border px-3 py-2 text-sm ${receiptStatus.startsWith('Gagal')?'border-red-400 bg-red-950/50 text-red-200':readingReceipt?'border-amber-400 bg-amber-950/40 text-amber-200':'border-emerald-400 bg-emerald-950/40 text-emerald-200'}`}>{readingReceipt&&<span className="mr-2 inline-block animate-spin">◌</span>}{receiptStatus}</div>}<textarea value={text} onChange={e=>setText(e.target.value)} rows={6} className="w-full rounded-lg border border-slate-600 bg-slate-800 p-3 font-mono text-sm"/><button onClick={parseText} className="mt-2 rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950"><Send className="mr-2 inline h-4 w-4"/>Baca Data</button></div>}
       <div className="grid gap-3 md:grid-cols-2"><div className="relative"><label className="text-sm">Cari pelanggan</label><input value={customerQuery} onFocus={()=>{if(!customer)setCustomerPickerOpen(true)}} onChange={e=>{setCustomerQuery(e.target.value);setCustomer(null);setCustomerPickerOpen(true)}} placeholder="Nama, kode, atau nomor HP" className="mt-1 w-full rounded-lg border p-2"/><Picker results={customerResults} onPick={chooseCustomer}/></div><div className="relative"><label className="text-sm">Cari kendaraan</label><input value={vehicleQuery} onFocus={()=>{if(!vehicle)setVehiclePickerOpen(true)}} onChange={e=>{setVehicleQuery(e.target.value);setVehicle(null);setVehiclePickerOpen(true)}} placeholder="Nomor plat, merek, atau tipe" className="mt-1 w-full rounded-lg border p-2"/><Picker results={vehicleResults} onPick={chooseVehicle}/></div></div>
       <label className="mt-3 block text-sm">Keterangan<input value={description} onChange={e=>setDescription(e.target.value)} className="mt-1 w-full rounded-lg border p-2"/></label>
-      <div className="mt-3 overflow-hidden rounded-xl border border-blue-200 bg-blue-50/40">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200 bg-blue-50 px-3 py-2">
-          <div><h2 className="font-semibold text-blue-950">Daftar isi nota</h2><p className="text-xs text-blue-700">Hasil upload otomatis dicentang. Pastikan setiap pilihan dipetakan ke master Barang/Jasa yang benar.</p></div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">{receiptTemplates.filter(template=>templateLine(template)?.selected).length} dipilih</span>
-        </div>
-        <div className="grid gap-px bg-blue-100 md:grid-cols-2">
-          {receiptTemplates.map(template=>{
-            const line=templateLine(template); const candidates=templateCandidates(template); const candidateIds=new Set(candidates.map(item=>item.id)); const otherItems=data.items.filter(item=>item.isActive&&!candidateIds.has(item.id));
-            return <div key={template.label} className={`grid grid-cols-[minmax(150px,0.8fr)_minmax(190px,1.2fr)] items-center gap-2 bg-white px-3 py-2 ${line?.selected?'ring-1 ring-inset ring-emerald-200':''}`}>
-              <label className="flex min-w-0 items-center gap-2 text-sm font-medium"><input type="checkbox" checked={!!line?.selected} onChange={event=>toggleTemplate(template,event.target.checked)} className="h-5 w-5 shrink-0 accent-green-600"/><span className="truncate">{template.label}</span><span className={`ml-auto rounded px-1.5 py-0.5 text-[10px] ${template.kind==='Jasa'?'bg-cyan-50 text-cyan-700':'bg-amber-50 text-amber-700'}`}>{template.kind}</span></label>
-              <select value={line?.item.id||''} onChange={event=>mapTemplate(template,event.target.value)} className={`min-w-0 rounded-lg border px-2 py-1.5 text-xs ${line?'border-emerald-300 bg-emerald-50 text-emerald-900':'border-gray-300 bg-white text-gray-500'}`}>
-                <option value="">Pilih master Barang/Jasa...</option>
-                {candidates.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
-                {!!candidates.length&&!!otherItems.length&&<option disabled>──────── Item lainnya ────────</option>}
-                {otherItems.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
-              </select>
-            </div>;
-          })}
-        </div>
-      </div>
       <div className="relative mt-3"><label className="text-sm">Cari barang / jasa</label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400"/><input value={itemQuery} onFocus={()=>setItemPickerOpen(true)} onChange={e=>{setItemQuery(e.target.value);setItemPickerOpen(true)}} placeholder="Kode, barcode, atau nama" className="mt-1 w-full rounded-lg border py-2 pl-9 pr-3"/></div><Picker results={itemResults} onPick={addItem}/></div>
-      <div className="mt-3 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr><th className="p-2 text-center">Pilih</th><th className="p-2 text-left">Barang/Jasa</th><th>Qty</th><th>Harga historis</th><th>Subtotal</th><th/></tr></thead><tbody>{lines.map((l,i)=><tr key={l.item.id} className={`border-t ${l.selected?'bg-emerald-50/40':'bg-slate-50 text-slate-400'}`}><td className="p-2 text-center"><input type="checkbox" checked={l.selected} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,selected:e.target.checked}:v))} className="h-5 w-5 accent-green-600" aria-label={`Pilih ${l.item.name}`}/></td><td className="p-2 font-medium">{l.item.code} — {l.item.name}</td><td><input type="number" min="1" disabled={!l.selected} value={l.qty} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,qty:Number(e.target.value)}:v))} className="w-20 rounded border p-1 disabled:bg-slate-100"/></td><td><input type="number" min="0" disabled={!l.selected} value={l.price} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,price:Number(e.target.value)}:v))} className="w-32 rounded border p-1 disabled:bg-slate-100"/></td><td className="whitespace-nowrap p-2 font-semibold">{l.selected?`Rp ${(l.qty*l.price).toLocaleString('id-ID')}`:'Tidak dipilih'}</td><td><button onClick={()=>setLines(x=>x.filter((_,n)=>n!==i))} className="p-2 text-red-500"><Trash2 className="h-4 w-4"/></button></td></tr>)}</tbody></table>{!lines.length&&<div className="p-8 text-center text-sm text-gray-400">Belum ada barang atau jasa.</div>}</div>
+      <div className="mt-3 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-slate-100"><tr><th className="p-2 text-center">Pilih</th><th className="p-2 text-left">Barang/Jasa</th><th>Qty</th><th>Harga historis</th><th>Subtotal</th><th className="p-2">Aksi</th></tr></thead><tbody>{lines.map((l,i)=>{
+        const template=l.templateLabel?receiptTemplates.find(value=>value.label===l.templateLabel):undefined;
+        const isEditing=!!template&&editingTemplate===template.label;
+        return <tr key={`${l.templateLabel||'item'}-${l.item.id}`} className={`border-t ${l.selected?'bg-emerald-50/40':'bg-slate-50 text-slate-400'}`}><td className="p-2 text-center"><input type="checkbox" checked={l.selected} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,selected:e.target.checked}:v))} className="h-5 w-5 accent-green-600" aria-label={`Pilih ${template?.label||l.item.name}`}/></td><td className="min-w-[280px] p-2 font-medium">{isEditing?<div className="flex items-center gap-2"><select autoFocus value={l.item.id} onChange={event=>mapTemplate(template,event.target.value)} className="min-w-0 flex-1 rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Pilih master Barang/Jasa...</option>{data.items.filter(item=>item.isActive).sort((a,b)=>a.name.localeCompare(b.name)).map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select><button type="button" onClick={()=>setEditingTemplate(null)} className="rounded p-1 text-slate-500 hover:bg-slate-100" title="Tutup"><X className="h-4 w-4"/></button></div>:<div><div className="flex items-center gap-2"><span className={template?'font-semibold text-slate-900':''}>{template?.label||l.item.name}</span>{template&&<span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">Layanan tetap</span>}</div><div className="text-xs font-normal text-slate-500">{l.item.code} — {l.item.name}</div></div>}</td><td><input type="number" min="1" disabled={!l.selected} value={l.qty} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,qty:Number(e.target.value)}:v))} className="w-20 rounded border p-1 disabled:bg-slate-100"/></td><td><input type="number" min="0" disabled={!l.selected} value={l.price} onChange={e=>setLines(x=>x.map((v,n)=>n===i?{...v,price:Number(e.target.value)}:v))} className="w-32 rounded border p-1 disabled:bg-slate-100"/></td><td className="whitespace-nowrap p-2 font-semibold">{l.selected?`Rp ${(l.qty*l.price).toLocaleString('id-ID')}`:'Tidak dipilih'}</td><td className="whitespace-nowrap p-1 text-center">{template&&<button type="button" onClick={()=>setEditingTemplate(template.label)} className="rounded p-2 text-blue-600 hover:bg-blue-50" title="Ubah pemetaan kode barang/jasa"><Pencil className="h-4 w-4"/></button>}<button type="button" onClick={()=>setLines(x=>x.filter((_,n)=>n!==i))} className="rounded p-2 text-red-500 hover:bg-red-50" title="Hapus dari daftar"><Trash2 className="h-4 w-4"/></button></td></tr>})}</tbody></table>{!lines.length&&<div className="p-8 text-center text-sm text-gray-400">Belum ada barang atau jasa.</div>}</div>
       <div className="mt-3 grid gap-3 rounded-lg border bg-slate-50 p-3 sm:grid-cols-3"><div><span className="text-xs text-slate-500">Total rincian item</span><div className="font-semibold">Rp {total.toLocaleString('id-ID')}</div></div><label className="text-xs text-slate-500">Total Nota/Pembayaran (Rp)<input type="number" min="0" value={paymentTotal||''} onChange={e=>setReceiptTotal(Math.max(0,Number(e.target.value)||0))} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-base font-bold text-green-700"/></label><div><span className="text-xs text-slate-500">Selisih</span><div className={`font-bold ${Math.abs(difference)<0.01?'text-green-600':'text-red-600'}`}>Rp {difference.toLocaleString('id-ID')}</div><p className="text-xs text-slate-500">Harus Rp0 sebelum disimpan.</p></div></div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div>{message&&<span className="text-sm font-medium text-blue-700">{message}</span>}<p className="text-xs text-amber-700">Barang tetap tercatat di faktur, tetapi stok gudang tidak berubah.</p></div><div className="flex items-center gap-4"><strong>Total pembayaran Rp {paymentTotal.toLocaleString('id-ID')}</strong><button disabled={saving||!mapped||paymentTotal<=0||Math.abs(difference)>0.01} onClick={save} className="rounded-lg bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-40"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{saving?'Menyimpan...':'Simpan Lengkap'}</button></div></div>
     </div>
