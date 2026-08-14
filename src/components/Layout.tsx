@@ -69,6 +69,8 @@ const pageTitles: Record<string, string> = {
   '/historical-entry': 'Input Cepat Historis',
 };
 
+const workspacePathFor = (path: string) => path.startsWith('/receipts/') ? '/receipts' : path;
+
 type DesktopMenuItem = {
   label: string;
   path?: string;
@@ -141,7 +143,13 @@ export default function Layout() {
   const [workspaceTabs, setWorkspaceTabs] = useState<Array<{ path: string; label: string }>>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('drac-workspace-tabs') || '[]');
-      return Array.isArray(saved) ? saved.filter(tab => tab?.path && tab.path !== '/' && tab?.label) : [];
+      if (!Array.isArray(saved)) return [];
+      return saved.filter(tab => tab?.path && tab.path !== '/' && tab?.label).reduce<Array<{ path: string; label: string }>>((tabs, tab) => {
+        const path = workspacePathFor(tab.path);
+        if (tabs.some(current => current.path === path)) return tabs;
+        tabs.push({ path, label: path === '/receipts' ? 'Penerimaan Barang' : tab.label });
+        return tabs;
+      }, []);
     } catch { return []; }
   });
   const location = useLocation();
@@ -174,7 +182,7 @@ export default function Layout() {
     const index = workspaceTabs.findIndex(tab => tab.path === path);
     const remaining = workspaceTabs.filter(tab => tab.path !== path);
     setWorkspaceTabs(remaining);
-    if (location.pathname === path) {
+    if (workspacePathFor(location.pathname) === path) {
       const fallback = remaining[Math.min(index, remaining.length - 1)]?.path || '/';
       navigate(fallback);
     }
@@ -184,12 +192,14 @@ export default function Layout() {
   useEffect(() => { setMobileMenuOpen(false); setDesktopMenuOpen(null); }, [location.pathname]);
   useEffect(() => {
     if (location.pathname === '/') return;
-    const label = getPageTitle();
+    const path = workspacePathFor(location.pathname);
+    const label = path === '/receipts' ? 'Penerimaan Barang' : getPageTitle();
     setWorkspaceTabs(current => {
-      const existing = current.find(tab => tab.path === location.pathname);
-      if (!existing) return [...current, { path: location.pathname, label }];
-      if (existing.label === label) return current;
-      return current.map(tab => tab.path === location.pathname ? { ...tab, label } : tab);
+      const withoutReceiptChildren = path === '/receipts' ? current.filter(tab => !tab.path.startsWith('/receipts/')) : current;
+      const existing = withoutReceiptChildren.find(tab => tab.path === path);
+      if (!existing) return [...withoutReceiptChildren, { path, label }];
+      if (existing.label === label) return withoutReceiptChildren;
+      return withoutReceiptChildren.map(tab => tab.path === path ? { ...tab, label } : tab);
     });
   }, [location.pathname, data.goodsReceipts]);
   useEffect(() => { localStorage.setItem('drac-workspace-tabs', JSON.stringify(workspaceTabs)); }, [workspaceTabs]);
@@ -456,7 +466,7 @@ export default function Layout() {
               <span className="truncate">Dashboard</span>
             </button>
             {workspaceTabs.map(tab => {
-              const active = location.pathname === tab.path;
+              const active = workspacePathFor(location.pathname) === tab.path;
               return (
                 <div key={tab.path} className={`ml-1 flex h-10 min-w-40 max-w-56 flex-shrink-0 items-center rounded-t-md border border-b-0 transition-colors ${active ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                   <button type="button" onClick={() => navigate(tab.path)} title={tab.label} className={`min-w-0 flex-1 truncate px-3 text-left text-sm ${active ? 'font-semibold' : ''}`}>{tab.label}</button>
