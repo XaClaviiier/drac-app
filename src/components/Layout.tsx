@@ -460,8 +460,8 @@ export default function Layout() {
           </div>
         </header>
 
-        <div className={`hidden flex-shrink-0 items-start border-b bg-gray-100 px-2 lg:flex ${location.pathname.startsWith('/receipts') ? 'h-10 border-transparent' : 'h-14 border-blue-600'}`}>
-          <div className={`flex min-w-0 flex-1 items-start overflow-x-auto overflow-y-hidden ${location.pathname.startsWith('/receipts') ? 'h-10' : 'h-14'}`}>
+        <div className="hidden h-10 flex-shrink-0 items-start border-b border-transparent bg-gray-100 px-2 lg:flex">
+          <div className="flex h-10 min-w-0 flex-1 items-start overflow-x-auto overflow-y-hidden">
             <button type="button" onClick={() => navigate('/')} className={`flex h-10 min-w-32 flex-shrink-0 items-center justify-between gap-3 rounded-t-md border border-b-0 px-4 text-sm transition-colors ${location.pathname === '/' ? 'border-blue-600 bg-blue-600 font-semibold text-white' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               <span className="truncate">Dashboard</span>
             </button>
