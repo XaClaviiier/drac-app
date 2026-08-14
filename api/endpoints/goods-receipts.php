@@ -14,9 +14,15 @@ function nextManualTransferNumber(PDO $pdo,string $sourceBranchId,string $destin
     $sourceLetter=substr(preg_replace('/[^A-Z0-9]/','',strtoupper($sourceCode)),0,1)?:'X';$destinationLetter=substr(preg_replace('/[^A-Z0-9]/','',strtoupper($destinationCode)),0,1)?:'X';
     $prefix='TRF-'.$sourceLetter.'-'.$destinationLetter.'-'.date('ymd',strtotime($date)).'-';$seq=$pdo->prepare("SELECT transfer_number FROM goods_receipts WHERE transfer_number LIKE ? ORDER BY transfer_number DESC LIMIT 1 FOR UPDATE");$seq->execute([$prefix.'%']);$last=(string)$seq->fetchColumn();$number=$last?(int)substr($last,-4)+1:1;return $prefix.str_pad((string)$number,4,'0',STR_PAD_LEFT);
 }
+function canSeeReceiptSupplier(PDO $pdo,array $actor):bool{
+    if(!empty($actor['is_owner']))return true;
+    $stmt=$pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');$stmt->execute([(string)($actor['role_id']??'')]);$role=$stmt->fetch()?:[];
+    return strtoupper(trim((string)($role['code']??'')))==='ADM'||strtolower(trim((string)($role['name']??'')))==='administrator';
+}
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        $canSeeSuppliers=canSeeReceiptSupplier($pdo,$actor);
         $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
         $rows = array_values(array_filter(
             $pdo->query("SELECT * FROM goods_receipts ORDER BY date DESC, receipt_number DESC")->fetchAll(),
@@ -24,8 +30,8 @@ switch ($method) {
         ));
         foreach ($rows as &$r) {
             $r['receiptNumber'] = $r['receipt_number'];
-            $r['supplierId'] = $r['supplier_id'];
-            $r['supplierName'] = $r['supplier_name'];
+            $r['supplierId'] = $canSeeSuppliers ? $r['supplier_id'] : '';
+            $r['supplierName'] = $canSeeSuppliers ? $r['supplier_name'] : '';
             $r['doNumber'] = $r['do_number'];
             $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
             $r['deliveryOther'] = $r['delivery_other'] ?? '';
@@ -76,7 +82,7 @@ switch ($method) {
             $sourceCheck=$pdo->prepare("SELECT id,branch_id FROM warehouses WHERE id=? AND is_active=1");$sourceCheck->execute([$sourceWarehouseId]);$sourceWarehouse=$sourceCheck->fetch();if(!$sourceWarehouse)respondError('Gudang asal tidak valid',422);$sourceBranchId=(string)$sourceWarehouse['branch_id'];requireAccessibleBranch($pdo,$actor,$sourceBranchId);
         }
         $supplier = null;
-        if (!empty($d['supplierId'])) {
+        if (canSeeReceiptSupplier($pdo,$actor) && !empty($d['supplierId'])) {
             $supplierCheck = $pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");
             $supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();
             if (!$supplier) respondError('Supplier tidak ditemukan atau nonaktif', 422);
@@ -162,7 +168,8 @@ switch ($method) {
             $warehouseCheck=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1");$warehouseCheck->execute([$newWarehouseId,$newBranchId]);
             if(!$warehouseCheck->fetch())throw new InvalidArgumentException('Gudang tujuan tidak valid');
             $supplier=null;
-            if(!empty($d['supplierId'])){$supplierCheck=$pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");$supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();if(!$supplier)throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');}
+            if(canSeeReceiptSupplier($pdo,$actor)&&!empty($d['supplierId'])){$supplierCheck=$pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");$supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();if(!$supplier)throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');}
+            if(!canSeeReceiptSupplier($pdo,$actor)&&!empty($oldRow['supplier_id']))$supplier=['id'=>$oldRow['supplier_id'],'name'=>$oldRow['supplier_name']];
             $receiverId=(string)($d['receivedById']??($oldRow['received_by_id']??($actor['id']??'')));$receiverStmt=$pdo->prepare("SELECT id,name,is_active FROM users WHERE id=? LIMIT 1");$receiverStmt->execute([$receiverId]);$receiver=$receiverStmt->fetch();if(!$receiver||!(bool)$receiver['is_active'])throw new InvalidArgumentException('Petugas penerima tidak valid');
 
             $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,delivery_method=?,delivery_other=?,shipping_notes=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");

@@ -34,6 +34,12 @@ try {
     $canUseInvoices = authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view');
     $canUseReceipts = authenticatedUserHasPermission($pdo, $actor, 'receipt:view');
     $canUsePurchases = authenticatedUserHasPermission($pdo, $actor, 'purchase:view');
+    $supplierRoleStmt = $pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');
+    $supplierRoleStmt->execute([(string)($actor['role_id'] ?? '')]);
+    $supplierRole = $supplierRoleStmt->fetch() ?: [];
+    $canSeeSuppliers = !empty($actor['is_owner'])
+        || strtoupper(trim((string)($supplierRole['code'] ?? ''))) === 'ADM'
+        || strtolower(trim((string)($supplierRole['name'] ?? ''))) === 'administrator';
     $data = [];
     // Selalu kirim akses efektif user aktif. Frontend memakai nilai ini untuk
     // menyegarkan sesi lama ketika role atau hak cabang diubah oleh owner.
@@ -203,7 +209,7 @@ try {
         $r['isActive'] = (bool)$r['is_active'];
         $r['createdAt'] = $r['created_at'];
     }
-    $data['suppliers'] = ($canUseReceipts || $canUsePurchases || authenticatedUserHasPermission($pdo, $actor, 'supplier:view')) ? $rows : [];
+    $data['suppliers'] = $canSeeSuppliers ? $rows : [];
 
     // Item Categories
     $rows = $pdo->query("SELECT * FROM item_categories ORDER BY code")->fetchAll();
@@ -391,8 +397,8 @@ try {
     }
     foreach ($rows as &$r) {
         $r['receiptNumber'] = $r['receipt_number'];
-        $r['supplierId'] = $r['supplier_id'];
-        $r['supplierName'] = $r['supplier_name'];
+        $r['supplierId'] = $canSeeSuppliers ? $r['supplier_id'] : '';
+        $r['supplierName'] = $canSeeSuppliers ? $r['supplier_name'] : '';
         $r['doNumber'] = $r['do_number'];
         $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
         $r['deliveryOther'] = $r['delivery_other'] ?? '';

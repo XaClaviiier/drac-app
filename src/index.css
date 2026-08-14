@@ -184,3 +184,6 @@ body { margin: 0; background: #f3f4f6; }
   .shadow-slate-900 { --tw-shadow-color: #0f172a; }
   .shadow-slate-950 { --tw-shadow-color: #020617; }
 }
+
+/* Detail barang penerimaan dibuka sebagai dialog, bukan panel inline. */
+.goods-receipt-detail table + div { display: none; }
