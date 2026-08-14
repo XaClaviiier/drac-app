@@ -293,6 +293,8 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_warehouse_branch (branch_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    $pdo->exec("ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS address VARCHAR(255) NULL AFTER name");
+    $pdo->exec("ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS is_system TINYINT(1) NOT NULL DEFAULT 0 AFTER is_sellable");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS warehouse_stocks (
             warehouse_id VARCHAR(20) NOT NULL,
@@ -430,6 +432,10 @@ function ensureApiSupportTables(PDO $pdo): void {
         INSERT IGNORE INTO warehouses (id, code, name, branch_id, is_default, is_sellable, is_active)
         VALUES (?, ?, ?, ?, 1, 1, 1)
     ");
+    if (!empty($branches)) {
+        $pdo->prepare("INSERT IGNORE INTO warehouses(id,code,name,address,branch_id,is_default,is_sellable,is_system,is_active) VALUES('WH-TRANSIT','TRANSIT','Transit (AOL System)','Gudang sementara barang dalam perjalanan',?,0,0,1,1)")
+            ->execute([(string)$branches[0]['id']]);
+    }
     foreach ($branches as $branch) {
         $warehouseInsert->execute([
             'WH-' . substr(preg_replace('/[^A-Za-z0-9]/', '', $branch['id']), -12),

@@ -264,7 +264,7 @@ try {
 
     // Gudang, saldo stok per gudang, dan histori mutasi.
     $warehouses = $pdo->query("SELECT w.*,b.name branch_name FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id COLLATE utf8mb4_unicode_ci ORDER BY b.name,w.is_default DESC,w.name")->fetchAll();
-    foreach($warehouses as &$w){$w['branchId']=$w['branch_id'];$w['branchName']=$w['branch_name'];$w['isDefault']=(bool)$w['is_default'];$w['isSellable']=(bool)$w['is_sellable'];$w['isActive']=(bool)$w['is_active'];}
+    foreach($warehouses as &$w){$w['branchId']=$w['branch_id'];$w['branchName']=$w['branch_name'];$w['isDefault']=(bool)$w['is_default'];$w['isSellable']=(bool)$w['is_sellable'];$w['isSystem']=(bool)($w['is_system']??false);$w['isActive']=(bool)$w['is_active'];}
     $warehouses = array_values(array_filter($warehouses, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']])));
     $data['warehouses']=($canUseItems || $canUseReceipts || $canUsePurchases) ? $warehouses : [];
     $allowedWarehouseMap = array_fill_keys(array_map(fn($row) => (string)$row['id'], $warehouses), true);

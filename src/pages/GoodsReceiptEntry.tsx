@@ -11,7 +11,7 @@ export default function GoodsReceiptEntry(){
   const navigate=useNavigate();
   const {data,currentUser,currentBranchId,generateReceiptNumber,addGoodsReceipt,addItem}=useApp();
   const branchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
-  const warehouses=data.warehouses.filter(w=>w.branchId===branchId&&w.isActive);
+  const warehouses=data.warehouses.filter(w=>w.branchId===branchId&&w.isActive&&!w.isSystem);
   const defaultWarehouse=warehouses.find(w=>w.isDefault)||warehouses[0];
   const [form,setForm]=useState({date:localDateKey(),warehouseId:defaultWarehouse?.id||'',supplierId:'',deliveryMethod:'Diantar Supplier',deliveryOther:'',shippingNotes:'',notes:'',receivedById:currentUser?.id||'',items:[] as GoodsReceiptItem[]});
   const [search,setSearch]=useState('');

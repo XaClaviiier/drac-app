@@ -305,10 +305,12 @@ export interface Warehouse {
   id: string;
   code: string;
   name: string;
+  address?: string;
   branchId: string;
   branchName: string;
   isDefault: boolean;
   isSellable: boolean;
+  isSystem?: boolean;
   isActive: boolean;
 }
 

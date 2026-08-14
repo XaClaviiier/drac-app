@@ -23,7 +23,7 @@ $mapTransfer=function(array $row)use($pdo){
 };
 if($method==='GET'){
  $rows=$pdo->query("SELECT t.*,sw.name source_name,sw.branch_id source_branch_id,sb.name source_branch_name,dw.name destination_name,dw.branch_id destination_branch_id,db.name destination_branch_name FROM warehouse_transfers t JOIN warehouses sw ON sw.id=t.source_warehouse_id JOIN branches sb ON sb.id=sw.branch_id JOIN warehouses dw ON dw.id=t.destination_warehouse_id JOIN branches db ON db.id=dw.branch_id ORDER BY t.transfer_date DESC,t.created_at DESC")->fetchAll();
- $out=[];foreach($rows as $row)if(isset($allowed[$row['source_branch_id']])||isset($allowed[$row['destination_branch_id']]))$out[]=$mapTransfer($row);$warehouseOptions=$pdo->query("SELECT w.id,w.code,w.name,w.branch_id AS branchId,b.name AS branchName,w.is_default AS isDefault FROM warehouses w JOIN branches b ON b.id=w.branch_id WHERE w.is_active=1 AND b.is_active=1 ORDER BY b.name,w.name")->fetchAll();respondSuccess(['transfers'=>$out,'warehouses'=>$warehouseOptions]);
+ $out=[];foreach($rows as $row)if(isset($allowed[$row['source_branch_id']])||isset($allowed[$row['destination_branch_id']]))$out[]=$mapTransfer($row);$warehouseOptions=$pdo->query("SELECT w.id,w.code,w.name,w.branch_id AS branchId,b.name AS branchName,w.is_default AS isDefault FROM warehouses w JOIN branches b ON b.id=w.branch_id WHERE w.is_active=1 AND w.is_system=0 AND b.is_active=1 ORDER BY b.name,w.name")->fetchAll();respondSuccess(['transfers'=>$out,'warehouses'=>$warehouseOptions]);
 }
 if($method==='POST'){
  $d=getInput();$source=(string)($d['sourceWarehouseId']??'');$destination=(string)($d['destinationWarehouseId']??'');$date=(string)($d['date']??date('Y-m-d'));$status=($d['action']??'send')==='draft'?'Draft':'Dalam Perjalanan';

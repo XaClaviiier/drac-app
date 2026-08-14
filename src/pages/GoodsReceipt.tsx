@@ -286,7 +286,7 @@ export default function GoodsReceiptPage() {
   const pendingItems=data.items.filter(i=>i.verificationStatus==='Pending');
   const canVerify=Boolean(currentUser?.isOwner)||String(currentUser?.roleName||'').toLowerCase().includes('admin');
   const transactionBranchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
-  const activeWarehouses=data.warehouses.filter(w=>w.branchId===transactionBranchId&&w.isActive);
+  const activeWarehouses=data.warehouses.filter(w=>w.branchId===transactionBranchId&&w.isActive&&!w.isSystem);
 
   return (
     <div className="space-y-5">
