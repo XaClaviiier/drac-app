@@ -161,6 +161,10 @@ export default function Layout() {
   const mobileVisibleNavItems = visibleNavItems.filter((item) => item.path !== '/suppliers');
 
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/receipts/view/')) {
+      const receiptId = decodeURIComponent(location.pathname.slice('/receipts/view/'.length));
+      return data.goodsReceipts.find(receipt => receipt.id === receiptId)?.receiptNumber || 'Detail Penerimaan';
+    }
     return pageTitles[location.pathname]
       || visibleNavItems.find((item) => item.path === location.pathname)?.label
       || 'Dashboard';
@@ -187,7 +191,7 @@ export default function Layout() {
       if (existing.label === label) return current;
       return current.map(tab => tab.path === location.pathname ? { ...tab, label } : tab);
     });
-  }, [location.pathname]);
+  }, [location.pathname, data.goodsReceipts]);
   useEffect(() => { localStorage.setItem('drac-workspace-tabs', JSON.stringify(workspaceTabs)); }, [workspaceTabs]);
   useEffect(() => {
     const syncProcesses = (event: Event) => setSystemProcesses((event as CustomEvent<SystemProcess[]>).detail || readProcessQueue());

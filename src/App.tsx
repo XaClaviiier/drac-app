@@ -12,6 +12,7 @@ import ItemsAndServices from './pages/ItemsAndServices';
 import UsersAndRoles from './pages/UsersAndRoles';
 import GoodsReceiptPage from './pages/GoodsReceipt';
 import GoodsReceiptEntry from './pages/GoodsReceiptEntry';
+import GoodsReceiptDetail from './pages/GoodsReceiptDetail';
 import Suppliers from './pages/Suppliers';
 import PurchaseInvoicesPage from './pages/PurchaseInvoices';
 import AIAssistant from './pages/AIAssistant';
@@ -92,6 +93,7 @@ function AppRoutes() {
         <Route path="suppliers" element={protectedPage('supplier:view', <Suppliers />)} />
         <Route path="receipts" element={protectedPage('receipt:view', <GoodsReceiptPage />)} />
         <Route path="receipts/new" element={protectedPage('receipt:create', <GoodsReceiptEntry />)} />
+        <Route path="receipts/view/:id" element={protectedPage('receipt:view', <GoodsReceiptDetail />)} />
         <Route path="purchase-invoices" element={protectedPage('purchase:view', <PurchaseInvoicesPage />)} />
         <Route path="categories" element={protectedPage('item:view', <Categories />)} />
         <Route path="ai" element={protectedPage('ai:view', <AIAssistant />)} />
