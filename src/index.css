@@ -29,6 +29,19 @@
 html, body, #root { min-height: 100%; }
 body { margin: 0; background: #f3f4f6; }
 
+/* Standar tipografi tabel aplikasi, mengikuti hierarki visual Accurate. */
+#root table {
+  font-size: 13px !important;
+  font-weight: 400;
+}
+#root table thead {
+  font-size: 12px !important;
+  font-weight: 600;
+}
+#root table thead th {
+  font-weight: 600;
+}
+
 .field {
   width: 100%;
   border: 1px solid #d1d5db;
