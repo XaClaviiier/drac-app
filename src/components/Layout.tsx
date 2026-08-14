@@ -480,7 +480,7 @@ export default function Layout() {
           </div>
         )}
 
-        <main className={`flex-1 ${location.pathname === '/ai' ? 'overflow-hidden p-0 pb-[64px] lg:overflow-y-auto lg:p-6 lg:pb-6' : location.pathname === '/' ? 'overflow-y-auto p-0 lg:p-6' : 'overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6'}`}>
+        <main className={`flex-1 ${location.pathname === '/ai' ? 'overflow-hidden p-0 pb-[64px] lg:overflow-y-auto lg:p-6 lg:pb-6' : location.pathname === '/' ? 'overflow-y-auto p-0 lg:p-6' : location.pathname.startsWith('/receipts') ? 'overflow-y-auto p-0 pb-24 lg:pb-0' : 'overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6'}`}>
           <Outlet />
         </main>
         {location.pathname !== '/' && (
