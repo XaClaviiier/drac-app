@@ -295,7 +295,7 @@ export default function GoodsReceiptPage() {
   return (
     <div className="space-y-5">
       <section className="overflow-hidden rounded-none border-0 bg-[#f2f2f2] shadow-none [&_thead]:!bg-[#60778e]">
-        <div className="flex items-end border-b border-[#e63268] bg-[#ededed]"><div className="flex h-11 w-14 items-center justify-center rounded-t border border-b-0 border-[#b8b8b8] bg-white text-[#333333]" title="Daftar Penerimaan"><List className="h-5 w-5"/></div></div>
+        <div className="flex items-end border-b border-[#e63268] bg-[#ededed]"><div className="flex h-11 w-14 items-center justify-center rounded-t border border-b-0 border-[#b8b8b8] border-t-2 border-t-blue-600 bg-white text-blue-700" title="Daftar Penerimaan"><List className="h-5 w-5"/></div></div>
         <div className="space-y-3 bg-[#ededed] p-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input type="date" value={filterFromDate} onChange={e=>setFilterFromDate(e.target.value)} className="rounded border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm" title="Tampilkan mulai tanggal"/></label>
