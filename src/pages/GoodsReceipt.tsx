@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight } from 'lucide-react';
+import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, CalendarDays, Filter, Printer, RefreshCw, Settings2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { GoodsReceipt, GoodsReceiptItem, PurchaseInvoice, PurchaseInvoiceItem } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +17,8 @@ export default function GoodsReceiptPage() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterInvoice, setFilterInvoice] = useState('');
+  const [filterSupplier, setFilterSupplier] = useState('');
+  const [filterFromDate, setFilterFromDate] = useState('');
 
   // Receipt modal
   const [showModal, setShowModal] = useState(false);
@@ -151,15 +153,17 @@ export default function GoodsReceiptPage() {
           r.supplierName.toLowerCase().includes(q) ||
           r.doNumber.toLowerCase().includes(q);
         const statusMatch = !filterStatus || r.status === filterStatus;
+        const supplierMatch = !filterSupplier || r.supplierId === filterSupplier || (filterSupplier === 'pending' && !r.supplierId);
+        const dateMatch = !filterFromDate || r.date >= filterFromDate;
         const invStatus = getInvoiceStatus(r);
         const invMatch = !filterInvoice || invStatus === filterInvoice;
-        return searchMatch && statusMatch && invMatch;
+        return searchMatch && statusMatch && supplierMatch && dateMatch && invMatch;
       })
       .sort((a, b) => {
         const dc = b.date.localeCompare(a.date);
         return dc !== 0 ? dc : b.receiptNumber.localeCompare(a.receiptNumber);
       });
-  }, [data.goodsReceipts, search, filterStatus, filterInvoice, currentBranchId]);
+  }, [data.goodsReceipts, search, filterStatus, filterSupplier, filterFromDate, filterInvoice, currentBranchId]);
 
   const pickableItems = useMemo(() => {
     const q = itemSearch.toLowerCase();
@@ -290,6 +294,24 @@ export default function GoodsReceiptPage() {
 
   return (
     <div className="space-y-5">
+      <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+        <div className="flex items-end border-b border-blue-600 bg-slate-100 px-2 pt-2"><div className="flex min-h-11 items-center gap-2 rounded-t border border-b-0 bg-white px-5 py-2 font-semibold text-slate-700"><List className="h-5 w-5"/>Daftar Penerimaan</div></div>
+        <div className="space-y-3 bg-slate-50 p-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input type="date" value={filterFromDate} onChange={e=>setFilterFromDate(e.target.value)} className="rounded border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm" title="Tampilkan mulai tanggal"/></label>
+            <select value={filterSupplier} onChange={e=>setFilterSupplier(e.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Terima dari: Semua</option><option value="pending">Supplier menyusul</option>{data.suppliers.filter(s=>s.isActive).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Status: Semua</option><option value="Draft">Draft</option><option value="Diterima">Diterima</option><option value="Batal">Batal</option></select>
+            <button onClick={()=>{setFilterFromDate('');setFilterSupplier('');setFilterStatus('');setFilterInvoice('')}} className="rounded border border-blue-600 bg-blue-50 px-3 py-2 text-blue-700" title="Bersihkan filter"><Filter className="h-5 w-5"/></button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={()=>navigate('/receipts/new')} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
+            <div className="flex items-center gap-2"><button onClick={()=>window.print()} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Cetak"><Printer className="h-5 w-5"/></button>{hasPermission('purchase:view')&&<button onClick={()=>navigate('/purchase-invoices')} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Faktur Pembelian"><Settings2 className="h-5 w-5"/></button>}<div className="relative"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className="w-64 rounded border border-slate-300 px-3 py-2.5 pr-10"/><Search className="absolute right-3 top-3 h-5 w-5"/></div><span className="min-w-16 rounded border border-slate-300 bg-white px-4 py-2.5 text-center">{filtered.length}</span></div>
+          </div>
+        </div>
+        {showSuccessMsg&&<div className="border-y border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-700">{showSuccessMsg}</div>}
+        <div className="min-h-[440px] overflow-x-auto"><table className="w-full min-w-[1000px] text-sm"><thead className="bg-slate-600 text-white"><tr><th className="p-3 text-left">Nomor #</th><th className="p-3 text-left">No Terima #</th><th className="p-3 text-left">Tanggal</th><th className="p-3 text-left">Pemasok</th><th className="p-3 text-left">Keterangan</th><th className="p-3 text-left">Status</th></tr></thead><tbody>{filtered.map(r=><tr key={r.id} onClick={()=>setViewing(r)} className="cursor-pointer border-b even:bg-slate-50 hover:bg-blue-50"><td className="p-3 font-medium">{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td><td className="p-3">{r.doNumber||'-'}</td><td className="p-3 whitespace-nowrap">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td><td className="p-3">{r.sourceType==='Transfer Gudang'?'TRANSFER GUDANG':(r.supplierName||'SUPPLIER MENYUSUL')}</td><td className="max-w-sm truncate p-3">{r.notes||r.shippingNotes||''}</td><td className="p-3">{r.status}</td></tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
+      </section>
+      <div className="hidden">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Penerimaan Barang</h2>
@@ -527,6 +549,8 @@ export default function GoodsReceiptPage() {
         </div>
       </div>
 
+      </div>
+
       {/* MODAL */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -745,6 +769,13 @@ export default function GoodsReceiptPage() {
                 </table>
               </div>
               {viewing.notes && <div className="rounded-lg bg-gray-50 p-3 text-sm"><p className="font-medium text-gray-700 mb-1">Catatan:</p><p className="text-gray-600">{viewing.notes}</p></div>}
+              <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+                {viewing.status==='Draft'&&hasPermission('receipt:edit')&&<button onClick={()=>{handleReceive(viewing);setViewing(null)}} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white">Terima Barang</button>}
+                {viewing.status==='Diterima'&&viewing.sourceType!=='Transfer Gudang'&&getInvoiceStatus(viewing)!=='Lunas'&&hasPermission('purchase:create')&&<button onClick={()=>{openInvoicePreview(viewing);setViewing(null)}} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">Buat Faktur</button>}
+                {hasPermission('receipt:edit')&&<button onClick={()=>{const selected=viewing;setViewing(null);openModal(selected)}} className="rounded-lg border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700">Edit</button>}
+                {hasPermission('receipt:delete')&&<button onClick={()=>{handleDelete(viewing);setViewing(null)}} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700">Hapus</button>}
+                <button onClick={()=>setViewing(null)} className="rounded-lg border px-4 py-2 text-sm">Tutup</button>
+              </div>
             </div>
           </div>
         </div>
