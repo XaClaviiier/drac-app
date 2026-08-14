@@ -42,6 +42,25 @@ body { margin: 0; background: #f3f4f6; }
   font-weight: 600;
 }
 
+/* Standar warna isi seluruh tabel. Specificity dibuat rendah agar status,
+   baris terpilih, nilai uang, dan peringatan tetap dapat memakai warna konteks. */
+:where(#root table) tbody tr {
+  background-color: #ffffff;
+  color: #172033;
+}
+
+:where(#root table) tbody tr:nth-child(even) {
+  background-color: #f5f5f5;
+}
+
+:where(#root table) tbody tr:hover {
+  background-color: #eef6ff;
+}
+
+:where(#root table) tbody td {
+  border-color: #d9dee5;
+}
+
 .field {
   width: 100%;
   border: 1px solid #d1d5db;
