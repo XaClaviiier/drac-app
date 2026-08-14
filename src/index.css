@@ -44,21 +44,32 @@ body { margin: 0; background: #f3f4f6; }
 
 /* Standar warna isi seluruh tabel. Specificity dibuat rendah agar status,
    baris terpilih, nilai uang, dan peringatan tetap dapat memakai warna konteks. */
-:where(#root table) tbody tr {
+:where(#root table tbody tr) {
   background-color: #ffffff;
   color: #172033;
 }
 
-:where(#root table) tbody tr:nth-child(even) {
+:where(#root table tbody tr:nth-child(even)) {
   background-color: #f5f5f5;
 }
 
-:where(#root table) tbody tr:hover {
+:where(#root table tbody tr:hover) {
   background-color: #eef6ff;
 }
 
-:where(#root table) tbody td {
+:where(#root table tbody td) {
   border-color: #d9dee5;
+}
+
+/* Form penerimaan dibuat padat; bidang isian dan ruang tabel kosong tetap putih. */
+.goods-receipt-entry input[type="date"],
+.goods-receipt-entry input,
+.goods-receipt-entry select {
+  background-color: #ffffff;
+}
+
+.goods-receipt-entry .overflow-x-auto {
+  background-color: #ffffff;
 }
 
 .field {
