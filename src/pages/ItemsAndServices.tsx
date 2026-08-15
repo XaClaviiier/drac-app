@@ -972,7 +972,19 @@ export default function ItemsAndServices() {
   const formatCurrency = (v: number) => `Rp ${v.toLocaleString('id-ID')}`;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-0">
+      <div className="mb-2 flex h-11 items-stretch border-b border-slate-300 bg-[#eeeeee]">
+        <button type="button" onClick={() => setShowItemModal(false)} title="Daftar Barang & Jasa" className="flex w-16 items-center justify-center rounded-t-md bg-[#58c915] text-white">
+          <Boxes className="h-5 w-5" />
+        </button>
+        {showItemModal && (
+          <div className="flex items-center gap-2 rounded-t-md border-x border-t-2 border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700">
+            {editingItem ? editingItem.code : 'Data Baru'}
+            <button type="button" onClick={() => setShowItemModal(false)} className="ml-1 text-slate-500 hover:text-red-600"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+      </div>
+      {!showItemModal && <div className="space-y-3 px-1">
       {/* Header */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="lg:hidden">
@@ -1246,19 +1258,12 @@ export default function ItemsAndServices() {
           ))}
         </div>
       </div>
+      </div>}
 
       {/* ========== Item Modal ========== */}
       {showItemModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/45 p-2 sm:p-4">
-          <div className="mx-auto flex h-full w-full max-w-[1500px] flex-col overflow-hidden rounded-t-md border border-slate-400 bg-[#f4f4f4] shadow-2xl">
-            <div className="flex h-11 flex-shrink-0 items-stretch border-b border-slate-400 bg-[#ededed]">
-              <div className="flex w-16 items-center justify-center bg-[#58c915] text-white"><Boxes className="h-6 w-6" /></div>
-              <div className="flex items-center gap-2 rounded-t-md border-x border-t-2 border-blue-600 bg-white px-4 text-sm font-semibold text-slate-900">
-                {editingItem ? editingItem.code : 'Data Baru'}
-                <button type="button" onClick={() => setShowItemModal(false)} className="ml-1 text-slate-600 hover:text-red-600"><X className="h-4 w-4" /></button>
-              </div>
-              <div className="flex-1" />
-            </div>
+        <div className="min-h-[calc(100vh-175px)] bg-[#f4f4f4]">
+          <div className="flex min-h-[calc(100vh-175px)] w-full flex-col overflow-hidden border border-slate-300 bg-[#f4f4f4] shadow-sm">
             <div className="flex flex-shrink-0 items-end gap-1 border-b border-slate-400 bg-[#f4f4f4] px-4 pt-1">
               {([
                 ['general', 'Umum'], ['sales', 'Penjualan / Pembelian'], ['stock', 'Stok'],
