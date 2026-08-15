@@ -115,6 +115,7 @@ export default function ItemsAndServices() {
   const [filterType, setFilterType] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
   const [showItemModal, setShowItemModal] = useState(false);
+  const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'account' | 'image' | 'other'>('general');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState<any[]>([]);
@@ -290,6 +291,7 @@ export default function ItemsAndServices() {
   ) : false;
 
   const openItemModal = (item?: Item) => {
+    setItemFormTab('general');
     if (item) {
       setEditingItem(item);
       setItemForm({
@@ -1247,18 +1249,85 @@ export default function ItemsAndServices() {
 
       {/* ========== Item Modal ========== */}
       {showItemModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
-            <div className="z-10 flex flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3 sm:px-6 sm:py-4 rounded-t-xl">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{editingItem ? 'Edit Barang/Jasa' : 'Barang/Jasa Baru'}</h3>
-                <p className="text-sm text-gray-500">Isi identitas item dan harga jual opsional. Stok serta harga beli berasal dari transaksi pembelian.</p>
+        <div className="fixed inset-0 z-[100] bg-slate-900/45 p-2 sm:p-4">
+          <div className="mx-auto flex h-full w-full max-w-[1500px] flex-col overflow-hidden rounded-t-md border border-slate-400 bg-[#f4f4f4] shadow-2xl">
+            <div className="flex h-11 flex-shrink-0 items-stretch border-b border-slate-400 bg-[#ededed]">
+              <div className="flex w-16 items-center justify-center bg-[#58c915] text-white"><Boxes className="h-6 w-6" /></div>
+              <div className="flex items-center gap-2 rounded-t-md border-x border-t-2 border-blue-600 bg-white px-4 text-sm font-semibold text-slate-900">
+                {editingItem ? editingItem.code : 'Data Baru'}
+                <button type="button" onClick={() => setShowItemModal(false)} className="ml-1 text-slate-600 hover:text-red-600"><X className="h-4 w-4" /></button>
               </div>
-              <button onClick={() => setShowItemModal(false)} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
+              <div className="flex-1" />
             </div>
-            <form onSubmit={saveItem} className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
+            <div className="flex flex-shrink-0 items-end gap-1 border-b border-slate-400 bg-[#f4f4f4] px-4 pt-1">
+              {([
+                ['general', 'Umum'], ['sales', 'Penjualan / Pembelian'], ['stock', 'Stok'],
+                ['account', 'Akun'], ['image', 'Gambar'], ['other', 'Lain-lain'],
+              ] as const).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setItemFormTab(key)} className={`rounded-t border border-b-0 px-3 py-2 text-sm ${itemFormTab === key ? 'bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>{label}</button>
+              ))}
+            </div>
+            <form onSubmit={saveItem} className="relative min-h-0 flex-1 overflow-y-auto bg-[#f4f4f4] p-3 pr-24 sm:p-5 sm:pr-28">
+              {itemFormTab === 'general' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-3 shadow-sm">
+                <div className="grid gap-10 lg:grid-cols-2 lg:gap-20">
+                  <section>
+                    <h4 className="mb-3 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Barang &amp; Jasa</h4>
+                    <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-sm">
+                      <label>Nama Barang <span className="text-red-600">*</span></label>
+                      <input autoFocus required value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value.toUpperCase() })} className="h-9 rounded border border-slate-300 bg-white px-3 uppercase outline-none focus:border-blue-500 focus:shadow-[0_0_5px_rgba(59,130,246,.45)]" />
+                      <label>Kategori Barang <span className="text-red-600">*</span></label>
+                      <select required value={itemForm.categoryId} onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })} className="h-9 rounded border border-slate-300 bg-white px-2 outline-none focus:border-blue-500">
+                        <option value="">Pilih kategori</option>
+                        {data.itemCategories.filter((cat) => cat.isActive).map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                      </select>
+                      <label>Jenis Barang</label>
+                      <select disabled={itemTypeLocked} value={itemForm.type} onChange={(e) => handleItemTypeChange(e.target.value as ItemType)} className="h-9 rounded border border-slate-300 bg-white px-2 disabled:bg-slate-100">
+                        {allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                      <label>Kode Barang <span className="text-red-600">*</span></label>
+                      <input readOnly value={editingItem ? itemForm.code : nextItemCode(itemForm.type)} className="h-9 rounded border border-slate-300 bg-slate-100 px-3 font-mono font-semibold uppercase text-blue-700" />
+                      <label>UPC/Barcode</label>
+                      <input disabled={itemForm.type === 'Jasa' || itemForm.type === 'Group'} value={itemForm.barcode} onChange={(e) => setItemForm({ ...itemForm, barcode: e.target.value.trim() })} placeholder="Scan atau ketik barcode" className="h-9 rounded border border-slate-300 bg-white px-3 font-mono outline-none disabled:bg-slate-100" />
+                      <label>Satuan <span className="text-red-600">*</span></label>
+                      <select value={itemForm.unit} onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })} className="h-9 rounded border border-slate-300 bg-white px-2">
+                        {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                    </div>
+                  </section>
+                  <section>
+                    <h4 className="mb-3 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Lainnya</h4>
+                    <div className="grid grid-cols-[170px_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-sm">
+                      <label>Merek Kendaraan <span className="text-red-600">*</span></label>
+                      <select required value={itemForm.vehicleBrandId} onChange={e => setItemForm({ ...itemForm, vehicleBrandId: e.target.value })} className="h-9 rounded border border-slate-300 bg-white px-2">
+                        <option value="">Pilih merek kendaraan</option>
+                        {vehicleBrands.filter(b => b.isActive).map(b => <option key={b.id} value={b.id}>{b.itemCode || '--'} - {b.name}</option>)}
+                      </select>
+                      <label>Merek Barang</label>
+                      <input disabled={itemForm.type === 'Jasa' || itemForm.type === 'Group'} value={itemForm.brand} onChange={(e) => setItemForm({ ...itemForm, brand: e.target.value.toUpperCase() })} placeholder="Cari/Pilih Merek..." className="h-9 rounded border border-slate-300 bg-white px-3 uppercase outline-none disabled:bg-slate-100" />
+                      <span>Aktifkan No. Seri/Produksi</span>
+                      <button type="button" title="Fitur nomor seri disiapkan untuk pengembangan berikutnya" className="relative h-5 w-9 rounded-full bg-slate-300"><span className="absolute left-1 top-1 h-3 w-3 rounded-full bg-white" /></button>
+                    </div>
+                  </section>
+                </div>
+              </div>}
+              {itemFormTab === 'sales' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm">
+                <h4 className="mb-5 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Penjualan / Pembelian</h4>
+                <div className="grid max-w-3xl gap-4 md:grid-cols-[210px_1fr] md:items-center">
+                  <label className="text-sm">Harga Jual (opsional)</label>
+                  <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">Rp</span><input type="text" inputMode="numeric" value={formatNumericInput(itemForm.sellingPrice)} onChange={(e) => setItemForm({ ...itemForm, sellingPrice: parseNumericInput(e.target.value) })} placeholder="0" className="h-9 w-full rounded border border-slate-300 bg-white pl-10 pr-3 text-right font-semibold tabular-nums" /></div>
+                  <label className="text-sm">Deskripsi Nota</label>
+                  <input value={itemForm.receiptDescription} onChange={(e) => setItemForm({ ...itemForm, receiptDescription: e.target.value })} placeholder="Nama/keterangan pada WO dan faktur" className="h-9 rounded border border-slate-300 bg-white px-3" />
+                </div>
+              </div>}
+              {itemFormTab === 'stock' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Stok</h4><p className="text-sm text-slate-600">Stok dan harga beli tidak diinput dari master barang. Nilainya berasal dari penerimaan barang, pemindahan gudang, pembelian, dan penyesuaian stok.</p></div>}
+              {itemFormTab === 'account' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Akun Barang &amp; Jasa</h4><p className="text-sm text-slate-600">Pemetaan akun mengikuti kategori barang dan pengaturan akun perkiraan perusahaan.</p></div>}
+              {itemFormTab === 'image' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Gambar Barang</h4><div className="flex h-56 max-w-lg items-center justify-center rounded border-2 border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">Fitur gambar barang akan ditambahkan pada penyimpanan media.</div></div>}
+              {itemFormTab === 'other' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm">
+                <h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Lain-lain</h4>
+                <div className="max-w-3xl space-y-4"><label className="block text-sm">Keterangan<textarea value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} rows={4} className="mt-1 w-full resize-none rounded border border-slate-300 bg-white p-3" /></label><div className="flex gap-6"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={itemForm.isActive} onChange={(e) => setItemForm({ ...itemForm, isActive: e.target.checked })} /> Aktif</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={itemForm.isQuickService} onChange={(e) => setItemForm({ ...itemForm, isQuickService: e.target.checked })} /> Layanan Cepat (Template)</label></div></div>
+              </div>}
               {/* Basic info */}
-              <div className="grid gap-4 md:grid-cols-2">
+              {false && <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Kode Barang/Jasa *</label>
                   <input readOnly value={editingItem ? itemForm.code : nextItemCode(itemForm.type)} className="w-full rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 font-mono font-semibold uppercase text-blue-700" />
@@ -1323,10 +1392,10 @@ export default function ItemsAndServices() {
                   <label className="mb-1 block text-sm font-medium text-gray-700">Keterangan</label>
                   <textarea value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} rows={2} className="w-full resize-none rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                 </div>
-              </div>
+              </div>}
 
               {/* ===== GROUP MEMBERS SECTION ===== */}
-              {itemForm.type === 'Group' && (
+              {itemFormTab === 'general' && itemForm.type === 'Group' && (
                 <div className="rounded-lg border-2 border-purple-200 bg-purple-50/30 p-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="flex items-center gap-2 font-semibold text-purple-800">
@@ -1438,7 +1507,7 @@ export default function ItemsAndServices() {
                 </div>
               )}
 
-              <div className="flex gap-6">
+              {false && <div className="flex gap-6">
                 {(itemForm.type === 'Jasa' || itemForm.type === 'Group') && <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input type="checkbox" checked={itemForm.isActive} onChange={(e) => setItemForm({ ...itemForm, isActive: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
                   Aktif
@@ -1447,10 +1516,10 @@ export default function ItemsAndServices() {
                   <input type="checkbox" checked={itemForm.isQuickService} onChange={(e) => setItemForm({ ...itemForm, isQuickService: e.target.checked })} className="h-4 w-4 rounded text-blue-600" />
                   Layanan Cepat (Template)
                 </label>
-              </div>
-              <div className="sticky bottom-0 z-10 -mx-4 flex justify-end gap-3 border-t border-gray-200 bg-white px-4 pb-1 pt-3 sm:-mx-6 sm:px-6">
-                <button type="button" onClick={() => setShowItemModal(false)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
-                <button type="submit" disabled={isSavingItem} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"><Save className="h-4 w-4" /> {isSavingItem ? 'Menyimpan...' : 'Simpan'}</button>
+              </div>}
+              <div className="absolute right-3 top-3 flex flex-col gap-3 sm:right-4">
+                <button type="submit" disabled={isSavingItem} title="Simpan" className="flex h-14 w-14 items-center justify-center rounded border border-blue-700 bg-blue-600 text-white shadow-md hover:bg-blue-700 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400"><Save className="h-7 w-7" /></button>
+                <button type="button" onClick={() => setShowItemModal(false)} title="Tutup" className="flex h-10 w-14 items-center justify-center rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"><X className="h-5 w-5" /></button>
               </div>
             </form>
           </div>
