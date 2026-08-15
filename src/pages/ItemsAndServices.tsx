@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2 } from 'lucide-react';
+import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2, RefreshCw, Printer, Share2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
 import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
@@ -46,7 +46,7 @@ const emptyItem = {
 };
 
 type ItemColumn = 'code' | 'name' | 'receiptDescription' | 'type' | 'category' | 'barcode' | 'price' | 'stock' | 'unit' | 'brand' | 'purchasePrice' | 'status' | 'actions';
-const defaultItemColumns: ItemColumn[] = ['code', 'name', 'receiptDescription', 'type', 'category', 'barcode', 'price', 'actions'];
+const defaultItemColumns: ItemColumn[] = ['code', 'name', 'stock', 'unit', 'category', 'brand', 'actions'];
 const itemColumnLabels: Record<ItemColumn, string> = {
   code: 'Kode',
   name: 'Nama Barang/Jasa',
@@ -107,10 +107,11 @@ export default function ItemsAndServices() {
     resolveBranchId,
     hasPermission,
     currentUser,
+    refreshData,
   } = useApp();
 
   const [search, setSearch] = useState('');
-  const [filterActive, setFilterActive] = useState('active');
+  const [filterActive, setFilterActive] = useState('all');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
@@ -130,11 +131,11 @@ export default function ItemsAndServices() {
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showColumnSettings, setShowColumnSettings] = useState(false);
-  const columnStorageKey = `dokterac_item_columns_${currentUser?.id || currentUser?.username || 'default'}`;
+  const columnStorageKey = `dokterac_item_columns_accurate_v2_${currentUser?.id || currentUser?.username || 'default'}`;
   const columnWidthStorageKey = `dokterac_item_column_widths_${currentUser?.id || currentUser?.username || 'default'}`;
   const [visibleColumns, setVisibleColumns] = useState<ItemColumn[]>(() => {
     try {
-      const saved = localStorage.getItem(`dokterac_item_columns_${currentUser?.id || currentUser?.username || 'default'}`);
+      const saved = localStorage.getItem(`dokterac_item_columns_accurate_v2_${currentUser?.id || currentUser?.username || 'default'}`);
       if (saved) return JSON.parse(saved) as ItemColumn[];
     } catch { /* gunakan default */ }
     return defaultItemColumns;
@@ -974,8 +975,8 @@ export default function ItemsAndServices() {
   return (
     <div className="space-y-0">
       <div className="mb-2 flex h-11 items-stretch border-b border-slate-300 bg-[#eeeeee]">
-        <button type="button" onClick={() => setShowItemModal(false)} title="Daftar Barang & Jasa" className="flex w-16 items-center justify-center rounded-t-md bg-[#58c915] text-white">
-          <Boxes className="h-5 w-5" />
+        <button type="button" onClick={() => setShowItemModal(false)} title="Daftar Barang & Jasa" className={`flex w-16 items-center justify-center rounded-t-md border border-b-0 border-slate-400 ${showItemModal ? 'bg-[#58c915] text-white' : 'bg-white text-slate-800'}`}>
+          <List className="h-5 w-5" />
         </button>
         {showItemModal && (
           <div className="flex items-center gap-2 rounded-t-md border-x border-t-2 border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700">
@@ -986,7 +987,7 @@ export default function ItemsAndServices() {
       </div>
       {!showItemModal && <div className="space-y-3 px-1">
       {/* Header */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 lg:hidden">
         <div className="lg:hidden">
           <h2 className="text-2xl font-bold text-gray-900">Barang & Jasa</h2>
           <p className="mt-1 text-gray-500">Kelola master sparepart, bahan, jasa service, group, dan kategori.</p>
@@ -1044,35 +1045,42 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Filters */}
-      <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm lg:rounded-md lg:p-2">
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto_auto]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode, nama barang, merek, kategori..." className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+      <div className="border border-slate-300 bg-[#eeeeee] p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500">
+            <option value="all">Non Aktif: Semua</option><option value="active">Non Aktif: Tidak</option><option value="inactive">Non Aktif: Ya</option>
+          </select>
+          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"><option value="">Merek Barang: Semua</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"><option value="">Kategori Barang: Semua</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+          <button type="button" className="flex h-10 w-12 items-center justify-center rounded border border-blue-500 bg-blue-50 text-blue-700" title="Filter lanjutan"><Filter className="h-5 w-5" /></button>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-2">
+            {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Data Baru" className="flex h-11 w-16 items-center justify-center rounded bg-blue-800 text-white hover:bg-blue-900"><Plus className="h-6 w-6" /></button>}
+            <button type="button" onClick={() => refreshData()} title="Refresh" className="flex h-11 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"><RefreshCw className="h-5 w-5" /></button>
           </div>
-          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className={`rounded-lg border-2 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 ${filterActive === 'active' ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : filterActive === 'inactive' ? 'border-red-400 bg-red-50 text-red-800' : 'border-blue-300 bg-blue-50 text-blue-800'}`}>
-            <option value="active">Status: Aktif</option>
-            <option value="inactive">Status: Nonaktif</option>
-            <option value="all">Status: Semua</option>
-          </select>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
-            <option value="">Kategori: Semua</option>
-            {data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-          </select>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
-            <option value="">Jenis: Semua</option>
-            {allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-          </select>
-          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
-            <option value="">Merek: Semua</option>
-            {brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
-          </select>
+          <div className="relative flex items-center gap-2">
+            <button type="button" onClick={exportCurrentData} title="Download / Export" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Download className="h-5 w-5" /></button>
+            {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Share2 className="h-5 w-5" /></button>}
+            <button type="button" onClick={() => window.print()} title="Cetak" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Settings2 className="h-5 w-5" /></button>
+            <div className="relative w-72"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 outline-none focus:border-blue-500" /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
+            <span className="flex h-10 min-w-16 items-center justify-center rounded border border-slate-300 bg-white px-3 text-sm text-slate-600">{filteredItems.length}</span>
+            {showColumnSettings && (
+              <div className="absolute right-0 top-12 z-30 w-72 rounded border border-slate-300 bg-white p-4 shadow-xl">
+                <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-bold">Kolom Ditampilkan</p><p className="text-[10px] text-slate-500">Tersimpan untuk pengguna ini</p></div><button type="button" onClick={() => setShowColumnSettings(false)}><X className="h-4 w-4" /></button></div>
+                {(Object.keys(itemColumnLabels) as ItemColumn[]).map(column => { const required = column === 'name' || column === 'actions'; return <label key={column} className="flex items-center justify-between px-2 py-1.5 text-sm"><span>{itemColumnLabels[column]}</span><input type="checkbox" disabled={required} checked={required || visibleColumns.includes(column)} onChange={event => setColumnVisible(column, event.target.checked)} /></label>; })}
+                <button type="button" onClick={resetColumns} className="mt-2 w-full rounded border px-3 py-2 text-xs">Kembalikan Default</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
+      <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
+        <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Filter className="h-4 w-4" />
             Menampilkan {filteredItems.length} dari {data.items.length} item
@@ -1101,13 +1109,13 @@ export default function ItemsAndServices() {
         </div>
         <div className="max-h-[calc(100vh-420px)] overflow-auto lg:max-h-[calc(100vh-265px)]">
           <table className="w-full table-fixed" style={{ minWidth: tableMinWidth }}>
-            <thead className="sticky top-0 z-10 bg-gradient-to-r from-blue-800 to-blue-900 text-white">
+            <thead className="sticky top-0 z-10 bg-[#637c93] text-white">
               <tr>
                 <th colSpan={9} className="p-0">
-                  <div className="flex items-center text-xs font-medium uppercase tracking-wider" style={{ minWidth: tableMinWidth }}>
+                  <div className="flex items-center text-sm font-medium" style={{ minWidth: tableMinWidth }}>
                     <div className="w-10 flex-shrink-0 px-2 py-3"></div>
-                    {visibleColumns.includes('code') && resizableHeader('code', 'Kode')}
-                    {resizableHeader('name', 'Nama Barang/Jasa')}
+                    {visibleColumns.includes('code') && resizableHeader('code', 'Kode Barang')}
+                    {resizableHeader('name', 'Nama Barang')}
                     {visibleColumns.includes('receiptDescription') && resizableHeader('receiptDescription', 'Deskripsi Nota')}
                     {visibleColumns.includes('type') && resizableHeader('type', 'Jenis')}
                     {visibleColumns.includes('category') && resizableHeader('category', 'Kategori')}
