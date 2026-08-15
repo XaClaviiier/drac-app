@@ -75,7 +75,6 @@ switch ($method) {
         if(!$warehouseCheck->fetch())respondError('Gudang tujuan tidak valid',422);
         $sourceType=(string)($d['sourceType']??'Supplier');
         if(!in_array($sourceType,['Supplier','Transfer Gudang'],true))respondError('Sumber barang tidak valid',422);
-        if($sourceType==='Supplier'&&trim((string)($d['doNumber']??''))==='')respondError('No Terima wajib diisi',422);
         $sourceWarehouseId=null;$sourceBranchId=null;
         if($sourceType==='Transfer Gudang'){
             $sourceWarehouseId=(string)($d['sourceWarehouseId']??'');if($sourceWarehouseId===''||$sourceWarehouseId===$warehouseId)respondError('Gudang asal transfer wajib dipilih dan berbeda dari gudang tujuan',422);

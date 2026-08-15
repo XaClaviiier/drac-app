@@ -17,7 +17,6 @@ export default function GoodsReceiptPage() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterInvoice, setFilterInvoice] = useState('');
-  const [filterSupplier, setFilterSupplier] = useState('');
   const [filterFromDate, setFilterFromDate] = useState('');
 
   // Receipt modal
@@ -150,20 +149,18 @@ export default function GoodsReceiptPage() {
         const q = search.toLowerCase();
         const searchMatch = !q ||
           r.receiptNumber.toLowerCase().includes(q) ||
-          r.supplierName.toLowerCase().includes(q) ||
-          r.doNumber.toLowerCase().includes(q);
+          r.items.some(item => item.itemCode.toLowerCase().includes(q) || item.itemName.toLowerCase().includes(q));
         const statusMatch = !filterStatus || r.status === filterStatus;
-        const supplierMatch = !filterSupplier || r.supplierId === filterSupplier || (filterSupplier === 'pending' && !r.supplierId);
         const dateMatch = !filterFromDate || r.date >= filterFromDate;
         const invStatus = getInvoiceStatus(r);
         const invMatch = !filterInvoice || invStatus === filterInvoice;
-        return searchMatch && statusMatch && supplierMatch && dateMatch && invMatch;
+        return searchMatch && statusMatch && dateMatch && invMatch;
       })
       .sort((a, b) => {
         const dc = b.date.localeCompare(a.date);
         return dc !== 0 ? dc : b.receiptNumber.localeCompare(a.receiptNumber);
       });
-  }, [data.goodsReceipts, search, filterStatus, filterSupplier, filterFromDate, filterInvoice, currentBranchId]);
+  }, [data.goodsReceipts, search, filterStatus, filterFromDate, filterInvoice, currentBranchId]);
 
   const pickableItems = useMemo(() => {
     const q = itemSearch.toLowerCase();
@@ -299,9 +296,8 @@ export default function GoodsReceiptPage() {
         <div className="space-y-3 bg-[#ededed] p-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input type="date" value={filterFromDate} onChange={e=>setFilterFromDate(e.target.value)} className="rounded border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm" title="Tampilkan mulai tanggal"/></label>
-            <select value={filterSupplier} onChange={e=>setFilterSupplier(e.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Terima dari: Semua</option><option value="pending">Supplier menyusul</option>{data.suppliers.filter(s=>s.isActive).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Status: Semua</option><option value="Draft">Draft</option><option value="Diterima">Diterima</option><option value="Batal">Batal</option></select>
-            <button onClick={()=>{setFilterFromDate('');setFilterSupplier('');setFilterStatus('');setFilterInvoice('')}} className="rounded border border-blue-600 bg-blue-50 px-3 py-2 text-blue-700" title="Bersihkan filter"><Filter className="h-5 w-5"/></button>
+            <button onClick={()=>{setFilterFromDate('');setFilterStatus('');setFilterInvoice('')}} className="rounded border border-blue-600 bg-blue-50 px-3 py-2 text-blue-700" title="Bersihkan filter"><Filter className="h-5 w-5"/></button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={()=>navigate('/receipts/new')} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
@@ -309,7 +305,7 @@ export default function GoodsReceiptPage() {
           </div>
         </div>
         {showSuccessMsg&&<div className="border-y border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-700">{showSuccessMsg}</div>}
-        <div className="mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[1000px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{['Nomor #','No. Surat Jalan','Tanggal','Pemasok','Keterangan','Status'].map(label=><th key={label} className="border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0">{label}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]"><td className="border-r border-[#d8d8d8] p-3 font-normal text-blue-700 underline-offset-2 hover:underline">{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td><td className="border-r border-[#d8d8d8] p-3">{r.doNumber||'-'}</td><td className="whitespace-nowrap border-r border-[#d8d8d8] p-3">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td><td className="border-r border-[#d8d8d8] p-3">{r.sourceType==='Transfer Gudang'?'TRANSFER GUDANG':(r.supplierName||'SUPPLIER MENYUSUL')}</td><td className="max-w-sm truncate border-r border-[#d8d8d8] p-3">{r.notes||r.shippingNotes||''}</td><td className="p-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${r.status==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span></td></tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
+        <div className="mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[760px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{['Nomor #','Tanggal','Gudang','Diterima Oleh','Jumlah Barang','Status'].map(label=><th key={label} className="border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0">{label}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]"><td className="border-r border-[#d8d8d8] p-3 font-normal text-blue-700 underline-offset-2 hover:underline">{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td><td className="whitespace-nowrap border-r border-[#d8d8d8] p-3">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td><td className="border-r border-[#d8d8d8] p-3">{data.warehouses.find(w=>w.id===r.warehouseId)?.name||'-'}</td><td className="border-r border-[#d8d8d8] p-3">{r.receivedBy||'-'}</td><td className="border-r border-[#d8d8d8] p-3">{r.items.length} barang · {r.items.reduce((sum,item)=>sum+item.qty,0)} unit</td><td className="p-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${r.status==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span></td></tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
       </section>
       <div className="hidden">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
