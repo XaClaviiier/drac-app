@@ -1242,30 +1242,6 @@ export default function ItemsAndServices() {
         </div>
       </div>
 
-      {/* Categories */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 font-semibold text-gray-900"><FolderTree className="h-5 w-5 text-blue-600" /> Kategori Barang/Jasa</h3>
-          <button onClick={() => openCategoryModal()} className="text-sm font-medium text-blue-600 hover:text-blue-700">+ Tambah Kategori</button>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          {data.itemCategories.map((category) => (
-            <div key={category.id} className="rounded-lg border border-gray-200 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-gray-900">{category.name}</p>
-                  <p className="font-mono text-xs text-blue-600">{category.code}</p>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => openCategoryModal(category)} className="rounded p-1 text-blue-600 hover:bg-blue-100"><Edit className="h-3.5 w-3.5" /></button>
-                  <button onClick={() => removeCategory(category)} className="rounded p-1 text-red-600 hover:bg-red-100"><Trash2 className="h-3.5 w-3.5" /></button>
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">{category.description || '-'}</p>
-            </div>
-          ))}
-        </div>
-      </div>
       </div>}
 
       {/* ========== Item Modal ========== */}
