@@ -974,7 +974,7 @@ export default function ItemsAndServices() {
 
   return (
     <div className="space-y-0">
-      <div className="mb-2 flex h-11 items-stretch border-b border-slate-300 bg-[#eeeeee]">
+      <div className="flex h-11 items-stretch border-b border-slate-300 bg-[#eeeeee]">
         <button type="button" onClick={() => setShowItemModal(false)} title="Daftar Barang & Jasa" className={`flex w-16 items-center justify-center rounded-t-md border border-b-0 border-slate-400 ${showItemModal ? 'bg-[#58c915] text-white' : 'bg-white text-slate-800'}`}>
           <List className="h-5 w-5" />
         </button>
@@ -985,7 +985,7 @@ export default function ItemsAndServices() {
           </div>
         )}
       </div>
-      {!showItemModal && <div className="space-y-3 px-1">
+      {!showItemModal && <div className="space-y-3 px-1 lg:space-y-0 lg:px-0">
       {/* Header */}
       <div className="flex flex-col gap-3 lg:hidden">
         <div className="lg:hidden">
@@ -1045,7 +1045,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Filters */}
-      <div className="border border-slate-300 bg-[#eeeeee] p-3 shadow-sm">
+      <div className="border border-slate-300 bg-[#eeeeee] p-3 shadow-sm lg:border-x-0 lg:border-t-0 lg:shadow-none">
         <div className="flex flex-wrap items-center gap-3">
           <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500">
             <option value="all">Non Aktif: Semua</option><option value="active">Non Aktif: Tidak</option><option value="inactive">Non Aktif: Ya</option>
@@ -1079,7 +1079,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
+      <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white lg:rounded-none lg:border-x-0 lg:border-t-0">
         <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Filter className="h-4 w-4" />
