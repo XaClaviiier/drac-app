@@ -115,6 +115,9 @@ export default function ItemsAndServices() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
+  const [itemListTab, setItemListTab] = useState<'list' | 'verification'>('list');
+  const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
+  const [verifyingItemId, setVerifyingItemId] = useState('');
   const [showItemModal, setShowItemModal] = useState(false);
   const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'account' | 'image' | 'other'>('general');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -971,13 +974,39 @@ export default function ItemsAndServices() {
   };
 
   const formatCurrency = (v: number) => `Rp ${v.toLocaleString('id-ID')}`;
+  const canVerifyItems = Boolean(currentUser?.isOwner) || String(currentUser?.roleName || '').toLowerCase().includes('admin');
+  const pendingItems = data.items.filter(item => item.verificationStatus === 'Pending');
+  const itemWarehouseRows = editingItem
+    ? data.warehouses
+        .filter(warehouse => warehouse.isActive && !warehouse.isSystem && (currentBranchId === 'ALL' || warehouse.branchId === currentBranchId))
+        .map(warehouse => {
+          const stock = data.warehouseStocks.find(row => row.warehouseId === warehouse.id && row.itemId === editingItem.id);
+          const quantity = Number(stock?.quantity || 0);
+          const reserved = Number(stock?.reservedQuantity || 0);
+          return { warehouse, quantity, reserved, available: quantity - reserved };
+        })
+        .sort((a, b) => a.warehouse.name.localeCompare(b.warehouse.name, 'id'))
+    : [];
+  const verifyPendingItem = async (itemId: string, targetItemId?: string) => {
+    setVerifyingItemId(itemId);
+    try {
+      await api.update('items', itemId, targetItemId ? { action: 'merge', targetItemId } : { action: 'verify' });
+      await refreshData();
+      setMergeTargets(current => { const next = { ...current }; delete next[itemId]; return next; });
+    } catch (error: any) {
+      window.alert(error?.message || 'Verifikasi barang gagal.');
+    } finally {
+      setVerifyingItemId('');
+    }
+  };
 
   return (
     <div className="space-y-0">
       <div className="flex h-11 items-stretch border-b border-slate-300 bg-[#eeeeee]">
-        <button type="button" onClick={() => setShowItemModal(false)} title="Daftar Barang & Jasa" className={`flex w-16 items-center justify-center rounded-t-md border border-b-0 border-slate-400 ${showItemModal ? 'bg-[#58c915] text-white' : 'bg-white text-slate-800'}`}>
+        <button type="button" onClick={() => { setShowItemModal(false); setItemListTab('list'); }} title="Daftar Barang & Jasa" className={`flex w-16 items-center justify-center rounded-t-md border border-b-0 border-slate-400 ${showItemModal || itemListTab !== 'list' ? 'bg-[#58c915] text-white' : 'bg-white text-slate-800'}`}>
           <List className="h-5 w-5" />
         </button>
+        {!showItemModal && canVerifyItems && <button type="button" onClick={() => setItemListTab('verification')} className={`ml-1 flex items-center gap-2 rounded-t-md border border-b-0 px-4 text-sm font-semibold ${itemListTab === 'verification' ? 'border-t-2 border-blue-600 bg-white text-blue-700' : 'border-slate-400 bg-[#d6d6d6] text-slate-600'}`}>Menunggu Verifikasi {pendingItems.length > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{pendingItems.length}</span>}</button>}
         {showItemModal && (
           <div className="flex items-center gap-2 rounded-t-md border-x border-t-2 border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700">
             {editingItem ? editingItem.code : 'Data Baru'}
@@ -986,6 +1015,19 @@ export default function ItemsAndServices() {
         )}
       </div>
       {!showItemModal && <div className="space-y-3 px-1 lg:space-y-0 lg:px-0">
+      {itemListTab === 'verification' && <section className="min-h-[560px] border border-slate-300 bg-[#eeeeee] p-4">
+        <div className="mb-4"><h3 className="text-lg font-semibold text-slate-900">Verifikasi Barang Baru</h3><p className="text-sm text-slate-600">Sahkan jika data benar, atau gabungkan ke master lama jika barang ternyata duplikat.</p></div>
+        <div className="overflow-x-auto rounded-t-lg border border-slate-300 bg-white">
+          <div className="grid min-w-[1050px] grid-cols-[160px_minmax(240px,1fr)_170px_minmax(280px,1fr)_210px] bg-[#637c93] px-3 py-2.5 text-sm font-semibold text-white"><span>Kode Barang</span><span>Nama Barang</span><span>Kategori / Stok</span><span>Master Tujuan</span><span>Aksi</span></div>
+          {pendingItems.map(item => <div key={item.id} className="grid min-w-[1050px] grid-cols-[160px_minmax(240px,1fr)_170px_minmax(280px,1fr)_210px] items-center border-b border-slate-300 px-3 py-2 text-sm odd:bg-white even:bg-slate-50">
+            <span className="font-mono text-blue-700">{item.code}</span><span className="font-medium">{item.name}</span><span className="text-xs text-slate-600">{item.categoryName}<br/>{item.stock} {item.unit}</span>
+            <select value={mergeTargets[item.id] || ''} onChange={event => setMergeTargets(current => ({ ...current, [item.id]: event.target.value }))} className="mr-3 h-9 rounded border border-slate-300 bg-white px-2"><option value="">Pilih jika barang duplikat...</option>{data.items.filter(target => target.id !== item.id && target.isActive && target.verificationStatus !== 'Pending' && target.verificationStatus !== 'Merged' && target.type === 'Persediaan').map(target => <option key={target.id} value={target.id}>{target.code} — {target.name}</option>)}</select>
+            <div className="flex gap-2"><button disabled={verifyingItemId === item.id} onClick={() => verifyPendingItem(item.id)} className="rounded bg-emerald-600 px-3 py-2 font-semibold text-white disabled:opacity-50">Verifikasi</button><button disabled={!mergeTargets[item.id] || verifyingItemId === item.id} onClick={() => verifyPendingItem(item.id, mergeTargets[item.id])} className="rounded bg-amber-600 px-3 py-2 font-semibold text-white disabled:opacity-40">Gabungkan</button></div>
+          </div>)}
+          {!pendingItems.length && <div className="py-24 text-center text-slate-500"><CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-400"/>Tidak ada barang yang menunggu verifikasi.</div>}
+        </div>
+      </section>}
+      <div className={itemListTab === 'list' ? '' : 'hidden'}>
       {/* Header */}
       <div className="flex flex-col gap-3 lg:hidden">
         <div className="lg:hidden">
@@ -1157,6 +1199,8 @@ export default function ItemsAndServices() {
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900">{item.name}</p>
                             {!item.isActive && <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">NONAKTIF</span>}
+                            {item.verificationStatus === 'Pending' && <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">MENUNGGU VERIFIKASI</span>}
+                            {item.verificationStatus === 'Merged' && <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">DIGABUNG</span>}
                             {isGroup && (
                               <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
                                 <Layers className="h-3 w-3" /> {item.groupMembers!.length} item
@@ -1241,7 +1285,7 @@ export default function ItemsAndServices() {
           </table>
         </div>
       </div>
-
+      </div>
       </div>}
 
       {/* ========== Item Modal ========== */}
@@ -1308,7 +1352,18 @@ export default function ItemsAndServices() {
                   <input value={itemForm.receiptDescription} onChange={(e) => setItemForm({ ...itemForm, receiptDescription: e.target.value })} placeholder="Nama/keterangan pada WO dan faktur" className="h-9 rounded border border-slate-300 bg-white px-3" />
                 </div>
               </div>}
-              {itemFormTab === 'stock' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Stok</h4><p className="text-sm text-slate-600">Stok dan harga beli tidak diinput dari master barang. Nilainya berasal dari penerimaan barang, pemindahan gudang, pembelian, dan penyesuaian stok.</p></div>}
+              {itemFormTab === 'stock' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm">
+                <h4 className="mb-2 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Stok per Gudang</h4>
+                <p className="mb-5 text-sm text-slate-600">Stok hanya berubah melalui penerimaan barang, transfer gudang, pemakaian, dan penyesuaian stok. Nilai di bawah tidak dapat diedit dari master barang.</p>
+                {!editingItem && <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">Simpan barang terlebih dahulu untuk melihat stok per gudang.</div>}
+                {editingItem && <div className="overflow-hidden rounded-t-lg border border-slate-300">
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="bg-[#637c93] text-left text-white"><tr><th className="px-4 py-2.5">Gudang</th><th className="px-4 py-2.5">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead>
+                    <tbody>{itemWarehouseRows.map(({ warehouse, quantity, reserved, available }) => <tr key={warehouse.id} className="border-b border-slate-200 odd:bg-white even:bg-slate-50"><td className="px-4 py-2.5 font-medium text-slate-900">{warehouse.name}</td><td className="px-4 py-2.5 text-slate-600">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right tabular-nums">{quantity} {editingItem.unit}</td><td className="px-4 py-2.5 text-right tabular-nums text-amber-700">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>)}</tbody>
+                  </table>
+                  {!itemWarehouseRows.length && <div className="bg-white px-4 py-12 text-center text-slate-500">Belum ada gudang aktif pada cabang yang dipilih.</div>}
+                </div>}
+              </div>}
               {itemFormTab === 'account' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Akun Barang &amp; Jasa</h4><p className="text-sm text-slate-600">Pemetaan akun mengikuti kategori barang dan pengaturan akun perkiraan perusahaan.</p></div>}
               {itemFormTab === 'image' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Gambar Barang</h4><div className="flex h-56 max-w-lg items-center justify-center rounded border-2 border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">Fitur gambar barang akan ditambahkan pada penyimpanan media.</div></div>}
               {itemFormTab === 'other' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm">
