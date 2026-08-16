@@ -276,10 +276,6 @@ export default function WorkOrderTimeline() {
             <p className="text-xs font-semibold uppercase text-gray-400">Status Sekarang</p><b className={`mt-1 inline-flex rounded-lg px-3 py-1.5 ${STAGES[currentStage(selected)].soft} ${STAGES[currentStage(selected)].text}`}>{STAGES[currentStage(selected)].label}</b>
             <dl className="mt-3 grid grid-cols-[90px_1fr] gap-y-2 text-sm"><dt className="text-gray-500">Jam Mulai</dt><dd>{selectedRow.segments[0]?.start.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</dd><dt className="text-gray-500">Total Durasi</dt><dd className="font-bold">{durationLabel(totalSelectedDuration)}</dd><dt className="text-gray-500">Cabang</dt><dd>{data.branches.find(item => item.id === selected.branchId)?.name || '-'}</dd></dl>
           </div>
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Rincian Durasi Tahapan</p>
-            <div className="flex gap-2 overflow-x-auto pb-2">{selectedStages.map(stage => { const config = STAGES[stage.key]; const Icon = config.icon; return <div key={stage.key} className={`min-w-[135px] flex-1 rounded-xl border p-3 text-center ${config.soft}`}><div className={`flex items-center justify-center gap-1 text-xs font-semibold ${config.text}`}><Icon className="h-4 w-4"/>{config.short}</div><b className="mt-2 block text-xl text-gray-900">{durationLabel(stage.duration)}</b><small className="text-[10px] text-gray-500">{stage.start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}–{stage.end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</small></div>; })}</div>
-          </div>
           <div className="min-w-0 border-l border-gray-200 pl-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold uppercase text-gray-400">Layanan &amp; Hasil</p>
@@ -300,6 +296,10 @@ export default function WorkOrderTimeline() {
                 {completionLog?.at ? ` · ${parseDateTime(completionLog.at, selected.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : ''}
               </p>
             </> : <p className="mt-2 text-xs text-gray-500">Hasil akhir tersedia setelah pekerjaan diselesaikan.</p>}
+          </div>
+          <div className="min-w-0 border-l border-gray-200 pl-4">
+            <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Rincian Durasi Tahapan</p>
+            <div className="grid grid-cols-3 gap-1.5">{selectedStages.map(stage => { const config = STAGES[stage.key]; const Icon = config.icon; return <div key={stage.key} className={`min-w-0 rounded-lg border px-1.5 py-2 text-center ${config.soft}`} title={`${config.label}: ${durationLabel(stage.duration)}`}><div className={`flex items-center justify-center gap-1 truncate text-[10px] font-bold ${config.text}`}><Icon className="h-3.5 w-3.5 flex-shrink-0"/><span className="truncate">{config.short}</span></div><b className="mt-1 block truncate text-xs text-gray-900">({durationLabel(stage.duration)})</b><small className="mt-1 block truncate text-[9px] text-gray-500">{stage.start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}–{stage.end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</small></div>; })}</div>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
