@@ -223,7 +223,7 @@ export default function WorkOrderTimeline() {
         <div className="overflow-x-auto">
           <div className="min-w-[1240px]">
             <div className="grid grid-cols-[270px_minmax(760px,1fr)_190px] border-b bg-gray-50 text-xs font-bold text-gray-800">
-              <div className="px-4 py-3">WO / Kendaraan / Teknisi</div>
+              <div className="px-4 py-3">Kendaraan / Nama Customer</div>
               <div className="relative grid" style={{ gridTemplateColumns: `repeat(${timelineHours.length - 1}, minmax(0, 1fr))` }}>
                 {timelineHours.slice(0, -1).map(hour => <span key={hour} className="border-l px-1 py-3 text-center">{String(hour).padStart(2, '0')}:00</span>)}
                 {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute -top-0.5 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-semibold not-italic text-red-600">Sekarang</i></span>}
@@ -233,10 +233,9 @@ export default function WorkOrderTimeline() {
             {visibleRows.map(({ wo, invoice, segments }) => {
               const selectedRowActive = selected?.id === wo.id;
               return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full grid-cols-[270px_minmax(760px,1fr)_190px] border-b text-left last:border-b-0 ${selectedRowActive ? 'bg-blue-50/70 shadow-[inset_4px_0_0_#2563eb]' : 'hover:bg-gray-50'}`}>
-                <div className="px-4 py-3">
-                  <b className="block text-sm text-gray-900">{wo.woNumber}</b>
-                  <span className="block truncate text-xs text-gray-600">{wo.plateNumber} · {wo.vehicleInfo}</span>
-                  <span className="block truncate text-xs text-gray-500">Teknisi: {wo.technicianName || wo.createdByName || '-'}</span>
+                <div className="flex min-w-0 flex-col justify-center px-4 py-3" title={`${wo.woNumber} · Teknisi: ${wo.technicianName || wo.createdByName || '-'}`}>
+                  <b className="block truncate text-base font-bold text-gray-950">{wo.plateNumber} / {wo.customerName}</b>
+                  <span className="mt-0.5 block truncate text-xs text-gray-500">{wo.vehicleInfo || '-'}</span>
                 </div>
                 <div className="relative my-2 min-h-[44px] overflow-hidden rounded bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)]" style={{ minHeight: '44px', backgroundSize: `${100 / (timelineHours.length - 1)}% 100%` }}>
                   {segments.map((segment, index) => {
