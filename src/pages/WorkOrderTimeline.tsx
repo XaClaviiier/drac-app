@@ -227,20 +227,29 @@ export default function WorkOrderTimeline() {
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <div className="md:min-w-[1240px]">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] border-b bg-gray-50 text-xs font-bold text-gray-800 md:grid-cols-[270px_minmax(760px,1fr)_190px]">
-              <div className="px-4 py-3">Kendaraan / Nama Customer</div>
+            <div className="grid grid-cols-1 border-b bg-gray-50 text-xs font-bold text-gray-800 md:grid-cols-[380px_minmax(850px,1fr)]">
+              <div className="px-4 py-3">Kendaraan / Customer / Status</div>
               <div className="relative hidden md:grid" style={{ gridTemplateColumns: `repeat(${timelineHours.length - 1}, minmax(0, 1fr))` }}>
                 {timelineHours.slice(0, -1).map(hour => <span key={hour} className="border-l px-1 py-3 text-center">{String(hour).padStart(2, '0')}:00</span>)}
                 {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute -top-0.5 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-semibold not-italic text-red-600">Sekarang</i></span>}
               </div>
-              <div className="px-3 py-3 text-center">Administrasi</div>
             </div>
             {visibleRows.map(({ wo, invoice, segments }) => {
               const selectedRowActive = selected?.id === wo.id;
-              return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_auto] border-b text-left last:border-b-0 md:grid-cols-[270px_minmax(760px,1fr)_190px] ${selectedRowActive ? 'bg-blue-50/70 shadow-[inset_4px_0_0_#2563eb]' : 'hover:bg-gray-50'}`}>
+              const stage = STAGES[currentStage(wo)];
+              return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full grid-cols-1 border-b text-left last:border-b-0 md:grid-cols-[380px_minmax(850px,1fr)] ${selectedRowActive ? 'bg-blue-50/70 shadow-[inset_4px_0_0_#2563eb]' : 'hover:bg-gray-50'}`}>
                 <div className="flex min-w-0 flex-col justify-center px-4 py-3" title={`${wo.woNumber} · Teknisi: ${wo.technicianName || wo.createdByName || '-'}`}>
-                  <b className="block truncate text-base font-bold text-gray-950">{wo.plateNumber} / {wo.customerName}</b>
-                  <span className="mt-0.5 block truncate text-xs text-gray-500">{wo.vehicleInfo || '-'}</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <b className="min-w-0 flex-1 truncate text-base font-bold text-gray-950">{wo.plateNumber} / {wo.customerName}</b>
+                    <span className={`flex-shrink-0 rounded-md border px-2 py-1 text-[9px] font-bold uppercase ${stage.soft} ${stage.text}`}>{stage.short}</span>
+                  </div>
+                  <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 flex-1 truncate text-xs text-gray-500">{wo.vehicleInfo || '-'}</span>
+                    {invoice ? <>
+                      <span className="flex-shrink-0 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">{invoice.invoiceNumber}</span>
+                      <span className={`flex-shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase ${invoice.status === 'Lunas' ? 'border-green-200 bg-green-50 text-green-700' : 'border-orange-200 bg-orange-50 text-orange-700'}`}>{invoice.status}</span>
+                    </> : wo.status === 'Selesai' ? <span className="flex-shrink-0 rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-gray-500">Belum Faktur</span> : null}
+                  </div>
                 </div>
                 <div className="relative my-2 hidden min-h-[44px] overflow-hidden rounded bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)] md:block" style={{ minHeight: '44px', backgroundSize: `${100 / (timelineHours.length - 1)}% 100%` }}>
                   {segments.map((segment, index) => {
@@ -254,10 +263,6 @@ export default function WorkOrderTimeline() {
                   {showNowLine && (
                     <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>
                   )}
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-1 px-2 py-3 text-[10px]">
-                  <span className={`rounded-md border px-2 py-1 font-semibold ${invoice ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-400'}`}>{invoice ? invoice.invoiceNumber : 'Belum Faktur'}</span>
-                  {invoice && <span className={`rounded-md border px-2 py-1 font-semibold ${invoice.status === 'Lunas' ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-600'}`}>{invoice.status}</span>}
                 </div>
               </button>;
             })}
