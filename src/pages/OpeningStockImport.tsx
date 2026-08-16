@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  Eye,
   FileSpreadsheet,
   Pencil,
   Send,
@@ -35,6 +36,16 @@ type AdjustmentDocument = {
   itemCount: number;
   totalQuantity: number;
   cancellationReason?: string;
+};
+type AdjustmentDetail = AdjustmentDocument & {
+  rows: Array<{
+    id: string;
+    itemCode: string;
+    itemName: string;
+    warehouseName: string;
+    quantity: number;
+    unit: string;
+  }>;
 };
 
 const parseCsv = (text: string) =>
@@ -72,6 +83,8 @@ export default function OpeningStockImport() {
   const [message, setMessage] = useState("");
   const [documents, setDocuments] = useState<AdjustmentDocument[]>([]);
   const [editingId, setEditingId] = useState("");
+  const [selectedDocument, setSelectedDocument] =
+    useState<AdjustmentDetail | null>(null);
   const isAdmin =
     Boolean(currentUser?.isOwner) ||
     String(currentUser?.roleName || "")
@@ -307,6 +320,23 @@ export default function OpeningStockImport() {
     }
   };
 
+  const viewDocument = async (document: AdjustmentDocument) => {
+    setLoading(true);
+    setMessage("");
+    try {
+      const response = await api.get<AdjustmentDetail>(
+        `stock-adjustments/${document.id}`,
+      );
+      if (!response.success)
+        throw new Error(response.message || "Rincian tidak dapat dibuka.");
+      setSelectedDocument({ ...document, ...response.data });
+    } catch (error: any) {
+      setMessage(error?.message || "Rincian penyesuaian tidak dapat dibuka.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const processDocument = async (
     document: AdjustmentDocument,
     action: "post" | "cancel" | "delete",
@@ -524,8 +554,15 @@ export default function OpeningStockImport() {
                 key={document.id}
                 className={`border-b ${index % 2 ? "bg-slate-50" : "bg-white"}`}
               >
-                <td className="px-3 py-2 font-medium text-blue-700">
-                  {document.adjustmentNumber}
+                <td className="px-3 py-2 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => viewDocument(document)}
+                    className="text-blue-700 underline-offset-2 hover:underline"
+                    title="Buka rincian penyesuaian"
+                  >
+                    {document.adjustmentNumber}
+                  </button>
                 </td>
                 <td className="px-3 py-2">{document.date}</td>
                 <td className="px-3 py-2">Saldo Awal</td>
@@ -546,6 +583,13 @@ export default function OpeningStockImport() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-2">
+                    <button
+                      title="Lihat Rincian"
+                      onClick={() => viewDocument(document)}
+                      className="text-slate-600"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
                     {document.status === "Draft" && (
                       <>
                         <button
@@ -593,6 +637,117 @@ export default function OpeningStockImport() {
           </div>
         )}
       </div>
+      {selectedDocument && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#123968] px-5 py-4 text-white">
+              <div>
+                <div className="text-xs text-blue-100">
+                  RINCIAN PENYESUAIAN STOK
+                </div>
+                <h3 className="text-lg font-semibold">
+                  {selectedDocument.adjustmentNumber}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedDocument(null)}
+                className="rounded p-1 hover:bg-white/10"
+                title="Tutup"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="grid gap-3 border-b bg-[#eeeeee] px-5 py-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-slate-500">Tanggal</span>
+                <b>{selectedDocument.date}</b>
+              </div>
+              <div>
+                <span className="block text-xs text-slate-500">Jenis</span>
+                <b>Saldo Awal</b>
+              </div>
+              <div>
+                <span className="block text-xs text-slate-500">Status</span>
+                <b
+                  className={
+                    selectedDocument.status === "Posted"
+                      ? "text-emerald-700"
+                      : selectedDocument.status === "Cancelled"
+                        ? "text-slate-600"
+                        : "text-amber-700"
+                  }
+                >
+                  {selectedDocument.status === "Posted"
+                    ? "Diposting"
+                    : selectedDocument.status === "Cancelled"
+                      ? "Dibatalkan"
+                      : "Draft"}
+                </b>
+              </div>
+              {selectedDocument.cancellationReason && (
+                <div className="sm:col-span-3">
+                  <span className="block text-xs text-slate-500">
+                    Alasan Pembatalan
+                  </span>
+                  <b className="text-red-700">
+                    {selectedDocument.cancellationReason}
+                  </b>
+                </div>
+              )}
+            </div>
+            <div className="overflow-auto p-5">
+              <table className="w-full min-w-[760px] overflow-hidden rounded-t-lg border border-slate-300 text-[13px]">
+                <thead className="bg-[#637c93] text-left text-white">
+                  <tr>
+                    <th className="px-3 py-2.5">Kode Barang</th>
+                    <th className="px-3 py-2.5">Nama Barang</th>
+                    <th className="px-3 py-2.5">Gudang</th>
+                    <th className="px-3 py-2.5 text-right">Qty</th>
+                    <th className="px-3 py-2.5">Satuan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedDocument.rows.map((row, index) => (
+                    <tr
+                      key={row.id}
+                      className={`border-b ${index % 2 ? "bg-slate-50" : "bg-white"}`}
+                    >
+                      <td className="px-3 py-2 font-medium text-blue-700">
+                        {row.itemCode}
+                      </td>
+                      <td className="px-3 py-2">{row.itemName}</td>
+                      <td className="px-3 py-2">{row.warehouseName}</td>
+                      <td className="px-3 py-2 text-right font-semibold">
+                        {row.quantity}
+                      </td>
+                      <td className="px-3 py-2">{row.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2 border-t bg-[#eeeeee] px-5 py-3">
+              {selectedDocument.status === "Posted" && (
+                <button
+                  onClick={async () => {
+                    setSelectedDocument(null);
+                    await processDocument(selectedDocument, "cancel");
+                  }}
+                  className="rounded border border-amber-500 bg-white px-4 py-2 text-sm font-semibold text-amber-700"
+                >
+                  Batalkan Penyesuaian
+                </button>
+              )}
+              <button
+                onClick={() => setSelectedDocument(null)}
+                className="rounded bg-blue-700 px-5 py-2 text-sm font-semibold text-white"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
