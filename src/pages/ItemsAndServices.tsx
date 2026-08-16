@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2, RefreshCw, Printer, Share2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
@@ -95,6 +96,7 @@ const typeColors: Record<string, string> = {
 };
 
 export default function ItemsAndServices() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     data,
     addItem,
@@ -361,6 +363,18 @@ export default function ItemsAndServices() {
     setMemberSearch('');
     setShowItemModal(true);
   };
+
+  useEffect(() => {
+    const requestedItemId = searchParams.get('view');
+    if (!requestedItemId || !data.items.length) return;
+
+    const requestedItem = data.items.find((item) => item.id === requestedItemId);
+    if (requestedItem) openItemModal(requestedItem);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('view');
+    setSearchParams(nextParams, { replace: true });
+  }, [data.items, searchParams, setSearchParams]);
 
   const openCategoryModal = (category?: ItemCategory) => {
     if (category) {
