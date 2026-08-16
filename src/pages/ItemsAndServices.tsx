@@ -134,6 +134,8 @@ export default function ItemsAndServices() {
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ column: 'code' | 'name' | 'category'; direction: 'asc' | 'desc' }>({ column: 'code', direction: 'asc' });
+  const [draggedColumn, setDraggedColumn] = useState<ItemColumn | null>(null);
   const columnStorageKey = `dokterac_item_columns_accurate_v2_${currentUser?.id || currentUser?.username || 'default'}`;
   const columnWidthStorageKey = `dokterac_item_column_widths_${currentUser?.id || currentUser?.username || 'default'}`;
   const [visibleColumns, setVisibleColumns] = useState<ItemColumn[]>(() => {
@@ -151,13 +153,12 @@ export default function ItemsAndServices() {
     return defaultItemColumnWidths;
   });
 
-  const itemTableColumns = useMemo<ItemColumn[]>(() => [
-    ...(visibleColumns.includes('code') ? ['code' as const] : []),
-    'name',
-    ...(['receiptDescription', 'type', 'category', 'barcode', 'stock', 'unit', 'brand', 'purchasePrice', 'status', 'price'] as ItemColumn[])
-      .filter((column) => visibleColumns.includes(column)),
-    'actions',
-  ], [visibleColumns]);
+  const itemTableColumns = useMemo<ItemColumn[]>(() => {
+    const columns = visibleColumns.filter((column, index, all) => all.indexOf(column) === index);
+    if (!columns.includes('name')) columns.push('name');
+    if (!columns.includes('actions')) columns.push('actions');
+    return columns;
+  }, [visibleColumns]);
 
   const tableMinWidth = useMemo(
     () => 40 + itemTableColumns.reduce((total, column) => total + columnWidths[column], 0),
@@ -207,13 +208,38 @@ export default function ItemsAndServices() {
     localStorage.setItem(columnWidthStorageKey, JSON.stringify(defaultItemColumnWidths));
   };
 
+  const moveColumn = (source: ItemColumn, target: ItemColumn) => {
+    if (source === target) return;
+    setVisibleColumns(current => {
+      const ordered = [...current];
+      const sourceIndex = ordered.indexOf(source);
+      const targetIndex = ordered.indexOf(target);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      ordered.splice(sourceIndex, 1);
+      ordered.splice(targetIndex, 0, source);
+      localStorage.setItem(columnStorageKey, JSON.stringify(ordered));
+      return ordered;
+    });
+  };
+
   const resizableHeader = (column: ItemColumn, label: string, align: 'left' | 'center' | 'right' = 'left') => (
     <div
       key={column}
       style={columnStyle(column)}
-      className={`relative flex-shrink-0 px-3 py-2 ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
+      draggable
+      onDragStart={() => setDraggedColumn(column)}
+      onDragOver={event => event.preventDefault()}
+      onDrop={() => { if (draggedColumn) moveColumn(draggedColumn, column); setDraggedColumn(null); }}
+      onDragEnd={() => setDraggedColumn(null)}
+      onClick={() => {
+        if (column !== 'code' && column !== 'name' && column !== 'category') return;
+        setSortConfig(current => ({ column, direction: current.column === column && current.direction === 'asc' ? 'desc' : 'asc' }));
+      }}
+      title={`${column === 'code' || column === 'name' || column === 'category' ? 'Klik untuk urutkan. ' : ''}Tarik untuk memindahkan kolom.`}
+      className={`relative flex flex-shrink-0 cursor-grab select-none items-center gap-1 px-3 py-2.5 text-[13px] font-semibold ${draggedColumn === column ? 'opacity-50' : ''} ${align === 'right' ? 'justify-end text-right' : align === 'center' ? 'justify-center text-center' : 'justify-start text-left'}`}
     >
       <span className="block truncate">{label}</span>
+      {sortConfig.column === column && <span className="text-[10px]">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>}
       <span
         role="separator"
         aria-label={`Ubah lebar kolom ${label}`}
@@ -247,8 +273,13 @@ export default function ItemsAndServices() {
         (item.receiptDescription || '').toLowerCase().includes(q) ||
         (item.barcode || '').toLowerCase().includes(q);
       return activeMatch && categoryMatch && typeMatch && brandMatch && searchMatch;
+    }).sort((a, b) => {
+      const left = sortConfig.column === 'category' ? a.categoryName : a[sortConfig.column];
+      const right = sortConfig.column === 'category' ? b.categoryName : b[sortConfig.column];
+      const result = String(left || '').localeCompare(String(right || ''), 'id', { numeric: true, sensitivity: 'base' });
+      return sortConfig.direction === 'asc' ? result : -result;
     });
-  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand]);
+  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand, sortConfig]);
 
   // Master barang bersifat global. Hanya saldo stok yang mengikuti cabang aktif.
   const displayStock = (item: Item) =>
@@ -1089,12 +1120,12 @@ export default function ItemsAndServices() {
       {/* Filters */}
       <div className="border border-slate-300 bg-[#eeeeee] p-3 shadow-sm lg:border-x-0 lg:border-t-0 lg:shadow-none">
         <div className="flex flex-wrap items-center gap-3">
-          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500">
+          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500">
             <option value="all">Non Aktif: Semua</option><option value="active">Non Aktif: Tidak</option><option value="inactive">Non Aktif: Ya</option>
           </select>
-          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"><option value="">Merek Barang: Semua</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"><option value="">Kategori Barang: Semua</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500"><option value="">Merek Barang: Semua</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500"><option value="">Kategori Barang: Semua</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500"><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
           <button type="button" className="flex h-10 w-12 items-center justify-center rounded border border-blue-500 bg-blue-50 text-blue-700" title="Filter lanjutan"><Filter className="h-5 w-5" /></button>
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -1107,7 +1138,7 @@ export default function ItemsAndServices() {
             {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Share2 className="h-5 w-5" /></button>}
             <button type="button" onClick={() => window.print()} title="Cetak" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
             <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Settings2 className="h-5 w-5" /></button>
-            <div className="relative w-72"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 outline-none focus:border-blue-500" /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
+            <div className="relative w-72"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-[13px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200" /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
             <span className="flex h-10 min-w-16 items-center justify-center rounded border border-slate-300 bg-white px-3 text-sm text-slate-600">{filteredItems.length}</span>
             {showColumnSettings && (
               <div className="absolute right-0 top-12 z-30 w-72 rounded border border-slate-300 bg-white p-4 shadow-xl">
@@ -1121,7 +1152,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white lg:rounded-none lg:border-x-0 lg:border-t-0">
+      <div className="mx-1 overflow-hidden rounded-t-lg border border-slate-300 bg-white">
         <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Filter className="h-4 w-4" />
@@ -1156,19 +1187,11 @@ export default function ItemsAndServices() {
                 <th colSpan={9} className="p-0">
                   <div className="flex items-center text-sm font-medium" style={{ minWidth: tableMinWidth }}>
                     <div className="w-10 flex-shrink-0 px-2 py-3"></div>
-                    {visibleColumns.includes('code') && resizableHeader('code', 'Kode Barang')}
-                    {resizableHeader('name', 'Nama Barang')}
-                    {visibleColumns.includes('receiptDescription') && resizableHeader('receiptDescription', 'Deskripsi Nota')}
-                    {visibleColumns.includes('type') && resizableHeader('type', 'Jenis')}
-                    {visibleColumns.includes('category') && resizableHeader('category', 'Kategori')}
-                    {visibleColumns.includes('barcode') && resizableHeader('barcode', 'Barcode')}
-                    {visibleColumns.includes('stock') && resizableHeader('stock', 'KTS', 'right')}
-                    {visibleColumns.includes('unit') && resizableHeader('unit', 'Satuan')}
-                    {visibleColumns.includes('brand') && resizableHeader('brand', 'Merek')}
-                    {visibleColumns.includes('purchasePrice') && resizableHeader('purchasePrice', 'Harga Beli', 'right')}
-                    {visibleColumns.includes('status') && resizableHeader('status', 'Status', 'center')}
-                    {visibleColumns.includes('price') && resizableHeader('price', 'Harga Jual', 'right')}
-                    {resizableHeader('actions', 'Aksi', 'center')}
+                    {itemTableColumns.map(column => resizableHeader(
+                      column,
+                      column === 'code' ? 'Kode Barang' : column === 'name' ? 'Nama Barang' : itemColumnLabels[column],
+                      column === 'stock' || column === 'purchasePrice' || column === 'price' ? 'right' : column === 'status' || column === 'actions' ? 'center' : 'left'
+                    ))}
                   </div>
                 </th>
               </tr>
@@ -1181,11 +1204,11 @@ export default function ItemsAndServices() {
                     Tidak ada barang/jasa ditemukan
                   </td>
                 </tr>
-              ) : filteredItems.map((item) => {
+              ) : filteredItems.map((item, rowIndex) => {
                 const isGroup = item.type === 'Group' && item.groupMembers && item.groupMembers.length > 0;
                 const expanded = expandedGroups.has(item.id);
                 return (
-                    <tr key={item.id} className={`group ${!item.isActive ? 'bg-red-50/50 opacity-75' : ''}`}>
+                    <tr key={item.id} className={`group ${!item.isActive ? 'bg-red-50/50 opacity-75' : rowIndex % 2 ? 'bg-slate-50' : 'bg-white'}`}>
                     <td colSpan={9} className="p-0">
                       {/* Main row */}
                       <div style={{ minWidth: tableMinWidth }} className={`flex items-center transition-colors hover:bg-blue-50/50 ${isGroup ? 'cursor-pointer' : ''}`} onClick={isGroup ? () => toggleGroup(item.id) : undefined}>
@@ -1194,45 +1217,22 @@ export default function ItemsAndServices() {
                             expanded ? <ChevronUp className="mx-auto h-4 w-4 text-purple-500" /> : <ChevronDown className="mx-auto h-4 w-4 text-purple-500" />
                           ) : null}
                         </div>
-                        {visibleColumns.includes('code') && <div style={columnStyle('code')} className="flex-shrink-0 px-3 py-3 font-mono text-sm text-gray-900">{item.code}</div>}
-                        <div style={columnStyle('name')} className="flex-shrink-0 overflow-hidden px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                            {!item.isActive && <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">NONAKTIF</span>}
-                            {item.verificationStatus === 'Pending' && <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">MENUNGGU VERIFIKASI</span>}
-                            {item.verificationStatus === 'Merged' && <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">DIGABUNG</span>}
-                            {isGroup && (
-                              <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
-                                <Layers className="h-3 w-3" /> {item.groupMembers!.length} item
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500">{item.description || ''}</p>
-                        </div>
-                        {visibleColumns.includes('receiptDescription') && <div style={columnStyle('receiptDescription')} className="flex-shrink-0 truncate px-3 py-3 text-sm text-gray-700" title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</div>}
-                        {visibleColumns.includes('type') && <div style={columnStyle('type')} className="flex-shrink-0 px-3 py-3">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>
-                            {item.type}
-                          </span>
-                        </div>}
-                        {visibleColumns.includes('category') && <div style={columnStyle('category')} className="flex-shrink-0 truncate px-3 py-3 text-sm text-gray-700">{item.categoryName}</div>}
-                        {visibleColumns.includes('barcode') && <div style={columnStyle('barcode')} className="flex-shrink-0 truncate px-3 py-3 font-mono text-xs text-gray-700" title={item.barcode}>{item.barcode || '—'}</div>}
-                        {visibleColumns.includes('stock') && <div style={columnStyle('stock')} className="flex-shrink-0 px-3 py-3 text-right text-sm font-semibold text-gray-900">{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>}
-                        {visibleColumns.includes('unit') && <div style={columnStyle('unit')} className="flex-shrink-0 px-3 py-3 text-sm text-gray-700">{item.unit}</div>}
-                        {visibleColumns.includes('brand') && <div style={columnStyle('brand')} className="flex-shrink-0 truncate px-3 py-3 text-sm text-gray-700">{item.brand || '—'}</div>}
-                        {visibleColumns.includes('purchasePrice') && <div style={columnStyle('purchasePrice')} className="flex-shrink-0 px-3 py-3 text-right text-sm text-gray-700">{formatCurrency(item.purchasePrice)}</div>}
-                        {visibleColumns.includes('status') && <div style={columnStyle('status')} className="flex-shrink-0 px-3 py-3 text-center text-xs font-semibold">{item.isActive ? <span className="text-green-700">Aktif</span> : <span className="text-red-700">Nonaktif</span>}</div>}
-                        {visibleColumns.includes('price') && <div style={columnStyle('price')} className="flex-shrink-0 px-3 py-3 text-right text-sm font-medium text-gray-900">{formatCurrency(item.sellingPrice)}</div>}
-                        <div style={columnStyle('actions')} className="flex-shrink-0 px-3 py-3">
-                          <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            {hasPermission('item:edit') && (
-                              <button onClick={() => openItemModal(item)} className="rounded-lg p-1.5 text-blue-600 transition-colors hover:bg-blue-100" title="Edit"><Edit className="h-4 w-4" /></button>
-                            )}
-                            {hasPermission('item:delete') && (
-                              <button onClick={() => removeItem(item)} className="rounded-lg p-1.5 text-red-600 transition-colors hover:bg-red-100" title="Hapus"><Trash2 className="h-4 w-4" /></button>
-                            )}
-                          </div>
-                        </div>
+                        {itemTableColumns.map(column => {
+                          const base = 'flex-shrink-0 px-3 py-2.5 text-[13px] leading-5 text-slate-800';
+                          if (column === 'code') return <div key={column} style={columnStyle(column)} className={`${base} truncate font-medium`} title={item.code}>{item.code}</div>;
+                          if (column === 'name') return <div key={column} style={columnStyle(column)} className={`${base} overflow-hidden`}><div className="flex items-center gap-2"><p className="truncate font-medium text-slate-900">{item.name}</p>{!item.isActive && <span className="rounded-full bg-red-100 px-2 text-[10px] font-bold text-red-700">NONAKTIF</span>}{item.verificationStatus === 'Pending' && <span className="rounded-full bg-amber-100 px-2 text-[10px] font-bold text-amber-800">MENUNGGU VERIFIKASI</span>}{isGroup && <span className="rounded bg-purple-100 px-1.5 text-[10px] text-purple-700">{item.groupMembers!.length} item</span>}</div></div>;
+                          if (column === 'receiptDescription') return <div key={column} style={columnStyle(column)} className={`${base} truncate`} title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</div>;
+                          if (column === 'type') return <div key={column} style={columnStyle(column)} className={base}><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>{item.type}</span></div>;
+                          if (column === 'category') return <div key={column} style={columnStyle(column)} className={`${base} truncate`}>{item.categoryName}</div>;
+                          if (column === 'barcode') return <div key={column} style={columnStyle(column)} className={`${base} truncate font-mono`}>{item.barcode || '—'}</div>;
+                          if (column === 'stock') return <div key={column} style={columnStyle(column)} className={`${base} text-right font-semibold`}>{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>;
+                          if (column === 'unit') return <div key={column} style={columnStyle(column)} className={base}>{item.unit}</div>;
+                          if (column === 'brand') return <div key={column} style={columnStyle(column)} className={`${base} truncate`}>{item.brand || '—'}</div>;
+                          if (column === 'purchasePrice') return <div key={column} style={columnStyle(column)} className={`${base} text-right`}>{formatCurrency(item.purchasePrice)}</div>;
+                          if (column === 'status') return <div key={column} style={columnStyle(column)} className={`${base} text-center font-semibold ${item.isActive ? 'text-green-700' : 'text-red-700'}`}>{item.isActive ? 'Aktif' : 'Nonaktif'}</div>;
+                          if (column === 'price') return <div key={column} style={columnStyle(column)} className={`${base} text-right font-medium`}>{formatCurrency(item.sellingPrice)}</div>;
+                          return <div key={column} style={columnStyle(column)} className={`${base} flex justify-center gap-2`} onClick={event => event.stopPropagation()}>{hasPermission('item:edit') && <button onClick={() => openItemModal(item)} className="p-1 text-blue-600 hover:bg-blue-100" title="Edit"><Edit className="h-4 w-4" /></button>}{hasPermission('item:delete') && <button onClick={() => removeItem(item)} className="p-1 text-red-600 hover:bg-red-100" title="Hapus"><Trash2 className="h-4 w-4" /></button>}</div>;
+                        })}
                       </div>
 
                       {/* Expanded group members */}
