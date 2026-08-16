@@ -321,6 +321,41 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_movement_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS stock_adjustments (
+            id VARCHAR(30) NOT NULL PRIMARY KEY,
+            adjustment_number VARCHAR(40) NOT NULL UNIQUE,
+            adjustment_type VARCHAR(30) NOT NULL DEFAULT 'opening_balance',
+            adjustment_date DATE NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'Draft',
+            batch_key VARCHAR(64) NULL UNIQUE,
+            notes VARCHAR(255) NOT NULL DEFAULT '',
+            created_by VARCHAR(20) NULL,
+            posted_by VARCHAR(20) NULL,
+            cancelled_by VARCHAR(20) NULL,
+            cancellation_reason VARCHAR(255) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            posted_at DATETIME NULL,
+            cancelled_at DATETIME NULL,
+            INDEX idx_stock_adjustment_date (adjustment_date),
+            INDEX idx_stock_adjustment_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS stock_adjustment_items (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            adjustment_id VARCHAR(30) NOT NULL,
+            item_id VARCHAR(20) NOT NULL,
+            warehouse_id VARCHAR(20) NOT NULL,
+            item_code VARCHAR(80) NOT NULL,
+            item_name VARCHAR(255) NOT NULL,
+            unit VARCHAR(30) NOT NULL DEFAULT '',
+            quantity INT NOT NULL,
+            INDEX idx_stock_adjustment_item_parent (adjustment_id),
+            INDEX idx_stock_adjustment_item_item (item_id),
+            INDEX idx_stock_adjustment_item_warehouse (warehouse_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
     $pdo->exec("CREATE TABLE IF NOT EXISTS cash_accounts (
         id VARCHAR(64) PRIMARY KEY, code VARCHAR(30) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL,
         account_type ENUM('cash','bank','qris') NOT NULL, branch_id VARCHAR(20) NULL,
