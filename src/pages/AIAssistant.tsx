@@ -84,6 +84,18 @@ const titleCaseVehicleName = (value: string) => value
 const canonicalVehicleInfo = (brand: string, model: string, year?: number, color?: string) =>
   `${brand} ${model}${year ? ` ${year}` : ''}${color ? ` - ${color}` : ''}`.trim();
 
+// Nama warna pada master bisa memakai spasi atau tanda hubung, sedangkan user
+// sering mengetik bebas (contoh: "abu abu", "abu-abu", atau "abuabu").
+const normalizeCatalogTerm = (value: unknown) => String(value || '')
+  .normalize('NFKD')
+  .replace(/[^a-z0-9]/gi, '')
+  .toLocaleLowerCase('id-ID');
+
+const extractIndonesianPlate = (value: unknown) => {
+  const match = String(value || '').toUpperCase().match(/(?:^|[^A-Z0-9])([A-Z]{1,2})[\s-]*(\d{1,4})[\s-]*([A-Z]{0,3})(?=$|[^A-Z0-9])/);
+  return match ? `${match[1]}${match[2]}${match[3]}` : '';
+};
+
 type AIVehicleCatalogGeneration = { id: string; name: string; aliases?: string; isActive: boolean; engineCcs?: number[] };
 type AIVehicleCatalogModel = { id: string; name: string; isActive: boolean; usageCount?: number; generations?: AIVehicleCatalogGeneration[] };
 type AIVehicleCatalogBrand = { id: string; name: string; isActive: boolean; usageCount?: number; models: AIVehicleCatalogModel[] };
@@ -169,18 +181,23 @@ const parseInlineRegistrationIdentity = (text: string): InlineRegistrationIdenti
     remainder = remainder.slice(0, complaintMatch.index).replace(/[,;\s]+$/, '');
   }
 
-  const segments = remainder.split(',').map(part => part.trim());
-  const address = segments[0] || '';
-  const vehicleSegment = segments[1] || '';
-  const description = explicitComplaint || segments.slice(2).filter(Boolean).join(', ');
-  const vehicleMatch = vehicleSegment.match(/^([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3})\s*(.*)$/i);
+  const plateMatch = remainder.match(/(?:^|[^A-Z0-9])([A-Z]{1,2})[\s-]*(\d{1,4})[\s-]*([A-Z]{0,3})(?=$|[^A-Z0-9])/i);
+  const plateNumber = plateMatch ? `${plateMatch[1]}${plateMatch[2]}${plateMatch[3]}`.toUpperCase() : '';
+  const plateStart = plateMatch?.index === undefined ? -1 : plateMatch.index + (plateMatch[0].match(/^[^A-Z0-9]/i)?.[0]?.length || 0);
+  const address = plateStart >= 0
+    ? remainder.slice(0, plateStart).replace(/[,;\s]+$/, '').trim()
+    : (remainder.split(',')[0] || '').trim();
+  const afterPlate = plateStart >= 0 ? remainder.slice(plateStart + (plateMatch?.[0].trim().length || 0)).trim() : '';
+  const vehicleAndComplaint = afterPlate.split(',').map(part => part.trim());
+  const vehicleInfo = vehicleAndComplaint[0] || '';
+  const description = explicitComplaint || vehicleAndComplaint.slice(1).filter(Boolean).join(', ');
 
   return {
     customerName,
     phone,
     address,
-    plateNumber: vehicleMatch?.[1]?.replace(/\s+/g, '').toUpperCase() || '',
-    vehicleInfo: vehicleMatch?.[2]?.trim() || '',
+    plateNumber,
+    vehicleInfo,
     description,
   };
 };
@@ -303,8 +320,12 @@ export default function AIAssistant() {
         const colors = (response.data?.colors || []).filter(color => color.isActive);
         const raw = String(pendingAction.vehicleInfo || '').trim();
         const normalizedRaw = raw.toLocaleLowerCase('id-ID');
+        const normalizedCatalogRaw = normalizeCatalogTerm(raw);
         const year = Number(raw.match(/\b(?:19|20)\d{2}\b/)?.[0] || 0) || undefined;
-        const color = colors.find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')))?.name;
+        const color = colors.find(item => {
+          const candidate = normalizeCatalogTerm(item.name);
+          return candidate.length > 0 && normalizedCatalogRaw.includes(candidate);
+        })?.name;
         const brand = [...brands]
           .sort((left, right) => right.name.length - left.name.length)
           .find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')));
@@ -1308,7 +1329,8 @@ ${buildSmartContext(userMsgText)}`;
 
   const executeCreateWO = async (a: any, selectedBranchId: string) => {
     const normalizedCustomerName = sanitizeRegistrationCustomerName(a.customerName);
-    a = { ...a, customerName: normalizedCustomerName };
+    const normalizedPlateNumber = extractIndonesianPlate(a.plateNumber) || normalizePlate(String(a.plateNumber || ''));
+    a = { ...a, customerName: normalizedCustomerName, plateNumber: normalizedPlateNumber };
     const branchId = selectedBranchId;
     const branchName = data.branches.find(b => b.id === branchId)?.name || branchId;
     const suppliedDate = String(a.date || '');
@@ -1401,8 +1423,13 @@ ${buildSmartContext(userMsgText)}`;
         const availableModels = (catalogMatch.brand.models || []).filter((model: any) => model.isActive).slice(0, 6).map((model: any) => model.name).join(', ');
         throw new Error(`Tipe kendaraan pada "${vehicleText}" belum tersedia untuk ${catalogMatch.brand.name}. Pilihan master: ${availableModels || 'belum ada'}. Tambahkan tipe di Master Kendaraan lalu ulangi registrasi.`);
       }
-      const matchedColor = catalogColors.find(color => color.name.localeCompare(String(confirmedResolution?.color || ''), 'id', { sensitivity: 'base' }) === 0)
-        || catalogColors.find(color => normalizedVehicleText.includes(color.name.trim().toLocaleLowerCase('id-ID')));
+      const normalizedVehicleCatalogText = normalizeCatalogTerm(vehicleText);
+      const confirmedColor = normalizeCatalogTerm(confirmedResolution?.color);
+      const matchedColor = catalogColors.find(color => confirmedColor && normalizeCatalogTerm(color.name) === confirmedColor)
+        || catalogColors.find(color => {
+          const candidate = normalizeCatalogTerm(color.name);
+          return candidate.length > 0 && normalizedVehicleCatalogText.includes(candidate);
+        });
       if (!matchedColor) {
         throw new Error(`Warna kendaraan pada "${vehicleText}" belum cocok dengan daftar warna di Master Kendaraan. Pilih atau tambahkan warna terlebih dahulu.`);
       }
@@ -2018,6 +2045,7 @@ ${buildSmartContext(userMsgText)}`;
       if (action?.action === 'create_wo') {
         const parsedDate = parseCompactTransactionDate(content);
         const inlineIdentity = parseInlineRegistrationIdentity(content);
+        const plateFromCommand = extractIndonesianPlate(content);
         const codedServices = servicesFromCodes(content);
         if (parsedDate) action.date = parsedDate.date;
         if (inlineIdentity) {
@@ -2029,6 +2057,9 @@ ${buildSmartContext(userMsgText)}`;
           action.description = inlineIdentity.description;
           action.complaintRequired = !inlineIdentity.description;
         }
+        // Hasil ekstraksi lokal lebih aman daripada tebakan model AI. Kata alamat
+        // sebelum pelat (mis. "REGE DD1431RM") tidak boleh menjadi bagian pelat.
+        if (plateFromCommand) action.plateNumber = plateFromCommand;
         const similarCustomers = findSimilarRegistrationCustomers(String(action.customerName || ''), String(action.phone || ''));
         if (similarCustomers.length > 0) {
           action.customerCandidates = similarCustomers.map(customer => customer.id);
@@ -2567,7 +2598,7 @@ ${buildSmartContext(userMsgText)}`;
                   )}
                   <p>Kendaraan: <b className="text-white">{pendingAction.plateNumber}</b> — {pendingAction.vehicleInfo}</p>
                   {pendingAction.vehicleCatalogResolution?.status === 'checking' && <div className="my-3 flex items-center gap-2 rounded-lg border border-cyan-500/50 bg-cyan-950/50 p-3 text-cyan-200"><Loader2 className="h-4 w-4 animate-spin" /> Memeriksa Master Kendaraan…</div>}
-                  {pendingAction.vehicleCatalogResolution?.status === 'ready' && <div className="my-3 rounded-lg border border-emerald-500/50 bg-emerald-950/40 p-3 text-emerald-200"><p className="font-semibold">✓ Data kendaraan cocok dengan master</p><p className="mt-1 text-xs">{pendingAction.vehicleCatalogResolution.brandName} · {pendingAction.vehicleCatalogResolution.modelName}</p></div>}
+                  {pendingAction.vehicleCatalogResolution?.status === 'ready' && <div className="my-3 rounded-lg border border-emerald-500/50 bg-emerald-950/40 p-3 text-emerald-200"><p className="font-semibold">✓ Data kendaraan cocok dengan master</p><p className="mt-1 text-xs">{pendingAction.vehicleCatalogResolution.brandName} · {pendingAction.vehicleCatalogResolution.modelName}{pendingAction.vehicleCatalogResolution.color ? ` · ${pendingAction.vehicleCatalogResolution.color}` : ''}</p></div>}
                   {pendingAction.vehicleCatalogResolution?.status === 'missing_brand' && (
                     <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
                       <p className="font-semibold text-amber-200">Merek <b>{pendingAction.vehicleCatalogResolution.brandCandidate || '-'}</b> belum ada di Master Kendaraan.</p>
