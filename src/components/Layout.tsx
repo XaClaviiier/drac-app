@@ -4,7 +4,7 @@ import {
   Settings, Menu, Bell, User, ChevronDown, LogOut, Building2, Shield, Bot, FolderTree, X,
   Warehouse, ArrowLeft, Home, CirclePlus,
   ChevronRight, BookOpen, Landmark, ShoppingCart, BarChart3, CreditCard,
-  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Coins, CalendarClock,
+  ClipboardList, ArrowLeftRight, History, Banknote, Activity, LoaderCircle, CheckCircle2, AlertCircle, Coins, CalendarClock, Upload,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
@@ -60,6 +60,7 @@ const pageTitles: Record<string, string> = {
   '/reports/sales': 'Laporan Penjualan',
   '/reports/purchases': 'Laporan Pembelian',
   '/reports/inventory': 'Laporan Persediaan',
+  '/opening-stock': 'Saldo Awal Stok',
   '/reports/cash-bank': 'Laporan Kas & Bank',
   '/cash-accounts': 'Kas Cabang',
   '/bank-accounts': 'Rekening Bank',
@@ -116,6 +117,7 @@ const desktopGroups = [
     { label: 'Penerimaan Barang', path: '/receipts', icon: PackageCheck, perm: 'receipt:view', tone: 'green' },
     { label: 'Transfer Gudang', path: '/warehouse-transfers', icon: ArrowLeftRight, perm: 'item:view', tone: 'green' },
     { label: 'Penyesuaian Stok', path: '/warehouses', icon: ClipboardList, perm: 'item:edit', tone: 'green' },
+    { label: 'Saldo Awal Stok', path: '/opening-stock', icon: Upload, perm: 'item:edit', tone: 'green' },
     { label: 'Stok Opname', icon: ClipboardList, tone: 'green' }, { label: 'Permintaan Barang', icon: FileText, tone: 'blue' },
     { label: 'Barang & Jasa', path: '/items', icon: Boxes, perm: 'item:view', tone: 'blue' },
     { label: 'Gudang', path: '/warehouses', icon: Warehouse, perm: 'item:view', tone: 'blue' },

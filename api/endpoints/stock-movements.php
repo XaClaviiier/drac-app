@@ -7,7 +7,31 @@ if($method==='GET'){
     respondSuccess($rows);
 }
 if($method!=='POST')respondError('Method not allowed',405);
-$d=getInput();$qty=(int)($d['quantity']??0);$source=$d['sourceWarehouseId']??'';$destination=$d['destinationWarehouseId']??'';
+$d=getInput();
+if(($d['action']??'')==='opening_balance_import'){
+    $roleStmt=$pdo->prepare("SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$role=$roleStmt->fetch();
+    $isAdmin=!empty($actor['is_owner'])||strtoupper((string)($role['code']??''))==='ADM'||strtolower((string)($role['name']??''))==='administrator';
+    if(!$isAdmin)respondError('Import saldo awal hanya tersedia untuk Owner dan Administrator',403);
+    $rows=is_array($d['rows']??null)?$d['rows']:[];$date=(string)($d['date']??date('Y-m-d'));$batchKey=preg_replace('/[^A-Z0-9_-]/','',strtoupper((string)($d['batchKey']??'')));
+    if(!$rows||count($rows)>5000||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date)||strlen($batchKey)<8)respondError('Data import saldo awal tidak valid',422);
+    $marker='OPENING_BALANCE:'.$batchKey;
+    $duplicate=$pdo->prepare("SELECT COUNT(*) FROM stock_movements WHERE notes LIKE ?");$duplicate->execute([$marker.'%']);if((int)$duplicate->fetchColumn()>0)respondError('File/batch saldo awal ini sudah pernah diimport',409);
+    $warehouseStmt=$pdo->prepare("SELECT id,branch_id,is_active FROM warehouses WHERE id=?");$itemStmt=$pdo->prepare("SELECT id,code,name,type,is_active FROM items WHERE id=?");
+    $pdo->beginTransaction();
+    try{
+        $created=0;
+        foreach($rows as $index=>$row){$itemId=(string)($row['itemId']??'');$warehouseId=(string)($row['warehouseId']??'');$quantity=(int)($row['quantity']??0);if($quantity===0)continue;
+            $warehouseStmt->execute([$warehouseId]);$warehouse=$warehouseStmt->fetch();if(!$warehouse||!(bool)$warehouse['is_active'])throw new InvalidArgumentException('Gudang baris '.($index+1).' tidak valid');requireAccessibleBranch($pdo,$actor,(string)$warehouse['branch_id']);
+            $itemStmt->execute([$itemId]);$item=$itemStmt->fetch();if(!$item||$item['type']!=='Persediaan'||!(bool)$item['is_active'])throw new InvalidArgumentException('Barang baris '.($index+1).' tidak valid atau bukan persediaan aktif');
+            adjustWarehouseStockAllowNegative($pdo,$warehouseId,(string)$warehouse['branch_id'],$itemId,$quantity);
+            $mid='MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);$notes=$marker.' Saldo awal '.$item['code'];
+            $pdo->prepare("INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,notes,created_by,created_at) VALUES(?,?,NULL,?,?,'adjustment',?,?,CONCAT(?,' 00:00:00'))")->execute([$mid,$itemId,$warehouseId,$quantity,$notes,$actor['id'],$date]);$created++;
+        }
+        if($created===0)throw new InvalidArgumentException('Tidak ada kuantitas saldo awal yang dapat diproses');
+        $pdo->commit();respondSuccess(['batchKey'=>$batchKey,'created'=>$created],'Saldo awal stok berhasil diimport');
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
+}
+$qty=(int)($d['quantity']??0);$source=$d['sourceWarehouseId']??'';$destination=$d['destinationWarehouseId']??'';
 if($qty<=0||!$source||!$destination||$source===$destination)respondError('Data mutasi tidak valid',422);
 $warehouseStmt=$pdo->prepare("SELECT id,branch_id,is_active FROM warehouses WHERE id IN (?,?)");$warehouseStmt->execute([$source,$destination]);$warehouseRows=$warehouseStmt->fetchAll();
 if(count($warehouseRows)!==2)respondError('Gudang sumber atau tujuan tidak ditemukan',422);

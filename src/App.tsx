@@ -32,6 +32,7 @@ import PurchaseReport from './pages/PurchaseReport';
 import InventoryReport from './pages/InventoryReport';
 import CashBankReport from './pages/CashBankReport';
 import HistoricalQuickEntry from './pages/HistoricalQuickEntry';
+import OpeningStockImport from './pages/OpeningStockImport';
 import type { Permission } from './types';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -101,6 +102,7 @@ function AppRoutes() {
         <Route path="settings" element={protectedPage('settings:view', <SettingsPage />)} />
         <Route path="warehouses" element={protectedPage('item:view', <Warehouses />)} />
         <Route path="warehouse-transfers" element={protectedPage('item:view', <WarehouseTransfers />)} />
+        <Route path="opening-stock" element={protectedPage('item:edit', <OpeningStockImport />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
