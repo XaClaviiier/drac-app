@@ -226,10 +226,10 @@ export default function WorkOrderTimeline() {
 
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <div className="min-w-[1240px]">
-            <div className="grid grid-cols-[270px_minmax(760px,1fr)_190px] border-b bg-gray-50 text-xs font-bold text-gray-800">
+          <div className="md:min-w-[1240px]">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] border-b bg-gray-50 text-xs font-bold text-gray-800 md:grid-cols-[270px_minmax(760px,1fr)_190px]">
               <div className="px-4 py-3">Kendaraan / Nama Customer</div>
-              <div className="relative grid" style={{ gridTemplateColumns: `repeat(${timelineHours.length - 1}, minmax(0, 1fr))` }}>
+              <div className="relative hidden md:grid" style={{ gridTemplateColumns: `repeat(${timelineHours.length - 1}, minmax(0, 1fr))` }}>
                 {timelineHours.slice(0, -1).map(hour => <span key={hour} className="border-l px-1 py-3 text-center">{String(hour).padStart(2, '0')}:00</span>)}
                 {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute -top-0.5 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-semibold not-italic text-red-600">Sekarang</i></span>}
               </div>
@@ -237,12 +237,12 @@ export default function WorkOrderTimeline() {
             </div>
             {visibleRows.map(({ wo, invoice, segments }) => {
               const selectedRowActive = selected?.id === wo.id;
-              return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full grid-cols-[270px_minmax(760px,1fr)_190px] border-b text-left last:border-b-0 ${selectedRowActive ? 'bg-blue-50/70 shadow-[inset_4px_0_0_#2563eb]' : 'hover:bg-gray-50'}`}>
+              return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_auto] border-b text-left last:border-b-0 md:grid-cols-[270px_minmax(760px,1fr)_190px] ${selectedRowActive ? 'bg-blue-50/70 shadow-[inset_4px_0_0_#2563eb]' : 'hover:bg-gray-50'}`}>
                 <div className="flex min-w-0 flex-col justify-center px-4 py-3" title={`${wo.woNumber} · Teknisi: ${wo.technicianName || wo.createdByName || '-'}`}>
                   <b className="block truncate text-base font-bold text-gray-950">{wo.plateNumber} / {wo.customerName}</b>
                   <span className="mt-0.5 block truncate text-xs text-gray-500">{wo.vehicleInfo || '-'}</span>
                 </div>
-                <div className="relative my-2 min-h-[44px] overflow-hidden rounded bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)]" style={{ minHeight: '44px', backgroundSize: `${100 / (timelineHours.length - 1)}% 100%` }}>
+                <div className="relative my-2 hidden min-h-[44px] overflow-hidden rounded bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)] md:block" style={{ minHeight: '44px', backgroundSize: `${100 / (timelineHours.length - 1)}% 100%` }}>
                   {segments.map((segment, index) => {
                     const rawLeft = position(segment.start);
                     const rawRight = position(segment.end);
@@ -267,14 +267,13 @@ export default function WorkOrderTimeline() {
       </section>
 
       {selected && selectedRow && <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-4 xl:grid-cols-[1.05fr_.75fr_1.55fr_1.35fr]">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.05fr_1.55fr_1.35fr]">
           <div className="border-l-4 border-blue-600 pl-4">
             <div className="flex items-center gap-2"><h2 className="text-lg font-bold">{selected.woNumber}</h2><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${STAGES[currentStage(selected)].soft} ${STAGES[currentStage(selected)].text}`}>{STAGES[currentStage(selected)].label}</span></div>
             <dl className="mt-3 grid grid-cols-[90px_1fr] gap-y-2 text-sm"><dt className="text-gray-500">Pelanggan</dt><dd className="font-semibold">{selected.customerName}</dd><dt className="text-gray-500">No. Polisi</dt><dd className="font-semibold">{selected.plateNumber}</dd><dt className="text-gray-500">Kendaraan</dt><dd>{selected.vehicleInfo}</dd><dt className="text-gray-500">Teknisi</dt><dd>{selected.technicianName || selected.createdByName || '-'}</dd></dl>
-          </div>
-          <div className="border-l border-gray-200 pl-4">
-            <p className="text-xs font-semibold uppercase text-gray-400">Status Sekarang</p><b className={`mt-1 inline-flex rounded-lg px-3 py-1.5 ${STAGES[currentStage(selected)].soft} ${STAGES[currentStage(selected)].text}`}>{STAGES[currentStage(selected)].label}</b>
-            <dl className="mt-3 grid grid-cols-[90px_1fr] gap-y-2 text-sm"><dt className="text-gray-500">Jam Mulai</dt><dd>{selectedRow.segments[0]?.start.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</dd><dt className="text-gray-500">Total Durasi</dt><dd className="font-bold">{durationLabel(totalSelectedDuration)}</dd><dt className="text-gray-500">Cabang</dt><dd>{data.branches.find(item => item.id === selected.branchId)?.name || '-'}</dd></dl>
+            <p className="mt-3 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
+              Mulai {selectedRow.segments[0]?.start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · Durasi <b className="text-gray-700">{durationLabel(totalSelectedDuration)}</b> · {data.branches.find(item => item.id === selected.branchId)?.name || '-'}
+            </p>
           </div>
           <div className="min-w-0 border-l border-gray-200 pl-4">
             <div className="flex items-center justify-between gap-2">
@@ -303,7 +302,7 @@ export default function WorkOrderTimeline() {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-          <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
+          <div className="hidden min-w-0 flex-wrap gap-x-3 gap-y-1.5 text-[11px] md:flex">
             {(Object.keys(STAGES) as StageKey[]).map(key => (
               <span key={key} className="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-500">
                 <i className={`h-2.5 w-2.5 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}
