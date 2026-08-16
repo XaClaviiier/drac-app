@@ -119,7 +119,13 @@ export default function ItemsAndServices() {
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [verifyingItemId, setVerifyingItemId] = useState('');
   const [showItemModal, setShowItemModal] = useState(false);
-  const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'account' | 'image' | 'other'>('general');
+  const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'account' | 'image' | 'other' | 'movement' | 'warehouse'>('general');
+  const [movementDateFrom, setMovementDateFrom] = useState(() => {
+    const today = new Date();
+    return localDateKey(new Date(today.getFullYear(), today.getMonth(), 1));
+  });
+  const [movementDateTo, setMovementDateTo] = useState(() => localDateKey());
+  const [movementSearch, setMovementSearch] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState<any[]>([]);
@@ -1018,6 +1024,30 @@ export default function ItemsAndServices() {
         })
         .sort((a, b) => a.warehouse.name.localeCompare(b.warehouse.name, 'id'))
     : [];
+  const itemMovementRows = useMemo(() => {
+    if (!editingItem) return [];
+    const query = movementSearch.trim().toLowerCase();
+    let runningBalance = data.warehouseStocks
+      .filter(stock => stock.itemId === editingItem.id)
+      .reduce((total, stock) => total + Number(stock.quantity || 0), 0);
+    return data.stockMovements
+      .filter(movement => movement.itemId === editingItem.id)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(movement => {
+        const destinationAllowed = movement.destinationWarehouseId ? data.warehouses.some(warehouse => warehouse.id === movement.destinationWarehouseId) : false;
+        const sourceAllowed = movement.sourceWarehouseId ? data.warehouses.some(warehouse => warehouse.id === movement.sourceWarehouseId) : false;
+        const incoming = destinationAllowed ? Number(movement.quantity || 0) : 0;
+        const outgoing = sourceAllowed ? Number(movement.quantity || 0) : 0;
+        const row = { ...movement, incoming, outgoing, balance: runningBalance };
+        runningBalance -= incoming - outgoing;
+        return row;
+      })
+      .filter(movement => {
+        const date = String(movement.createdAt || '').slice(0, 10);
+        const searchable = `${movement.movementType} ${movement.notes || ''} ${movement.sourceName || ''} ${movement.destinationName || ''}`.toLowerCase();
+        return (!movementDateFrom || date >= movementDateFrom) && (!movementDateTo || date <= movementDateTo) && (!query || searchable.includes(query));
+      });
+  }, [editingItem, data.stockMovements, data.warehouseStocks, data.warehouses, movementDateFrom, movementDateTo, movementSearch]);
   const verifyPendingItem = async (itemId: string, targetItemId?: string) => {
     setVerifyingItemId(itemId);
     try {
@@ -1040,7 +1070,7 @@ export default function ItemsAndServices() {
         {!showItemModal && canVerifyItems && <button type="button" onClick={() => setItemListTab('verification')} className={`ml-1 flex items-center gap-2 rounded-t-md border border-b-0 px-4 text-sm font-semibold ${itemListTab === 'verification' ? 'border-t-2 border-blue-600 bg-white text-blue-700' : 'border-slate-400 bg-[#d6d6d6] text-slate-600'}`}>Menunggu Verifikasi {pendingItems.length > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{pendingItems.length}</span>}</button>}
         {showItemModal && (
           <div className="flex items-center gap-2 rounded-t-md border-x border-t-2 border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700">
-            {editingItem ? editingItem.code : 'Data Baru'}
+            <span className="max-w-[340px] truncate" title={editingItem?.name}>{editingItem ? editingItem.name : 'Data Baru'}</span>
             <button type="button" onClick={() => setShowItemModal(false)} className="ml-1 text-slate-500 hover:text-red-600"><X className="h-4 w-4" /></button>
           </div>
         )}
@@ -1211,8 +1241,8 @@ export default function ItemsAndServices() {
                     <tr key={item.id} className={`group ${!item.isActive ? 'bg-red-50/50 opacity-75' : rowIndex % 2 ? 'bg-slate-50' : 'bg-white'}`}>
                     <td colSpan={9} className="p-0">
                       {/* Main row */}
-                      <div style={{ minWidth: tableMinWidth }} className={`flex items-center transition-colors hover:bg-blue-50/50 ${isGroup ? 'cursor-pointer' : ''}`} onClick={isGroup ? () => toggleGroup(item.id) : undefined}>
-                        <div className="w-10 flex-shrink-0 px-2 py-3 text-center">
+                      <div style={{ minWidth: tableMinWidth }} className="flex cursor-pointer items-center transition-colors hover:bg-blue-50/50" onClick={() => openItemModal(item)}>
+                        <div className="w-10 flex-shrink-0 px-2 py-3 text-center" onClick={event => { if (isGroup) { event.stopPropagation(); toggleGroup(item.id); } }}>
                           {isGroup ? (
                             expanded ? <ChevronUp className="mx-auto h-4 w-4 text-purple-500" /> : <ChevronDown className="mx-auto h-4 w-4 text-purple-500" />
                           ) : null}
@@ -1292,13 +1322,17 @@ export default function ItemsAndServices() {
       {showItemModal && (
         <div className="min-h-[calc(100vh-175px)] bg-[#f4f4f4]">
           <div className="flex min-h-[calc(100vh-175px)] w-full flex-col overflow-hidden border border-slate-300 bg-[#f4f4f4] shadow-sm">
-            <div className="flex flex-shrink-0 items-end gap-1 border-b border-slate-400 bg-[#f4f4f4] px-4 pt-1">
-              {([
-                ['general', 'Umum'], ['sales', 'Penjualan / Pembelian'], ['stock', 'Stok'],
-                ['account', 'Akun'], ['image', 'Gambar'], ['other', 'Lain-lain'],
-              ] as const).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setItemFormTab(key)} className={`rounded-t border border-b-0 px-3 py-2 text-sm ${itemFormTab === key ? 'bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>{label}</button>
-              ))}
+            <div className="flex flex-shrink-0 items-end justify-between border-b border-slate-400 bg-[#f4f4f4] px-4 pt-1">
+              <div className="flex items-end gap-1">{([
+                  ['general', 'Umum'], ['sales', 'Penjualan / Pembelian'], ['stock', 'Stok'],
+                  ['account', 'Akun'], ['image', 'Gambar'], ['other', 'Lain-lain'],
+                ] as const).map(([key, label]) => (
+                  <button key={key} type="button" onClick={() => setItemFormTab(key)} className={`rounded-t border border-b-0 px-3 py-2 text-sm ${itemFormTab === key ? 'border-t-2 border-t-blue-600 bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>{label}</button>
+                ))}</div>
+              {editingItem && <div className="flex items-end gap-1">
+                <button type="button" onClick={() => setItemFormTab('movement')} className={`rounded-t border border-b-0 px-5 py-2 text-sm ${itemFormTab === 'movement' ? 'border-t-2 border-t-blue-600 bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>Mutasi</button>
+                <button type="button" onClick={() => setItemFormTab('warehouse')} className={`rounded-t border border-b-0 px-5 py-2 text-sm ${itemFormTab === 'warehouse' ? 'border-t-2 border-t-blue-600 bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>Gudang</button>
+              </div>}
             </div>
             <form onSubmit={saveItem} className="relative min-h-0 flex-1 overflow-y-auto bg-[#f4f4f4] p-3 pr-24 sm:p-5 sm:pr-28">
               {itemFormTab === 'general' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-3 shadow-sm">
@@ -1363,6 +1397,25 @@ export default function ItemsAndServices() {
                   </table>
                   {!itemWarehouseRows.length && <div className="bg-white px-4 py-12 text-center text-slate-500">Belum ada gudang aktif pada cabang yang dipilih.</div>}
                 </div>}
+              </div>}
+              {itemFormTab === 'movement' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <input type="date" value={movementDateFrom} onChange={event => setMovementDateFrom(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
+                  <span className="text-sm font-medium text-slate-600">s/d</span>
+                  <input type="date" value={movementDateTo} onChange={event => setMovementDateTo(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
+                  <button type="button" onClick={() => refreshData()} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5" /></button>
+                  <div className="relative ml-auto w-80 max-w-full"><input value={movementSearch} onChange={event => setMovementSearch(event.target.value)} placeholder="Cari/Pilih..." className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-sm"/><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2"/></div>
+                </div>
+                <div className="overflow-auto rounded-t-lg border border-slate-300">
+                  <table className="min-w-[1100px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-3 py-2.5 text-left">Tanggal</th><th className="px-3 py-2.5 text-left">No. Sumber #</th><th className="px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Nilai Satuan</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
+                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5">{new Date(movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.id}</td><td className="px-3 py-2.5">{movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right">—</td><td className="px-3 py-2.5 text-right text-emerald-700">{movement.incoming || ''}</td><td className="px-3 py-2.5 text-right text-red-700">{movement.outgoing || ''}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance}</td></tr>)}</tbody>
+                  </table>
+                  {!itemMovementRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada data mutasi pada periode ini.</div>}
+                </div>
+              </div>}
+              {itemFormTab === 'warehouse' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
+                <div className="mb-3 flex items-center gap-3"><input type="date" value={movementDateTo} onChange={event => setMovementDateTo(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm"/><button type="button" onClick={() => refreshData()} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5"/></button></div>
+                <div className="overflow-hidden rounded-t-lg border border-slate-300"><table className="w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-4 py-2.5 text-left">Gudang</th><th className="px-4 py-2.5 text-left">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead><tbody>{itemWarehouseRows.map(({ warehouse, quantity, reserved, available }, index) => <tr key={warehouse.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-4 py-2.5 font-medium">{warehouse.name}</td><td className="px-4 py-2.5">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right">{quantity}</td><td className="px-4 py-2.5 text-right">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>)}</tbody></table>{!itemWarehouseRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada gudang aktif.</div>}</div>
               </div>}
               {itemFormTab === 'account' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Akun Barang &amp; Jasa</h4><p className="text-sm text-slate-600">Pemetaan akun mengikuti kategori barang dan pengaturan akun perkiraan perusahaan.</p></div>}
               {itemFormTab === 'image' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Gambar Barang</h4><div className="flex h-56 max-w-lg items-center justify-center rounded border-2 border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">Fitur gambar barang akan ditambahkan pada penyimpanan media.</div></div>}
