@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity, Banknote, CalendarDays, Check, CheckCircle2, ChevronRight,
-  FileText, Package, Plus, RefreshCw, Settings2, Stethoscope, UserRound, Wrench, XCircle,
+  FileText, Gauge, Package, Plus, RefreshCw, Settings2, Stethoscope, Thermometer,
+  UserRound, Wrench, XCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { LegacyWOStatus, SalesInvoice, WorkOrder, WOStatus } from '../types';
@@ -175,6 +176,10 @@ export default function WorkOrderTimeline() {
 
   const timelineHours = Array.from({ length: AXIS_END_HOUR - AXIS_START_HOUR + 1 }, (_, index) => AXIS_START_HOUR + index);
   const totalSelectedDuration = selectedRow?.segments.reduce((sum, segment) => sum + segment.duration, 0) || 0;
+  const completionLog = selected?.statusLog ? [...selected.statusLog].reverse().find(log => log.to === 'Selesai') : undefined;
+  const hasFinalMeasurements = [selected?.finalTemperature, selected?.finalLp, selected?.finalHp]
+    .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
+  const completionNote = selected?.findings?.trim() || selected?.notes?.trim() || '';
 
   return (
     <div className="min-w-0 space-y-3">
@@ -276,6 +281,33 @@ export default function WorkOrderTimeline() {
             <div className="flex gap-2 overflow-x-auto pb-2">{selectedStages.map(stage => { const config = STAGES[stage.key]; const Icon = config.icon; return <div key={stage.key} className={`min-w-[135px] flex-1 rounded-xl border p-3 text-center ${config.soft}`}><div className={`flex items-center justify-center gap-1 text-xs font-semibold ${config.text}`}><Icon className="h-4 w-4"/>{config.short}</div><b className="mt-2 block text-xl text-gray-900">{durationLabel(stage.duration)}</b><small className="text-[10px] text-gray-500">{stage.start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}–{stage.end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</small></div>; })}</div>
           </div>
         </div>
+        {selected.status === 'Selesai' && (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Hasil Akhir Pekerjaan</p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {completionLog?.byUserName || selected.technicianName || selected.createdByName || 'Teknisi'}
+                  {completionLog?.at ? ` · ${parseDateTime(completionLog.at, selected.date).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                <CheckCircle2 className="h-3.5 w-3.5"/>{hasFinalMeasurements ? 'Pengukuran Lengkap' : 'Catatan Teknisi'}
+              </span>
+            </div>
+            {hasFinalMeasurements ? (
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2.5"><span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500"><Thermometer className="h-4 w-4 text-rose-500"/>Suhu akhir</span><b className="mt-1 block text-lg text-gray-950">{selected.finalTemperature}°C</b></div>
+                <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2.5"><span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500"><Gauge className="h-4 w-4 text-blue-500"/>Tekanan Low</span><b className="mt-1 block text-lg text-gray-950">{selected.finalLp} PSI</b></div>
+                <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2.5"><span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500"><Gauge className="h-4 w-4 text-orange-500"/>Tekanan High</span><b className="mt-1 block text-lg text-gray-950">{selected.finalHp} PSI</b></div>
+              </div>
+            ) : null}
+            <div className="mt-3 rounded-lg border border-emerald-100 bg-white px-3 py-2.5">
+              <span className="text-[11px] font-semibold text-gray-500">Catatan hasil pekerjaan</span>
+              <p className={`mt-1 text-sm ${completionNote ? 'text-gray-800' : 'italic text-gray-400'}`}>{completionNote || 'Tidak ada catatan tambahan.'}</p>
+            </div>
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
           <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
             {(Object.keys(STAGES) as StageKey[]).map(key => (
