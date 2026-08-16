@@ -5,6 +5,7 @@ import {
   Download,
   Eye,
   FileSpreadsheet,
+  List,
   Pencil,
   Send,
   Trash2,
@@ -85,6 +86,7 @@ export default function OpeningStockImport() {
   const [editingId, setEditingId] = useState("");
   const [selectedDocument, setSelectedDocument] =
     useState<AdjustmentDetail | null>(null);
+  const [detailTabs, setDetailTabs] = useState<AdjustmentDetail[]>([]);
   const isAdmin =
     Boolean(currentUser?.isOwner) ||
     String(currentUser?.roleName || "")
@@ -329,12 +331,28 @@ export default function OpeningStockImport() {
       );
       if (!response.success)
         throw new Error(response.message || "Rincian tidak dapat dibuka.");
-      setSelectedDocument({ ...document, ...response.data });
+      const detail = { ...document, ...response.data } as AdjustmentDetail;
+      setDetailTabs((current) => {
+        const found = current.some((tab) => tab.id === detail.id);
+        return found
+          ? current.map((tab) => (tab.id === detail.id ? detail : tab))
+          : [...current, detail];
+      });
+      setSelectedDocument(detail);
     } catch (error: any) {
       setMessage(error?.message || "Rincian penyesuaian tidak dapat dibuka.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const closeDetailTab = (documentId: string) => {
+    setDetailTabs((current) => {
+      const remaining = current.filter((tab) => tab.id !== documentId);
+      if (selectedDocument?.id === documentId)
+        setSelectedDocument(remaining[remaining.length - 1] || null);
+      return remaining;
+    });
   };
 
   const processDocument = async (
@@ -377,269 +395,312 @@ export default function OpeningStockImport() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-t-lg border border-slate-300 bg-[#eeeeee] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">
-              Penyesuaian Stok
-            </h2>
-            <p className="text-sm text-slate-600">
-              Saldo awal disimpan sebagai dokumen. Draft belum mengubah stok;
-              Posting mencatat mutasi dan Pembatalan membuat pembalik.
-            </p>
-          </div>
-          <button
-            onClick={downloadTemplate}
-            className="flex h-10 items-center gap-2 rounded border border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700"
-          >
-            <Download className="h-4 w-4" />
-            Unduh Template
-          </button>
-        </div>
-      </div>
-      {!isAdmin && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-          <AlertTriangle className="mr-2 inline h-4 w-4" />
-          Import hanya dapat dilakukan Owner atau Administrator.
-        </div>
-      )}
-      <div className="grid gap-3 rounded border border-slate-300 bg-white p-4 md:grid-cols-[220px_minmax(0,1fr)_auto]">
-        <label className="text-sm">
-          Tanggal Saldo Awal
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="mt-1 h-10 w-full rounded border border-slate-300 px-3"
-          />
-        </label>
-        <label className="text-sm">
-          File CSV/Excel
-          <div className="mt-1 flex h-10 items-center rounded border border-slate-300 bg-white">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="flex h-full items-center gap-2 border-r border-slate-300 px-4 text-blue-700"
+      <div className="flex min-h-11 items-end gap-1 border-b border-blue-600 bg-[#eeeeee] px-1 pt-1">
+        <button
+          type="button"
+          onClick={() => setSelectedDocument(null)}
+          className={`flex h-10 w-14 items-center justify-center rounded-t-md border border-b-0 ${selectedDocument ? "border-slate-300 bg-[#d7d7d7] text-blue-700" : "border-blue-600 bg-green-500 text-white"}`}
+          title="Daftar Penyesuaian Stok"
+        >
+          <List className="h-5 w-5" />
+        </button>
+        {detailTabs.map((tab) => {
+          const active = selectedDocument?.id === tab.id;
+          return (
+            <div
+              key={tab.id}
+              className={`flex h-10 min-w-56 max-w-80 items-center rounded-t-md border border-b-0 ${active ? "border-blue-600 bg-white text-blue-700 shadow-[inset_0_3px_0_#2563eb]" : "border-slate-300 bg-[#d0d0d0] text-slate-700"}`}
             >
-              <Upload className="h-4 w-4" />
-              {editingId ? "Ganti File" : "Pilih File"}
-            </button>
-            <span className="truncate px-3 text-slate-500">
-              {fileName || "Belum ada file"}
-            </span>
-            {fileName && (
               <button
-                onClick={() => {
-                  setRows([]);
-                  setFileName("");
-                  setEditingId("");
-                }}
-                className="ml-auto px-3"
+                type="button"
+                onClick={() => setSelectedDocument(tab)}
+                className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold"
+              >
+                {tab.adjustmentNumber}
+              </button>
+              <button
+                type="button"
+                onClick={() => closeDetailTab(tab.id)}
+                className="mr-1 rounded p-1.5 hover:bg-slate-100"
+                title="Tutup tab"
               >
                 <X className="h-4 w-4" />
               </button>
-            )}
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={(event) => loadFile(event.target.files?.[0])}
-            className="hidden"
-          />
-        </label>
-        <div className="mt-6 flex gap-2">
-          <button
-            disabled={
-              !isAdmin || loading || !validRows.length || !!errorRows.length
-            }
-            onClick={() => submit(false)}
-            className="h-10 rounded border border-blue-700 bg-white px-4 text-sm font-semibold text-blue-700 disabled:border-slate-300 disabled:text-slate-400"
-          >
-            {editingId ? "Perbarui Draft" : "Simpan Draft"}
-          </button>
-          <button
-            disabled={
-              !isAdmin || loading || !validRows.length || !!errorRows.length
-            }
-            onClick={() => submit(true)}
-            className="h-10 rounded bg-blue-700 px-4 text-sm font-semibold text-white disabled:bg-slate-300"
-          >
-            Simpan & Posting
-          </button>
-        </div>
+            </div>
+          );
+        })}
       </div>
-      {message && (
-        <div
-          className={`rounded border p-3 text-sm ${message.includes("berhasil") ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-red-300 bg-red-50 text-red-700"}`}
-        >
-          {message}
-        </div>
-      )}
-      {rows.length > 0 && (
-        <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
-          <div className="flex items-center justify-between bg-[#eeeeee] px-4 py-3 text-sm">
-            <span>
-              Pratinjau: <b>{rows.length}</b> baris · Valid{" "}
-              <b className="text-emerald-700">{validRows.length}</b> ·
-              Bermasalah <b className="text-red-700">{errorRows.length}</b>
-            </span>
-            {!errorRows.length && (
-              <span className="text-emerald-700">
-                <CheckCircle2 className="mr-1 inline h-4 w-4" />
-                Siap disimpan
-              </span>
-            )}
+      {!selectedDocument && (
+        <>
+          <div className="rounded-t-lg border border-slate-300 bg-[#eeeeee] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Penyesuaian Stok
+                </h2>
+                <p className="text-sm text-slate-600">
+                  Saldo awal disimpan sebagai dokumen. Draft belum mengubah
+                  stok; Posting mencatat mutasi dan Pembatalan membuat pembalik.
+                </p>
+              </div>
+              <button
+                onClick={downloadTemplate}
+                className="flex h-10 items-center gap-2 rounded border border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700"
+              >
+                <Download className="h-4 w-4" />
+                Unduh Template
+              </button>
+            </div>
           </div>
-          <div className="max-h-72 overflow-auto">
-            <table className="min-w-[1000px] w-full text-[13px]">
-              <thead className="sticky top-0 bg-[#637c93] text-left text-white">
+          {!isAdmin && (
+            <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+              <AlertTriangle className="mr-2 inline h-4 w-4" />
+              Import hanya dapat dilakukan Owner atau Administrator.
+            </div>
+          )}
+          <div className="grid gap-3 rounded border border-slate-300 bg-white p-4 md:grid-cols-[220px_minmax(0,1fr)_auto]">
+            <label className="text-sm">
+              Tanggal Saldo Awal
+              <input
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                className="mt-1 h-10 w-full rounded border border-slate-300 px-3"
+              />
+            </label>
+            <label className="text-sm">
+              File CSV/Excel
+              <div className="mt-1 flex h-10 items-center rounded border border-slate-300 bg-white">
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  className="flex h-full items-center gap-2 border-r border-slate-300 px-4 text-blue-700"
+                >
+                  <Upload className="h-4 w-4" />
+                  {editingId ? "Ganti File" : "Pilih File"}
+                </button>
+                <span className="truncate px-3 text-slate-500">
+                  {fileName || "Belum ada file"}
+                </span>
+                {fileName && (
+                  <button
+                    onClick={() => {
+                      setRows([]);
+                      setFileName("");
+                      setEditingId("");
+                    }}
+                    className="ml-auto px-3"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={(event) => loadFile(event.target.files?.[0])}
+                className="hidden"
+              />
+            </label>
+            <div className="mt-6 flex gap-2">
+              <button
+                disabled={
+                  !isAdmin || loading || !validRows.length || !!errorRows.length
+                }
+                onClick={() => submit(false)}
+                className="h-10 rounded border border-blue-700 bg-white px-4 text-sm font-semibold text-blue-700 disabled:border-slate-300 disabled:text-slate-400"
+              >
+                {editingId ? "Perbarui Draft" : "Simpan Draft"}
+              </button>
+              <button
+                disabled={
+                  !isAdmin || loading || !validRows.length || !!errorRows.length
+                }
+                onClick={() => submit(true)}
+                className="h-10 rounded bg-blue-700 px-4 text-sm font-semibold text-white disabled:bg-slate-300"
+              >
+                Simpan & Posting
+              </button>
+            </div>
+          </div>
+          {message && (
+            <div
+              className={`rounded border p-3 text-sm ${message.includes("berhasil") ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-red-300 bg-red-50 text-red-700"}`}
+            >
+              {message}
+            </div>
+          )}
+          {rows.length > 0 && (
+            <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
+              <div className="flex items-center justify-between bg-[#eeeeee] px-4 py-3 text-sm">
+                <span>
+                  Pratinjau: <b>{rows.length}</b> baris · Valid{" "}
+                  <b className="text-emerald-700">{validRows.length}</b> ·
+                  Bermasalah <b className="text-red-700">{errorRows.length}</b>
+                </span>
+                {!errorRows.length && (
+                  <span className="text-emerald-700">
+                    <CheckCircle2 className="mr-1 inline h-4 w-4" />
+                    Siap disimpan
+                  </span>
+                )}
+              </div>
+              <div className="max-h-72 overflow-auto">
+                <table className="min-w-[1000px] w-full text-[13px]">
+                  <thead className="sticky top-0 bg-[#637c93] text-left text-white">
+                    <tr>
+                      <th className="px-3 py-2.5">Baris</th>
+                      <th className="px-3 py-2.5">Kode Barang</th>
+                      <th className="px-3 py-2.5">Nama Barang</th>
+                      <th className="px-3 py-2.5">Gudang</th>
+                      <th className="px-3 py-2.5 text-right">Qty Awal</th>
+                      <th className="px-3 py-2.5">Satuan</th>
+                      <th className="px-3 py-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, index) => (
+                      <tr
+                        key={`${row.row}-${index}`}
+                        className={`border-b ${row.error ? "bg-red-50" : index % 2 ? "bg-slate-50" : "bg-white"}`}
+                      >
+                        <td className="px-3 py-2">{row.row}</td>
+                        <td className="px-3 py-2 font-medium text-blue-700">
+                          {row.code}
+                        </td>
+                        <td className="px-3 py-2">{row.itemName || "—"}</td>
+                        <td className="px-3 py-2">{row.warehouse}</td>
+                        <td className="px-3 py-2 text-right font-semibold">
+                          {row.quantity}
+                        </td>
+                        <td className="px-3 py-2">{row.unit}</td>
+                        <td
+                          className={`px-3 py-2 ${row.error ? "text-red-700" : "text-emerald-700"}`}
+                        >
+                          {row.error || "Valid"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
+            <div className="bg-[#eeeeee] px-4 py-3 text-sm font-semibold">
+              Daftar Penyesuaian Stok
+            </div>
+            <table className="w-full text-[13px]">
+              <thead className="bg-[#637c93] text-left text-white">
                 <tr>
-                  <th className="px-3 py-2.5">Baris</th>
-                  <th className="px-3 py-2.5">Kode Barang</th>
-                  <th className="px-3 py-2.5">Nama Barang</th>
-                  <th className="px-3 py-2.5">Gudang</th>
-                  <th className="px-3 py-2.5 text-right">Qty Awal</th>
-                  <th className="px-3 py-2.5">Satuan</th>
+                  <th className="px-3 py-2.5">Nomor</th>
+                  <th className="px-3 py-2.5">Tanggal</th>
+                  <th className="px-3 py-2.5">Jenis</th>
+                  <th className="px-3 py-2.5 text-right">Barang</th>
+                  <th className="px-3 py-2.5 text-right">Total Qty</th>
                   <th className="px-3 py-2.5">Status</th>
+                  <th className="px-3 py-2.5">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, index) => (
+                {documents.map((document, index) => (
                   <tr
-                    key={`${row.row}-${index}`}
-                    className={`border-b ${row.error ? "bg-red-50" : index % 2 ? "bg-slate-50" : "bg-white"}`}
+                    key={document.id}
+                    className={`border-b ${index % 2 ? "bg-slate-50" : "bg-white"}`}
                   >
-                    <td className="px-3 py-2">{row.row}</td>
-                    <td className="px-3 py-2 font-medium text-blue-700">
-                      {row.code}
+                    <td className="px-3 py-2 font-medium">
+                      <button
+                        type="button"
+                        onClick={() => viewDocument(document)}
+                        className="text-blue-700 underline-offset-2 hover:underline"
+                        title="Buka rincian penyesuaian"
+                      >
+                        {document.adjustmentNumber}
+                      </button>
                     </td>
-                    <td className="px-3 py-2">{row.itemName || "—"}</td>
-                    <td className="px-3 py-2">{row.warehouse}</td>
-                    <td className="px-3 py-2 text-right font-semibold">
-                      {row.quantity}
+                    <td className="px-3 py-2">{document.date}</td>
+                    <td className="px-3 py-2">Saldo Awal</td>
+                    <td className="px-3 py-2 text-right">
+                      {document.itemCount}
                     </td>
-                    <td className="px-3 py-2">{row.unit}</td>
-                    <td
-                      className={`px-3 py-2 ${row.error ? "text-red-700" : "text-emerald-700"}`}
-                    >
-                      {row.error || "Valid"}
+                    <td className="px-3 py-2 text-right">
+                      {document.totalQuantity}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`rounded-full px-2 py-1 ${document.status === "Draft" ? "bg-amber-100 text-amber-800" : document.status === "Posted" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}
+                      >
+                        {document.status === "Posted"
+                          ? "Diposting"
+                          : document.status === "Cancelled"
+                            ? "Dibatalkan"
+                            : "Draft"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-2">
+                        <button
+                          title="Lihat Rincian"
+                          onClick={() => viewDocument(document)}
+                          className="text-slate-600"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {document.status === "Draft" && (
+                          <>
+                            <button
+                              title="Edit Draft"
+                              onClick={() => editDocument(document)}
+                              className="text-blue-700"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              title="Posting"
+                              onClick={() => processDocument(document, "post")}
+                              className="text-emerald-700"
+                            >
+                              <Send className="h-4 w-4" />
+                            </button>
+                            <button
+                              title="Hapus Draft"
+                              onClick={() =>
+                                processDocument(document, "delete")
+                              }
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                        {document.status === "Posted" && (
+                          <button
+                            title="Batalkan dan balik stok"
+                            onClick={() => processDocument(document, "cancel")}
+                            className="text-amber-700"
+                          >
+                            <Undo2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {!documents.length && (
+              <div className="py-12 text-center text-slate-400">
+                <FileSpreadsheet className="mx-auto mb-2 h-9 w-9" />
+                Belum ada penyesuaian stok.
+              </div>
+            )}
           </div>
-        </div>
+        </>
       )}
-      <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
-        <div className="bg-[#eeeeee] px-4 py-3 text-sm font-semibold">
-          Daftar Penyesuaian Stok
-        </div>
-        <table className="w-full text-[13px]">
-          <thead className="bg-[#637c93] text-left text-white">
-            <tr>
-              <th className="px-3 py-2.5">Nomor</th>
-              <th className="px-3 py-2.5">Tanggal</th>
-              <th className="px-3 py-2.5">Jenis</th>
-              <th className="px-3 py-2.5 text-right">Barang</th>
-              <th className="px-3 py-2.5 text-right">Total Qty</th>
-              <th className="px-3 py-2.5">Status</th>
-              <th className="px-3 py-2.5">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {documents.map((document, index) => (
-              <tr
-                key={document.id}
-                className={`border-b ${index % 2 ? "bg-slate-50" : "bg-white"}`}
-              >
-                <td className="px-3 py-2 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => viewDocument(document)}
-                    className="text-blue-700 underline-offset-2 hover:underline"
-                    title="Buka rincian penyesuaian"
-                  >
-                    {document.adjustmentNumber}
-                  </button>
-                </td>
-                <td className="px-3 py-2">{document.date}</td>
-                <td className="px-3 py-2">Saldo Awal</td>
-                <td className="px-3 py-2 text-right">{document.itemCount}</td>
-                <td className="px-3 py-2 text-right">
-                  {document.totalQuantity}
-                </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`rounded-full px-2 py-1 ${document.status === "Draft" ? "bg-amber-100 text-amber-800" : document.status === "Posted" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}
-                  >
-                    {document.status === "Posted"
-                      ? "Diposting"
-                      : document.status === "Cancelled"
-                        ? "Dibatalkan"
-                        : "Draft"}
-                  </span>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex gap-2">
-                    <button
-                      title="Lihat Rincian"
-                      onClick={() => viewDocument(document)}
-                      className="text-slate-600"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    {document.status === "Draft" && (
-                      <>
-                        <button
-                          title="Edit Draft"
-                          onClick={() => editDocument(document)}
-                          className="text-blue-700"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          title="Posting"
-                          onClick={() => processDocument(document, "post")}
-                          className="text-emerald-700"
-                        >
-                          <Send className="h-4 w-4" />
-                        </button>
-                        <button
-                          title="Hapus Draft"
-                          onClick={() => processDocument(document, "delete")}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </>
-                    )}
-                    {document.status === "Posted" && (
-                      <button
-                        title="Batalkan dan balik stok"
-                        onClick={() => processDocument(document, "cancel")}
-                        className="text-amber-700"
-                      >
-                        <Undo2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!documents.length && (
-          <div className="py-12 text-center text-slate-400">
-            <FileSpreadsheet className="mx-auto mb-2 h-9 w-9" />
-            Belum ada penyesuaian stok.
-          </div>
-        )}
-      </div>
       {selectedDocument && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="px-1 pb-3">
+          <div className="flex min-h-[calc(100vh-245px)] w-full flex-col overflow-hidden rounded-b border border-slate-300 bg-white shadow-sm">
             <div className="flex items-center justify-between bg-[#123968] px-5 py-4 text-white">
               <div>
                 <div className="text-xs text-blue-100">
@@ -650,7 +711,7 @@ export default function OpeningStockImport() {
                 </h3>
               </div>
               <button
-                onClick={() => setSelectedDocument(null)}
+                onClick={() => closeDetailTab(selectedDocument.id)}
                 className="rounded p-1 hover:bg-white/10"
                 title="Tutup"
               >
@@ -695,7 +756,7 @@ export default function OpeningStockImport() {
                 </div>
               )}
             </div>
-            <div className="overflow-auto p-5">
+            <div className="flex-1 overflow-auto p-5">
               <table className="w-full min-w-[760px] overflow-hidden rounded-t-lg border border-slate-300 text-[13px]">
                 <thead className="bg-[#637c93] text-left text-white">
                   <tr>
@@ -730,7 +791,7 @@ export default function OpeningStockImport() {
               {selectedDocument.status === "Posted" && (
                 <button
                   onClick={async () => {
-                    setSelectedDocument(null);
+                    closeDetailTab(selectedDocument.id);
                     await processDocument(selectedDocument, "cancel");
                   }}
                   className="rounded border border-amber-500 bg-white px-4 py-2 text-sm font-semibold text-amber-700"
@@ -739,7 +800,7 @@ export default function OpeningStockImport() {
                 </button>
               )}
               <button
-                onClick={() => setSelectedDocument(null)}
+                onClick={() => closeDetailTab(selectedDocument.id)}
                 className="rounded bg-blue-700 px-5 py-2 text-sm font-semibold text-white"
               >
                 Tutup
