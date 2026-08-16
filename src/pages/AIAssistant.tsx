@@ -231,6 +231,7 @@ export default function AIAssistant() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmActionLockRef = useRef(false);
 
   const isLegacyFreeInspection = (item: typeof data.items[number]) => {
     const label = `${item.code} ${item.name} ${item.receiptDescription || ''}`.toUpperCase();
@@ -268,7 +269,7 @@ export default function AIAssistant() {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, busy, showBranchChooser]);
+  }, [messages, busy, showBranchChooser, pendingAction, pendingBranchId]);
 
   useEffect(() => {
     if (!pendingAction || !['create_wo', 'create_quick_invoice'].includes(pendingAction.action) || pendingAction.vehicleCatalogResolution) return;
@@ -1319,6 +1320,7 @@ ${buildSmartContext(userMsgText)}`;
     }
 
     // 1. Pelanggan
+    let customerUpdateSkipped = false;
     let customer = data.customers.find(c =>
       c.customerCode.toUpperCase() === String(a.customerId || '').toUpperCase() ||
       c.name.toUpperCase() === String(a.customerName || '').toUpperCase() ||
@@ -1343,9 +1345,15 @@ ${buildSmartContext(userMsgText)}`;
       const nextPhone = suppliedPhone || customer.phone || '';
       const nextAddress = suppliedAddress || customer.address || '';
       if (nextPhone !== (customer.phone || '') || nextAddress !== (customer.address || '')) {
-        const updatedCustomer = { ...customer, phone: nextPhone, address: nextAddress };
-        await updateCustomer(customer.id, updatedCustomer);
-        customer = updatedCustomer;
+        if (hasPermission('customer:edit')) {
+          const updatedCustomer = { ...customer, phone: nextPhone, address: nextAddress };
+          await updateCustomer(customer.id, updatedCustomer);
+          customer = updatedCustomer;
+        } else {
+          // Membuat WO dari pelanggan lama tidak boleh gagal hanya karena operator
+          // tidak mempunyai hak mengubah master pelanggan.
+          customerUpdateSkipped = true;
+        }
       }
     }
 
@@ -1501,7 +1509,7 @@ ${buildSmartContext(userMsgText)}`;
     };
     await addWorkOrder(wo);
 
-    return { woNumber, branchName, total, customerName: wo.customerName, customerPhone: customer?.phone || a.phone || '', plateNumber: wo.plateNumber, vehicleInfo: wo.vehicleInfo, description: wo.description, date: wo.date, servicesCount: services.length };
+    return { woNumber, branchName, total, customerName: wo.customerName, customerPhone: customer?.phone || a.phone || '', plateNumber: wo.plateNumber, vehicleInfo: wo.vehicleInfo, description: wo.description, date: wo.date, servicesCount: services.length, customerUpdateSkipped };
   };
 
   const executeQuickInvoice = async (a: any, selectedBranchId: string) => {
@@ -2084,7 +2092,8 @@ ${buildSmartContext(userMsgText)}`;
   };
 
   const confirmAction = async () => {
-    if (!pendingAction || !pendingBranchId) return;
+    if (confirmActionLockRef.current || !pendingAction || !pendingBranchId) return;
+    confirmActionLockRef.current = true;
     setBusy(true);
     let completed = false;
     try {
@@ -2108,7 +2117,7 @@ ${buildSmartContext(userMsgText)}`;
         role: 'assistant',
         time: now(),
         shareText,
-        content: `✅ **Order Kerja berhasil dibuat!**\n\n- Nomor: **${r.woNumber}**\n- Pelanggan: **${r.customerName}**\n- Kendaraan: **${r.plateNumber}**\n- Layanan: **${r.servicesCount} item**\n- Estimasi: **${fmt(r.total)}**\n- Cabang: **${r.branchName}**\n- Status: **Register**\n\nBuka menu Servis Job untuk menambah layanan atau mulai dikerjakan.`,
+        content: `✅ **Order Kerja berhasil dibuat!**\n\n- Nomor: **${r.woNumber}**\n- Pelanggan: **${r.customerName}**\n- Kendaraan: **${r.plateNumber}**\n- Layanan: **${r.servicesCount} item**\n- Estimasi: **${fmt(r.total)}**\n- Cabang: **${r.branchName}**\n- Status: **Register**${r.customerUpdateSkipped ? '\n- Catatan: **Data master pelanggan tidak diubah karena akun tidak memiliki izin edit pelanggan.**' : ''}\n\nBuka menu Servis Job untuk menambah layanan atau mulai dikerjakan.`,
       }]);
       completed = true;
     } catch (e: any) {
@@ -2119,6 +2128,7 @@ ${buildSmartContext(userMsgText)}`;
         setPendingBranchId('');
       }
       setBusy(false);
+      confirmActionLockRef.current = false;
     }
   };
 
@@ -2636,7 +2646,7 @@ ${buildSmartContext(userMsgText)}`;
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => { setPendingAction(null); setPendingBranchId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
-                  <button disabled={!pendingBranchId || !pendingAction.description?.trim() || pendingAction.vehicleCatalogResolution?.status !== 'ready' || (pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved)} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
+                  <button disabled={busy || !pendingBranchId || !pendingAction.description?.trim() || pendingAction.vehicleCatalogResolution?.status !== 'ready' || (pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved)} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
                     <CheckCircle2 className="h-4 w-4" /> {pendingBranchId ? `${pendingAction.action === 'create_quick_invoice' ? 'Buat REGINV' : 'Buat WO'} di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang'}
                   </button>
                 </div>
