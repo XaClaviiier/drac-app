@@ -169,7 +169,16 @@ export default function OpeningStockImport() {
 
   const loadDocuments = async () => {
     const response = await api.get<AdjustmentDocument[]>("stock-adjustments");
-    if (response.success) setDocuments(response.data || []);
+    if (response.success) {
+      setDocuments(response.data || []);
+      setMessage("");
+      return;
+    }
+    setMessage(
+      response.message ||
+        response.error ||
+        "Daftar penyesuaian stok gagal dimuat.",
+    );
   };
   useEffect(() => {
     if (isAdmin) void loadDocuments();
@@ -470,7 +479,7 @@ export default function OpeningStockImport() {
 
   return (
     <div className="space-y-0 bg-[#eeeeee]">
-      <div className="flex min-h-12 items-end gap-1 border-b border-slate-400 bg-[#eeeeee] px-1 pt-1">
+      <div className="flex min-h-12 items-end gap-1 border-b border-slate-400 bg-[#eeeeee] px-0 pt-0">
         <button
           type="button"
           onClick={() => {

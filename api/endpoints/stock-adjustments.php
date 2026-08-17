@@ -28,7 +28,11 @@ if ($method === 'GET') {
         foreach ($lines as &$line) { $line = ['id'=>$line['id'],'itemId'=>$line['item_id'],'itemCode'=>$line['item_code'],'itemName'=>$line['item_name'],'warehouseId'=>$line['warehouse_id'],'warehouseName'=>$line['warehouse_name'],'quantity'=>(int)$line['quantity'],'unit'=>$line['unit']]; }
         $payload = $mapDocument($document); $payload['rows'] = $lines; respondSuccess($payload);
     }
-    $rows = $pdo->query("SELECT sa.*,COUNT(sai.id) item_count,COALESCE(SUM(sai.quantity),0) total_quantity FROM stock_adjustments sa LEFT JOIN stock_adjustment_items sai ON sai.adjustment_id=sa.id GROUP BY sa.id ORDER BY sa.adjustment_date DESC,sa.created_at DESC LIMIT 250")->fetchAll();
+    $rows = $pdo->query("SELECT sa.*,
+        (SELECT COUNT(*) FROM stock_adjustment_items sai WHERE sai.adjustment_id=sa.id) item_count,
+        (SELECT COALESCE(SUM(sai.quantity),0) FROM stock_adjustment_items sai WHERE sai.adjustment_id=sa.id) total_quantity
+        FROM stock_adjustments sa
+        ORDER BY sa.adjustment_date DESC,sa.created_at DESC LIMIT 250")->fetchAll();
     respondSuccess(array_map($mapDocument, $rows));
 }
 
