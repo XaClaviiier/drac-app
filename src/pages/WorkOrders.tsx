@@ -2848,7 +2848,7 @@ export default function WorkOrders() {
                   />
                 </div>
 
-                <div className={editingWO && !isAutoRegisteredDraft ? '' : 'hidden'}>
+                <div className={!isAutoRegisteredDraft ? '' : 'hidden'}>
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <label className="block text-sm font-medium text-gray-700">
                       Keterangan / Keluhan
@@ -2904,16 +2904,6 @@ export default function WorkOrders() {
                 </div>
               </div>
               </>}
-
-              {!editingWO && (
-                <textarea
-                  rows={2}
-                  value={formData.description}
-                  onChange={(event) => setFormData(previous => ({ ...previous, description: event.target.value }))}
-                  placeholder="Keluhan / keterangan service *"
-                  className="h-[88px] w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm leading-5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
-              )}
 
               {(diagnosisMode || serviceEditMode || editingWO) && <>
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
