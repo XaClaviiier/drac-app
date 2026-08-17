@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Clock3, GitBranch, AlertTriangle, Undo2, LockKeyhole, Download, Printer, Filter } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, Undo2, LockKeyhole, Download, Printer, Filter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, LegacyWOStatus, Vehicle, WorkOrder, WorkOrderService, WOStatus } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -1716,37 +1716,41 @@ export default function WorkOrders() {
 
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
-      <div className="flex items-end gap-0.5 border-b border-blue-600 bg-gray-100 px-1">
-        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal && !detailWO ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
+      <div className="flex items-end gap-0 border-b border-blue-600 bg-[#eeeeee] px-1 pt-0">
+        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal && !detailWO ? 'relative z-10 border-blue-600 bg-white text-blue-700 shadow-[inset_0_2px_0_#2563eb]' : 'border-emerald-600 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
         {showModal && diagnosisMode && editingWO ? (
           <button
             type="button"
-            className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white"
+            className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]"
           >
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && serviceEditMode && editingWO ? (
-          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+          <button type="button" className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]">
             EDIT PEKERJAAN {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && editingWO ? (
-          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+          <button type="button" className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]">
             {isAutoRegisteredDraft ? <FileText className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
             {isAutoRegisteredDraft ? editingWO.woNumber : `Edit ${editingWO.woNumber}`}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && hasPermission('wo:create') ? (
-          <button type="button" className="flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-blue-600 px-5 text-sm font-semibold text-white">
+          <button type="button" className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]">
             Data Baru
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
           </button>
+        ) : hasPermission('wo:create') ? (
+          <button type="button" onClick={openNewRegistration} className="-ml-px flex h-11 min-w-36 items-center justify-between rounded-t-md border border-b-0 border-gray-400 bg-[#d0d0d0] px-4 text-sm font-semibold text-gray-700 hover:bg-gray-300">
+            <span>Data Baru</span><X className="h-4 w-4 text-gray-500" />
+          </button>
         ) : null}
         {!showModal && (
-          <div className="hidden min-w-0 items-end gap-0.5 overflow-x-auto lg:flex">
+          <div className="hidden min-w-0 items-end gap-0 overflow-x-auto lg:flex">
             {detailTabIds.map(tabId => {
               const tabWO = data.workOrders.find(wo => wo.id === tabId);
               if (!tabWO) return null;
@@ -1756,7 +1760,7 @@ export default function WorkOrders() {
                   key={tabId}
                   type="button"
                   onClick={() => setDetailWO(tabWO)}
-                  className={`flex h-11 max-w-[230px] flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${active ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  className={`-ml-px flex h-11 max-w-[230px] flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${active ? 'relative z-10 border-blue-600 bg-white text-blue-700 shadow-[inset_0_2px_0_#2563eb]' : 'border-gray-400 bg-[#d0d0d0] text-gray-700 hover:bg-gray-300'}`}
                   title={tabWO.woNumber}
                 >
                   <span className="truncate font-mono">{tabWO.woNumber}</span>
@@ -1766,15 +1770,9 @@ export default function WorkOrders() {
             })}
           </div>
         )}
-        <div className="ml-auto flex h-11 items-center gap-3 border-b-0 px-2 text-xs font-medium text-gray-500">
-          <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex items-center gap-1.5 font-semibold ${activeFilterCount > 0 ? 'text-emerald-700' : 'text-gray-500'}`} title="Buka filter Order Kerja">
-            <span className={`h-2 w-2 rounded-full ${activeFilterCount > 0 ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-            {activeFilterCount > 0 ? `Filter Aktif (${activeFilterCount})` : 'Tanpa Filter'}
-          </button>
-          <span className="text-gray-300">â€¢</span>
-          <span className="font-semibold text-gray-700">{branchScopeLabel}</span>
-          <span className="text-gray-300">•</span>
-          <span className="font-semibold text-blue-700">{filteredWOs.length} WO</span>
+        <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-2">
+          <button type="button" onClick={() => setShowColumnPicker(value => !value)} className="flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50" title="Pengaturan tampilan"><Settings2 className="h-5 w-5" /></button>
+          <button type="button" className="flex h-9 w-11 items-center justify-center rounded bg-amber-500 text-white" title="Panduan Work Order"><Lightbulb className="h-5 w-5" /></button>
         </div>
       </div>
 
@@ -1788,9 +1786,9 @@ export default function WorkOrders() {
       )}
 
       {/* Filters */}
-      <div className="border-y border-gray-200 bg-gray-50 px-3 py-2 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
-          <div className="relative min-w-[260px] flex-[1_1_360px] xl:min-w-[300px]">
+      <div className="border-y border-gray-300 bg-[#eeeeee] px-3 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="order-5 relative ml-auto min-w-[260px] flex-[0_1_360px] xl:min-w-[300px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -1801,18 +1799,24 @@ export default function WorkOrders() {
             />
           </div>
           {periodFilter === 'custom' && (
-            <div className="hidden items-center gap-1">
+            <div className="order-1 flex items-center gap-1">
               <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
               <span className="text-gray-400">–</span>
               <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
             </div>
           )}
-          {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4" /><span className="hidden xl:inline">WO Baru</span></button>}
-          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
+          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="order-1 h-10 rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500">
+            <option value="all">Tanggal: Semua</option><option value="today">Tanggal: Hari Ini</option><option value="7days">Tanggal: 7 Hari</option><option value="thisMonth">Tanggal: Bulan Ini</option><option value="lastMonth">Tanggal: Bulan Lalu</option><option value="custom">Tanggal: Pilih Rentang</option>
+          </select>
+          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="order-1 h-10 rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500">
+            <option value="">Status: Semua</option><option value="Register">Status: Register</option><option value="Proses">Status: Dikerjakan</option><option value="Selesai">Status: Selesai</option><option value="Closed">Status: Lost Sales</option>
+          </select>
+          {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="order-3 inline-flex h-10 w-16 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700"><Plus className="h-5 w-5" /></button>}
+          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="order-4 inline-flex h-10 w-12 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
-          <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
-            <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
+          <div className="order-1 relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
+            <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-10 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
             {showFilterPanel && <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Order Kerja</strong><button type="button" onClick={resetWorkOrderFilters} className="text-xs font-semibold text-blue-700 hover:underline">Reset</button></div>
               <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal text-gray-800"><option value="">Semua Status</option><option value="Register">Register</option><option value="Proses">Dikerjakan</option><option value="Selesai">Selesai</option><option value="Closed">Lost Sales</option></select></label>
@@ -1821,7 +1825,8 @@ export default function WorkOrders() {
               <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
             </div>}
           </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2 xl:flex-nowrap">
+          <div className="order-2 h-0 basis-full" />
+          <div className="order-6 flex flex-wrap items-center gap-2 xl:flex-nowrap">
           <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download"><Download className="h-4 w-4" /></button>
           <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Print"><Printer className="h-4 w-4" /></button>
           <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnPicker(false); }}>
@@ -1843,6 +1848,7 @@ export default function WorkOrders() {
             )}
           </div>
           </div>
+          <span className="order-6 flex h-10 min-w-16 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredWOs.length}</span>
         </div>
       </div>
       <div className="hidden px-3 py-0.5">
