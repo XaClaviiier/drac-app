@@ -78,15 +78,22 @@ try {
         $modelStmt = $pdo->prepare("SELECT id,name FROM vehicle_models WHERE brand_id=? AND is_active=1 AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
         $modelStmt->execute([$catalogBrand['id'],$modelInput]); $catalogModel = $modelStmt->fetch();
         if (!$catalogModel) throw new InvalidArgumentException('Tipe kendaraan tidak tersedia untuk merek yang dipilih.');
+        if (strtolower($colorInput) === 'lainnya') throw new InvalidArgumentException('Warna "Lainnya" tidak diperbolehkan. Pilih warna kendaraan yang sebenarnya.');
+        $colorStmt = $pdo->prepare("SELECT name FROM vehicle_colors WHERE is_active=1 AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
+        $colorStmt->execute([$colorInput]); $catalogColor = $colorStmt->fetch();
+        if (!$catalogColor) throw new InvalidArgumentException('Warna kendaraan tidak tersedia pada Master Kendaraan.');
         $vehicle = [
             'id' => generateId(), 'plate_number' => $plate, 'brand' => $catalogBrand['name'], 'model' => $catalogModel['name'],
             'brand_id' => $catalogBrand['id'], 'model_id' => $catalogModel['id'],
-            'year' => $year, 'color' => $colorInput,
+            'year' => $year, 'color' => $catalogColor['name'],
         ];
         $stmt = $pdo->prepare('INSERT INTO vehicles(id,plate_number,brand,model,brand_id,model_id,year,color,customer_id,customer_name,customer_code,phone,address,registration_date,notes,branch_id,first_seen_branch_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
         $stmt->execute([$vehicle['id'], $plate, $vehicle['brand'], $vehicle['model'], $vehicle['brand_id'], $vehicle['model_id'], $year, $vehicle['color'], $customer['id'], $customer['name'], $customer['customer_code'], $customer['phone'], $customer['address'] ?? '', $date, '', $branchId, $branchId]);
     } elseif ((string)$vehicle['customer_id'] !== (string)$customer['id']) {
         $pdo->prepare('UPDATE vehicles SET customer_id=?,customer_name=?,customer_code=?,phone=?,address=? WHERE id=?')->execute([$customer['id'], $customer['name'], $customer['customer_code'], $customer['phone'], $customer['address'] ?? '', $vehicle['id']]);
+    }
+    if (trim((string)($vehicle['color'] ?? '')) === '' || strtolower(trim((string)$vehicle['color'])) === 'lainnya') {
+        throw new InvalidArgumentException('Warna kendaraan belum jelas. Lengkapi warna sebenarnya pada Register Kendaraan sebelum membuat REGINV.');
     }
     assertNoActiveWorkOrder($pdo, (string)$vehicle['id']);
 

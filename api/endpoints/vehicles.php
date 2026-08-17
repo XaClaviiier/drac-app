@@ -32,6 +32,20 @@ $resolveVehicleCatalog = static function (PDO $pdo, array $data): array {
     return [$brand, $model, $generation, $engineCc];
 };
 
+$resolveVehicleColor = static function (PDO $pdo, array $data): array {
+    $colorInput = trim((string)($data['color'] ?? ''));
+    if ($colorInput === '' || strtolower($colorInput) === 'lainnya') {
+        throw new InvalidArgumentException('Warna kendaraan wajib dipilih secara jelas. Warna "Lainnya" tidak diperbolehkan.');
+    }
+    $stmt = $pdo->prepare("SELECT id,name,is_active FROM vehicle_colors WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
+    $stmt->execute([$colorInput]);
+    $color = $stmt->fetch();
+    if (!$color || !(bool)$color['is_active']) {
+        throw new InvalidArgumentException('Warna tidak tersedia pada Master Kendaraan. Tambahkan warna yang sebenarnya terlebih dahulu.');
+    }
+    return $color;
+};
+
 switch ($method) {
     case 'GET':
         $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
@@ -61,7 +75,7 @@ switch ($method) {
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
             respondError('Merek, model, dan warna wajib diisi.', 422);
         }
-        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); }
+        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); $color = $resolveVehicleColor($pdo, $d); }
         catch (InvalidArgumentException $e) { respondError($e->getMessage(), 422); }
         $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
         $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
@@ -79,7 +93,7 @@ switch ($method) {
             $d['id'] ?? generateId(),
             $plate, $brand['name'], $model['name'], $brand['id'], $model['id'],
             $generation['id']??null,$generation['name']??'',$engineCc,
-            $d['year'] ?? 0, $d['color'] ?? '',
+            $d['year'] ?? 0, $color['name'],
             $customer['id'], $customer['name'],
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
             $d['registrationDate'] ?? nowDate(),
@@ -103,7 +117,7 @@ switch ($method) {
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
             respondError('Merek, model, dan warna wajib diisi.', 422);
         }
-        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); }
+        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); $color = $resolveVehicleColor($pdo, $d); }
         catch (InvalidArgumentException $e) { respondError($e->getMessage(), 422); }
         $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
         $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
@@ -115,7 +129,7 @@ switch ($method) {
         $stmt->execute([
             $plate, $brand['name'], $model['name'], $brand['id'], $model['id'],
             $generation['id']??null,$generation['name']??'',$engineCc,
-            $d['year'] ?? 0, $d['color'] ?? '',
+            $d['year'] ?? 0, $color['name'],
             $customer['id'], $customer['name'],
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
             $d['notes'] ?? '', $branchId, $id

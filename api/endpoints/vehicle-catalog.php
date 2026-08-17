@@ -126,7 +126,7 @@ $universalBrandId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGN
 $itemBrandCodes=['Universal'=>'01','Toyota'=>'02','Daihatsu'=>'03','Honda'=>'04','Mitsubishi'=>'05','Suzuki'=>'06','Wuling'=>'07','Nissan'=>'08','Datsun'=>'09','Isuzu'=>'10','Mazda'=>'11','Ford'=>'12','Chevrolet'=>'13','Kia'=>'14','Hyundai'=>'15'];
 foreach($itemBrandCodes as $brandName=>$itemCode){$codeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) AND (item_code IS NULL OR item_code='')");$codeUpdate->execute([$itemCode,$brandName]);}
 $colorInsert = $pdo->prepare("INSERT IGNORE INTO vehicle_colors(id,name,is_active) VALUES(?,?,1)");
-foreach (['Hitam','Putih','Silver','Abu-abu','Merah','Biru','Cokelat','Hijau','Kuning','Oranye','Ungu','Emas','Lainnya'] as $colorName) {
+foreach (['Hitam','Putih','Silver','Abu-abu','Merah','Biru','Cokelat','Hijau','Kuning','Oranye','Ungu','Emas'] as $colorName) {
     $colorInsert->execute(['VC-' . substr(sha1(strtolower($colorName)), 0, 16), $colorName]);
 }
 

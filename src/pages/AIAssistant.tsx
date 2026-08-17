@@ -64,7 +64,7 @@ interface RegistrationDraft {
 }
 
 type VehicleCatalogResolution = {
-  status: 'checking' | 'ready' | 'missing_brand' | 'missing_model' | 'error';
+  status: 'checking' | 'ready' | 'missing_brand' | 'missing_model' | 'missing_color' | 'error';
   brandId?: string;
   brandName?: string;
   modelId?: string;
@@ -301,14 +301,16 @@ export default function AIAssistant() {
         const existingVehicle = data.vehicles.find(vehicle => normalizePlate(vehicle.plateNumber) === normalizePlate(String(pendingAction.plateNumber || '')));
         if (existingVehicle) {
           const normalized = canonicalVehicleInfo(existingVehicle.brand, existingVehicle.model, existingVehicle.year || undefined, existingVehicle.color || undefined);
+          const colorMissing = !normalizeCatalogTerm(existingVehicle.color) || normalizeCatalogTerm(existingVehicle.color) === 'lainnya';
           if (!cancelled) setPendingAction((current: any) => current ? {
             ...current,
             vehicleRefId: existingVehicle.id,
             vehicleInfo: normalized,
             vehicleCatalogResolution: {
-              status: 'ready', brandId: existingVehicle.brandId, brandName: existingVehicle.brand,
+              status: colorMissing ? 'missing_color' : 'ready', brandId: existingVehicle.brandId, brandName: existingVehicle.brand,
               modelId: existingVehicle.modelId, modelName: existingVehicle.model,
               year: existingVehicle.year || undefined, color: existingVehicle.color || undefined,
+              message: colorMissing ? 'Warna kendaraan lama belum jelas. Lengkapi melalui Register Kendaraan.' : undefined,
             } satisfies VehicleCatalogResolution,
           } : current);
           return;
@@ -355,6 +357,17 @@ export default function AIAssistant() {
             vehicleCatalogResolution: {
               status: 'missing_model', brandId: brand.id, brandName: brand.name,
               modelCandidate, year, color,
+            } satisfies VehicleCatalogResolution,
+          } : current);
+          return;
+        }
+        if (!color) {
+          if (!cancelled) setPendingAction((current: any) => current ? {
+            ...current,
+            vehicleCatalogResolution: {
+              status: 'missing_color', brandId: brand.id, brandName: brand.name,
+              modelId: model.id, modelName: model.name, year,
+              message: 'Warna kendaraan belum disebutkan atau belum tersedia di Master Kendaraan.',
             } satisfies VehicleCatalogResolution,
           } : current);
           return;
@@ -1383,6 +1396,9 @@ ${buildSmartContext(userMsgText)}`;
     let vehicle = data.vehicles.find(v =>
       v.plateNumber.replace(/\s/g, '').toUpperCase() === String(a.plateNumber || '').replace(/\s/g, '').toUpperCase()
     );
+    if (vehicle && (!normalizeCatalogTerm(vehicle.color) || normalizeCatalogTerm(vehicle.color) === 'lainnya')) {
+      throw new Error(`Warna kendaraan ${vehicle.plateNumber} belum jelas. Lengkapi warna sebenarnya pada Register Kendaraan sebelum membuat WO.`);
+    }
     if (!vehicle && a.plateNumber) {
       const vehicleText = String(a.vehicleInfo || '').trim();
       const normalizedVehicleText = vehicleText.toLocaleLowerCase('id-ID');
@@ -2616,6 +2632,13 @@ ${buildSmartContext(userMsgText)}`;
                         <button type="button" disabled={busy || !pendingAction.vehicleCatalogResolution.modelCandidate} onClick={() => void addPendingVehicleModel()} className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50">+ Tambahkan {pendingAction.vehicleCatalogResolution.modelCandidate} ke {pendingAction.vehicleCatalogResolution.brandName}</button>
                         <button type="button" onClick={() => { const corrected = window.prompt(`Perbaiki tipe untuk ${pendingAction.vehicleCatalogResolution.brandName}:`, pendingAction.vehicleCatalogResolution.modelCandidate || ''); if (corrected?.trim()) setPendingAction((current: any) => ({ ...current, vehicleInfo: canonicalVehicleInfo(pendingAction.vehicleCatalogResolution.brandName, corrected.trim(), pendingAction.vehicleCatalogResolution.year, pendingAction.vehicleCatalogResolution.color), vehicleCatalogResolution: undefined })); }} className="rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:border-amber-300">Perbaiki Tipe</button>
                       </div>
+                    </div>
+                  )}
+                  {pendingAction.vehicleCatalogResolution?.status === 'missing_color' && (
+                    <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
+                      <p className="font-semibold text-amber-200">Warna kendaraan belum jelas.</p>
+                      <p className="mt-1 text-xs text-amber-300">{pendingAction.vehicleCatalogResolution.message || 'Pilih atau tambahkan warna sebenarnya terlebih dahulu.'}</p>
+                      <button type="button" onClick={() => { const corrected = window.prompt('Tuliskan merek, tipe, tahun, dan warna kendaraan:', pendingAction.vehicleInfo); if (corrected?.trim()) setPendingAction((current: any) => ({ ...current, vehicleInfo: corrected.trim(), vehicleCatalogResolution: undefined })); }} className="mt-3 w-full rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:border-amber-300">Perbaiki Data Kendaraan</button>
                     </div>
                   )}
                   {pendingAction.vehicleCatalogResolution?.status === 'error' && <div className="my-3 rounded-lg border border-red-500/60 bg-red-950/40 p-3 text-red-200">Master Kendaraan gagal diperiksa: {pendingAction.vehicleCatalogResolution.message}</div>}

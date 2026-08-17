@@ -20,7 +20,7 @@ export const vehicleBrands = [...Object.keys(vehicleModels), 'Lainnya'];
 
 export const vehicleColors = [
   'Hitam', 'Putih', 'Silver', 'Abu-abu', 'Merah', 'Biru',
-  'Cokelat', 'Hijau', 'Kuning', 'Oranye', 'Ungu', 'Emas', 'Lainnya',
+  'Cokelat', 'Hijau', 'Kuning', 'Oranye', 'Ungu', 'Emas',
 ];
 
 export const vehicleYears = Array.from(

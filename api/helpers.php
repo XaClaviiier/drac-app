@@ -74,6 +74,10 @@ function resolveCustomerVehicle(PDO $pdo, string $customerRefId, string $vehicle
     $vehicleStmt->execute([$vehicleRefId]);
     $vehicle = $vehicleStmt->fetch();
     if (!$vehicle) throw new InvalidArgumentException('Data kendaraan tidak ditemukan.');
+    $vehicleColor = strtolower(trim((string)($vehicle['color'] ?? '')));
+    if ($vehicleColor === '' || $vehicleColor === 'lainnya') {
+        throw new InvalidArgumentException('Warna kendaraan belum jelas. Lengkapi warna sebenarnya pada Register Kendaraan sebelum membuat transaksi.');
+    }
     if ((string)$vehicle['customer_id'] !== (string)$customer['id']) {
         throw new InvalidArgumentException('Kendaraan yang dipilih bukan milik pelanggan tersebut.');
     }
@@ -572,6 +576,7 @@ function ensureApiSupportTables(PDO $pdo): void {
     }
     runProductionIntegrityRepair20260808($pdo);
     runProductionIntegrityRepair20260808StatusRestore($pdo);
+    runVehicleOtherColorCleanup20260817($pdo);
 }
 
 function getBearerToken(): string {
@@ -1165,6 +1170,79 @@ function runProductionIntegrityRepair20260808StatusRestore(PDO $pdo): void {
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('Production integrity status restore 20260808 failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Bersihkan pilihan warna semu "Lainnya" tanpa menghapus kendaraan, WO, atau
+ * faktur. Setiap baris disalin ke data_repair_snapshots sebelum diubah.
+ * Kendaraan lama dikosongkan warnanya agar wajib dilengkapi dengan warna nyata
+ * pada penyuntingan berikutnya.
+ */
+function runVehicleOtherColorCleanup20260817(PDO $pdo): void {
+    $repairKey = 'repair_20260817_remove_vehicle_color_lainnya_v1';
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
+            migration_key VARCHAR(100) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS data_repair_snapshots (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            repair_key VARCHAR(100) NOT NULL, entity_type VARCHAR(60) NOT NULL,
+            entity_id VARCHAR(100) NOT NULL, snapshot_json LONGTEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_repair_snapshot_key (repair_key),
+            INDEX idx_repair_snapshot_entity (entity_type, entity_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+        $check->execute([$repairKey]);
+        if ((int)$check->fetchColumn() > 0) return;
+
+        $pdo->beginTransaction();
+        $snapshotStmt = $pdo->prepare("INSERT INTO data_repair_snapshots
+            (repair_key,entity_type,entity_id,snapshot_json) VALUES(?,?,?,?)");
+        $snapshot = static function (string $type, string $id, array $row) use ($snapshotStmt, $repairKey): void {
+            $json = json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($json === false) throw new RuntimeException('Gagal membuat snapshot pembersihan warna kendaraan.');
+            $snapshotStmt->execute([$repairKey, $type, $id, $json]);
+        };
+
+        if ($pdo->query("SHOW TABLES LIKE 'vehicles'")->fetch()) {
+            $vehicles = $pdo->query("SELECT * FROM vehicles WHERE LOWER(TRIM(color))='lainnya' FOR UPDATE")->fetchAll();
+            $updateVehicle = $pdo->prepare("UPDATE vehicles SET color='', notes=CASE
+                WHEN notes LIKE '%[PERLU DILENGKAPI] Warna kendaraan%' THEN notes
+                WHEN TRIM(COALESCE(notes,''))='' THEN '[PERLU DILENGKAPI] Warna kendaraan belum diisi.'
+                ELSE CONCAT(notes, '\n[PERLU DILENGKAPI] Warna kendaraan belum diisi.') END WHERE id=?");
+            foreach ($vehicles as $vehicle) {
+                $snapshot('vehicle_before_other_color_cleanup', (string)$vehicle['id'], $vehicle);
+                $updateVehicle->execute([(string)$vehicle['id']]);
+            }
+        }
+
+        foreach (['work_orders' => 'work_order', 'sales_invoices' => 'sales_invoice'] as $table => $entityType) {
+            if (!$pdo->query("SHOW TABLES LIKE '{$table}'")->fetch()) continue;
+            $rows = $pdo->query("SELECT * FROM {$table} WHERE LOWER(vehicle_info) LIKE '%lainnya%' FOR UPDATE")->fetchAll();
+            $update = $pdo->prepare("UPDATE {$table} SET vehicle_info=? WHERE id=?");
+            foreach ($rows as $row) {
+                $oldInfo = (string)($row['vehicle_info'] ?? '');
+                $newInfo = trim((string)preg_replace('/\s*(?:-|–|—|\/)\s*Lainnya\b|\s*\(\s*Lainnya\s*\)/iu', '', $oldInfo));
+                $newInfo = preg_replace('/\s{2,}/u', ' ', $newInfo) ?? $newInfo;
+                if ($newInfo === $oldInfo) continue;
+                $snapshot($entityType . '_before_other_color_cleanup', (string)$row['id'], $row);
+                $update->execute([$newInfo, (string)$row['id']]);
+            }
+        }
+
+        if ($pdo->query("SHOW TABLES LIKE 'vehicle_colors'")->fetch()) {
+            $colors = $pdo->query("SELECT * FROM vehicle_colors WHERE LOWER(TRIM(name))='lainnya' FOR UPDATE")->fetchAll();
+            foreach ($colors as $color) $snapshot('vehicle_color_before_delete', (string)$color['id'], $color);
+            $pdo->exec("DELETE FROM vehicle_colors WHERE LOWER(TRIM(name))='lainnya'");
+        }
+
+        $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$repairKey]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Vehicle other color cleanup 20260817 failed: ' . $e->getMessage());
     }
 }
 
