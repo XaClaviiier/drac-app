@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -53,6 +54,7 @@ type AdjustmentDocument = {
 type AdjustmentDetail = AdjustmentDocument & {
   rows: Array<{
     id: string;
+    itemId: string;
     itemCode: string;
     itemName: string;
     warehouseName: string;
@@ -87,6 +89,7 @@ const parseCsv = (text: string) =>
     });
 
 export default function OpeningStockImport() {
+  const navigate = useNavigate();
   const { data, refreshData, currentUser, currentBranchId } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
   const [date, setDate] = useState(localDateKey());
@@ -1012,23 +1015,6 @@ export default function OpeningStockImport() {
       {selectedDocument && (
         <div className="px-1 pb-3">
           <div className="flex min-h-[calc(100vh-245px)] w-full flex-col overflow-hidden rounded-b border border-slate-300 bg-white shadow-sm">
-            <div className="flex items-center justify-between bg-[#123968] px-5 py-4 text-white">
-              <div>
-                <div className="text-xs text-blue-100">
-                  RINCIAN PENYESUAIAN STOK
-                </div>
-                <h3 className="text-lg font-semibold">
-                  {selectedDocument.adjustmentNumber}
-                </h3>
-              </div>
-              <button
-                onClick={() => closeDetailTab(selectedDocument.id)}
-                className="rounded p-1 hover:bg-white/10"
-                title="Tutup"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
             <div className="grid gap-3 border-b bg-[#eeeeee] px-5 py-4 text-sm sm:grid-cols-3">
               <div>
                 <span className="block text-xs text-slate-500">Tanggal</span>
@@ -1082,10 +1068,18 @@ export default function OpeningStockImport() {
                   {selectedDocument.rows.map((row, index) => (
                     <tr
                       key={row.id}
-                      className={`border-b ${index % 2 ? "bg-slate-50" : "bg-white"}`}
+                      onClick={() =>
+                        navigate(
+                          `/items?view=${encodeURIComponent(row.itemId)}`,
+                        )
+                      }
+                      title={`Buka detail ${row.itemName}`}
+                      className={`cursor-pointer border-b transition-colors hover:bg-blue-50 ${index % 2 ? "bg-slate-50" : "bg-white"}`}
                     >
                       <td className="px-3 py-2 font-medium text-blue-700">
-                        {row.itemCode}
+                        <button type="button" className="hover:underline">
+                          {row.itemCode}
+                        </button>
                       </td>
                       <td className="px-3 py-2">{row.itemName}</td>
                       <td className="px-3 py-2">{row.warehouseName}</td>
