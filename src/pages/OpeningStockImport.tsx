@@ -93,6 +93,7 @@ export default function OpeningStockImport() {
   const navigate = useNavigate();
   const { data, refreshData, currentUser, currentBranchId } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
+  const listImportRef = useRef<HTMLInputElement>(null);
   const [date, setDate] = useState(localDateKey());
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<PreviewRow[]>([]);
@@ -296,6 +297,15 @@ export default function OpeningStockImport() {
     } catch (error: any) {
       setMessage(error?.message || "File tidak dapat dibaca.");
     }
+  };
+
+  const importFromMainList = async (file?: File) => {
+    if (!file) return;
+    setSelectedDocument(null);
+    setEditingId("");
+    setViewMode("entry");
+    await loadFile(file);
+    if (listImportRef.current) listImportRef.current.value = "";
   };
 
   const submit = async (postImmediately: boolean) => {
@@ -898,6 +908,35 @@ export default function OpeningStockImport() {
                 >
                   <RefreshCw className="h-5 w-5" />
                 </button>
+                {isAdmin && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => listImportRef.current?.click()}
+                      title="Upload Excel/CSV"
+                      className="flex h-12 w-14 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"
+                    >
+                      <Upload className="h-5 w-5" />
+                    </button>
+                    <input
+                      ref={listImportRef}
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={(event) =>
+                        void importFromMainList(event.target.files?.[0])
+                      }
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={downloadTemplate}
+                      title="Unduh Template Import"
+                      className="flex h-12 w-14 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"
+                    >
+                      <Download className="h-5 w-5" />
+                    </button>
+                  </>
+                )}
               </div>
               <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
                 <table className="w-full text-[13px]">
