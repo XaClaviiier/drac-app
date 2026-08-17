@@ -1506,6 +1506,24 @@ export default function WorkOrders() {
     wo.diagnosisHp != null ? `HP ${wo.diagnosisHp} PSI` : '',
   ].filter(Boolean).join(' · ');
 
+  const openLinkedInvoice = (wo: WorkOrder) => {
+    const invoice = data.invoices.find(item =>
+      item.id === wo.invoiceId || item.woId === wo.id || item.invoiceNumber === wo.invoiceNumber
+    );
+    const target = invoice?.id || wo.invoiceId || wo.invoiceNumber;
+    if (!target) return window.alert('Faktur terkait belum ditemukan.');
+    window.location.assign(`/invoices?view=${encodeURIComponent(target)}`);
+  };
+
+  const openLinkedItem = (service: WorkOrderService) => {
+    const code = serviceItemCode(service).trim().toLowerCase();
+    const item = data.items.find(entry =>
+      entry.id === service.itemId || (!!code && entry.code.trim().toLowerCase() === code)
+    );
+    if (!item) return window.alert('Master Barang & Jasa untuk baris ini tidak ditemukan.');
+    window.location.assign(`/items?view=${encodeURIComponent(item.id)}`);
+  };
+
   const customerPhoneForWO = (wo: WorkOrder) => {
     const customer = data.customers.find(item =>
       item.id === wo.customerRefId
@@ -2420,10 +2438,15 @@ export default function WorkOrders() {
                 <span className="text-xs text-gray-500">Nomor: <strong className="font-mono text-gray-900">{detailWO.woNumber}</strong></span>
                 <span className="text-xs text-gray-500">Cabang: <strong className="text-gray-900">{data.branches.find(b => b.id === detailWO.branchId)?.name}</strong></span>
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
+                {(detailWO.invoiceId || detailWO.invoiceNumber) && (
+                  <button type="button" onClick={() => openLinkedInvoice(detailWO)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:underline" title="Buka faktur terkait">
+                    <FileText className="h-3.5 w-3.5" /> Faktur: {detailWO.invoiceNumber || 'Buka Faktur'}
+                  </button>
+                )}
               </div>
               <div className="hidden shrink-0 items-center gap-2 lg:flex">
-                <details data-wo-action-menu className={`group relative ${statusLabel(detailWO.status) === 'Lost Sales' ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                  <summary aria-disabled={statusLabel(detailWO.status) === 'Lost Sales'} tabIndex={statusLabel(detailWO.status) === 'Lost Sales' ? -1 : 0} className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Ambil <span className="text-xs">⌄</span></summary>
+                <details data-wo-action-menu className={`group relative ${statusLabel(detailWO.status) === 'Lost Sales' || detailWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                  <summary aria-disabled={statusLabel(detailWO.status) === 'Lost Sales' || Boolean(detailWO.invoiceId)} tabIndex={statusLabel(detailWO.status) === 'Lost Sales' || detailWO.invoiceId ? -1 : 0} className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Ambil <span className="text-xs">⌄</span></summary>
                   <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
                     <button type="button" onClick={() => takeServicesFromPreviousWO(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Layanan WO Sebelumnya</strong><span className="text-xs text-gray-500">Salin layanan kendaraan ini</span></button>
                     <button type="button" onClick={() => openFavoriteServicesForWO(detailWO)} className="block w-full border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Paket / Layanan Favorit</strong><span className="text-xs text-gray-500">Pilih dari quick service</span></button>
@@ -2435,7 +2458,7 @@ export default function WorkOrders() {
                     {detailWO.status === 'Register' && <><button type="button" disabled={!detailWO.services.length || detailWO.total <= 0} onClick={() => requestStatusChange(detailWO, 'Proses')} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 disabled:text-gray-300">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
                     {detailWO.status === 'Proses' && <><button type="button" onClick={() => openCompletionModal(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Tandai Selesai</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button></>}
                     {detailWO.status === 'Selesai' && !detailWO.invoiceId && <>{hasPermission('invoice:create') && detailWO.total > 0 && <button type="button" onClick={() => handleOpenInvoiceModal(detailWO)} className="block w-full px-3 py-2 text-left text-sm font-medium text-emerald-700 hover:bg-emerald-50">Buat Faktur</button>}<button type="button" onClick={() => void handleReopenCompletedWorkOrder(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-orange-700 hover:bg-orange-50">Kembali ke Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
-                    {detailWO.invoiceId && <><button type="button" onClick={() => window.alert(`Faktur ${detailWO.invoiceNumber || ''} sudah terhubung ke WO ini.`)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Lihat Faktur</button><button type="button" onClick={() => window.alert('Lanjutkan penerimaan pembayaran melalui menu Pembayaran/Faktur Penjualan.')} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Proses Pembayaran</button></>}
+                    {detailWO.invoiceId && <><button type="button" onClick={() => openLinkedInvoice(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Lihat Faktur</button><button type="button" onClick={() => window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(detailWO.invoiceId || '')}`)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Proses Pembayaran</button></>}
                     {detailWO.status === 'Closed' && <button type="button" onClick={() => setLostSalesFollowUp(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                   </div>
                 </details>
@@ -2468,7 +2491,7 @@ export default function WorkOrders() {
                 <div className="divide-y divide-gray-100 sm:hidden">
                   {detailWO.services.filter(service => !isPackageMemberService(service)).map(service => (
                     <div key={service.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                      <span><strong>{serviceReceiptName(service)}</strong> <span className="text-gray-500">×{service.qty}</span></span>
+                      <button type="button" onClick={() => openLinkedItem(service)} className="min-w-0 text-left text-blue-700 hover:underline"><strong>{serviceReceiptName(service)}</strong> <span className="text-gray-500">×{service.qty}</span></button>
                       <span className="font-medium">Rp {(service.price * service.qty).toLocaleString('id-ID')}</span>
                     </div>
                   ))}
@@ -2479,16 +2502,16 @@ export default function WorkOrders() {
                     {detailWO.services.length > 0 ? detailWO.services.map((service, index) => {
                       if (isPackageMemberService(service)) return null;
                       const members = isPackageHeaderService(service) ? packageMembersAfterService(detailWO.services, index) : [];
-                      return <tr key={service.id} className={members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}><td className="px-3 py-2.5 text-center text-xs text-gray-400">{detailWO.services.slice(0, index).filter(row => !isPackageMemberService(row)).length + 1}</td><td className="px-3 py-2.5"><strong className="text-gray-900">{serviceReceiptName(service)}</strong><p className="font-mono text-[10px] text-gray-400">{serviceItemCode(service)}</p>{members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</p>)}</div>}</td><td className="px-3 py-2.5 font-mono text-xs text-gray-600">{serviceBarcodeOrCode(service)}</td><td className="px-3 py-2.5 text-center">{service.qty}</td><td className="px-3 py-2.5 text-right">Rp {service.price.toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-right font-semibold">Rp {(service.price * service.qty).toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-center">{hasPermission('wo:edit') && detailWO.status !== 'Closed' && !detailWO.invoiceId && <button type="button" onClick={() => handleOpenModal(detailWO, true)} className="rounded p-1.5 text-blue-600 hover:bg-blue-50" title="Edit layanan"><Edit className="h-4 w-4" /></button>}</td></tr>;
+                      return <tr key={service.id} className={members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}><td className="px-3 py-2.5 text-center text-xs text-gray-400">{detailWO.services.slice(0, index).filter(row => !isPackageMemberService(row)).length + 1}</td><td className="px-3 py-2.5"><button type="button" onClick={() => openLinkedItem(service)} className="block max-w-full text-left hover:underline"><strong className="text-blue-700">{serviceReceiptName(service)}</strong><span className="block font-mono text-[10px] text-blue-500">{serviceItemCode(service)}</span></button>{members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <button type="button" key={member.id} onClick={() => openLinkedItem(member)} className="block max-w-full text-left hover:underline"><span className="font-mono text-purple-500">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</button>)}</div>}</td><td className="px-3 py-2.5 font-mono text-xs text-gray-600"><button type="button" onClick={() => openLinkedItem(service)} className="hover:text-blue-700 hover:underline">{serviceBarcodeOrCode(service)}</button></td><td className="px-3 py-2.5 text-center">{service.qty}</td><td className="px-3 py-2.5 text-right">Rp {service.price.toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-right font-semibold">Rp {(service.price * service.qty).toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-center">{hasPermission('wo:edit') && detailWO.status !== 'Closed' && !detailWO.invoiceId && <button type="button" onClick={() => handleOpenModal(detailWO, true)} className="rounded p-1.5 text-blue-600 hover:bg-blue-50" title="Edit layanan"><Edit className="h-4 w-4" /></button>}</td></tr>;
                     }) : <tr><td colSpan={7} className="h-40 text-center text-sm text-gray-400">Belum ada layanan atau barang.</td></tr>}
                   </tbody>
                 </table></div>
               </div>
-              {(detailWO.findings || diagnosisMeasurementLabel(detailWO)) && (
+              {(statusLabel(detailWO.status) === 'Selesai' || detailWO.findings || diagnosisMeasurementLabel(detailWO)) && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
-                  <h4 className="font-semibold text-cyan-900">Hasil Diagnosa</h4>
+                  <h4 className="font-semibold text-cyan-900">Keterangan Hasil Kerja</h4>
                   {diagnosisMeasurementLabel(detailWO) && <p className="mt-2 text-sm font-semibold text-cyan-800">{diagnosisMeasurementLabel(detailWO)}</p>}
-                  {detailWO.findings && <p className="mt-2 whitespace-pre-wrap text-sm text-cyan-900">{detailWO.findings}</p>}
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-cyan-900">{detailWO.findings?.trim() || 'Belum ada keterangan hasil kerja.'}</p>
                 </div>
               )}
               <div className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(360px,460px)]">
@@ -2619,8 +2642,8 @@ export default function WorkOrders() {
                   <span>Cabang: <strong className="text-gray-900">{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || 'Pilih cabang'}</strong></span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {editingWO && <details data-wo-action-menu className={`group relative ${statusLabel(editingWO.status) === 'Lost Sales' ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                    <summary aria-disabled={statusLabel(editingWO.status) === 'Lost Sales'} tabIndex={statusLabel(editingWO.status) === 'Lost Sales' ? -1 : 0} className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                  {editingWO && <details data-wo-action-menu className={`group relative ${statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                    <summary aria-disabled={statusLabel(editingWO.status) === 'Lost Sales' || Boolean(editingWO.invoiceId)} tabIndex={statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? -1 : 0} className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
                       Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
                     </summary>
                     <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
