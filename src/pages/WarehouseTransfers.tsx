@@ -1,5 +1,5 @@
 import { useEffect,useMemo,useState } from 'react';
-import { ArrowLeftRight,Check,Package,Plus,Search,X } from 'lucide-react';
+import { Check,Package,Plus,Search,X } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import { useApp } from '../context/AppContext';
 import { localDateKey } from '../lib/date';

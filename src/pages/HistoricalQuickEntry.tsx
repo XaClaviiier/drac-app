@@ -30,7 +30,7 @@ const parseMoney = (value:unknown) => {
 
 export default function HistoricalQuickEntry(){
   const { data, currentBranchId, setCurrentBranchId, currentUser, refreshData } = useApp();
-  const allowedBranches = data.branches.filter(b => b.isActive && (currentUser?.isOwner || currentUser?.permissions?.includes('branch:all') || currentUser?.branchIds?.includes(b.id) || currentUser?.branchId===b.id));
+  const allowedBranches = data.branches.filter(b => b.isActive && (currentUser?.isOwner || currentUser?.permissions?.includes('all_branches') || currentUser?.branchIds?.includes(b.id) || currentUser?.branchId===b.id));
   const [mode,setMode]=useState<'text'|'form'>('text');
   const [branchId,setBranchId]=useState(currentBranchId==='ALL' ? (allowedBranches[0]?.id||'') : currentBranchId);
   const [date,setDate]=useState(today()); const [customer,setCustomer]=useState<Customer|null>(null); const [vehicle,setVehicle]=useState<Vehicle|null>(null);
@@ -89,14 +89,6 @@ export default function HistoricalQuickEntry(){
     fixedListInitialized.current=true;
     setLines(current=>mergeWithFixedServices(current));
   },[data.items]);
-  const toggleTemplate=(template:ReceiptTemplate,checked:boolean)=>{
-    const current=templateLine(template);
-    if(current){setLines(rows=>rows.map(row=>row.item.id===current.item.id?{...row,selected:checked}:row));return;}
-    if(!checked)return;
-    const candidate=templateCandidates(template)[0];
-    if(!candidate){setMessage(`${template.label} belum dipetakan ke master Barang/Jasa. Pilih pemetaan pada daftar nota.`);return;}
-    setLines(rows=>rows.concat({item:candidate,qty:1,price:candidate.sellingPrice,selected:true}));
-  };
   const mapTemplate=(template:ReceiptTemplate,itemId:string)=>{
     const current=templateLine(template);
     const selected=current?.selected??true;
@@ -153,7 +145,7 @@ export default function HistoricalQuickEntry(){
       foundCustomer=findCustomer(customerName,phone);
       foundVehicle=findVehicle(plate);
       if(pipes[7])setDescription(pipes[7].replace(/\s+/g,' ').trim());
-      if(pipes[8])pipes[8].split(';').map(parseItem).filter((x):x is Line=>!!x).forEach(x=>parsed.push(x));
+      if(pipes[8])pipes[8].split(';').map(value=>parseItem(value)).filter((x):x is Line=>!!x).forEach(x=>parsed.push(x));
     }
 
     // Format alternatif: Tanggal: ..., Pelanggan: ..., Item: ...
@@ -163,7 +155,7 @@ export default function HistoricalQuickEntry(){
       if(/tanggal/i.test(label)){const d=parseDate(value);if(d)setDate(d);}
       else if(/pelanggan/i.test(label)){foundCustomer=findCustomer(value);setCustomerQuery(value);}
       else if(/kendaraan|plat|nopol/i.test(label)){foundVehicle=findVehicle(value);setVehicleQuery(value);}
-      else if(/item|layanan|barang/i.test(label)){value.split(';').map(parseItem).filter((x):x is Line=>!!x).forEach(x=>parsed.push(x));}
+      else if(/item|layanan|barang/i.test(label)){value.split(';').map(itemValue=>parseItem(itemValue)).filter((x):x is Line=>!!x).forEach(x=>parsed.push(x));}
       else if(/keluhan|keterangan/i.test(label))setDescription(value);
     }
     if(foundVehicle&&!foundCustomer)foundCustomer=data.customers.find(c=>c.id===foundVehicle!.customerRefId);
@@ -207,7 +199,9 @@ export default function HistoricalQuickEntry(){
     if(matchedCustomer)chooseCustomer(matchedCustomer); else setCustomer(null);
     if(matchedVehicle){setVehicle(matchedVehicle);setVehicleQuery(`${matchedVehicle.plateNumber} • ${matchedVehicle.brand} ${matchedVehicle.model}`);}else setVehicle(null);
     setDescription(r.complaint||'Transaksi historis');
-    const receiptLines=(Array.isArray(r.items)?r.items:[]).map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${parseMoney(x.price)}`,x.checked!==false)).filter((x:any):x is Line=>!!x);
+    const receiptLines:Line[]=(Array.isArray(r.items)?r.items:[])
+      .map((x:any)=>parseItem(`${x.name||''} x${Number(x.qty)||1} @${parseMoney(x.price)}`,x.checked!==false))
+      .filter((line:Line|null):line is Line=>line!==null);
     const ocrTotal=parseMoney(r.total);
     const detailedTotal=receiptLines.filter(line=>line.selected).reduce((sum,line)=>sum+line.qty*line.price,0);
     if(ocrTotal>0&&receiptLines.length&&detailedTotal!==ocrTotal){

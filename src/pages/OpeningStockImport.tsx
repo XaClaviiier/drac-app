@@ -8,7 +8,6 @@ import {
   FileText,
   FileSpreadsheet,
   Filter,
-  Info,
   List,
   Lightbulb,
   MoreHorizontal,

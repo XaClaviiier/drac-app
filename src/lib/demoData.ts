@@ -166,7 +166,7 @@ export const demoData: AppData = {
       id: '1', receiptNumber: 'GR-P-2026-0001', date: '2026-06-15',
       supplierId: '1', supplierName: 'PT WURTH INDONESIA', doNumber: 'DO-W/2026/0145',
       items: [{ id: '1', itemId: '1', itemCode: 'BF-1055', itemName: 'AC CLEANER WURTH', qty: 10, unit: 'CAN', qtyInvoiced: 0 }],
-      status: 'Diterima', notes: '', branchId: 'BR-001', receivedBy: 'ADMIN UTAMA', createdAt: '2026-06-15',
+      status: 'Diterima', notes: '', branchId: 'BR-001', warehouseId: 'WH-001', receivedBy: 'ADMIN UTAMA', createdAt: '2026-06-15',
     },
   ],
   purchaseInvoices: [],

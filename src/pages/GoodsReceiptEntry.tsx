@@ -2,11 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText, Lightbulb, List, MoreHorizontal, Package, Paperclip, Save, Search, Settings, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import type { GoodsReceipt, GoodsReceiptItem } from '../types';
+import type { GoodsReceiptItem } from '../types';
 import { localDateKey } from '../lib/date';
 import ItemSearchOption from '../components/ItemSearchOption';
 
 const deliveryOptions=['Diantar Langsung','Grab','Gojek','Ekspedisi','Diambil Sendiri','Lainnya'];
+
+type ReceiptEntryForm = {
+ date:string;doNumber:string;warehouseId:string;supplierId:string;deliveryMethod:string;
+ deliveryOther:string;shippingNotes:string;notes:string;receivedById:string;items:GoodsReceiptItem[];
+};
 
 export default function GoodsReceiptEntry(){
  const navigate=useNavigate();
@@ -14,7 +19,7 @@ export default function GoodsReceiptEntry(){
  const branchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
  const warehouses=data.warehouses.filter(w=>w.branchId===branchId&&w.isActive&&!w.isSystem);const defaultWarehouse=warehouses.find(w=>w.isDefault)||warehouses[0];
  const draftKey=`goods-receipt-draft:${currentUser?.id||currentUser?.username||'user'}:${branchId}`;
- const[form,setForm]=useState(()=>{const blank={date:localDateKey(),doNumber:'',warehouseId:defaultWarehouse?.id||'',supplierId:'',deliveryMethod:'Diantar Langsung',deliveryOther:'',shippingNotes:'',notes:'',receivedById:currentUser?.id||'',items:[] as GoodsReceiptItem[]};try{const saved=localStorage.getItem(draftKey);const restored=saved?{...blank,...JSON.parse(saved)}:blank;return restored.deliveryMethod==='Diantar Supplier'?{...restored,deliveryMethod:'Diantar Langsung'}:restored}catch{return blank}});
+ const[form,setForm]=useState<ReceiptEntryForm>(()=>{const blank:ReceiptEntryForm={date:localDateKey(),doNumber:'',warehouseId:defaultWarehouse?.id||'',supplierId:'',deliveryMethod:'Diantar Langsung',deliveryOther:'',shippingNotes:'',notes:'',receivedById:currentUser?.id||'',items:[]};try{const saved=localStorage.getItem(draftKey);const restored:ReceiptEntryForm=saved?{...blank,...JSON.parse(saved)}:blank;return restored.deliveryMethod==='Diantar Supplier'?{...restored,deliveryMethod:'Diantar Langsung'}:restored}catch{return blank}});
  useEffect(()=>{try{localStorage.setItem(draftKey,JSON.stringify(form))}catch{/* penyimpanan draft tidak tersedia */}},[draftKey,form]);
  const closeEntry=()=>{localStorage.removeItem(draftKey);navigate('/receipts')};
  const[search,setSearch]=useState('');const[showPicker,setShowPicker]=useState(false);const[showQuick,setShowQuick]=useState(false);const[saving,setSaving]=useState(false);const[selectedLineId,setSelectedLineId]=useState('');const[detailTab,setDetailTab]=useState<'detail'|'info'>('detail');const[quick,setQuick]=useState({name:'',categoryId:'',unit:'PCS',barcode:''});const[openRailMenu,setOpenRailMenu]=useState<'document'|'more'|''>('');const attachmentRef=useRef<HTMLInputElement>(null);

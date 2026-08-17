@@ -3347,7 +3347,7 @@ export default function WorkOrders() {
                         setFormData(previous => ({ ...previous, technicianId: event.target.value, technicianName: technician?.name || '' }));
                       }} className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-xs font-normal outline-none focus:border-blue-500">
                         <option value="">Pilih teknisi</option>
-                        {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO.branchId) || user.branchId === editingWO.branchId)).map(user => (
+                        {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO?.branchId || '') || user.branchId === editingWO?.branchId)).map(user => (
                           <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
                         ))}
                       </select>

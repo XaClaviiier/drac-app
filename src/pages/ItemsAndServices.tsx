@@ -21,10 +21,6 @@ const twoDigitSegment = (value: string, fallback: string) => {
   return code.padEnd(2, 'X');
 };
 
-const brandSegment = (brand: string, type: ItemType) => twoDigitSegment(
-  brand,
-  type === 'Jasa' ? 'JS' : type === 'Group' ? 'GP' : type === 'Non Persediaan' ? 'NP' : 'NA'
-);
 const formatNumericInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parseNumericInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
@@ -105,7 +101,6 @@ export default function ItemsAndServices() {
     deleteItem,
     addItemCategory,
     updateItemCategory,
-    deleteItemCategory,
     currentBranchId,
     resolveBranchId,
     hasPermission,
@@ -309,7 +304,7 @@ export default function ItemsAndServices() {
     });
   }, [data.items, editingItem, memberSearch]);
 
-  const nextItemCode = (type: ItemType, categoryId = itemForm.categoryId) => {
+  const nextItemCode = (categoryId = itemForm.categoryId) => {
     const category = data.itemCategories.find(item => item.id === categoryId);
     const categoryCode = twoDigitSegment(category?.code || category?.name || '', '00');
     const selectedBrand=vehicleBrands.find(brand=>brand.id===itemForm.vehicleBrandId)||vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal');
@@ -443,7 +438,7 @@ export default function ItemsAndServices() {
   const saveItem = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const code = editingItem?.code || nextItemCode(itemForm.type);
+    const code = editingItem?.code || nextItemCode();
     const name = itemForm.name.trim().toUpperCase();
 
     if (!code || !name) {
@@ -1000,23 +995,6 @@ export default function ItemsAndServices() {
     }, 3000);
   };
 
-  const removeCategory = (category: ItemCategory) => {
-    const usedItems = data.items.filter((item) => item.categoryId === category.id);
-    if (usedItems.length > 0) {
-      const names = usedItems.slice(0, 5).map(i => `• ${i.code} - ${i.name}`).join('\n');
-      window.alert(
-        `Kategori "${category.name}" tidak bisa dihapus.\n\n` +
-        `Masih dipakai oleh ${usedItems.length} barang/jasa:\n${names}` +
-        (usedItems.length > 5 ? `\n… dan ${usedItems.length - 5} lainnya` : '') +
-        `\n\nPindahkan item ke kategori lain terlebih dahulu.`
-      );
-      return;
-    }
-    if (window.confirm(`Hapus kategori "${category.name}" (${category.code})?`)) {
-      deleteItemCategory(category.id);
-    }
-  };
-
   const toggleGroup = (id: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -1367,7 +1345,7 @@ export default function ItemsAndServices() {
                         {allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}
                       </select>
                       <label>Kode Barang <span className="text-red-600">*</span></label>
-                      <input readOnly value={editingItem ? itemForm.code : nextItemCode(itemForm.type)} className="h-9 rounded border border-slate-300 bg-slate-100 px-3 font-mono font-semibold uppercase text-blue-700" />
+                      <input readOnly value={editingItem ? itemForm.code : nextItemCode()} className="h-9 rounded border border-slate-300 bg-slate-100 px-3 font-mono font-semibold uppercase text-blue-700" />
                       <label>UPC/Barcode</label>
                       <input disabled={itemForm.type === 'Jasa' || itemForm.type === 'Group'} value={itemForm.barcode} onChange={(e) => setItemForm({ ...itemForm, barcode: e.target.value.trim() })} placeholder="Scan atau ketik barcode" className="h-9 rounded border border-slate-300 bg-white px-3 font-mono outline-none disabled:bg-slate-100" />
                       <label>Satuan <span className="text-red-600">*</span></label>
@@ -1442,7 +1420,7 @@ export default function ItemsAndServices() {
               {false && <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Kode Barang/Jasa *</label>
-                  <input readOnly value={editingItem ? itemForm.code : nextItemCode(itemForm.type)} className="w-full rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 font-mono font-semibold uppercase text-blue-700" />
+                  <input readOnly value={editingItem ? itemForm.code : nextItemCode()} className="w-full rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 font-mono font-semibold uppercase text-blue-700" />
                   <p className="mt-1 text-xs text-gray-500">Otomatis: kategori 2 digit + merek 2 digit + urutan 4 digit.</p>
                 </div>
                 <div>
