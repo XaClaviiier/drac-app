@@ -72,6 +72,7 @@ export default function CustomerPayments() {
     [showForm, setShowForm] = useState(false),
     [invoiceSearch, setInvoiceSearch] = useState("");
   const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
+  const [viewingPayment, setViewingPayment] = useState<PaymentRow | null>(null);
   const [period, setPeriod] = useState<Period>("this_month"),
     [dateFrom, setDateFrom] = useState(""),
     [dateTo, setDateTo] = useState("");
@@ -107,6 +108,19 @@ export default function CustomerPayments() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    const requestedPayment = searchParams.get("view");
+    if (!requestedPayment || !rows.length) return;
+    const selected = rows.find((row) => row.id === requestedPayment || row.paymentNumber === requestedPayment);
+    if (selected) setViewingPayment(selected);
+    else window.alert("Pembayaran tidak ditemukan atau tidak dapat diakses.");
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      next.delete("view");
+      return next;
+    }, { replace: true });
+  }, [searchParams, rows, setSearchParams]);
 
   const unpaid = data.invoices.filter(
     (i) =>
@@ -482,7 +496,7 @@ export default function CustomerPayments() {
                   {displayDate(r.date)}
                 </td>
                 <td className="whitespace-nowrap px-3 font-semibold text-blue-700">
-                  {r.paymentNumber}
+                  <button type="button" onClick={() => setViewingPayment(r)} className="hover:underline" title="Buka detail pembayaran">{r.paymentNumber}</button>
                 </td>
                 <td className="px-3">{r.invoiceNumber}</td>
                 <td className="px-3">
@@ -565,7 +579,7 @@ export default function CustomerPayments() {
           >
             <div className="flex justify-between gap-2">
               <div>
-                <b className="text-blue-700">{r.paymentNumber}</b>
+                <button type="button" onClick={() => setViewingPayment(r)} className="font-bold text-blue-700 hover:underline">{r.paymentNumber}</button>
                 <p className="text-xs text-gray-500">
                   {displayDate(r.date)} · {r.invoiceNumber}
                 </p>
@@ -632,6 +646,32 @@ export default function CustomerPayments() {
           </div>
         )}
       </div>
+
+      {viewingPayment && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3" role="dialog" aria-modal="true" aria-label={`Detail pembayaran ${viewingPayment.paymentNumber}`}>
+          <section className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <header className="flex items-center justify-between bg-blue-900 px-5 py-4 text-white">
+              <div><p className="text-xs text-blue-200">DETAIL PEMBAYARAN</p><h3 className="font-mono text-lg font-bold">{viewingPayment.paymentNumber}</h3></div>
+              <button type="button" onClick={() => setViewingPayment(null)} className="rounded p-2 hover:bg-white/10" aria-label="Tutup"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="grid gap-x-6 gap-y-4 p-5 text-sm sm:grid-cols-2">
+              <div><span className="text-gray-500">Faktur</span><button type="button" onClick={() => window.location.assign(`/invoices?view=${encodeURIComponent(viewingPayment.invoiceId)}`)} className="block font-semibold text-blue-700 hover:underline">{viewingPayment.invoiceNumber}</button></div>
+              <div><span className="text-gray-500">Tanggal</span><strong className="block">{displayDate(viewingPayment.date)}</strong></div>
+              <div><span className="text-gray-500">Pelanggan</span><strong className="block">{viewingPayment.customerName}</strong><small className="text-gray-500">{viewingPayment.vehicleInfo}</small></div>
+              <div><span className="text-gray-500">Nominal Pembayaran</span><strong className="block text-lg text-emerald-700">{rupiah(viewingPayment.amount)}</strong></div>
+              <div><span className="text-gray-500">Metode</span><strong className="block">{viewingPayment.paymentMethod}</strong></div>
+              <div><span className="text-gray-500">Masuk ke</span><strong className="block">{viewingPayment.accountName || "-"}</strong></div>
+              <div><span className="text-gray-500">Saldo Faktur Setelah Pembayaran</span><strong className={`block ${viewingPayment.balanceAfter > 0 ? "text-amber-700" : "text-emerald-700"}`}>{rupiah(viewingPayment.balanceAfter)} · {viewingPayment.paymentStatus}</strong></div>
+              <div><span className="text-gray-500">Input Oleh</span><strong className="block">{viewingPayment.createdByName || "-"}</strong></div>
+              {viewingPayment.notes && <div className="sm:col-span-2"><span className="text-gray-500">Keterangan</span><p className="mt-1 rounded border border-gray-200 bg-gray-50 p-3">{viewingPayment.notes}</p></div>}
+            </div>
+            <footer className="flex justify-end gap-2 border-t bg-gray-50 px-5 py-3">
+              {hasPermission("payment:edit") && <button type="button" disabled={viewingPayment.isDeposited} onClick={() => { const selected = viewingPayment; setViewingPayment(null); openEdit(selected); }} className="rounded border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400">Edit</button>}
+              <button type="button" onClick={() => setViewingPayment(null)} className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Tutup</button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
