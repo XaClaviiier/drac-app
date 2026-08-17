@@ -58,6 +58,13 @@ const formatBusinessDate = (value?: string) => {
   const parsed = new Date(`${value.slice(0, 10)}T12:00:00`);
   return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(parsed);
 };
+const formatPlateNumber = (value?: string) => {
+  const normalized = String(value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (!normalized) return '-';
+  const match = normalized.match(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/);
+  if (!match) return String(value || '').trim().toUpperCase();
+  return [match[1], match[2], match[3]].filter(Boolean).join(' ');
+};
 
 type WorkOrderColumnKey = 'number' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'createdBy' | 'actions';
 const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
@@ -2032,7 +2039,7 @@ export default function WorkOrders() {
                       <span className="mt-0.5 block text-xs text-gray-500">{customerPhoneForWO(wo)}</span>
                     </td>}
                     {isColumnVisible('vehicle') && <td className="px-4 py-3">
-                      <span className="block font-mono text-sm font-bold text-gray-900">{wo.plateNumber}</span>
+                      <span className="block font-mono text-sm font-bold text-gray-900">{formatPlateNumber(wo.plateNumber)}</span>
                       <span className="mt-0.5 block max-w-[210px] truncate text-xs text-gray-500">{wo.vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span>
                     </td>}
                     {isColumnVisible('services') && <td className="px-4 py-3">
@@ -2053,7 +2060,6 @@ export default function WorkOrders() {
                       <span className="block max-w-[170px] truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
                         {wo.createdByName || '—'}
                       </span>
-                      {wo.createdBy && <span className="mt-0.5 block text-[11px] text-gray-500">ID: {wo.createdBy}</span>}
                     </td>}
                     {isColumnVisible('actions') && <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -2124,7 +2130,7 @@ export default function WorkOrders() {
                     {formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
                   </span>
                 </div>
-                <p className="mt-1 truncate text-sm font-semibold text-gray-900">{wo.plateNumber} — {wo.vehicleInfo}</p>
+                <p className="mt-1 truncate text-sm font-semibold text-gray-900">{formatPlateNumber(wo.plateNumber)} — {wo.vehicleInfo}</p>
                 <p className="mt-0.5 truncate text-xs text-gray-600">{wo.customerName} — {customerPhoneForWO(wo) || '-'}</p>
                 {wo.description && <p className="mt-1 line-clamp-2 text-xs text-gray-600"><span className="font-semibold text-gray-700">Keluhan:</span> {wo.description}</p>}
                 <p className="mt-1 truncate text-xs text-gray-500">
@@ -2416,8 +2422,8 @@ export default function WorkOrders() {
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
               </div>
               <div className="hidden shrink-0 items-center gap-2 lg:flex">
-                <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                  <summary className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Ambil <span className="text-xs">⌄</span></summary>
+                <details data-wo-action-menu className={`group relative ${statusLabel(detailWO.status) === 'Lost Sales' ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                  <summary aria-disabled={statusLabel(detailWO.status) === 'Lost Sales'} tabIndex={statusLabel(detailWO.status) === 'Lost Sales' ? -1 : 0} className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Ambil <span className="text-xs">⌄</span></summary>
                   <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
                     <button type="button" onClick={() => takeServicesFromPreviousWO(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Layanan WO Sebelumnya</strong><span className="text-xs text-gray-500">Salin layanan kendaraan ini</span></button>
                     <button type="button" onClick={() => openFavoriteServicesForWO(detailWO)} className="block w-full border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Paket / Layanan Favorit</strong><span className="text-xs text-gray-500">Pilih dari quick service</span></button>
@@ -2433,7 +2439,7 @@ export default function WorkOrders() {
                     {detailWO.status === 'Closed' && <button type="button" onClick={() => setLostSalesFollowUp(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                   </div>
                 </details>
-                <button type="button" disabled={Boolean(detailWO.invoiceId) || detailWO.status === 'Closed' || !hasPermission('wo:edit')} onClick={() => handleOpenModal(detailWO, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"><Save className="h-4 w-4" /> Simpan</button>
+                <button type="button" disabled={Boolean(detailWO.invoiceId) || statusLabel(detailWO.status) === 'Lost Sales' || !hasPermission('wo:edit')} onClick={() => handleOpenModal(detailWO, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4" /> Simpan</button>
                 <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Tutup tab WO"><X className="h-5 w-5" /></button>
               </div>
               <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden" title="Tutup tab WO"><X className="h-5 w-5" /></button>
@@ -2613,8 +2619,8 @@ export default function WorkOrders() {
                   <span>Cabang: <strong className="text-gray-900">{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || 'Pilih cabang'}</strong></span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {editingWO && <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                  {editingWO && <details data-wo-action-menu className={`group relative ${statusLabel(editingWO.status) === 'Lost Sales' ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                    <summary aria-disabled={statusLabel(editingWO.status) === 'Lost Sales'} tabIndex={statusLabel(editingWO.status) === 'Lost Sales' ? -1 : 0} className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
                       Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
                     </summary>
                     <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
@@ -2670,7 +2676,7 @@ export default function WorkOrders() {
                     type="submit"
                     onClick={() => { diagnosisSubmitAction.current = 'save'; }}
                     className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                    disabled={!editingWO ? (!newWOReadyForRegister || isAutoRegistering) : false}
+                    disabled={editingWO ? statusLabel(editingWO.status) === 'Lost Sales' : (!newWOReadyForRegister || isAutoRegistering)}
                   >
                     {editingWO ? <Save className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                     {editingWO ? 'Simpan' : isAutoRegistering ? 'Meregister...' : 'Register'}
