@@ -2032,8 +2032,8 @@ export default function WorkOrders() {
                       <span className="mt-0.5 block text-xs text-gray-500">{customerPhoneForWO(wo)}</span>
                     </td>}
                     {isColumnVisible('vehicle') && <td className="px-4 py-3">
-                      <span className="block max-w-[210px] truncate text-sm text-gray-900">{wo.vehicleInfo}</span>
-                      <span className="block text-xs font-semibold text-gray-500">{wo.plateNumber}</span>
+                      <span className="block font-mono text-sm font-bold text-gray-900">{wo.plateNumber}</span>
+                      <span className="mt-0.5 block max-w-[210px] truncate text-xs text-gray-500">{wo.vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span>
                     </td>}
                     {isColumnVisible('services') && <td className="px-4 py-3">
                       <span className="block max-w-[230px] truncate text-sm text-gray-800">
@@ -2041,7 +2041,7 @@ export default function WorkOrders() {
                       </span>
                       <span className="block text-xs text-gray-500">{wo.services.length} item layanan</span>
                     </td>}
-                    {isColumnVisible('total') && <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-bold text-gray-900">
+                    {isColumnVisible('total') && <td className={`whitespace-nowrap px-4 py-3 text-right text-sm font-bold ${statusLabel(wo.status) === 'Lost Sales' ? 'text-gray-400' : 'text-gray-900'}`}>
                       Rp {wo.total.toLocaleString('id-ID')}
                     </td>}
                     {isColumnVisible('status') && <td className="px-4 py-3 text-center">
