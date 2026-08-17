@@ -30,6 +30,7 @@ import { useApp } from "../context/AppContext";
 import { api } from "../lib/apiClient";
 import { localDateKey } from "../lib/date";
 import ItemSearchOption from "../components/ItemSearchOption";
+import { childTabClass, ui } from "../components/ui/interfaceStandards";
 
 type PreviewRow = {
   row: number;
@@ -493,14 +494,14 @@ export default function OpeningStockImport() {
 
   return (
     <div className="space-y-0 bg-[#eeeeee]">
-      <div className="flex min-h-12 items-end gap-1 border-b border-slate-400 bg-[#eeeeee] px-0 pt-0">
+      <div className={ui.childBar}>
         <button
           type="button"
           onClick={() => {
             setSelectedDocument(null);
             setViewMode("list");
           }}
-          className={`flex h-11 w-16 items-center justify-center rounded-t-md border border-b-0 ${!selectedDocument && viewMode === "list" ? "border-slate-400 bg-white text-slate-800" : "border-green-600 bg-[#58c915] text-white"}`}
+          className={ui.childListTab}
           title="Daftar Penyesuaian Stok"
         >
           <List className="h-5 w-5" />
@@ -511,7 +512,7 @@ export default function OpeningStockImport() {
             setSelectedDocument(null);
             setViewMode("entry");
           }}
-          className={`flex h-11 min-w-44 items-center justify-between rounded-t-md border border-b-0 px-4 text-sm font-semibold ${!selectedDocument && viewMode === "entry" ? "border-t-2 border-blue-600 bg-white text-slate-800" : "border-slate-400 bg-[#d0d0d0] text-slate-600"}`}
+          className={`${childTabClass(!selectedDocument && viewMode === "entry")} justify-between px-4 text-sm`}
         >
           <span>
             {editingId
@@ -532,7 +533,7 @@ export default function OpeningStockImport() {
           return (
             <div
               key={tab.id}
-              className={`flex h-10 min-w-56 max-w-80 items-center rounded-t-md border border-b-0 ${active ? "border-blue-600 bg-white text-blue-700 shadow-[inset_0_3px_0_#2563eb]" : "border-slate-300 bg-[#d0d0d0] text-slate-700"}`}
+              className={`${childTabClass(active)} min-w-56 max-w-80`}
             >
               <button
                 type="button"

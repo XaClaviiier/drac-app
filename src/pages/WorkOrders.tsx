@@ -8,6 +8,7 @@ import VehiclePicker from '../components/VehiclePicker';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import ItemSearchOption from '../components/ItemSearchOption';
+import { childTabClass, ui } from '../components/ui/interfaceStandards';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -1724,31 +1725,31 @@ export default function WorkOrders() {
 
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
-      <div className="flex items-end gap-0 border-b border-blue-600 bg-[#eeeeee] px-1 pt-0">
-        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 text-sm font-semibold transition-colors ${!showModal && !detailWO ? 'relative z-10 border-blue-600 bg-white text-blue-700 shadow-[inset_0_2px_0_#2563eb]' : 'border-emerald-600 bg-emerald-500 text-white hover:bg-emerald-600'}`} title="Daftar Order Kerja">
+      <div className={ui.childBar}>
+        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
         {showModal && diagnosisMode && editingWO ? (
           <button
             type="button"
-            className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]"
+            className={`${ui.childTabActive} gap-2 px-5 text-sm`}
           >
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && serviceEditMode && editingWO ? (
-          <button type="button" className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]">
+          <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
             EDIT PEKERJAAN {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && editingWO ? (
-          <button type="button" className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]">
+          <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
             {isAutoRegisteredDraft ? <FileText className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
             {isAutoRegisteredDraft ? editingWO.woNumber : `Edit ${editingWO.woNumber}`}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && hasPermission('wo:create') ? (
-          <button type="button" className="-ml-px flex h-11 items-center gap-2 rounded-t-md border border-b-0 border-blue-600 bg-white px-5 text-sm font-semibold text-blue-700 shadow-[inset_0_2px_0_#2563eb]">
+          <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
             Data Baru
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
           </button>
@@ -1764,7 +1765,7 @@ export default function WorkOrders() {
                   key={tabId}
                   type="button"
                   onClick={() => setDetailWO(tabWO)}
-                  className={`-ml-px flex h-11 max-w-[230px] flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-4 text-sm font-semibold transition-colors ${active ? 'relative z-10 border-blue-600 bg-white text-blue-700 shadow-[inset_0_2px_0_#2563eb]' : 'border-gray-400 bg-[#d0d0d0] text-gray-700 hover:bg-gray-300'}`}
+                  className={`${childTabClass(active)} max-w-[230px] flex-shrink-0 gap-2 px-4 text-sm`}
                   title={tabWO.woNumber}
                 >
                   <span className="truncate font-mono">{tabWO.woNumber}</span>

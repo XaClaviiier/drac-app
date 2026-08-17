@@ -8,6 +8,7 @@ import VehiclePicker from '../components/VehiclePicker';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
 import ItemSearchOption from '../components/ItemSearchOption';
+import { ui } from '../components/ui/interfaceStandards';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -722,23 +723,23 @@ export default function SalesInvoice() {
   return (
     <div className="space-y-3 lg:-mx-5 lg:-mt-5 lg:space-y-1">
       {/* Subtab Faktur Penjualan: daftar, data baru/edit, dan detail faktur. */}
-      <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
+      <div className={`${ui.childBar} hidden lg:flex`}>
         <button
           type="button"
           onClick={() => { if (showModal) handleCloseModal(); setViewingInvoice(null); }}
           title="Daftar Faktur Penjualan"
-          className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal && !viewingInvoice ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}
+          className={ui.childListTab}
         >
           <FileText className="h-6 w-6" />
         </button>
         {showModal && (
-          <div className="ml-0.5 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
+          <div className={`${ui.childTabActive} min-w-48 max-w-80`}>
             <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">{editingInvoice ? editingInvoice.invoiceNumber : 'Data Baru'}</button>
             <button type="button" onClick={handleCloseModal} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
         )}
         {viewingInvoice && (
-          <div className="ml-0.5 flex h-11 min-w-40 max-w-72 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
+          <div className={`${ui.childTabActive} min-w-40 max-w-72`}>
             <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">{viewingInvoice.invoiceNumber}</button>
             <button type="button" onClick={() => setViewingInvoice(null)} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>

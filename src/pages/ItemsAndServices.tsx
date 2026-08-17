@@ -7,6 +7,7 @@ import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
 import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
+import { childTabClass, ui } from '../components/ui/interfaceStandards';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -1077,13 +1078,13 @@ export default function ItemsAndServices() {
 
   return (
     <div className="space-y-0">
-      <div className="flex h-11 items-stretch border-b border-slate-300 bg-[#eeeeee]">
-        <button type="button" onClick={() => { setShowItemModal(false); setItemListTab('list'); }} title="Daftar Barang & Jasa" className={`flex w-16 items-center justify-center rounded-t-md border border-b-0 border-slate-400 ${showItemModal || itemListTab !== 'list' ? 'bg-[#58c915] text-white' : 'bg-white text-slate-800'}`}>
+      <div className={ui.childBar}>
+        <button type="button" onClick={() => { setShowItemModal(false); setItemListTab('list'); }} title="Daftar Barang & Jasa" className={ui.childListTab}>
           <List className="h-5 w-5" />
         </button>
-        {!showItemModal && canVerifyItems && <button type="button" onClick={() => setItemListTab('verification')} className={`ml-1 flex items-center gap-2 rounded-t-md border border-b-0 px-4 text-sm font-semibold ${itemListTab === 'verification' ? 'border-t-2 border-blue-600 bg-white text-blue-700' : 'border-slate-400 bg-[#d6d6d6] text-slate-600'}`}>Menunggu Verifikasi {pendingItems.length > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{pendingItems.length}</span>}</button>}
+        {!showItemModal && canVerifyItems && <button type="button" onClick={() => setItemListTab('verification')} className={`${childTabClass(itemListTab === 'verification')} gap-2 px-4 text-sm`}>Menunggu Verifikasi {pendingItems.length > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{pendingItems.length}</span>}</button>}
         {showItemModal && (
-          <div className="flex items-center gap-2 rounded-t-md border-x border-t-2 border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700">
+          <div className={`${childTabClass(true)} gap-2 px-4 text-sm`}>
             <span className="max-w-[340px] truncate" title={editingItem?.name}>{editingItem ? editingItem.name : 'Data Baru'}</span>
             <button type="button" onClick={() => setShowItemModal(false)} className="ml-1 text-slate-500 hover:text-red-600"><X className="h-4 w-4" /></button>
           </div>
@@ -1162,7 +1163,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Filters */}
-      <div className="border border-slate-300 bg-[#eeeeee] p-3 shadow-sm lg:border-x-0 lg:border-t-0 lg:shadow-none">
+      <div className={`${ui.toolbar} border p-3 shadow-sm lg:border-x-0 lg:border-t-0 lg:shadow-none`}>
         <div className="flex flex-wrap items-center gap-3">
           <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500">
             <option value="all">Non Aktif: Semua</option><option value="active">Non Aktif: Tidak</option><option value="inactive">Non Aktif: Ya</option>
@@ -1182,7 +1183,7 @@ export default function ItemsAndServices() {
             {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Share2 className="h-5 w-5" /></button>}
             <button type="button" onClick={() => window.print()} title="Cetak" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
             <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Settings2 className="h-5 w-5" /></button>
-            <div className="relative w-72"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-[13px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200" /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
+            <div className="relative w-72"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
             <span className="flex h-10 min-w-16 items-center justify-center rounded border border-slate-300 bg-white px-3 text-sm text-slate-600">{filteredItems.length}</span>
             {showColumnSettings && (
               <div className="absolute right-0 top-12 z-30 w-72 rounded border border-slate-300 bg-white p-4 shadow-xl">
@@ -1196,7 +1197,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Table */}
-      <div className="mx-1 overflow-hidden rounded-t-lg border border-slate-300 bg-white">
+      <div className={`${ui.tableShell} mx-1`}>
         <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Filter className="h-4 w-4" />
