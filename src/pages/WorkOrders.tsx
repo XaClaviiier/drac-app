@@ -148,6 +148,7 @@ export default function WorkOrders() {
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
+  const [linkedServiceDetail, setLinkedServiceDetail] = useState<WorkOrderService | null>(null);
   const [detailTabIds, setDetailTabIds] = useState<string[]>([]);
   const [financialTimeline, setFinancialTimeline] = useState<WorkOrderFinancialTimeline>(EMPTY_FINANCIAL_TIMELINE);
   const [financialTimelineLoading, setFinancialTimelineLoading] = useState(false);
@@ -1527,13 +1528,9 @@ export default function WorkOrders() {
   };
 
   const openLinkedItem = (service: WorkOrderService) => {
-    const code = serviceItemCode(service).trim().toLowerCase();
-    const item = data.items.find(entry =>
-      entry.id === service.itemId || (!!code && entry.code.trim().toLowerCase() === code)
-    );
-    if (!item) return window.alert('Master Barang & Jasa untuk baris ini tidak ditemukan.');
-    window.location.assign(`/items?view=${encodeURIComponent(item.id)}`);
+    setLinkedServiceDetail(service);
   };
+  const linkedServiceMaster = linkedServiceDetail ? masterItemForService(linkedServiceDetail) : undefined;
 
   const customerPhoneForWO = (wo: WorkOrder) => {
     const customer = data.customers.find(item =>
@@ -3861,6 +3858,39 @@ export default function WorkOrders() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Rincian barang/jasa dari baris WO */}
+      {linkedServiceDetail && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-3" role="dialog" aria-modal="true" aria-label={`Rincian ${serviceReceiptName(linkedServiceDetail)}`}>
+          <section className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+            <header className="flex items-center justify-between bg-[#12386b] px-4 py-3 text-white">
+              <div className="flex items-center gap-2"><Edit className="h-5 w-5" /><h3 className="font-semibold">Rincian Barang</h3></div>
+              <button type="button" onClick={() => setLinkedServiceDetail(null)} className="rounded p-1 hover:bg-white/10" aria-label="Tutup"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="flex border-b border-gray-300 px-3 pt-2 text-sm">
+              <span className="border-b-2 border-red-500 px-3 py-2 font-medium text-red-600">Rincian Barang</span>
+              <span className="px-4 py-2 text-gray-500">Info lainnya</span>
+              <span className="px-4 py-2 text-gray-500">Penangguhan</span>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5 text-sm">
+              <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-3">
+                <span>Kode #</span>
+                <button type="button" onClick={() => linkedServiceMaster && window.location.assign(`/items?view=${encodeURIComponent(linkedServiceMaster.id)}`)} disabled={!linkedServiceMaster} className="w-fit font-mono font-semibold text-cyan-600 hover:underline disabled:cursor-default disabled:no-underline">{serviceItemCode(linkedServiceDetail)}</button>
+                <span>Nama Barang</span><div className="rounded border border-gray-300 bg-white px-3 py-2 font-medium shadow-sm">{serviceReceiptName(linkedServiceDetail)}</div>
+                <span>Kuantitas</span><div className="flex items-center justify-end rounded border border-gray-300 bg-white px-3 py-2 tabular-nums">{linkedServiceDetail.qty}</div>
+                <span>@Harga</span><div className="flex items-center rounded border border-gray-300 bg-white"><span className="border-r border-gray-200 px-3 py-2 text-gray-500">Rp</span><strong className="flex-1 px-3 py-2 text-right tabular-nums">{linkedServiceDetail.price.toLocaleString('id-ID')}</strong></div>
+                <span>Diskon</span><div className="grid grid-cols-2 gap-3"><div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-right text-gray-500">0 %</div><div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-right text-gray-500">Rp 0</div></div>
+                <span>Total Harga</span><strong className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-right tabular-nums">Rp {(linkedServiceDetail.price * linkedServiceDetail.qty).toLocaleString('id-ID')}</strong>
+                <span>Penjual / Teknisi</span><div className="rounded border border-gray-300 bg-white px-3 py-2">{detailWO?.technicianName || detailWO?.createdByName || '-'}</div>
+                <span>Satuan</span><div className="rounded border border-gray-300 bg-gray-50 px-3 py-2">{linkedServiceMaster?.unit || (linkedServiceMaster?.type === 'Jasa' ? 'JASA' : 'PCS')}</div>
+              </div>
+            </div>
+            <footer className="flex justify-end border-t border-gray-300 p-4">
+              <button type="button" onClick={() => setLinkedServiceDetail(null)} className="rounded bg-blue-800 px-6 py-2 font-semibold text-white hover:bg-blue-700">Lanjut</button>
+            </footer>
+          </section>
         </div>
       )}
 
