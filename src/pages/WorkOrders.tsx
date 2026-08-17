@@ -7,6 +7,7 @@ import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
+import ItemSearchOption from '../components/ItemSearchOption';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -2950,14 +2951,8 @@ export default function WorkOrders() {
                                 }}
                                 className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-gray-100 px-3 py-2.5 text-left last:border-0 ${added ? 'cursor-not-allowed bg-green-50 opacity-60' : 'active:bg-blue-100 hover:bg-blue-50'}`}
                               >
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-semibold text-gray-900">{item.name}</span>
-                                  <span className="block truncate font-mono text-[10px] text-gray-500">{item.code} · {item.categoryName} · {item.type}</span>
-                                </span>
-                                <span className="inline-flex flex-shrink-0 items-center gap-1.5 text-sm font-semibold text-gray-700">
-                                  Rp {item.sellingPrice.toLocaleString('id-ID')}
-                                  {added && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                                </span>
+                                <ItemSearchOption name={item.name} code={item.code} selected={added}/>
+                                {added && <CheckCircle2 className="h-4 w-4 text-green-600" />}
                               </button>
                             );
                           })}

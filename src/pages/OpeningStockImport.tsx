@@ -29,6 +29,7 @@ import {
 import { useApp } from "../context/AppContext";
 import { api } from "../lib/apiClient";
 import { localDateKey } from "../lib/date";
+import ItemSearchOption from "../components/ItemSearchOption";
 
 type PreviewRow = {
   row: number;
@@ -714,13 +715,9 @@ export default function OpeningStockImport() {
                             key={item.id}
                             type="button"
                             onClick={() => addManualItem(item)}
-                            className="grid w-full grid-cols-[130px_1fr_auto] gap-2 border-b px-3 py-2 text-left text-sm hover:bg-blue-50"
+                            className="block w-full border-b border-slate-200 px-3 py-2 text-left hover:bg-blue-50"
                           >
-                            <b className="font-mono text-blue-700">
-                              {item.code}
-                            </b>
-                            <span className="truncate">{item.name}</span>
-                            <span>{item.unit}</span>
+                            <ItemSearchOption name={item.name} code={item.code} />
                           </button>
                         ))}
                       </div>

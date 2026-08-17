@@ -7,6 +7,7 @@ import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
+import ItemSearchOption from '../components/ItemSearchOption';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -1198,7 +1199,7 @@ export default function SalesInvoice() {
                     <input id="invoice-item-search" value={formItemSearch} onFocus={() => setItemSearchOpen(true)} onChange={event => { setFormItemSearch(event.target.value); setItemSearchOpen(true); }} onKeyDown={event => { if (event.key === 'Escape') setItemSearchOpen(false); if (event.key === 'Enter' && searchableItems[0]) { event.preventDefault(); addItemDirectly(searchableItems[0].id); } }} placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 pl-9 pr-10 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/>
                     <button type="button" onClick={() => setItemSearchOpen(current => !current)} className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-blue-700"><Search className="h-5 w-5"/></button>
                     {itemSearchOpen && formItemSearch.trim() && <div className="absolute left-0 top-full z-40 mt-1 max-h-72 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-2xl">
-                      {searchableItems.slice(0, 20).map(item => { const stock = item.type === 'Persediaan' ? (item.branchStocks?.[currentBranchId]?.sellableStock ?? item.sellableStock) : null; return <button key={item.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => addItemDirectly(item.id)} className="block w-full border-b border-gray-100 px-3 py-2 text-left hover:bg-blue-50"><strong className="block text-sm text-gray-900">{item.name}</strong><span className="flex justify-between gap-2 text-xs text-gray-500"><span>{item.code} · {item.type} · {item.unit}</span><span>{stock === null ? 'Jasa' : `Stok ${stock}`} · Rp {item.sellingPrice.toLocaleString('id-ID')}</span></span></button>; })}
+                      {searchableItems.slice(0, 20).map(item => <button key={item.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => addItemDirectly(item.id)} className="block w-full border-b border-slate-200 px-3 py-2 text-left hover:bg-blue-50"><ItemSearchOption name={item.name} code={item.code}/></button>)}
                       {!searchableItems.length && <p className="p-4 text-center text-sm text-gray-400">Barang atau jasa tidak ditemukan.</p>}
                     </div>}
                   </div>
@@ -1208,7 +1209,7 @@ export default function SalesInvoice() {
                   <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"/><input value={formItemSearch} onChange={event => { setFormItemSearch(event.target.value); setFormItemToAdd(''); }} placeholder="Cari kode atau nama barang/jasa..." className="h-10 w-full rounded border border-gray-300 pl-9 pr-3 text-sm outline-none focus:border-blue-500"/></div>
                   <select value={formItemToAdd} onChange={(e) => setFormItemToAdd(e.target.value)} className="min-w-0 rounded border border-gray-300 bg-white px-3 py-2 text-sm">
                     <option value="">Pilih barang atau jasa...</option>
-                    {searchableItems.map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
+                    {searchableItems.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.code}</option>)}
                   </select>
                   <button type="button" disabled={!formItemToAdd} onClick={addFormItem} className="rounded bg-blue-700 px-4 py-2 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
                 </div>
@@ -1443,7 +1444,7 @@ export default function SalesInvoice() {
                       <div className="flex gap-2">
                         <select value={woItemToAdd} onChange={(e) => setWoItemToAdd(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
                           <option value="">Tambah barang atau jasa...</option>
-                          {data.items.filter((item) => item.isActive && item.type !== 'Group').map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
+                          {data.items.filter((item) => item.isActive && item.type !== 'Group').map((item) => <option key={item.id} value={item.id}>{item.name} — {item.code}</option>)}
                         </select>
                         <button type="button" disabled={!woItemToAdd} onClick={addWODraftItem} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
                       </div>
