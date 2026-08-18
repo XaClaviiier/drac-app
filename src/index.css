@@ -46,7 +46,7 @@ body { margin: 0; background: #f3f4f6; }
 
 .app-workspace-bar {
   position: relative;
-  display: flex;
+  display: none !important;
   height: 40px;
   flex-shrink: 0;
   align-items: flex-start;
@@ -55,6 +55,11 @@ body { margin: 0; background: #f3f4f6; }
   overflow-y: hidden;
   background: #f3f4f6;
   padding: 0 8px;
+}
+@media (min-width: 1024px) {
+  .app-workspace-bar {
+    display: flex !important;
+  }
 }
 .app-workspace-bar::after {
   position: absolute;
