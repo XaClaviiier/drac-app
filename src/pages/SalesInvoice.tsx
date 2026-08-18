@@ -68,7 +68,7 @@ export default function SalesInvoice() {
   const [formItemSearch, setFormItemSearch] = useState('');
   const [formActionMenu, setFormActionMenu] = useState<'ambil' | 'proses' | null>(null);
   const [formDiscount, setFormDiscount] = useState(0);
-  const [identityCorrection, setIdentityCorrection] = useState({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false });
+  const [identityCorrection, setIdentityCorrection] = useState({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false, error: '' });
   const [itemSearchOpen, setItemSearchOpen] = useState(false);
   const [detailItemId, setDetailItemId] = useState('');
   const [detailQty, setDetailQty] = useState(1);
@@ -511,13 +511,12 @@ export default function SalesInvoice() {
       reason: identityCorrection.reason.trim(),
     });
     if (!result.success) {
-      window.alert(result.message || 'Koreksi identitas gagal.');
-      setIdentityCorrection(current => ({ ...current, saving: false }));
+      setIdentityCorrection(current => ({ ...current, saving: false, error: result.message || 'Koreksi identitas gagal.' }));
       return;
     }
     await refreshData();
     setSuccessMsg('Identitas WO, faktur, dan tampilan pembayaran berhasil dikoreksi.');
-    setIdentityCorrection({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false });
+    setIdentityCorrection({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false, error: '' });
     handleCloseModal();
   };
 
@@ -1198,7 +1197,8 @@ export default function SalesInvoice() {
                             <select aria-label="Kendaraan tujuan koreksi" value={identityCorrection.vehicleRefId} disabled={!identityCorrection.customerRefId} onChange={event => setIdentityCorrection(current => ({ ...current, vehicleRefId: event.target.value }))} className="h-10 rounded border bg-white px-3 text-sm disabled:bg-gray-100"><option value="">Pilih kendaraan</option>{data.vehicles.filter(vehicle => vehicle.customerRefId === identityCorrection.customerRefId || vehicle.customerId === identityCorrection.customerRefId).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber} · {vehicle.brand} {vehicle.model}</option>)}</select>
                             <select aria-label="Supir atau pembawa" value={identityCorrection.driverContactId} disabled={!identityCorrection.customerRefId} onChange={event => setIdentityCorrection(current => ({ ...current, driverContactId: event.target.value }))} className="h-10 rounded border bg-white px-3 text-sm disabled:bg-gray-100"><option value="">Kontak utama / tanpa supir</option>{data.customerPeople.filter(person => person.customerId === identityCorrection.customerRefId && person.isActive !== false).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || '-'}</option>)}</select>
                             <input aria-label="Alasan koreksi terpadu" value={identityCorrection.reason} onChange={event => setIdentityCorrection(current => ({ ...current, reason: event.target.value }))} placeholder="Alasan koreksi *" className="h-10 rounded border bg-white px-3 text-sm" />
-                            <div className="flex gap-2 md:col-span-2"><button type="button" disabled={identityCorrection.saving || !identityCorrection.customerRefId || !identityCorrection.vehicleRefId || !identityCorrection.reason.trim()} onClick={() => void saveIdentityCorrection()} className="rounded bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-300">{identityCorrection.saving ? 'Menyimpan...' : 'Simpan Koreksi Terpadu'}</button><button type="button" onClick={() => setIdentityCorrection({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false })} className="rounded border bg-white px-4 py-2 text-sm">Batal</button></div>
+                            {identityCorrection.error && <p className="rounded bg-red-50 p-2 text-sm text-red-700 md:col-span-2">{identityCorrection.error}</p>}
+                            <div className="flex gap-2 md:col-span-2"><button type="button" disabled={identityCorrection.saving || !identityCorrection.customerRefId || !identityCorrection.vehicleRefId || !identityCorrection.reason.trim()} onClick={() => void saveIdentityCorrection()} className="rounded bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-300">{identityCorrection.saving ? 'Menyimpan...' : 'Simpan Koreksi Terpadu'}</button><button type="button" onClick={() => setIdentityCorrection({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false, error: '' })} className="rounded border bg-white px-4 py-2 text-sm">Batal</button></div>
                           </div>
                         )}
                       </div>
