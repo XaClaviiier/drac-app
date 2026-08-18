@@ -103,6 +103,7 @@ function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $exclud
 function ensureApiSupportTables(PDO $pdo): void {
     $customerColumns = array_column($pdo->query("SHOW COLUMNS FROM customers")->fetchAll(), 'Field');
     if (!in_array('account_type', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD account_type ENUM('Pribadi','Perusahaan') NOT NULL DEFAULT 'Pribadi' AFTER name");
+    if (!in_array('company_name', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD company_name VARCHAR(150) NOT NULL DEFAULT '' AFTER name");
     if (!in_array('primary_contact_id', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD primary_contact_id VARCHAR(64) NULL AFTER address");
     if (!in_array('billing_contact_id', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD billing_contact_id VARCHAR(64) NULL AFTER primary_contact_id");
     $pdo->exec("CREATE TABLE IF NOT EXISTS customer_people (

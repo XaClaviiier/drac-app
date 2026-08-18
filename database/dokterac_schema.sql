@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS `branches` (
   `id` VARCHAR(20) NOT NULL,
   `code` VARCHAR(20) NOT NULL,
   `name` VARCHAR(100) NOT NULL,
+  `company_name` VARCHAR(150) NOT NULL DEFAULT '',
   `address` TEXT,
   `phone` VARCHAR(30),
   `is_active` TINYINT(1) DEFAULT 1,

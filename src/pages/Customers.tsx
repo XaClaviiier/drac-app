@@ -46,6 +46,7 @@ export default function Customers() {
   const [formData, setFormData] = useState({
     accountType: 'Pribadi' as 'Pribadi' | 'Perusahaan',
     name: '',
+    companyName: '',
     phone: '',
     address: '',
     email: '',
@@ -57,6 +58,7 @@ export default function Customers() {
       const matchesPlate = data.vehicles.some(v => (v.customerRefId === c.id || (!v.customerRefId && v.customerId === c.customerCode)) && v.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesSearch =
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.phone.includes(searchTerm) ||
         c.email.toLowerCase().includes(searchTerm.toLowerCase()) || matchesPlate;
       return matchesSearch;
@@ -72,7 +74,7 @@ export default function Customers() {
 
   const customerFieldValue = (customer: Customer, column: CustomerColumn) => {
     const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === customer.id || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode));
-    if (column === 'name') return `${customer.customerCode} - ${customer.name}`;
+    if (column === 'name') return `${customer.customerCode} - ${customer.companyName ? `${customer.companyName} / ` : ''}${customer.name}`;
     if (column === 'phone') return customer.phone || '';
     if (column === 'plates') return vehicles.map(vehicle => vehicle.plateNumber).join(', ');
     if (column === 'email') return customer.email || '';
@@ -106,7 +108,7 @@ export default function Customers() {
   };
 
   const resetForm = () => {
-    setFormData({ accountType: 'Pribadi', name: '', phone: '', address: '', email: '' });
+    setFormData({ accountType: 'Pribadi', name: '', companyName: '', phone: '', address: '', email: '' });
     setEditingCustomer(null);
   };
 
@@ -119,6 +121,7 @@ export default function Customers() {
       setFormData({
         accountType: customer.accountType || 'Pribadi',
         name: customer.name,
+        companyName: customer.companyName || '',
         phone: customer.phone,
         address: customer.address,
         email: customer.email,
@@ -131,7 +134,7 @@ export default function Customers() {
   };
 
   const formIsDirty = () => {
-    if (editingCustomer) return formData.accountType !== (editingCustomer.accountType || 'Pribadi') || formData.name !== editingCustomer.name || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
+    if (editingCustomer) return formData.accountType !== (editingCustomer.accountType || 'Pribadi') || formData.name !== editingCustomer.name || formData.companyName !== (editingCustomer.companyName || '') || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
     return Object.values(formData).some(value => value.trim() !== '');
   };
 
@@ -308,6 +311,7 @@ export default function Customers() {
                           </div>
                           <div className="min-w-0">
                             <p className="max-w-[220px] truncate text-sm font-semibold text-gray-900">{customer.name}</p>
+                            {customer.companyName && <p className="max-w-[220px] truncate text-xs text-gray-500">{customer.companyName}</p>}
                             <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
                           </div>
                         </div>
@@ -396,6 +400,7 @@ export default function Customers() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900">{customer.name}</h3>
+                      {customer.companyName && <p className="text-xs text-gray-500">{customer.companyName}</p>}
                       <p className="text-xs text-blue-600 font-mono font-medium">{customer.customerCode}</p>
                       <p className="text-xs text-gray-500">Sejak {customer.createdAt}</p>
                     </div>
@@ -500,8 +505,12 @@ export default function Customers() {
                       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-mono font-bold text-blue-700">{editingCustomer ? editingCustomer.customerCode : generateCustomerCode()}</div>
                     </div>
                     <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
-                      <label className="text-sm font-medium text-gray-700">Nama Customer/Perusahaan <span className="text-red-500">*</span></label>
-                      <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama customer, perusahaan, atau instansi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <label className="text-sm font-medium text-gray-700">Nama Customer/PIC <span className="text-red-500">*</span></label>
+                      <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama orang yang dapat dihubungi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">Nama Perusahaan <span className="block text-xs font-normal text-gray-400">Opsional</span></label>
+                      <input type="text" value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value.toUpperCase() })} placeholder="Perusahaan atau instansi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
                       <label className="text-sm font-medium text-gray-700">No. Telepon <span className="text-red-500">*</span></label>
@@ -519,6 +528,7 @@ export default function Customers() {
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                       <div className="mb-3 flex items-center justify-between"><strong className="text-sm text-blue-900">Kontak Utama (PIC)</strong><span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">UTAMA</span></div>
                       <p className="font-semibold text-gray-900">{formData.name || 'Nama mengikuti customer/perusahaan'}</p>
+                      {formData.companyName && <p className="text-xs font-medium text-blue-700">{formData.companyName}</p>}
                       <p className="mt-1 text-sm text-gray-600">{formData.phone || 'Nomor telepon belum diisi'}</p>
                       <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="Email PIC (opsional)" className="mt-3 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500" />
                     </div>

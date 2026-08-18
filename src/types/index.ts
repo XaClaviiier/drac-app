@@ -33,6 +33,7 @@ export interface Customer {
   id: string;
   customerCode: string;
   name: string;
+  companyName?: string;
   phone: string;
   address: string;
   email: string;

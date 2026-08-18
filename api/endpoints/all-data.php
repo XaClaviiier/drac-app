@@ -176,6 +176,7 @@ try {
     $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
     foreach ($rows as &$r) {
         $r['customerCode']      = $r['customer_code'];
+        $r['companyName']       = $r['company_name'] ?? '';
         $r['accountType']       = $r['account_type'] ?? 'Pribadi';
         $r['primaryContactId']  = $r['primary_contact_id'] ?? null;
         $r['billingContactId']  = $r['billing_contact_id'] ?? null;
