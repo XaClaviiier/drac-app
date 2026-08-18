@@ -45,3 +45,13 @@ test('respons gagal koneksi database tidak mengirim detail internal', () => {
   assert.match(config, /error_log\('DRAC database connection failed:/);
   assert.doesNotMatch(config, /'error'\s*=>\s*\$e->getMessage\(\)/);
 });
+
+test('pencarian barang mendukung filter stok cabang dan mengecualikan jasa', () => {
+  const page = source('src/pages/ItemsAndServices.tsx');
+  const rules = source('src/lib/itemSearchRules.ts');
+  assert.match(page, /parseItemStockSearch\(search\)/);
+  assert.match(page, /item\.type === 'Persediaan'/);
+  assert.match(page, /matchesStockSearch\(displayStock\(item\)/);
+  assert.match(rules, /stok\\s\*/);
+  assert.match(rules, /normalized\.match/);
+});

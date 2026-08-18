@@ -8,6 +8,7 @@ import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSyste
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import { childTabClass, ui } from '../components/ui/interfaceStandards';
+import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -262,13 +263,24 @@ export default function ItemsAndServices() {
     [data.items]
   );
 
+  // Master barang bersifat global. Hanya saldo stok yang mengikuti cabang aktif.
+  const displayStock = (item: Item) =>
+    currentBranchId === 'ALL'
+      ? item.stock
+      : (item.branchStocks?.[currentBranchId]?.stock ?? 0);
+
   const filteredItems = useMemo(() => {
-    const q = search.toLowerCase();
+    const parsedSearch = parseItemStockSearch(search);
+    const q = parsedSearch.text;
     return data.items.filter((item) => {
       const activeMatch = filterActive === 'all' || (filterActive === 'active' ? item.isActive : !item.isActive);
       const categoryMatch = !filterCategory || item.categoryId === filterCategory;
       const typeMatch = !filterType || item.type === filterType;
       const brandMatch = !filterBrand || item.brand === filterBrand;
+      const stockMatch = !parsedSearch.stock || (
+        item.type === 'Persediaan'
+        && matchesStockSearch(displayStock(item), parsedSearch.stock.operator, parsedSearch.stock.value)
+      );
       const searchMatch =
         item.code.toLowerCase().includes(q) ||
         item.name.toLowerCase().includes(q) ||
@@ -276,20 +288,14 @@ export default function ItemsAndServices() {
         item.brand.toLowerCase().includes(q) ||
         (item.receiptDescription || '').toLowerCase().includes(q) ||
         (item.barcode || '').toLowerCase().includes(q);
-      return activeMatch && categoryMatch && typeMatch && brandMatch && searchMatch;
+      return activeMatch && categoryMatch && typeMatch && brandMatch && stockMatch && searchMatch;
     }).sort((a, b) => {
       const left = sortConfig.column === 'category' ? a.categoryName : a[sortConfig.column];
       const right = sortConfig.column === 'category' ? b.categoryName : b[sortConfig.column];
       const result = String(left || '').localeCompare(String(right || ''), 'id', { numeric: true, sensitivity: 'base' });
       return sortConfig.direction === 'asc' ? result : -result;
     });
-  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand, sortConfig]);
-
-  // Master barang bersifat global. Hanya saldo stok yang mengikuti cabang aktif.
-  const displayStock = (item: Item) =>
-    currentBranchId === 'ALL'
-      ? item.stock
-      : (item.branchStocks?.[currentBranchId]?.stock ?? 0);
+  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand, sortConfig, currentBranchId]);
 
   // Items available for group picking (exclude Groups and current item)
   const pickableItems = useMemo(() => {
@@ -1161,7 +1167,7 @@ export default function ItemsAndServices() {
             {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Share2 className="h-5 w-5" /></button>}
             <button type="button" onClick={() => window.print()} title="Cetak" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
             <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Settings2 className="h-5 w-5" /></button>
-            <div className="relative w-72"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
+            <div className="relative w-80"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari atau ketik stok=0, stok>0, stok<0" title="Filter stok: stok=0, stok>0, stok<0, stok<=1" className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
             <span className="flex h-10 min-w-16 items-center justify-center rounded border border-slate-300 bg-white px-3 text-sm text-slate-600">{filteredItems.length}</span>
             {showColumnSettings && (
               <div className="absolute right-0 top-12 z-30 w-72 rounded border border-slate-300 bg-white p-4 shadow-xl">
