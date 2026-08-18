@@ -324,6 +324,11 @@ export default function WorkOrders() {
     vehicleRefId: '',
     plateNumber: '',
     vehicleInfo: '',
+    driverContactId: '',
+    driverName: '',
+    driverPhone: '',
+    approvalContactId: '',
+    billingContactId: '',
     description: '',
     diagnosisTemperature: undefined as number | undefined,
     diagnosisLp: undefined as number | undefined,
@@ -555,6 +560,10 @@ export default function WorkOrders() {
   };
 
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
+  const selectedCustomerPeople = data.customerPeople.filter(person => person.customerId === formData.customerRefId && person.isActive);
+  const selectedVehiclePeople = selectedCustomerPeople.filter(person =>
+    person.vehicleAssignments.some(assignment => assignment.vehicleId === formData.vehicleRefId)
+  );
   const customerVehicleReady = Boolean(formData.customerRefId && formData.vehicleRefId);
   const customerVehicleLocked = Boolean(isAutoRegistering || editingWO);
 
@@ -569,6 +578,7 @@ export default function WorkOrders() {
         vehicleRefId: '',
         plateNumber: '',
         vehicleInfo: '',
+        driverContactId: '', driverName: '', driverPhone: '', approvalContactId: '', billingContactId: '',
       }));
       return;
     }
@@ -581,6 +591,9 @@ export default function WorkOrders() {
       vehicleRefId: '',
       plateNumber: '',
       vehicleInfo: '',
+      driverContactId: '', driverName: '', driverPhone: '',
+      approvalContactId: customer.primaryContactId || '',
+      billingContactId: customer.billingContactId || customer.primaryContactId || '',
     }));
   };
 
@@ -595,6 +608,9 @@ export default function WorkOrders() {
       vehicleRefId: '',
       plateNumber: '',
       vehicleInfo: '',
+      driverContactId: '', driverName: '', driverPhone: '',
+      approvalContactId: customer.primaryContactId || '',
+      billingContactId: customer.billingContactId || customer.primaryContactId || '',
     }));
   };
 
@@ -602,11 +618,15 @@ export default function WorkOrders() {
     const vehicle = data.vehicles.find((item) => item.id === vehicleId);
     if (!vehicle) return;
 
+    const driver = data.customerPeople.find(person => person.customerId === vehicle.customerRefId && person.isActive && person.vehicleAssignments.some(assignment => assignment.vehicleId === vehicle.id && assignment.role === 'Supir'));
     setFormData((prev) => ({
       ...prev,
       vehicleRefId: vehicle.id,
       plateNumber: vehicle.plateNumber,
       vehicleInfo: `${vehicle.brand} ${vehicle.model}${vehicle.year ? ` ${vehicle.year}` : ''} - ${vehicle.color}`,
+      driverContactId: driver?.id || '',
+      driverName: driver?.name || '',
+      driverPhone: driver?.phone || '',
     }));
   };
 
@@ -618,6 +638,7 @@ export default function WorkOrders() {
       vehicleRefId: vehicle.id,
       plateNumber: vehicle.plateNumber,
       vehicleInfo: `${vehicle.brand} ${vehicle.model}${vehicle.year ? ` ${vehicle.year}` : ''} - ${vehicle.color}`,
+      driverContactId: '', driverName: '', driverPhone: '',
     }));
   };
 
@@ -720,6 +741,7 @@ export default function WorkOrders() {
       vehicleRefId: '',
       plateNumber: '',
       vehicleInfo: '',
+      driverContactId: '', driverName: '', driverPhone: '', approvalContactId: '', billingContactId: '',
       description: '',
       diagnosisTemperature: undefined,
       diagnosisLp: undefined,
@@ -763,6 +785,11 @@ export default function WorkOrders() {
         vehicleRefId: matchedVehicle?.id || '',
         plateNumber: wo.plateNumber,
         vehicleInfo: wo.vehicleInfo,
+        driverContactId: wo.driverContactId || '',
+        driverName: wo.driverName || '',
+        driverPhone: wo.driverPhone || '',
+        approvalContactId: wo.approvalContactId || '',
+        billingContactId: wo.billingContactId || '',
         description: wo.description || '',
         diagnosisTemperature: wo.diagnosisTemperature,
         diagnosisLp: wo.diagnosisLp,
@@ -2810,6 +2837,31 @@ export default function WorkOrders() {
                       : 'Isi keluhan/keterangan service sebelum Register.'
                     : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum Register.'}
               </div>
+              {customerVehicleReady && selectedCustomerPeople.length > 0 && (
+                <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
+                  <label className="text-xs font-semibold text-slate-600">Dibawa oleh
+                    <select value={formData.driverContactId} disabled={customerVehicleLocked} onChange={event => {
+                      const person = selectedCustomerPeople.find(item => item.id === event.target.value);
+                      setFormData(previous => ({ ...previous, driverContactId: person?.id || '', driverName: person?.name || '', driverPhone: person?.phone || '' }));
+                    }} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 disabled:bg-gray-100">
+                      <option value="">Belum dipilih</option>
+                      {(selectedVehiclePeople.length ? selectedVehiclePeople : selectedCustomerPeople.filter(person => person.roles.includes('Supir') || person.roles.includes('Owner'))).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || 'tanpa nomor'}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">PIC persetujuan
+                    <select value={formData.approvalContactId} disabled={customerVehicleLocked} onChange={event => setFormData(previous => ({ ...previous, approvalContactId: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 disabled:bg-gray-100">
+                      <option value="">Kontak utama akun</option>
+                      {selectedCustomerPeople.filter(person => person.roles.includes('PIC') || person.roles.includes('Owner')).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || 'tanpa nomor'}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">Penerima faktur
+                    <select value={formData.billingContactId} disabled={customerVehicleLocked} onChange={event => setFormData(previous => ({ ...previous, billingContactId: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 disabled:bg-gray-100">
+                      <option value="">Kontak tagihan akun</option>
+                      {selectedCustomerPeople.filter(person => person.roles.includes('Keuangan') || person.roles.includes('PIC') || person.roles.includes('Owner')).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || 'tanpa nomor'}</option>)}
+                    </select>
+                  </label>
+                </div>
+              )}
               {data.settings.security.requireBackdateReason !== false && formData.date < localDateKey() && (
                 <div className="grid grid-cols-1 md:grid-cols-2"><span /><input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" /></div>
               )}

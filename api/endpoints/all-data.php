@@ -176,11 +176,25 @@ try {
     $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
     foreach ($rows as &$r) {
         $r['customerCode']      = $r['customer_code'];
+        $r['accountType']       = $r['account_type'] ?? 'Pribadi';
+        $r['primaryContactId']  = $r['primary_contact_id'] ?? null;
+        $r['billingContactId']  = $r['billing_contact_id'] ?? null;
         $r['branchId']          = $r['branch_id'];
         $r['firstSeenBranchId'] = $r['first_seen_branch_id'] ?? $r['branch_id'];
         $r['createdAt']         = $r['created_at'];
     }
     $data['customers'] = $canUseCustomers ? $rows : [];
+
+    // Orang yang terkait dengan akun pelanggan beserta peran dan kendaraan.
+    $people = $pdo->query("SELECT * FROM customer_people ORDER BY name")->fetchAll();
+    $peopleRoles = $pdo->query("SELECT person_id,role_code FROM customer_person_roles ORDER BY role_code")->fetchAll();
+    $peopleVehicles = $pdo->query("SELECT person_id,vehicle_id,assignment_role,is_primary FROM vehicle_people ORDER BY vehicle_id,assignment_role")->fetchAll();
+    $rolesByPerson=[];$vehiclesByPerson=[];
+    foreach($peopleRoles as $roleRow)$rolesByPerson[$roleRow['person_id']][]=$roleRow['role_code'];
+    foreach($peopleVehicles as $vehicleRow)$vehiclesByPerson[$vehicleRow['person_id']][]=['vehicleId'=>$vehicleRow['vehicle_id'],'role'=>$vehicleRow['assignment_role'],'isPrimary'=>(bool)$vehicleRow['is_primary']];
+    $customerLinks=[];foreach($rows as $customerRow)$customerLinks[$customerRow['id']]=['primary'=>$customerRow['primary_contact_id']??null,'billing'=>$customerRow['billing_contact_id']??null];
+    foreach($people as &$person){$person['customerId']=$person['customer_id'];$person['relationshipLabel']=$person['relationship_label'];$person['isActive']=(bool)$person['is_active'];$person['roles']=$rolesByPerson[$person['id']]??[];$person['vehicleAssignments']=$vehiclesByPerson[$person['id']]??[];$person['isPrimaryPic']=($customerLinks[$person['customer_id']]['primary']??null)===$person['id'];$person['isBillingContact']=($customerLinks[$person['customer_id']]['billing']??null)===$person['id'];}
+    $data['customerPeople']=$canUseCustomers?$people:[];
 
     // Vehicles
     $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
@@ -307,6 +321,15 @@ try {
         $r['vehicleRefId'] = $r['vehicle_ref_id'];
         $r['plateNumber'] = $r['plate_number'];
         $r['vehicleInfo'] = $r['vehicle_info'];
+        $r['driverContactId'] = $r['driver_contact_id'] ?? null;
+        $r['driverName'] = $r['driver_name'] ?? null;
+        $r['driverPhone'] = $r['driver_phone'] ?? null;
+        $r['approvalContactId'] = $r['approval_contact_id'] ?? null;
+        $r['approvalContactName'] = $r['approval_contact_name'] ?? null;
+        $r['approvalContactPhone'] = $r['approval_contact_phone'] ?? null;
+        $r['billingContactId'] = $r['billing_contact_id'] ?? null;
+        $r['billingContactName'] = $r['billing_contact_name'] ?? null;
+        $r['billingContactPhone'] = $r['billing_contact_phone'] ?? null;
         $r['transactionTime'] = isset($r['transaction_time']) ? substr((string)$r['transaction_time'], 0, 5) : null;
         $r['branchId'] = $r['branch_id'];
         $r['createdBy'] = $r['created_by'] ?? null;

@@ -26,6 +26,18 @@ $normalizeWorkOrderServices = static function (PDO $pdo, array $services): array
     }
     return ['services' => $result, 'total' => $total];
 };
+$resolveWorkOrderContacts = static function(PDO $pdo,string $customerId,array $data): array {
+    $customerStmt=$pdo->prepare("SELECT primary_contact_id,billing_contact_id FROM customers WHERE id=?");$customerStmt->execute([$customerId]);$customer=$customerStmt->fetch()?:[];
+    $load=static function(PDO $pdo,string $personId,string $customerId): ?array {if($personId==='')return null;$stmt=$pdo->prepare("SELECT id,name,phone FROM customer_people WHERE id=? AND customer_id=? AND is_active=1");$stmt->execute([$personId,$customerId]);$row=$stmt->fetch();if(!$row)throw new InvalidArgumentException('Kontak yang dipilih tidak terhubung dengan akun pelanggan.');return $row;};
+    $driver=$load($pdo,(string)($data['driverContactId']??''),$customerId);
+    $approvalId=(string)($data['approvalContactId']??($customer['primary_contact_id']??''));$approval=$load($pdo,$approvalId,$customerId);
+    $billingId=(string)($data['billingContactId']??($customer['billing_contact_id']??$approvalId));$billing=$load($pdo,$billingId,$customerId);
+    return [
+        'driverContactId'=>$driver['id']??null,'driverName'=>$driver['name']??trim((string)($data['driverName']??'')),'driverPhone'=>$driver['phone']??trim((string)($data['driverPhone']??'')),
+        'approvalContactId'=>$approval['id']??null,'approvalContactName'=>$approval['name']??trim((string)($data['approvalContactName']??'')),'approvalContactPhone'=>$approval['phone']??trim((string)($data['approvalContactPhone']??'')),
+        'billingContactId'=>$billing['id']??null,'billingContactName'=>$billing['name']??trim((string)($data['billingContactName']??'')),'billingContactPhone'=>$billing['phone']??trim((string)($data['billingContactPhone']??'')),
+    ];
+};
 
 switch ($method) {
     case 'GET':
@@ -110,6 +122,15 @@ switch ($method) {
             $r['vehicleRefId']            = $r['vehicle_ref_id'];
             $r['plateNumber']             = $r['plate_number'];
             $r['vehicleInfo']             = $r['vehicle_info'];
+            $r['driverContactId']         = $r['driver_contact_id'] ?? null;
+            $r['driverName']              = $r['driver_name'] ?? null;
+            $r['driverPhone']             = $r['driver_phone'] ?? null;
+            $r['approvalContactId']       = $r['approval_contact_id'] ?? null;
+            $r['approvalContactName']     = $r['approval_contact_name'] ?? null;
+            $r['approvalContactPhone']    = $r['approval_contact_phone'] ?? null;
+            $r['billingContactId']        = $r['billing_contact_id'] ?? null;
+            $r['billingContactName']      = $r['billing_contact_name'] ?? null;
+            $r['billingContactPhone']     = $r['billing_contact_phone'] ?? null;
             $r['transactionTime']         = isset($r['transaction_time']) ? substr((string)$r['transaction_time'], 0, 5) : null;
             $r['branchId']                = $r['branch_id'];
             $r['createdBy']               = $r['created_by'] ?? null;
@@ -180,6 +201,7 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
+            $contacts = $resolveWorkOrderContacts($pdo, (string)$customer['id'], $d);
             assertNoActiveWorkOrder($pdo, (string)$vehicle['id']);
             $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
             $transactionTime = substr((string)($d['transactionTime'] ?? date('H:i')), 0, 5);
@@ -216,18 +238,24 @@ switch ($method) {
                     id, wo_number, date, transaction_time, backdate_reason,
                     customer_ref_id, customer_id, customer_name,
                     vehicle_ref_id, plate_number, vehicle_info,
+                    driver_contact_id, driver_name, driver_phone,
+                    approval_contact_id, approval_contact_name, approval_contact_phone,
+                    billing_contact_id, billing_contact_name, billing_contact_phone,
                     description, findings, diagnosis_temperature, diagnosis_lp, diagnosis_hp, final_temperature, final_lp, final_hp,
                     total, estimate_total, approved_at, approved_services_json, pending_at, pending_until, pending_reason,
                     status, cancel_reason, status_log, notes, branch_id, created_by, created_by_name, technician_id, technician_name,
                     continued_from_wo_id, continued_from_wo_number, continued_from_branch_name,
                     continued_to_wo_id, continued_to_wo_number, continued_to_branch_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $woId, $woNumber, $transactionDate, $transactionTime, $backdateReason ?: null,
                 $customer['id'], $customer['customer_code'], $customer['name'],
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
+                $contacts['driverContactId'], $contacts['driverName'], $contacts['driverPhone'],
+                $contacts['approvalContactId'], $contacts['approvalContactName'], $contacts['approvalContactPhone'],
+                $contacts['billingContactId'], $contacts['billingContactName'], $contacts['billingContactPhone'],
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
                 $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,
@@ -271,6 +299,7 @@ switch ($method) {
                 (string)($d['vehicleRefId'] ?? ''),
                 true
             );
+            $contacts = $resolveWorkOrderContacts($pdo, (string)$customer['id'], $d);
             $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,transaction_time,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
@@ -411,6 +440,9 @@ switch ($method) {
                     wo_number=?, date=?, transaction_time=?, backdate_reason=?,
                     customer_ref_id=?, customer_id=?, customer_name=?,
                     vehicle_ref_id=?, plate_number=?, vehicle_info=?,
+                    driver_contact_id=?, driver_name=?, driver_phone=?,
+                    approval_contact_id=?, approval_contact_name=?, approval_contact_phone=?,
+                    billing_contact_id=?, billing_contact_name=?, billing_contact_phone=?,
                     description=?, findings=?, diagnosis_temperature=?, diagnosis_lp=?, diagnosis_hp=?, final_temperature=?, final_lp=?, final_hp=?,
                     total=?, estimate_total=?, approved_at=?, approved_services_json=?,
                     pending_at=?, pending_until=?, pending_reason=?,
@@ -426,6 +458,9 @@ switch ($method) {
                 $customer['id'], $customer['customer_code'], $customer['name'],
                 $vehicle['id'], normalizeVehiclePlate($vehicle['plate_number']),
                 trim($vehicle['brand'] . ' ' . $vehicle['model'] . ($vehicle['year'] ? ' ' . $vehicle['year'] : '') . ' - ' . $vehicle['color']),
+                $contacts['driverContactId'], $contacts['driverName'], $contacts['driverPhone'],
+                $contacts['approvalContactId'], $contacts['approvalContactName'], $contacts['approvalContactPhone'],
+                $contacts['billingContactId'], $contacts['billingContactName'], $contacts['billingContactPhone'],
                 $d['description'] ?? '', $d['findings'] ?? null,
                 $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
                 $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,

@@ -78,7 +78,7 @@ export const demoData: AppData = {
     { id: '1', code: 'ADM', name: 'Administrator', permissions: allPermissions, description: 'Akses penuh', isActive: true },
     { id: '2', code: 'SPV', name: 'Supervisor', permissions: allPermissions.filter(p => !p.startsWith('user:') && !p.startsWith('role:') && !p.startsWith('branch:delete')), description: 'Kelola operasional', isActive: true },
     { id: '3', code: 'KSR', name: 'Kasir', permissions: ['dashboard:view','ai:view','invoice:view','invoice:create','invoice:edit','wo:view','customer:view','customer:create','customer:edit','vehicle:view','vehicle:create','vehicle:edit','item:view','report:view'], description: 'Kasir', isActive: true },
-    { id: '4', code: 'TKN', name: 'Teknisi', permissions: ['dashboard:view','ai:view','wo:view','wo:create','wo:edit','customer:view','customer:create','vehicle:view','vehicle:create','item:view'], description: 'Teknisi', isActive: true },
+    { id: '4', code: 'TKN', name: 'Teknisi', permissions: ['dashboard:view','ai:view','wo:view','wo:create','wo:edit','customer:view','customer:create','customer:edit','vehicle:view','vehicle:create','vehicle:edit','item:view'], description: 'Teknisi', isActive: true },
   ],
   users: [
     { id: '1', username: 'demo-owner', name: 'OWNER DEMO', email: '', password: 'demo', roleId: '1', roleName: 'Owner', branchId: 'BR-001', branchName: 'CABANG PERINTIS', isActive: true, createdAt: '2026-01-01', isOwner: true, isProtected: true },
@@ -93,6 +93,7 @@ export const demoData: AppData = {
     { id: '4', customerCode: 'PLG-004', name: 'INTAN', phone: '083134567892', address: 'Jl. Diponegoro No. 8', email: 'intan@email.com', createdAt: '2026-03-20', branchId: 'BR-002' },
     { id: '5', customerCode: 'PLG-005', name: 'HERMAN', phone: '086134567895', address: 'Jl. Veteran No. 18', email: 'herman@email.com', createdAt: '2026-05-01', branchId: 'BR-003' },
   ],
+  customerPeople: [],
   vehicles: [
     { id: '1', plateNumber: 'DD1486QZ', brand: 'Suzuki', model: 'APV', year: 2018, color: 'Putih', customerName: 'AHMAD', customerId: 'PLG-001', phone: '085179958522', address: 'Jl. Sudirman No. 10', registrationDate: '2026-06-20', notes: 'AC bocor', branchId: 'BR-001' },
     { id: '2', plateNumber: 'DD1502AZ', brand: 'Toyota', model: 'Avanza', year: 2019, color: 'Hitam', customerName: 'DIKI', customerId: 'PLG-003', phone: '082134567891', address: 'Jl. Ahmad Yani No. 15', registrationDate: '2026-06-25', notes: 'Isi freon', branchId: 'BR-001' },

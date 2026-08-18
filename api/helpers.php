@@ -101,6 +101,39 @@ function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $exclud
 }
 
 function ensureApiSupportTables(PDO $pdo): void {
+    $customerColumns = array_column($pdo->query("SHOW COLUMNS FROM customers")->fetchAll(), 'Field');
+    if (!in_array('account_type', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD account_type ENUM('Pribadi','Perusahaan') NOT NULL DEFAULT 'Pribadi' AFTER name");
+    if (!in_array('primary_contact_id', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD primary_contact_id VARCHAR(64) NULL AFTER address");
+    if (!in_array('billing_contact_id', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD billing_contact_id VARCHAR(64) NULL AFTER primary_contact_id");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS customer_people (
+        id VARCHAR(64) PRIMARY KEY, customer_id VARCHAR(20) NOT NULL, name VARCHAR(150) NOT NULL,
+        phone VARCHAR(30) NOT NULL DEFAULT '', email VARCHAR(150) NOT NULL DEFAULT '',
+        relationship_label VARCHAR(80) NOT NULL DEFAULT '', is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        KEY idx_customer_people_customer(customer_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS customer_person_roles (
+        person_id VARCHAR(64) NOT NULL,
+        role_code ENUM('Owner','PIC','Supir','Keuangan','Pengelola Kendaraan') NOT NULL,
+        PRIMARY KEY(person_id,role_code)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_people (
+        vehicle_id VARCHAR(20) NOT NULL, person_id VARCHAR(64) NOT NULL,
+        assignment_role ENUM('Owner','Supir') NOT NULL,
+        is_primary TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(vehicle_id,person_id,assignment_role),
+        KEY idx_vehicle_people_person(person_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS customer_master_audit_logs (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, entity_type VARCHAR(30) NOT NULL,
+        entity_id VARCHAR(64) NOT NULL, action_type VARCHAR(30) NOT NULL,
+        before_json LONGTEXT NULL, after_json LONGTEXT NULL,
+        user_id VARCHAR(64) NULL, user_name VARCHAR(150) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_customer_master_audit(entity_type,entity_id,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $branchColumns = array_column($pdo->query("SHOW COLUMNS FROM branches")->fetchAll(), 'Field');
     if (!in_array('review_url', $branchColumns, true)) $pdo->exec("ALTER TABLE branches ADD review_url VARCHAR(500) NULL AFTER phone");
     $vehicleColumns = array_column($pdo->query("SHOW COLUMNS FROM vehicles")->fetchAll(), 'Field');
@@ -137,6 +170,15 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('continued_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_by_name VARCHAR(150) NULL AFTER continued_by");
     if (!in_array('continued_branch_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_branch_id VARCHAR(20) NULL AFTER continued_by_name");
     if (!in_array('approved_services_json', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD approved_services_json LONGTEXT NULL AFTER approved_at");
+    if (!in_array('driver_contact_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD driver_contact_id VARCHAR(64) NULL AFTER vehicle_info");
+    if (!in_array('driver_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD driver_name VARCHAR(150) NULL AFTER driver_contact_id");
+    if (!in_array('driver_phone', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD driver_phone VARCHAR(30) NULL AFTER driver_name");
+    if (!in_array('approval_contact_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD approval_contact_id VARCHAR(64) NULL AFTER driver_phone");
+    if (!in_array('approval_contact_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD approval_contact_name VARCHAR(150) NULL AFTER approval_contact_id");
+    if (!in_array('approval_contact_phone', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD approval_contact_phone VARCHAR(30) NULL AFTER approval_contact_name");
+    if (!in_array('billing_contact_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD billing_contact_id VARCHAR(64) NULL AFTER approval_contact_phone");
+    if (!in_array('billing_contact_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD billing_contact_name VARCHAR(150) NULL AFTER billing_contact_id");
+    if (!in_array('billing_contact_phone', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD billing_contact_phone VARCHAR(30) NULL AFTER billing_contact_name");
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
     if ($statusColumn && (
         stripos((string)$statusColumn['Type'], "'Register'") === false
@@ -160,6 +202,30 @@ function ensureApiSupportTables(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
         migration_key VARCHAR(100) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $customerAccountMigrationKey = 'customer_accounts_and_people_20260818_v1';
+    $customerAccountMigrationCheck = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $customerAccountMigrationCheck->execute([$customerAccountMigrationKey]);
+    if ((int)$customerAccountMigrationCheck->fetchColumn() === 0) {
+        $pdo->beginTransaction();
+        try {
+            $insertPerson = $pdo->prepare("INSERT INTO customer_people(id,customer_id,name,phone,email,relationship_label,is_active) VALUES(?,?,?,?,?,'Pemilik akun',1)");
+            $insertRole = $pdo->prepare("INSERT IGNORE INTO customer_person_roles(person_id,role_code) VALUES(?,?)");
+            $setPrimary = $pdo->prepare("UPDATE customers SET primary_contact_id=?,billing_contact_id=? WHERE id=?");
+            $assignOwnedVehicles = $pdo->prepare("INSERT IGNORE INTO vehicle_people(vehicle_id,person_id,assignment_role,is_primary) SELECT id,?,'Owner',1 FROM vehicles WHERE customer_id=?");
+            foreach ($pdo->query("SELECT id,name,phone,email FROM customers WHERE primary_contact_id IS NULL OR primary_contact_id='' FOR UPDATE")->fetchAll() as $customerRow) {
+                $personId = 'CP-' . strtoupper(substr(hash('sha256', (string)$customerRow['id']), 0, 24));
+                $insertPerson->execute([$personId,$customerRow['id'],$customerRow['name'],$customerRow['phone'] ?? '',$customerRow['email'] ?? '']);
+                foreach (['Owner','PIC','Keuangan'] as $roleCode) $insertRole->execute([$personId,$roleCode]);
+                $setPrimary->execute([$personId,$personId,$customerRow['id']]);
+                $assignOwnedVehicles->execute([$personId,$customerRow['id']]);
+            }
+            $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$customerAccountMigrationKey]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
     $lostSalesMigrationKey = 'legacy_floating_work_orders_to_lost_sales_20260810_v1';
     $lostSalesMigrationCheck = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
     $lostSalesMigrationCheck->execute([$lostSalesMigrationKey]);
@@ -650,8 +716,8 @@ function getUserPermissions(PDO $pdo, array $user): array {
         $permissions = array_merge($permissions, [
             'ai:view',
             'wo:view', 'wo:create',
-            'customer:view', 'customer:create',
-            'vehicle:view', 'vehicle:create',
+            'customer:view', 'customer:create', 'customer:edit',
+            'vehicle:view', 'vehicle:create', 'vehicle:edit',
             'item:view',
         ]);
     }

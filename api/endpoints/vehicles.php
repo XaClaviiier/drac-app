@@ -88,9 +88,10 @@ switch ($method) {
         $firstSeenBranchId = (string)($d['firstSeenBranchId'] ?? $branchId);
         requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
+        $vehicleId = $d['id'] ?? generateId();
         $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, brand_id, model_id, generation_id, generation_name, engine_cc, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
-            $d['id'] ?? generateId(),
+            $vehicleId,
             $plate, $brand['name'], $model['name'], $brand['id'], $model['id'],
             $generation['id']??null,$generation['name']??'',$engineCc,
             $d['year'] ?? 0, $color['name'],
@@ -100,18 +101,20 @@ switch ($method) {
             $d['notes'] ?? '',
             $branchId, $firstSeenBranchId
         ]);
+        $ownerStmt=$pdo->prepare("SELECT primary_contact_id FROM customers WHERE id=?");$ownerStmt->execute([$customer['id']]);$ownerId=(string)($ownerStmt->fetchColumn()?:'');
+        if($ownerId!=='')$pdo->prepare("INSERT IGNORE INTO vehicle_people(vehicle_id,person_id,assignment_role,is_primary) VALUES(?,?,'Owner',1)")->execute([$vehicleId,$ownerId]);
         respondSuccess(null, 'Kendaraan ditambahkan');
         break;
 
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
-        $currentStmt = $pdo->prepare("SELECT branch_id FROM vehicles WHERE id=?");
+        $currentStmt = $pdo->prepare("SELECT * FROM vehicles WHERE id=?");
         $currentStmt->execute([$id]);
         $current = $currentStmt->fetch();
         if (!$current) respondError('Kendaraan tidak ditemukan', 404);
-        $branchId = (string)($d['branchId'] ?? $current['branch_id']);
-        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        // Kendaraan adalah master global; cabang pertama tetap menjadi asal data.
+        $branchId = (string)$current['branch_id'];
         $plate = normalizeVehiclePlate((string)($d['plateNumber'] ?? ''));
         if ($plate === '') respondError('Nomor plat wajib diisi.', 422);
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
@@ -134,6 +137,11 @@ switch ($method) {
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
             $d['notes'] ?? '', $branchId, $id
         ]);
+        if ((string)($current['customer_id'] ?? '') !== (string)$customer['id']) {
+            $pdo->prepare("DELETE vp FROM vehicle_people vp JOIN customer_people cp ON cp.id=vp.person_id WHERE vp.vehicle_id=? AND cp.customer_id<>?")->execute([$id,$customer['id']]);
+        }
+        $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,before_json,after_json,user_id,user_name) VALUES('vehicle',?,'update',?,?,?,?)")
+            ->execute([$id,json_encode($current,JSON_UNESCAPED_UNICODE),json_encode(['plateNumber'=>$plate,'brand'=>$brand['name'],'model'=>$model['name'],'year'=>(int)($d['year']??0),'color'=>$color['name'],'customerId'=>$customer['id'],'notes'=>$d['notes']??''],JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
         respondSuccess(null, 'Kendaraan diupdate');
         break;
 
@@ -141,6 +149,7 @@ switch ($method) {
         if (!$id) respondError('ID required');
         $check=$pdo->prepare("SELECT COUNT(*) FROM work_orders WHERE vehicle_ref_id=?");$check->execute([$id]);
         if((int)$check->fetchColumn()>0) respondError('Kendaraan sudah memiliki histori WO dan tidak dapat dihapus.',409);
+        $pdo->prepare("DELETE FROM vehicle_people WHERE vehicle_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM vehicles WHERE id=?")->execute([$id]);
         respondSuccess(null, 'Kendaraan dihapus');
         break;

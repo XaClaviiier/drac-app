@@ -78,7 +78,7 @@ interface AppContextType {
 }
 
 const emptyData: AppData = {
-  vehicles: [], customers: [], invoices: [], workOrders: [],
+  vehicles: [], customers: [], customerPeople: [], invoices: [], workOrders: [],
   itemCategories: [], items: [], branches: [], roles: [], users: [],
   suppliers: [], goodsReceipts: [], purchaseInvoices: [],
   warehouses: [], warehouseStocks: [], stockMovements: [],
@@ -157,6 +157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           customerRefId: vehicle.customerRefId || vehicle.customer_id || undefined,
         })),
         customers: res.data.customers || [],
+        customerPeople: res.data.customerPeople || [],
         invoices: res.data.invoices || [],
         workOrders: res.data.workOrders || [],
         itemCategories: res.data.itemCategories || [],
@@ -300,8 +301,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const technicianBaseline: Permission[] = [
       'ai:view',
       'wo:view', 'wo:create',
-      'customer:view', 'customer:create',
-      'vehicle:view', 'vehicle:create',
+      'customer:view', 'customer:create', 'customer:edit',
+      'vehicle:view', 'vehicle:create', 'vehicle:edit',
       'item:view',
     ];
     if (isTechnicianRole && technicianBaseline.includes(perm)) return true;

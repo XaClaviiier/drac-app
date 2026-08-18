@@ -40,6 +40,26 @@ export interface Customer {
   branchId: string;
   /** Cabang tempat pelanggan pertama kali diinput (tidak berubah meski data dilihat di cabang lain) */
   firstSeenBranchId?: string;
+  accountType?: 'Pribadi' | 'Perusahaan';
+  primaryContactId?: string;
+  billingContactId?: string;
+}
+
+export type CustomerPersonRole = 'Owner' | 'PIC' | 'Supir' | 'Keuangan' | 'Pengelola Kendaraan';
+export interface CustomerPerson {
+  id: string;
+  customerId: string;
+  name: string;
+  phone: string;
+  email: string;
+  relationshipLabel: string;
+  roles: CustomerPersonRole[];
+  vehicleAssignments: Array<{ vehicleId: string; role: 'Owner' | 'Supir'; isPrimary?: boolean }>;
+  isPrimaryPic: boolean;
+  isBillingContact: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SalesInvoice {
@@ -50,6 +70,15 @@ export interface SalesInvoice {
   customerId: string;
   customerName: string;
   vehicleInfo: string;
+  driverContactId?: string;
+  driverName?: string;
+  driverPhone?: string;
+  approvalContactId?: string;
+  approvalContactName?: string;
+  approvalContactPhone?: string;
+  billingContactId?: string;
+  billingContactName?: string;
+  billingContactPhone?: string;
   description: string;
   total: number;
   payment: number;
@@ -94,6 +123,15 @@ export interface WorkOrder {
   vehicleRefId?: string;
   plateNumber: string;
   vehicleInfo: string;
+  driverContactId?: string;
+  driverName?: string;
+  driverPhone?: string;
+  approvalContactId?: string;
+  approvalContactName?: string;
+  approvalContactPhone?: string;
+  billingContactId?: string;
+  billingContactName?: string;
+  billingContactPhone?: string;
   description?: string;       // keluhan pelanggan
   findings?: string;          // hasil pemeriksaan teknisi
   diagnosisTemperature?: number;
@@ -430,6 +468,7 @@ export interface PurchaseInvoice {
 export interface AppData {
   vehicles: Vehicle[];
   customers: Customer[];
+  customerPeople: CustomerPerson[];
   invoices: SalesInvoice[];
   workOrders: WorkOrder[];
   itemCategories: ItemCategory[];

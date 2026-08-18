@@ -41,7 +41,7 @@ if ($requestUser && $resource === 'suppliers' && empty($requestUser['is_owner'])
 // (pembayaran, AI, sesi) melakukan pemeriksaan tambahan di dalam endpoint.
 $permissionByResource = [
     'branches' => 'branch', 'roles' => 'role', 'users' => 'user',
-    'customers' => 'customer', 'vehicles' => 'vehicle',
+    'customers' => 'customer', 'customer-people' => 'customer', 'vehicles' => 'vehicle',
     'suppliers' => 'supplier', 'items' => 'item',
     'item-categories' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item', 'stock-adjustments' => 'item',
     'warehouse-transfers' => 'item',
@@ -54,7 +54,9 @@ if ($requestUser && isset($permissionByResource[$resource])) {
     if ($operation !== null) {
         $permission = ($resource === 'purchase-invoices' && $action === 'payments')
             ? 'purchase:pay'
-            : $permissionByResource[$resource] . ':' . $operation;
+            : (($resource === 'customer-people' && $method !== 'GET')
+                ? 'customer:edit'
+                : $permissionByResource[$resource] . ':' . $operation);
         // Petugas penerimaan boleh membuat master barang sementara. Barang ini
         // tetap Pending sampai diverifikasi Administrator/Owner.
         if ($resource === 'items' && $method === 'POST' && !authenticatedUserHasPermission($pdo, $requestUser, $permission)) {
@@ -143,6 +145,9 @@ try {
             break;
         case 'customer-contacts':
             require 'endpoints/customer-contacts.php';
+            break;
+        case 'customer-people':
+            require 'endpoints/customer-people.php';
             break;
 
         // ----- VEHICLES -----

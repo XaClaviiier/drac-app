@@ -12,6 +12,9 @@ switch ($method) {
         $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
         foreach ($rows as &$r) {
             $r['customerCode']       = $r['customer_code'];
+            $r['accountType']        = $r['account_type'] ?? 'Pribadi';
+            $r['primaryContactId']   = $r['primary_contact_id'] ?? null;
+            $r['billingContactId']   = $r['billing_contact_id'] ?? null;
             $r['branchId']           = $r['branch_id'];
             $r['firstSeenBranchId']  = $r['first_seen_branch_id'] ?? $r['branch_id'];
             $r['createdAt']          = $r['created_at'];
@@ -41,13 +44,19 @@ switch ($method) {
         $firstSeenBranchId = (string)($d['firstSeenBranchId'] ?? $branchId);
         requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
-        $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([
-            $d['id'] ?? generateId(),
-            $code, $name, $phone,
-            $d['email'] ?? '', $d['address'] ?? '',
-            $branchId, $firstSeenBranchId
-        ]);
+        $customerId = $d['id'] ?? generateId();
+        $accountType = ($d['accountType'] ?? 'Pribadi') === 'Perusahaan' ? 'Perusahaan' : 'Pribadi';
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, account_type, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$customerId,$code,$name,$accountType,$phone,$d['email'] ?? '',$d['address'] ?? '',$branchId,$firstSeenBranchId]);
+            $personId = 'CP-' . strtoupper(substr(hash('sha256', (string)$customerId), 0, 24));
+            $pdo->prepare("INSERT INTO customer_people(id,customer_id,name,phone,email,relationship_label,is_active) VALUES(?,?,?,?,?,'Pemilik akun',1)")->execute([$personId,$customerId,$name,$phone,$d['email'] ?? '']);
+            foreach (['Owner','PIC','Keuangan'] as $roleCode) $pdo->prepare("INSERT INTO customer_person_roles(person_id,role_code) VALUES(?,?)")->execute([$personId,$roleCode]);
+            $pdo->prepare("UPDATE customers SET primary_contact_id=?,billing_contact_id=? WHERE id=?")->execute([$personId,$personId,$customerId]);
+            $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,after_json,user_id,user_name) VALUES('customer',?,'create',?,?,?)")->execute([$customerId,json_encode(['name'=>$name,'accountType'=>$accountType,'phone'=>$phone,'email'=>$d['email']??'','address'=>$d['address']??''],JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
+            $pdo->commit();
+        } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
         $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
         respondSuccess(['customerCode' => $code], 'Pelanggan ditambahkan');
         break;
@@ -55,16 +64,22 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
-        $currentStmt = $pdo->prepare("SELECT branch_id FROM customers WHERE id=?");
+        $currentStmt = $pdo->prepare("SELECT * FROM customers WHERE id=?");
         $currentStmt->execute([$id]);
         $current = $currentStmt->fetch();
         if (!$current) respondError('Pelanggan tidak ditemukan', 404);
-        $branchId = (string)($d['branchId'] ?? $current['branch_id']);
-        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        // Master pelanggan bersifat global. Cabang asal tetap dipertahankan,
+        // tetapi teknisi cabang lain yang berhak edit boleh melengkapi datanya.
+        $branchId = (string)$current['branch_id'];
         $name = $sanitizeCustomerName($d['name'] ?? '');
         if ($name === '') respondError('Nama pelanggan wajib diisi.', 422);
-        $stmt = $pdo->prepare("UPDATE customers SET name=?, phone=?, email=?, address=?, branch_id=? WHERE id=?");
-        $stmt->execute([$name, $d['phone'] ?? '', $d['email'] ?? '', $d['address'] ?? '', $branchId, $id]);
+        $accountType = ($d['accountType'] ?? ($current['account_type'] ?? 'Pribadi')) === 'Perusahaan' ? 'Perusahaan' : 'Pribadi';
+        $after = ['name'=>$name,'accountType'=>$accountType,'phone'=>$d['phone']??'','email'=>$d['email']??'','address'=>$d['address']??'','branchId'=>$branchId];
+        $stmt = $pdo->prepare("UPDATE customers SET name=?,account_type=?,phone=?,email=?,address=?,branch_id=? WHERE id=?");
+        $stmt->execute([$name,$accountType,$d['phone'] ?? '',$d['email'] ?? '',$d['address'] ?? '',$branchId,$id]);
+        $pdo->prepare("UPDATE customer_people SET name=?,phone=?,email=? WHERE id=? AND relationship_label='Pemilik akun'")
+            ->execute([$name,$d['phone'] ?? '',$d['email'] ?? '',$current['primary_contact_id'] ?? '']);
+        $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,before_json,after_json,user_id,user_name) VALUES('customer',?,'update',?,?,?,?)")->execute([$id,json_encode($current,JSON_UNESCAPED_UNICODE),json_encode($after,JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
         respondSuccess(null, 'Pelanggan diupdate');
         break;
 
@@ -74,6 +89,9 @@ switch ($method) {
             $check=$pdo->prepare("SELECT COUNT(*) FROM {$table} WHERE {$column}=?");$check->execute([$id]);
             if((int)$check->fetchColumn()>0) respondError('Pelanggan sudah memiliki kendaraan atau transaksi. Nonaktifkan/arsipkan data, jangan hapus histori.',409);
         }
+        $personIds=$pdo->prepare("SELECT id FROM customer_people WHERE customer_id=?");$personIds->execute([$id]);$personIds=$personIds->fetchAll(PDO::FETCH_COLUMN);
+        foreach($personIds as $personId){$pdo->prepare("DELETE FROM vehicle_people WHERE person_id=?")->execute([$personId]);$pdo->prepare("DELETE FROM customer_person_roles WHERE person_id=?")->execute([$personId]);}
+        $pdo->prepare("DELETE FROM customer_people WHERE customer_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM customers WHERE id=?")->execute([$id]);
         respondSuccess(null, 'Pelanggan dihapus');
         break;

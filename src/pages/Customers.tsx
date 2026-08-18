@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3, ContactRound } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { Customer } from '../types';
+import type { Customer, CustomerPerson, CustomerPersonRole } from '../types';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 
@@ -19,7 +19,7 @@ const customerColumns: Array<{ id: CustomerColumn; label: string; locked?: boole
 const defaultCustomerColumns: CustomerColumn[] = ['name', 'phone', 'plates', 'vehicles', 'workOrders', 'invoices', 'actions'];
 
 export default function Customers() {
-  const { data, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission } = useApp();
+  const { data, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,6 +31,11 @@ export default function Customers() {
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
   const [contactHistory, setContactHistory] = useState<ContactLog[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [peopleCustomer, setPeopleCustomer] = useState<Customer | null>(null);
+  const [editingPerson, setEditingPerson] = useState<CustomerPerson | null>(null);
+  const [personSaving, setPersonSaving] = useState(false);
+  const emptyPersonForm = { name:'', phone:'', email:'', relationshipLabel:'', roles:['Supir'] as CustomerPersonRole[], vehicleIds:[] as string[], isPrimaryPic:false, isBillingContact:false, isActive:true };
+  const [personForm, setPersonForm] = useState(emptyPersonForm);
   const [visibleColumns, setVisibleColumns] = useState<CustomerColumn[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('drac-customer-columns') || '[]');
@@ -39,6 +44,7 @@ export default function Customers() {
   });
 
   const [formData, setFormData] = useState({
+    accountType: 'Pribadi' as 'Pribadi' | 'Perusahaan',
     name: '',
     phone: '',
     address: '',
@@ -100,7 +106,7 @@ export default function Customers() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', phone: '', address: '', email: '' });
+    setFormData({ accountType: 'Pribadi', name: '', phone: '', address: '', email: '' });
     setEditingCustomer(null);
   };
 
@@ -108,6 +114,7 @@ export default function Customers() {
     if (customer) {
       setEditingCustomer(customer);
       setFormData({
+        accountType: customer.accountType || 'Pribadi',
         name: customer.name,
         phone: customer.phone,
         address: customer.address,
@@ -120,7 +127,7 @@ export default function Customers() {
   };
 
   const formIsDirty = () => {
-    if (editingCustomer) return formData.name !== editingCustomer.name || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
+    if (editingCustomer) return formData.accountType !== (editingCustomer.accountType || 'Pribadi') || formData.name !== editingCustomer.name || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
     return Object.values(formData).some(value => value.trim() !== '');
   };
 
@@ -178,6 +185,25 @@ export default function Customers() {
   const whatsappNumber=(value:string)=>{const digits=value.replace(/\D/g,'');return digits.startsWith('0')?`62${digits.slice(1)}`:digits};
   const sendContact = async () => { if(!contactCustomer||!contactMessage.trim())return;const context=customerContext(contactCustomer);if(contactTemplate==='Minta Ulasan'&&!context.branch?.reviewUrl)return window.alert('Link Google Review cabang belum diatur. Buka Pengguna & Akses → Cabang → Edit Cabang.');const payload={customerId:contactCustomer.id,customerName:contactCustomer.name,phone:contactCustomer.phone,templateType:contactTemplate,messageText:contactMessage,vehicleId:context.vehicle?.id,vehicleInfo:context.vehicle?`${context.vehicle.plateNumber} · ${context.vehicle.brand} ${context.vehicle.model}`:'',workOrderId:context.wo?.id,workOrderNumber:context.wo?.woNumber,invoiceId:context.invoice?.id,invoiceNumber:context.invoice?.invoiceNumber,branchId:context.branchId};const logRequest=api.create('customer-contacts',payload);window.open(`https://wa.me/${whatsappNumber(contactCustomer.phone)}?text=${encodeURIComponent(contactMessage)}`,'_blank','noopener,noreferrer');setContactCustomer(null);const result=await logRequest;if(!result.success)window.alert(result.message||'WhatsApp dibuka, tetapi histori kontak gagal disimpan.'); };
   const openHistory = async(customer:Customer)=>{setHistoryCustomer(customer);setHistoryLoading(true);const result=await api.get(`customer-contacts/${customer.id}`);setContactHistory(result.success?result.data||[]:[]);setHistoryLoading(false);};
+  const openPeople = (customer: Customer) => { setPeopleCustomer(customer); setEditingPerson(null); setPersonForm(emptyPersonForm); };
+  const editPerson = (person: CustomerPerson) => {
+    setEditingPerson(person);
+    setPersonForm({ name:person.name, phone:person.phone, email:person.email, relationshipLabel:person.relationshipLabel, roles:person.roles, vehicleIds:Array.from(new Set(person.vehicleAssignments.map(item=>item.vehicleId))), isPrimaryPic:person.isPrimaryPic, isBillingContact:person.isBillingContact, isActive:person.isActive });
+  };
+  const togglePersonRole = (role: CustomerPersonRole) => setPersonForm(current => ({ ...current, roles:current.roles.includes(role) ? current.roles.filter(item=>item!==role) : [...current.roles,role] }));
+  const savePerson = async () => {
+    if(!peopleCustomer || !personForm.name.trim()) return;
+    setPersonSaving(true);
+    const assignments = personForm.vehicleIds.flatMap(vehicleId => [
+      ...(personForm.roles.includes('Owner') ? [{vehicleId,role:'Owner' as const}] : []),
+      ...(personForm.roles.includes('Supir') ? [{vehicleId,role:'Supir' as const}] : []),
+    ]);
+    const payload={...personForm,customerId:peopleCustomer.id,vehicleAssignments:assignments};
+    const result=editingPerson ? await api.update('customer-people',editingPerson.id,payload) : await api.create('customer-people',payload);
+    setPersonSaving(false);
+    if(!result.success) return window.alert(result.message || 'Kontak gagal disimpan.');
+    await refreshData(); setEditingPerson(null); setPersonForm(emptyPersonForm);
+  };
 
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
@@ -276,7 +302,7 @@ export default function Customers() {
                           </div>
                           <div className="min-w-0">
                             <p className="max-w-[220px] truncate text-sm font-semibold text-gray-900">{customer.name}</p>
-                            <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
+                            <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode} <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 font-sans text-[10px] text-slate-600">{customer.accountType || 'Pribadi'}</span></p>
                           </div>
                         </div>
                       </td>}
@@ -302,6 +328,7 @@ export default function Customers() {
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => openContact(customer)} disabled={!customer.phone} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:text-gray-300" title="Hubungi via WhatsApp"><MessageCircle className="h-4 w-4" /></button>
                           <button onClick={() => void openHistory(customer)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100" title="Riwayat kontak"><History className="h-4 w-4" /></button>
+                          {hasPermission('customer:edit') && <button onClick={() => openPeople(customer)} className="rounded-lg p-1.5 text-violet-600 hover:bg-violet-50" title="Kelola owner, PIC, pengemudi, dan penerima tagihan"><ContactRound className="h-4 w-4" /></button>}
                           {hasPermission('customer:edit') && (
                             <button onClick={() => handleOpenModal(customer)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit pelanggan">
                               <Edit className="h-4 w-4" />
@@ -365,12 +392,14 @@ export default function Customers() {
                     <div>
                       <h3 className="font-semibold text-gray-900">{customer.name}</h3>
                       <p className="text-xs text-blue-600 font-mono font-medium">{customer.customerCode}</p>
+                      <p className="text-[10px] font-semibold uppercase text-slate-500">{customer.accountType || 'Pribadi'}</p>
                       <p className="text-xs text-gray-500">Sejak {customer.createdAt}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => openContact(customer)} disabled={!customer.phone} className="rounded-lg bg-emerald-50 p-1.5 text-emerald-600 disabled:text-gray-300" title="Hubungi via WhatsApp"><MessageCircle className="h-4 w-4" /></button>
                     <button onClick={() => void openHistory(customer)} className="rounded-lg bg-slate-50 p-1.5 text-slate-600" title="Riwayat kontak"><History className="h-4 w-4" /></button>
+                    {hasPermission('customer:edit') && <button onClick={() => openPeople(customer)} className="rounded-lg bg-violet-50 p-1.5 text-violet-600" title="Kelola kontak dan pengemudi"><ContactRound className="h-4 w-4" /></button>}
                     {hasPermission('customer:edit') && (
                       <button
                         onClick={() => handleOpenModal(customer)}
@@ -468,8 +497,12 @@ export default function Customers() {
                       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-mono font-bold text-blue-700">{editingCustomer ? editingCustomer.customerCode : generateCustomerCode()}</div>
                     </div>
                     <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
-                      <label className="text-sm font-medium text-gray-700">Nama Pelanggan <span className="text-red-500">*</span></label>
-                      <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama lengkap pelanggan" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <label className="text-sm font-medium text-gray-700">Jenis Akun</label>
+                      <select value={formData.accountType} onChange={event=>setFormData({...formData,accountType:event.target.value as 'Pribadi'|'Perusahaan'})} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500"><option value="Pribadi">Pribadi / Keluarga</option><option value="Perusahaan">Perusahaan / Organisasi</option></select>
+                    </div>
+                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">{formData.accountType==='Perusahaan'?'Nama Perusahaan':'Nama Pelanggan'} <span className="text-red-500">*</span></label>
+                      <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder={formData.accountType==='Perusahaan'?'Nama perusahaan / instansi':'Nama pemilik akun'} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
                       <label className="text-sm font-medium text-gray-700">No. Telepon <span className="text-red-500">*</span></label>
@@ -516,6 +549,18 @@ export default function Customers() {
           </button>
         </div>
       )}
+      {peopleCustomer && <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/50 p-3"><div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="font-bold">Kontak & Pengguna Kendaraan</h3><p className="text-sm text-gray-500">{peopleCustomer.name} · {peopleCustomer.accountType || 'Pribadi'}</p></div><button onClick={()=>setPeopleCustomer(null)}><X className="h-5 w-5"/></button></header>
+        <div className="grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[1fr_1.15fr]">
+          <section className="border-b p-4 md:border-b-0 md:border-r"><h4 className="mb-3 text-sm font-bold text-slate-700">Daftar kontak</h4><div className="space-y-2">{data.customerPeople.filter(person=>person.customerId===peopleCustomer.id).map(person=><button type="button" key={person.id} onClick={()=>editPerson(person)} className={`w-full rounded-xl border p-3 text-left ${editingPerson?.id===person.id?'border-blue-500 bg-blue-50':'border-gray-200 hover:bg-slate-50'}`}><div className="flex justify-between gap-2"><strong>{person.name}</strong><span className={`text-xs font-semibold ${person.isActive?'text-emerald-600':'text-gray-400'}`}>{person.isActive?'Aktif':'Nonaktif'}</span></div><p className="text-xs text-gray-500">{person.phone || 'Tanpa telepon'} · {person.relationshipLabel || 'Kontak'}</p><div className="mt-2 flex flex-wrap gap-1">{person.roles.map(role=><span key={role} className="rounded bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{role}</span>)}</div></button>)}{data.customerPeople.filter(person=>person.customerId===peopleCustomer.id).length===0&&<p className="rounded-lg bg-gray-50 p-6 text-center text-sm text-gray-400">Belum ada kontak.</p>}</div></section>
+          <section className="space-y-4 p-4"><div className="flex items-center justify-between"><h4 className="text-sm font-bold text-slate-700">{editingPerson?'Edit kontak':'Kontak baru'}</h4>{editingPerson&&<button onClick={()=>{setEditingPerson(null);setPersonForm(emptyPersonForm)}} className="text-xs font-semibold text-blue-600">+ Kontak baru</button>}</div>
+            <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-gray-600">Nama *<input value={personForm.name} onChange={e=>setPersonForm({...personForm,name:e.target.value.toUpperCase()})} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-normal"/></label><label className="text-xs font-semibold text-gray-600">Hubungan / Jabatan<input value={personForm.relationshipLabel} onChange={e=>setPersonForm({...personForm,relationshipLabel:e.target.value})} placeholder="Direktur, istri, staf..." className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-normal"/></label><label className="text-xs font-semibold text-gray-600">Telepon<input value={personForm.phone} onChange={e=>setPersonForm({...personForm,phone:e.target.value})} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-normal"/></label><label className="text-xs font-semibold text-gray-600">Email<input value={personForm.email} onChange={e=>setPersonForm({...personForm,email:e.target.value})} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-normal"/></label></div>
+            <div><p className="mb-2 text-xs font-bold text-gray-600">Peran</p><div className="flex flex-wrap gap-2">{(['Owner','PIC','Supir','Keuangan','Pengelola Kendaraan'] as CustomerPersonRole[]).map(role=><label key={role} className={`cursor-pointer rounded-lg border px-3 py-2 text-xs font-semibold ${personForm.roles.includes(role)?'border-violet-500 bg-violet-50 text-violet-700':'border-gray-200 text-gray-500'}`}><input type="checkbox" checked={personForm.roles.includes(role)} onChange={()=>togglePersonRole(role)} className="mr-2"/>{role}</label>)}</div></div>
+            <div><p className="mb-2 text-xs font-bold text-gray-600">Kendaraan yang boleh dibawa / dimiliki</p><div className="grid max-h-32 gap-2 overflow-y-auto sm:grid-cols-2">{data.vehicles.filter(vehicle=>vehicle.customerRefId===peopleCustomer.id).map(vehicle=><label key={vehicle.id} className="flex cursor-pointer items-center gap-2 rounded-lg border p-2 text-xs"><input type="checkbox" checked={personForm.vehicleIds.includes(vehicle.id)} onChange={()=>setPersonForm(current=>({...current,vehicleIds:current.vehicleIds.includes(vehicle.id)?current.vehicleIds.filter(id=>id!==vehicle.id):[...current.vehicleIds,vehicle.id]}))}/><span><strong>{vehicle.plateNumber}</strong><br/>{vehicle.brand} {vehicle.model}</span></label>)}</div></div>
+            <div className="grid gap-2 sm:grid-cols-3"><label className="text-xs"><input type="checkbox" checked={personForm.isPrimaryPic} onChange={e=>setPersonForm({...personForm,isPrimaryPic:e.target.checked})} className="mr-2"/>PIC utama</label><label className="text-xs"><input type="checkbox" checked={personForm.isBillingContact} onChange={e=>setPersonForm({...personForm,isBillingContact:e.target.checked})} className="mr-2"/>Penerima tagihan</label><label className="text-xs"><input type="checkbox" checked={personForm.isActive} onChange={e=>setPersonForm({...personForm,isActive:e.target.checked})} className="mr-2"/>Aktif</label></div>
+          </section>
+        </div><footer className="flex justify-end gap-2 border-t p-4"><button onClick={()=>setPeopleCustomer(null)} className="rounded-lg border px-4 py-2">Tutup</button><button onClick={()=>void savePerson()} disabled={!personForm.name.trim()||personSaving} className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white disabled:bg-gray-300">{personSaving?'Menyimpan...':'Simpan Kontak'}</button></footer>
+      </div></div>}
       {contactCustomer && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between bg-emerald-600 px-5 py-4 text-white"><div><h3 className="font-bold">WhatsApp Pelanggan</h3><p className="text-xs text-emerald-100">{contactCustomer.name} · {contactCustomer.phone}</p></div><button onClick={()=>setContactCustomer(null)}><X className="h-5 w-5"/></button></header><div className="space-y-4 p-5"><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{(['Hubungi Kembali','Terima Kasih','Minta Ulasan','Pengingat Servis','Pesan Bebas'] as ContactTemplate[]).map(template=><button key={template} onClick={()=>changeTemplate(template)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${contactTemplate===template?'border-emerald-600 bg-emerald-50 text-emerald-700':'border-gray-200 text-gray-600'}`}>{template}</button>)}</div><label className="block text-sm font-medium text-gray-700">Pesan<textarea rows={7} value={contactMessage} onChange={event=>setContactMessage(event.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 p-3 text-sm outline-none focus:border-emerald-500"/></label><p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Saat dilanjutkan, sistem mencatat status “WhatsApp Dibuka”. Pengiriman dan pembacaan pesan tidak dapat dipastikan tanpa WhatsApp Business API.</p></div><footer className="flex justify-end gap-2 border-t p-4"><button onClick={()=>setContactCustomer(null)} className="rounded-lg border px-4 py-2">Batal</button><button onClick={()=>void sendContact()} disabled={!contactMessage.trim()} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white disabled:bg-gray-300"><MessageCircle className="h-4 w-4"/>Buka WhatsApp</button></footer></div></div>}
       {historyCustomer && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="font-bold">Riwayat Kontak</h3><p className="text-sm text-gray-500">{historyCustomer.name}</p></div><button onClick={()=>setHistoryCustomer(null)}><X className="h-5 w-5"/></button></header><div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">{historyLoading?<p className="py-10 text-center text-gray-400">Memuat histori...</p>:contactHistory.length?contactHistory.map(log=><article key={log.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{log.templateType}</span><p className="mt-2 text-xs text-gray-500">{[log.vehicleInfo,log.workOrderNumber,log.invoiceNumber].filter(Boolean).join(' · ')||'Kontak pelanggan'}</p></div><div className="text-right text-xs text-gray-500"><p className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5"/>{new Date(log.createdAt).toLocaleString('id-ID')}</p><p>{log.createdByName||'-'} · {log.status}</p></div></div><p className="mt-3 whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm text-gray-700">{log.messageText}</p></article>):<p className="py-10 text-center text-gray-400">Belum ada riwayat kontak.</p>}</div><footer className="flex justify-end border-t p-4"><button onClick={()=>setHistoryCustomer(null)} className="rounded-lg border px-4 py-2">Tutup</button></footer></div></div>}
     </div>
