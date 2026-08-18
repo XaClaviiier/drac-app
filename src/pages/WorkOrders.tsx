@@ -143,6 +143,8 @@ export default function WorkOrders() {
   const [showQuickContact, setShowQuickContact] = useState(false);
   const [quickContactSaving, setQuickContactSaving] = useState(false);
   const [quickContactDeletingId, setQuickContactDeletingId] = useState('');
+  const [customerVehicleCorrectionUnlocked, setCustomerVehicleCorrectionUnlocked] = useState(false);
+  const [customerVehicleCorrectionReason, setCustomerVehicleCorrectionReason] = useState('');
   const [quickContact, setQuickContact] = useState({ name: '', phone: '', description: '' });
   const canShowAdminRowActions = Boolean(
     currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
@@ -566,7 +568,7 @@ export default function WorkOrders() {
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
   const selectedCustomerPeople = data.customerPeople.filter(person => person.customerId === formData.customerRefId && person.isActive);
   const customerVehicleReady = Boolean(formData.customerRefId && formData.vehicleRefId);
-  const customerVehicleLocked = Boolean(isAutoRegistering || editingWO);
+  const customerVehicleLocked = Boolean(isAutoRegistering || (editingWO && !customerVehicleCorrectionUnlocked));
 
   const selectVisitContact = (personId: string) => {
     const person = selectedCustomerPeople.find(item => item.id === personId);
@@ -844,6 +846,8 @@ export default function WorkOrders() {
     autoRegisteringRef.current = false;
     setWoDateUnlocked(false);
     setWoBackdateReason('');
+    setCustomerVehicleCorrectionUnlocked(false);
+    setCustomerVehicleCorrectionReason('');
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false) => {
@@ -853,9 +857,8 @@ export default function WorkOrders() {
     setIsAutoRegisteredDraft(false);
     if (wo) {
       setEditingWO(wo);
-      const matchedVehicle = data.vehicles.find(
-        (v) => v.plateNumber === wo.plateNumber && v.customerName === wo.customerName
-      );
+      const matchedVehicle = data.vehicles.find(v => v.id === wo.vehicleRefId)
+        || data.vehicles.find(v => v.plateNumber === wo.plateNumber && v.customerName === wo.customerName);
       setFormData({
         date: wo.date,
         transactionTime: wo.transactionTime?.slice(0, 5) || (wo.createdAt ? localTimeKey(new Date(wo.createdAt.replace(' ', 'T'))) : localTimeKey()),
@@ -1199,6 +1202,7 @@ export default function WorkOrders() {
         const savedWorkOrder: WorkOrder = {
           ...editingWO,
           ...formData,
+          correctionReason: customerVehicleCorrectionReason.trim() || undefined,
           backdateReason: woBackdateReason.trim() || undefined,
           total: totalServices,
           estimateTotal: diagnosisMode || editingWO.status === 'Register'
@@ -2194,7 +2198,7 @@ export default function WorkOrders() {
                         <button onClick={() => openDetailTab(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
                           <Eye className="h-4 w-4" />
                         </button>
-                        {canShowAdminRowActions && hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
+                        {canShowAdminRowActions && hasPermission('wo:edit') && !wo.invoiceId && (
                           <button onClick={() => handleOpenModal(wo)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit">
                             <Edit className="h-4 w-4" />
                           </button>
@@ -2263,7 +2267,7 @@ export default function WorkOrders() {
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
                 <button type="button" onClick={() => openDetailTab(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Lihat detail ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
-                {canShowAdminRowActions && hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
+                {canShowAdminRowActions && hasPermission('wo:edit') && !wo.invoiceId && (
                   <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>
                 )}
                 {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
@@ -2563,7 +2567,7 @@ export default function WorkOrders() {
                     {detailWO.status === 'Closed' && <button type="button" onClick={() => setLostSalesFollowUp(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                   </div>
                 </details>
-                <button type="button" disabled={Boolean(detailWO.invoiceId) || statusLabel(detailWO.status) === 'Lost Sales' || !hasPermission('wo:edit')} onClick={() => handleOpenModal(detailWO, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4" /> Simpan</button>
+                <button type="button" disabled={Boolean(detailWO.invoiceId) || !hasPermission('wo:edit')} onClick={() => handleOpenModal(detailWO, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4" /> Simpan</button>
                 <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Tutup tab WO"><X className="h-5 w-5" /></button>
               </div>
               <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden" title="Tutup tab WO"><X className="h-5 w-5" /></button>
@@ -2669,6 +2673,7 @@ export default function WorkOrders() {
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Register' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
+              {canShowAdminRowActions && hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.invoiceId && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Koreksi Customer/Kendaraan</button>}
               <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
               {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
                 <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-white text-orange-700 hover:bg-orange-50" title="Kembali ke Dikerjakan" aria-label={`Kembalikan ${detailWO.woNumber} ke Dikerjakan`}><Undo2 className="h-5 w-5" /></button>
@@ -2916,6 +2921,13 @@ export default function WorkOrders() {
                       ? 'Data siap. Tekan Register untuk membuat nomor WO.'
                       : 'Isi keluhan/keterangan service sebelum Register.'
                     : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum Register.'}
+                {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => {
+                  const reason = window.prompt('Alasan koreksi customer/kendaraan:');
+                  if (!reason?.trim()) return;
+                  setCustomerVehicleCorrectionReason(reason.trim());
+                  setCustomerVehicleCorrectionUnlocked(true);
+                }} className="ml-auto flex-shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Ubah Customer/Kendaraan</button>}
+                {customerVehicleCorrectionUnlocked && <span className="ml-auto flex-shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-amber-800">Mode koreksi aktif</span>}
               </div>
               {customerVehicleReady && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
