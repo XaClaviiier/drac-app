@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3, Building2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, CustomerPerson, CustomerPersonRole } from '../types';
 import { localDateKey } from '../lib/date';
@@ -23,8 +23,6 @@ export default function Customers() {
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [directoryTab, setDirectoryTab] = useState<'customers' | 'companies'>('customers');
-  const [entryMode, setEntryMode] = useState<'customer' | 'company'>('customer');
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [columnSearch, setColumnSearch] = useState('');
   const [contactCustomer, setContactCustomer] = useState<Customer | null>(null);
@@ -66,22 +64,6 @@ export default function Customers() {
       return matchesSearch;
     });
   }, [data.customers, data.vehicles, searchTerm]);
-
-  const companyGroups = useMemo(() => {
-    const groups = new Map<string, { name: string; customers: Customer[] }>();
-    data.customers.forEach(customer => {
-      const name = (customer.companyName || '').trim();
-      if (!name) return;
-      const key = name.toLocaleUpperCase('id-ID').replace(/\s+/g, ' ');
-      const current = groups.get(key) || { name, customers: [] };
-      current.customers.push(customer);
-      groups.set(key, current);
-    });
-    const query = searchTerm.trim().toLocaleLowerCase('id-ID');
-    return [...groups.values()]
-      .filter(group => !query || group.name.toLocaleLowerCase('id-ID').includes(query) || group.customers.some(customer => `${customer.name} ${customer.phone}`.toLocaleLowerCase('id-ID').includes(query)))
-      .sort((a, b) => a.name.localeCompare(b.name, 'id'));
-  }, [data.customers, searchTerm]);
 
   const setColumns = (columns: CustomerColumn[]) => {
     const next = Array.from(new Set<CustomerColumn>(['name', ...columns, 'actions']));
@@ -132,7 +114,6 @@ export default function Customers() {
 
   const handleOpenModal = (customer?: Customer) => {
     if (customer) {
-      setEntryMode(customer.companyName ? 'company' : 'customer');
       setEditingCustomer(customer);
       setPeopleCustomer(customer);
       setEditingPerson(null);
@@ -146,7 +127,6 @@ export default function Customers() {
         email: customer.email,
       });
     } else {
-      setEntryMode(directoryTab === 'companies' ? 'company' : 'customer');
       resetForm();
       setPeopleCustomer(null);
     }
@@ -192,9 +172,7 @@ export default function Customers() {
     handleCloseModal(true);
   };
 
-  const canSaveCustomer = entryMode === 'company'
-    ? Boolean(formData.companyName.trim())
-    : Boolean(formData.name.trim() && formData.phone.trim());
+  const canSaveCustomer = Boolean(formData.name.trim() && formData.phone.trim());
 
   const handleDelete = (id: string) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus pelanggan ini?')) {
@@ -250,7 +228,7 @@ export default function Customers() {
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}><List className="h-6 w-6" /></button>
         {showModal && (
           <div className="ml-0.5 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
-            <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.companyName || editingCustomer.name}` : entryMode === 'company' ? 'Perusahaan Baru' : 'Customer Baru'}</span>
+            <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.companyName || editingCustomer.name}` : 'Akun Pelanggan Baru'}</span>
             <button type="button" onClick={() => handleCloseModal()} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
         )}
@@ -264,20 +242,20 @@ export default function Customers() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder={directoryTab === 'companies' ? 'Cari perusahaan, PIC, atau telepon...' : 'Cari nama, nomor telepon, atau email...'}
+              placeholder="Cari akun, perusahaan, PIC, telepon, atau kendaraan..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="h-9 w-full rounded-lg border border-gray-300 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          {directoryTab === 'customers' && <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print daftar pelanggan" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Printer className="h-4 w-4" /><span className="hidden xl:inline">Print</span></button>}
-          {directoryTab === 'customers' && <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Export CSV" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Download className="h-4 w-4" /><span className="hidden xl:inline">Export</span></button>}
+          <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print daftar pelanggan" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Printer className="h-4 w-4" /><span className="hidden xl:inline">Print</span></button>
+          <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Export CSV" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Download className="h-4 w-4" /><span className="hidden xl:inline">Export</span></button>
           {hasPermission('customer:create') && (
-            <button onClick={() => handleOpenModal()} title={directoryTab === 'companies' ? 'Tambah perusahaan' : 'Tambah pelanggan'} className="inline-flex h-9 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
-              <Plus className="h-5 w-5" /><span className="hidden sm:inline">{directoryTab === 'companies' ? 'Tambah Perusahaan' : 'Tambah Customer'}</span>
+            <button onClick={() => handleOpenModal()} title="Tambah akun pelanggan" className="inline-flex h-9 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
+              <Plus className="h-5 w-5" /><span className="hidden sm:inline">Tambah Akun</span>
             </button>
           )}
-          {directoryTab === 'customers' && <div className="relative hidden lg:block">
+          <div className="relative hidden lg:block">
             <button type="button" onClick={() => setShowColumnPicker(current => !current)} title="Pilih kolom tabel" className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${showColumnPicker ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}><Settings2 className="h-4 w-4" /></button>
             {showColumnPicker && (
               <>
@@ -295,17 +273,12 @@ export default function Customers() {
                 </div>
               </>
             )}
-          </div>}
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200">
-        <button type="button" onClick={()=>setDirectoryTab('customers')} className={`inline-flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold ${directoryTab==='customers'?'border-blue-600 text-blue-700':'border-transparent text-gray-500 hover:text-gray-800'}`}><Users className="h-4 w-4"/>Customer</button>
-        <button type="button" onClick={()=>setDirectoryTab('companies')} className={`inline-flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold ${directoryTab==='companies'?'border-blue-600 text-blue-700':'border-transparent text-gray-500 hover:text-gray-800'}`}><Building2 className="h-4 w-4"/>Perusahaan <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{companyGroups.length}</span></button>
-      </div>
-
       {/* Desktop Customer Table */}
-      {directoryTab === 'customers' && filteredCustomers.length > 0 && (
+      {filteredCustomers.length > 0 && (
         <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
           <div className="max-h-[calc(100vh-245px)] overflow-auto">
             <table className="w-full min-w-[1050px] text-left">
@@ -397,7 +370,7 @@ export default function Customers() {
         </div>
       )}
 
-      {directoryTab === 'customers' && filteredCustomers.length === 0 && (
+      {filteredCustomers.length === 0 && (
         <div className="hidden rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm lg:block">
           <Users className="mx-auto mb-3 h-12 w-12 text-gray-300" />
           <p className="text-lg font-medium text-gray-900">Tidak ada data pelanggan</p>
@@ -406,7 +379,7 @@ export default function Customers() {
       )}
 
       {/* Mobile Customer Cards */}
-      <div className={`${directoryTab === 'customers' ? 'grid' : 'hidden'} grid-cols-1 gap-4 md:grid-cols-2 lg:hidden`}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:hidden">
         {filteredCustomers.length === 0 ? (
           <div className="col-span-full bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -509,24 +482,6 @@ export default function Customers() {
       </div>
       </div>
 
-      {directoryTab === 'companies' && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {companyGroups.map(group => {
-            const customerIds = new Set(group.customers.map(customer => customer.id));
-            const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId && customerIds.has(vehicle.customerRefId));
-            const extraContacts = data.customerPeople.filter(person => customerIds.has(person.customerId) && !group.customers.some(customer => customer.primaryContactId === person.id));
-            const primary = group.customers[0];
-            return <article key={group.name} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-indigo-100 text-indigo-700"><Building2 className="h-6 w-6"/></span><div className="min-w-0"><h3 className="truncate font-bold text-gray-900">{group.name}</h3><p className="text-xs text-gray-500">{group.customers.length} PIC/customer · {vehicles.length} kendaraan</p></div></div>{hasPermission('customer:edit')&&<button type="button" onClick={()=>handleOpenModal(primary)} title="Edit perusahaan dan kontak" className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"><Edit className="h-4 w-4"/></button>}</div>
-              <div className="mt-4 space-y-2 border-t pt-3"><p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">PIC / Customer</p>{group.customers.slice(0,4).map(customer=><button type="button" key={customer.id} onClick={()=>handleOpenModal(customer)} className="flex w-full items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-left"><span className="min-w-0"><strong className="block truncate text-sm">{customer.name}</strong><small className="text-gray-500">{customer.phone||'Tanpa telepon'}</small></span><span className="font-mono text-[10px] text-blue-600">{customer.customerCode}</span></button>)}</div>
-              {extraContacts.length>0&&<div className="mt-3"><p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Kontak tambahan</p><p className="mt-1 text-xs text-gray-600">{extraContacts.slice(0,4).map(person=>`${person.name} (${person.roles.join('/')||'Kontak'})`).join(', ')}</p></div>}
-              <div className="mt-3 flex flex-wrap gap-1">{vehicles.slice(0,5).map(vehicle=><span key={vehicle.id} className="rounded bg-sky-50 px-2 py-1 font-mono text-[11px] font-semibold text-sky-700">{vehicle.plateNumber}</span>)}{vehicles.length>5&&<span className="rounded bg-gray-100 px-2 py-1 text-[11px]">+{vehicles.length-5}</span>}</div>
-            </article>;
-          })}
-          {companyGroups.length===0&&<div className="col-span-full rounded-xl border border-dashed bg-white p-12 text-center"><Building2 className="mx-auto h-12 w-12 text-gray-300"/><h3 className="mt-3 font-semibold text-gray-800">Belum ada perusahaan</h3><p className="mt-1 text-sm text-gray-500">Tambahkan customer baru dan isi Nama Perusahaan/Instansi.</p>{hasPermission('customer:create')&&<button type="button" onClick={()=>handleOpenModal()} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">+ Tambah Perusahaan</button>}</div>}
-        </div>
-      )}
-
       {/* Form: subtab penuh di desktop, modal sederhana di mobile */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 lg:static lg:z-auto lg:grid lg:grid-cols-[minmax(0,1fr)_120px] lg:items-start lg:gap-3 lg:bg-transparent lg:p-0">
@@ -534,9 +489,9 @@ export default function Customers() {
             <div className="sticky top-0 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {editingCustomer ? `Edit ${editingCustomer.companyName ? 'Perusahaan' : 'Customer'}` : entryMode === 'company' ? 'Tambah Perusahaan Baru' : 'Tambah Customer Baru'}
+                  {editingCustomer ? 'Edit Akun Pelanggan' : 'Akun Pelanggan Baru'}
                 </h3>
-                <p className="text-sm text-gray-500">{entryMode === 'company' ? 'Isi data perusahaan; PIC dapat dilengkapi kemudian' : 'Isi data customer dan kontak utama'}</p>
+                <p className="text-sm text-gray-500">Satu akun dapat memiliki perusahaan, beberapa kontak, dan beberapa kendaraan.</p>
               </div>
               <button
                 onClick={() => handleCloseModal()}
@@ -556,17 +511,17 @@ export default function Customers() {
                       <label className="text-sm font-medium text-gray-700">ID Pelanggan</label>
                       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-mono font-bold text-blue-700">{editingCustomer ? editingCustomer.customerCode : generateCustomerCode()}</div>
                     </div>
-                    <div className={`${entryMode === 'company' ? 'order-2' : 'order-1'} grid items-center gap-2 sm:grid-cols-[150px_1fr]`}>
-                      <label className="text-sm font-medium text-gray-700">Nama Customer/PIC {entryMode === 'customer' && <span className="text-red-500">*</span>} {entryMode === 'company' && <span className="block text-xs font-normal text-gray-400">Boleh dilengkapi nanti</span>}</label>
-                      <input type="text" required={entryMode === 'customer'} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama orang yang dapat dihubungi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <div className="order-1 grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">Nama Akun/PIC <span className="text-red-500">*</span></label>
+                      <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama orang yang dapat dihubungi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
-                    <div className={`${entryMode === 'company' ? 'order-1' : 'order-2'} grid items-center gap-2 sm:grid-cols-[150px_1fr]`}>
-                      <label className="text-sm font-medium text-gray-700">Nama Perusahaan {entryMode === 'company' ? <span className="text-red-500">*</span> : <span className="block text-xs font-normal text-gray-400">Opsional</span>}</label>
-                      <input type="text" required={entryMode === 'company'} value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value.toUpperCase() })} placeholder="Perusahaan atau instansi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <div className="order-2 grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">Nama Perusahaan <span className="block text-xs font-normal text-gray-400">Opsional</span></label>
+                      <input type="text" value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value.toUpperCase() })} placeholder="Perusahaan atau instansi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="order-3 grid items-center gap-2 sm:grid-cols-[150px_1fr]">
-                      <label className="text-sm font-medium text-gray-700">No. Telepon {entryMode === 'customer' && <span className="text-red-500">*</span>} {entryMode === 'company' && <span className="block text-xs font-normal text-gray-400">Opsional</span>}</label>
-                      <input type="tel" required={entryMode === 'customer'} value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="08xxxxxxxxxx" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <label className="text-sm font-medium text-gray-700">No. Telepon <span className="text-red-500">*</span></label>
+                      <input type="tel" required value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="08xxxxxxxxxx" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="order-4 grid items-start gap-2 sm:grid-cols-[150px_1fr]">
                       <label className="pt-2.5 text-sm font-medium text-gray-700">Alamat</label>
@@ -618,12 +573,12 @@ export default function Customers() {
                   className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
                 >
                   <Save className="h-4 w-4" />
-                  <span>{editingCustomer ? 'Simpan Perubahan' : entryMode === 'company' ? 'Simpan Perusahaan' : 'Simpan Customer'}</span>
+                  <span>{editingCustomer ? 'Simpan Perubahan' : 'Simpan Akun'}</span>
                 </button>
               </div>
             </form>
           </div>
-          <button type="submit" form="customer-data-form" disabled={!canSaveCustomer} title={entryMode === 'company' ? 'Simpan Perusahaan' : 'Simpan Customer'} className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+          <button type="submit" form="customer-data-form" disabled={!canSaveCustomer} title={editingCustomer ? 'Simpan Perubahan' : 'Simpan Akun'} className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
             <Save className="h-12 w-12" />
           </button>
         </div>
