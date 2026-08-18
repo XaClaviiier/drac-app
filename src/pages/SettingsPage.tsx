@@ -452,7 +452,7 @@ export default function SettingsPage() {
               ) : (
                 <p className="mb-4 rounded-lg bg-gray-100 p-3 text-sm text-gray-600">API Key hanya dapat dikelola oleh Owner.</p>
               )}
-              <CompanyField label="Model Groq"><select className={inputClass} value={draft.ai.model} onChange={e => setDraft(prev => ({ ...prev, ai: { ...prev.ai, model: e.target.value } }))}><option value="llama-3.3-70b-versatile">Llama 3.3 70B</option><option value="llama-3.1-8b-instant">Llama 3.1 8B</option><option value="openai/gpt-oss-120b">GPT-OSS 120B</option></select></CompanyField>
+              <CompanyField label="Model Groq"><select className={inputClass} value={draft.ai.model} onChange={e => setDraft(prev => ({ ...prev, ai: { ...prev.ai, model: e.target.value } }))}><option value="openai/gpt-oss-120b">GPT-OSS 120B (cerdas)</option><option value="openai/gpt-oss-20b">GPT-OSS 20B (super cepat)</option></select></CompanyField>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <Toggle label="Data pelanggan & kendaraan" checked={draft.ai.allowCustomerData} onChange={checked => setDraft(prev => ({ ...prev, ai: { ...prev.ai, allowCustomerData: checked } }))} />
                 <Toggle label="Data barang & stok" checked={draft.ai.allowInventoryData} onChange={checked => setDraft(prev => ({ ...prev, ai: { ...prev.ai, allowInventoryData: checked } }))} />

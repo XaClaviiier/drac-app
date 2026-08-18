@@ -56,7 +56,7 @@ export const demoData: AppData = {
     security: { sessionHours: 8, maxLoginAttempts: 5, auditLogEnabled: true, requireBackdateReason: true },
     ai: {
       provider: 'groq',
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-120b',
       allowCustomerData: true,
       allowInventoryData: true,
       allowFinancialData: false,

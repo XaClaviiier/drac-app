@@ -10,9 +10,8 @@ import type { WorkOrder, WorkOrderService } from '../types';
 
 const GROQ_URL = `${window.location.origin}/api/ai-chat`;
 const GROQ_MODELS = [
-  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (cerdas)' },
-  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (super cepat)' },
-  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
+  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (cerdas)' },
+  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (super cepat)' },
 ];
 
 interface ChatMsg {
@@ -2039,7 +2038,7 @@ ${buildSmartContext(userMsgText)}`;
       });
       if (!res.ok) {
         const e = await res.json().catch(() => null);
-        const raw = e?.error?.message || `HTTP ${res.status}`;
+        const raw = e?.message || (typeof e?.error === 'string' ? e.error : e?.error?.message) || `HTTP ${res.status}`;
         if (res.status === 401) {
           throw new Error(
             'API Key ditolak Groq (401).\n\n' +
@@ -2214,7 +2213,7 @@ ${buildSmartContext(userMsgText)}`;
         setTestResult({ ok: true, msg: 'Berhasil terhubung ke Groq. Silakan simpan.' });
       } else {
         const err = await res.json().catch(() => null);
-        const raw = err?.error?.message || `HTTP ${res.status}`;
+        const raw = err?.message || (typeof err?.error === 'string' ? err.error : err?.error?.message) || `HTTP ${res.status}`;
         let hint = raw;
         if (res.status === 401) hint = 'Key ditolak (401). Key mungkin salah, sudah dihapus, atau di-regenerate di Groq. Buat key baru lalu tempel ulang.';
         else if (res.status === 404) hint = `Model "${model}" tidak tersedia untuk akun ini. Coba pilih model lain di bawah.`;
