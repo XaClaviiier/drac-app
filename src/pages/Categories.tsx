@@ -85,15 +85,11 @@ export default function Categories() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Kategori Barang & Jasa</h2>
-          <p className="mt-1 text-gray-500">Kelompokkan sparepart, chemical, jasa, dan paket. Kode & nama harus unik.</p>
-        </div>
+      {/* Action */}
+      <div className="flex justify-end">
         {hasPermission('item:create') && (
-          <button onClick={() => openModal()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
-            <Plus className="h-5 w-5" /> Kategori Baru
+          <button onClick={() => openModal()} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+            <Plus className="h-4 w-4" /> Kategori Baru
           </button>
         )}
       </div>
@@ -138,7 +134,7 @@ export default function Categories() {
               return (
                 <tr key={cat.id} className="transition-colors hover:bg-blue-50/50">
                   <td className="px-4 py-3 font-mono text-sm font-medium text-blue-700">{cat.code}</td>
-                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">{cat.name}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">{cat.name} <span className="font-normal text-gray-500">({count})</span></td>
                   <td className="px-4 py-3">
                     <div className="flex justify-center gap-2">
                       {hasPermission('item:edit') && (
