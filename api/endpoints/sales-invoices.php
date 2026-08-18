@@ -278,6 +278,7 @@ switch ($method) {
                     ->execute([$id,$wo['id'],substr($reason,0,255),json_encode(['invoice'=>$current,'workOrder'=>$wo]),json_encode(['customerRefId'=>$customer['id'],'customerName'=>$customer['name'],'vehicleRefId'=>$vehicle['id'],'plateNumber'=>normalizeVehiclePlate($vehicle['plate_number']),'driverContactId'=>$driver['id']??null]),$actor['id']??null,$actor['name']??null]);
                 $pdo->commit();
                 respondSuccess(null, 'Identitas WO dan faktur berhasil dikoreksi tanpa mengubah pembayaran atau stok.');
+                return;
             }
 
             $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
