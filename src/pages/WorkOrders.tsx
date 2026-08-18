@@ -771,11 +771,28 @@ export default function WorkOrders() {
         const dateMatch = (!periodRange.from || wo.date >= periodRange.from) && (!periodRange.to || wo.date <= periodRange.to);
         if (!dateMatch) return false;
 
-        const matchesSearch =
-          wo.woNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          wo.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (data.customers.find(customer => customer.id === wo.customerRefId || customer.customerCode === wo.customerId)?.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          wo.plateNumber.toLowerCase().includes(searchTerm.toLowerCase());
+        const customer = data.customers.find(item => item.id === wo.customerRefId || item.customerCode === wo.customerId);
+        const normalizeSearch = (value: string) => value.toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '');
+        const query = normalizeSearch(searchTerm.trim());
+        const searchValues = [
+          wo.woNumber,
+          wo.customerId,
+          wo.customerName,
+          customer?.customerCode,
+          customer?.name,
+          customer?.companyName,
+          customer?.phone,
+          customer?.email,
+          wo.driverName,
+          wo.driverPhone,
+          wo.approvalContactName,
+          wo.approvalContactPhone,
+          wo.billingContactName,
+          wo.billingContactPhone,
+          wo.plateNumber,
+          wo.vehicleInfo,
+        ];
+        const matchesSearch = !query || searchValues.some(value => normalizeSearch(String(value || '')).includes(query));
         const matchesStatus = !filterStatus || wo.status === filterStatus;
         return matchesSearch && matchesStatus;
       })
@@ -1910,7 +1927,7 @@ export default function WorkOrders() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Cari nomor WO, pelanggan, telepon, atau nomor plat..."
+              placeholder="Cari WO, perusahaan, PIC, supir, telepon, atau plat..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -1975,7 +1992,7 @@ export default function WorkOrders() {
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-              <input type="text" placeholder="Cari nomor WO, pelanggan, atau nomor plat..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+              <input type="text" placeholder="Cari WO, perusahaan, PIC, supir, telepon, atau plat..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-12 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
             </div>
             <button
               type="button"
