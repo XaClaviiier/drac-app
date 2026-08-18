@@ -1122,30 +1122,6 @@ export default function ItemsAndServices() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5 lg:hidden">
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Total Item</p>
-          <p className="text-2xl font-bold text-gray-900">{data.items.length}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Persediaan</p>
-          <p className="text-2xl font-bold text-blue-600">{data.items.filter((i) => i.type === 'Persediaan').length}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Jasa</p>
-          <p className="text-2xl font-bold text-green-600">{data.items.filter((i) => i.type === 'Jasa').length}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Group</p>
-          <p className="text-2xl font-bold text-purple-600">{data.items.filter((i) => i.type === 'Group').length}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Kategori</p>
-          <p className="text-2xl font-bold text-orange-600">{data.itemCategories.length}</p>
-        </div>
-      </div>
-
       {/* Filters */}
       <div className={`${ui.toolbar} border p-3 shadow-sm lg:border-x-0 lg:border-t-0 lg:shadow-none`}>
         <div className="flex flex-wrap items-center gap-3">
