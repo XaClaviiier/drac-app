@@ -2845,7 +2845,7 @@ export default function WorkOrders() {
                     type="submit"
                     onClick={() => { diagnosisSubmitAction.current = 'save'; }}
                     className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                    disabled={editingWO ? statusLabel(editingWO.status) === 'Lost Sales' : (!newWOReadyForRegister || isAutoRegistering)}
+                    disabled={editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : (!newWOReadyForRegister || isAutoRegistering)}
                   >
                     {editingWO ? <Save className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                     {editingWO ? 'Simpan' : isAutoRegistering ? 'Meregister...' : 'Register'}
