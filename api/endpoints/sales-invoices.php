@@ -243,6 +243,43 @@ switch ($method) {
             $actor = $requestUser ?? requireAuthenticatedUser($pdo);
             requireAccessibleBranch($pdo, $actor, (string)$current['branch_id']);
 
+            if ($action === 'identity') {
+                if (empty($current['wo_id'])) throw new InvalidArgumentException('Koreksi terpadu hanya berlaku untuk faktur dari WO.');
+                requireUserPermission($pdo, 'wo:edit');
+                $reason = trim((string)($d['reason'] ?? ''));
+                if ($reason === '') throw new InvalidArgumentException('Alasan koreksi wajib diisi.');
+                [$customer, $vehicle] = resolveCustomerVehicle($pdo, (string)($d['customerRefId'] ?? ''), (string)($d['vehicleRefId'] ?? ''), true);
+                $driverId = trim((string)($d['driverContactId'] ?? ''));
+                $driver = null;
+                if ($driverId !== '') {
+                    $driverStmt = $pdo->prepare("SELECT id,name,phone FROM customer_people WHERE id=? AND customer_id=? AND is_active=1 FOR UPDATE");
+                    $driverStmt->execute([$driverId, $customer['id']]);
+                    $driver = $driverStmt->fetch();
+                    if (!$driver) throw new InvalidArgumentException('Kontak supir tidak ditemukan pada customer tujuan.');
+                }
+                $woStmt = $pdo->prepare("SELECT * FROM work_orders WHERE id=? FOR UPDATE");
+                $woStmt->execute([$current['wo_id']]);
+                $wo = $woStmt->fetch();
+                if (!$wo) throw new InvalidArgumentException('WO terkait tidak ditemukan.');
+                $statusLog = json_decode((string)($wo['status_log'] ?? '[]'), true);
+                if (!is_array($statusLog)) $statusLog = [];
+                $statusLog[] = [
+                    'from' => $wo['status'], 'to' => $wo['status'], 'at' => date('c'),
+                    'byUserId' => $actor['id'] ?? '-', 'byUserName' => $actor['name'] ?? 'System',
+                    'reason' => sprintf('Koreksi terpadu WO/faktur: %s. %s menjadi %s / %s.', $reason, $wo['customer_name'], $customer['name'], normalizeVehiclePlate($vehicle['plate_number'])),
+                ];
+                $vehicleInfo = trim(implode(' ', array_filter([$vehicle['brand'], $vehicle['model'], $vehicle['year'], '-', $vehicle['color']]))) . ' ' . normalizeVehiclePlate($vehicle['plate_number']);
+                $pdo->prepare("UPDATE work_orders SET customer_ref_id=?,customer_id=?,customer_name=?,vehicle_ref_id=?,plate_number=?,vehicle_info=?,driver_contact_id=?,driver_name=?,driver_phone=?,status_log=? WHERE id=?")
+                    ->execute([$customer['id'],$customer['customer_code'],$customer['name'],$vehicle['id'],normalizeVehiclePlate($vehicle['plate_number']),trim(implode(' ',array_filter([$vehicle['brand'],$vehicle['model'],$vehicle['year'],'-',$vehicle['color']]))),$driver['id']??null,$driver['name']??null,$driver['phone']??null,json_encode($statusLog),$wo['id']]);
+                $pdo->prepare("UPDATE sales_invoices SET customer_ref_id=?,customer_id=?,customer_name=?,vehicle_info=? WHERE id=?")
+                    ->execute([$customer['id'],$customer['customer_code'],$customer['name'],$vehicleInfo,$id]);
+                $pdo->exec("CREATE TABLE IF NOT EXISTS sales_invoice_identity_audit_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY,invoice_id VARCHAR(64) NOT NULL,wo_id VARCHAR(64) NOT NULL,reason VARCHAR(255) NOT NULL,before_json LONGTEXT NULL,after_json LONGTEXT NULL,user_id VARCHAR(64) NULL,user_name VARCHAR(150) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_invoice_identity_audit(invoice_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                $pdo->prepare("INSERT INTO sales_invoice_identity_audit_logs(invoice_id,wo_id,reason,before_json,after_json,user_id,user_name) VALUES(?,?,?,?,?,?,?)")
+                    ->execute([$id,$wo['id'],substr($reason,0,255),json_encode(['invoice'=>$current,'workOrder'=>$wo]),json_encode(['customerRefId'=>$customer['id'],'customerName'=>$customer['name'],'vehicleRefId'=>$vehicle['id'],'plateNumber'=>normalizeVehiclePlate($vehicle['plate_number']),'driverContactId'=>$driver['id']??null]),$actor['id']??null,$actor['name']??null]);
+                $pdo->commit();
+                respondSuccess(null, 'Identitas WO dan faktur berhasil dikoreksi tanpa mengubah pembayaran atau stok.');
+            }
+
             $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
             if (!in_array($paymentMethod, ['Tunai', 'Transfer'], true)) throw new Exception('Metode pembayaran tidak valid');
             $invoiceDate = (string)($d['date'] ?? date('Y-m-d'));

@@ -68,6 +68,7 @@ export default function SalesInvoice() {
   const [formItemSearch, setFormItemSearch] = useState('');
   const [formActionMenu, setFormActionMenu] = useState<'ambil' | 'proses' | null>(null);
   const [formDiscount, setFormDiscount] = useState(0);
+  const [identityCorrection, setIdentityCorrection] = useState({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false });
   const [itemSearchOpen, setItemSearchOpen] = useState(false);
   const [detailItemId, setDetailItemId] = useState('');
   const [detailQty, setDetailQty] = useState(1);
@@ -498,6 +499,26 @@ export default function SalesInvoice() {
         window.alert(`Gagal menghapus invoice: ${error?.message || 'terjadi kesalahan'}`);
       }
     }
+  };
+
+  const saveIdentityCorrection = async () => {
+    if (!editingInvoice || !identityCorrection.customerRefId || !identityCorrection.vehicleRefId || !identityCorrection.reason.trim()) return;
+    setIdentityCorrection(current => ({ ...current, saving: true }));
+    const result = await api.update('sales-invoices', `${editingInvoice.id}/identity`, {
+      customerRefId: identityCorrection.customerRefId,
+      vehicleRefId: identityCorrection.vehicleRefId,
+      driverContactId: identityCorrection.driverContactId || undefined,
+      reason: identityCorrection.reason.trim(),
+    });
+    if (!result.success) {
+      window.alert(result.message || 'Koreksi identitas gagal.');
+      setIdentityCorrection(current => ({ ...current, saving: false }));
+      return;
+    }
+    await refreshData();
+    setSuccessMsg('Identitas WO, faktur, dan tampilan pembayaran berhasil dikoreksi.');
+    setIdentityCorrection({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false });
+    handleCloseModal();
   };
 
   // Hanya WO Selesai yang boleh difakturkan.
@@ -1163,10 +1184,25 @@ export default function SalesInvoice() {
               {/* Pelanggan & Kendaraan Picker */}
               <div className="contents">
                 {editingInvoice ? (
-                  <div className="grid grid-cols-1 gap-3 border border-blue-200 bg-blue-50 p-4 sm:grid-cols-3 lg:col-span-2">
-                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Pelanggan · terkunci</span><strong>{editingInvoice.customerName}</strong></div>
-                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Referensi · terkunci</span><strong>{editingInvoice.woNumber || 'Faktur manual'}</strong></div>
-                    <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{editingInvoice.vehicleInfo}</strong></div>
+                  <div className="space-y-3 lg:col-span-2">
+                    <div className="grid grid-cols-1 gap-3 border border-blue-200 bg-blue-50 p-4 sm:grid-cols-3">
+                      <div><span className="block text-[10px] font-bold uppercase text-blue-500">Pelanggan · terkunci</span><strong>{editingInvoice.customerName}</strong></div>
+                      <div><span className="block text-[10px] font-bold uppercase text-blue-500">Referensi · terkunci</span><strong>{editingInvoice.woNumber || 'Faktur manual'}</strong></div>
+                      <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{editingInvoice.vehicleInfo}</strong></div>
+                    </div>
+                    {editingInvoice.woId && hasPermission('wo:edit') && (
+                      <div className="rounded border border-amber-300 bg-amber-50 p-3">
+                        {!identityCorrection.open ? <button type="button" onClick={() => setIdentityCorrection(current => ({ ...current, open: true }))} className="rounded border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-800">Koreksi Identitas WO & Faktur</button> : (
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <select aria-label="Customer tujuan koreksi" value={identityCorrection.customerRefId} onChange={event => setIdentityCorrection(current => ({ ...current, customerRefId: event.target.value, vehicleRefId: '', driverContactId: '' }))} className="h-10 rounded border bg-white px-3 text-sm"><option value="">Pilih customer/perusahaan</option>{data.customers.filter(customer => customer.isActive !== false).map(customer => <option key={customer.id} value={customer.id}>{customer.customerCode || customer.id} · {customer.companyName ? `${customer.companyName} / ` : ''}{customer.name}</option>)}</select>
+                            <select aria-label="Kendaraan tujuan koreksi" value={identityCorrection.vehicleRefId} disabled={!identityCorrection.customerRefId} onChange={event => setIdentityCorrection(current => ({ ...current, vehicleRefId: event.target.value }))} className="h-10 rounded border bg-white px-3 text-sm disabled:bg-gray-100"><option value="">Pilih kendaraan</option>{data.vehicles.filter(vehicle => vehicle.customerRefId === identityCorrection.customerRefId || vehicle.customerId === identityCorrection.customerRefId).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber} · {vehicle.brand} {vehicle.model}</option>)}</select>
+                            <select aria-label="Supir atau pembawa" value={identityCorrection.driverContactId} disabled={!identityCorrection.customerRefId} onChange={event => setIdentityCorrection(current => ({ ...current, driverContactId: event.target.value }))} className="h-10 rounded border bg-white px-3 text-sm disabled:bg-gray-100"><option value="">Kontak utama / tanpa supir</option>{data.customerPeople.filter(person => person.customerId === identityCorrection.customerRefId && person.isActive !== false).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || '-'}</option>)}</select>
+                            <input aria-label="Alasan koreksi terpadu" value={identityCorrection.reason} onChange={event => setIdentityCorrection(current => ({ ...current, reason: event.target.value }))} placeholder="Alasan koreksi *" className="h-10 rounded border bg-white px-3 text-sm" />
+                            <div className="flex gap-2 md:col-span-2"><button type="button" disabled={identityCorrection.saving || !identityCorrection.customerRefId || !identityCorrection.vehicleRefId || !identityCorrection.reason.trim()} onClick={() => void saveIdentityCorrection()} className="rounded bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-300">{identityCorrection.saving ? 'Menyimpan...' : 'Simpan Koreksi Terpadu'}</button><button type="button" onClick={() => setIdentityCorrection({ open: false, customerRefId: '', vehicleRefId: '', driverContactId: '', reason: '', saving: false })} className="rounded border bg-white px-4 py-2 text-sm">Batal</button></div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
