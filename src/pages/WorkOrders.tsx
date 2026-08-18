@@ -144,6 +144,7 @@ export default function WorkOrders() {
   const [quickContactSaving, setQuickContactSaving] = useState(false);
   const [quickContactDeletingId, setQuickContactDeletingId] = useState('');
   const [customerVehicleCorrectionUnlocked, setCustomerVehicleCorrectionUnlocked] = useState(false);
+  const [showCustomerVehicleCorrectionForm, setShowCustomerVehicleCorrectionForm] = useState(false);
   const [customerVehicleCorrectionReason, setCustomerVehicleCorrectionReason] = useState('');
   const [quickContact, setQuickContact] = useState({ name: '', phone: '', description: '' });
   const canShowAdminRowActions = Boolean(
@@ -2960,14 +2961,30 @@ export default function WorkOrders() {
                       ? 'Data siap. Tekan Register untuk membuat nomor WO.'
                       : 'Isi keluhan/keterangan service sebelum Register.'
                     : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum Register.'}
-                {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => {
-                  const reason = window.prompt('Alasan koreksi customer/kendaraan:');
-                  if (!reason?.trim()) return;
-                  setCustomerVehicleCorrectionReason(reason.trim());
-                  setCustomerVehicleCorrectionUnlocked(true);
-                }} className="ml-auto flex-shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Ubah Customer/Kendaraan</button>}
+                {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => setShowCustomerVehicleCorrectionForm(true)} className="ml-auto flex-shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Ubah Customer/Kendaraan</button>}
                 {customerVehicleCorrectionUnlocked && <span className="ml-auto flex-shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-amber-800">Mode koreksi aktif</span>}
               </div>
+              {showCustomerVehicleCorrectionForm && !customerVehicleCorrectionUnlocked && (
+                <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:flex-row md:items-center">
+                  <input
+                    autoFocus
+                    value={customerVehicleCorrectionReason}
+                    onChange={(event) => setCustomerVehicleCorrectionReason(event.target.value)}
+                    placeholder="Alasan koreksi customer/kendaraan *"
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-amber-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  />
+                  <button type="button" onClick={() => {
+                    if (!customerVehicleCorrectionReason.trim()) return;
+                    setCustomerVehicleCorrectionReason(customerVehicleCorrectionReason.trim());
+                    setCustomerVehicleCorrectionUnlocked(true);
+                    setShowCustomerVehicleCorrectionForm(false);
+                  }} disabled={!customerVehicleCorrectionReason.trim()} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300">Aktifkan Koreksi</button>
+                  <button type="button" onClick={() => {
+                    setShowCustomerVehicleCorrectionForm(false);
+                    setCustomerVehicleCorrectionReason('');
+                  }} className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-600 hover:bg-gray-50">Batal</button>
+                </div>
+              )}
               {customerVehicleReady && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
