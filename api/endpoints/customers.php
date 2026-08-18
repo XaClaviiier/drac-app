@@ -25,9 +25,11 @@ switch ($method) {
 
     case 'POST':
         $d = getInput();
+        $companyName = trim((string)($d['companyName'] ?? ''));
         $name = $sanitizeCustomerName($d['name'] ?? '');
+        if ($name === '' && $companyName !== '') $name = function_exists('mb_strtoupper') ? mb_strtoupper($companyName, 'UTF-8') : strtoupper($companyName);
         $phone = trim((string)($d['phone'] ?? ''));
-        if ($name === '' || $phone === '') respondError('Nama dan nomor HP wajib diisi.', 422);
+        if ($name === '' || ($companyName === '' && $phone === '')) respondError('Nama customer dan nomor HP wajib diisi. Untuk perusahaan, Nama Perusahaan wajib diisi.', 422);
         $normalizedPhone = preg_replace('/\D/', '', $phone);
         foreach ($pdo->query("SELECT customer_code, name, phone FROM customers")->fetchAll() as $existing) {
             if ($normalizedPhone !== '' && preg_replace('/\D/', '', (string)$existing['phone']) === $normalizedPhone) {
@@ -46,7 +48,6 @@ switch ($method) {
         requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
         $customerId = $d['id'] ?? generateId();
-        $companyName = trim((string)($d['companyName'] ?? ''));
         $accountType = $companyName !== '' ? 'Perusahaan' : 'Pribadi';
         $pdo->beginTransaction();
         try {
