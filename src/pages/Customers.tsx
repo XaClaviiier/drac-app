@@ -24,6 +24,7 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [directoryTab, setDirectoryTab] = useState<'customers' | 'companies'>('customers');
+  const [entryMode, setEntryMode] = useState<'customer' | 'company'>('customer');
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [columnSearch, setColumnSearch] = useState('');
   const [contactCustomer, setContactCustomer] = useState<Customer | null>(null);
@@ -131,6 +132,7 @@ export default function Customers() {
 
   const handleOpenModal = (customer?: Customer) => {
     if (customer) {
+      setEntryMode(customer.companyName ? 'company' : 'customer');
       setEditingCustomer(customer);
       setPeopleCustomer(customer);
       setEditingPerson(null);
@@ -144,6 +146,7 @@ export default function Customers() {
         email: customer.email,
       });
     } else {
+      setEntryMode(directoryTab === 'companies' ? 'company' : 'customer');
       resetForm();
       setPeopleCustomer(null);
     }
@@ -164,25 +167,34 @@ export default function Customers() {
     resetForm();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const now = localDateKey();
+    const payload = {
+      ...formData,
+      name: formData.name.trim() || formData.companyName.trim(),
+      phone: formData.phone.trim(),
+    };
 
     if (editingCustomer) {
-      updateCustomer(editingCustomer.id, {
+      await updateCustomer(editingCustomer.id, {
         ...editingCustomer,
-        ...formData,
+        ...payload,
       });
     } else {
-      addCustomer({
+      await addCustomer({
         id: Date.now().toString(),
-        ...formData,
+        ...payload,
         createdAt: now,
         branchId: resolveBranchId(),
       });
     }
     handleCloseModal(true);
   };
+
+  const canSaveCustomer = entryMode === 'company'
+    ? Boolean(formData.companyName.trim())
+    : Boolean(formData.name.trim() && formData.phone.trim());
 
   const handleDelete = (id: string) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus pelanggan ini?')) {
@@ -238,7 +250,7 @@ export default function Customers() {
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}><List className="h-6 w-6" /></button>
         {showModal && (
           <div className="ml-0.5 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
-            <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.name}` : 'Data Baru'}</span>
+            <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.companyName || editingCustomer.name}` : entryMode === 'company' ? 'Perusahaan Baru' : 'Customer Baru'}</span>
             <button type="button" onClick={() => handleCloseModal()} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
         )}
@@ -522,9 +534,9 @@ export default function Customers() {
             <div className="sticky top-0 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {editingCustomer ? 'Edit Pelanggan' : 'Tambah Pelanggan Baru'}
+                  {editingCustomer ? `Edit ${editingCustomer.companyName ? 'Perusahaan' : 'Customer'}` : entryMode === 'company' ? 'Tambah Perusahaan Baru' : 'Tambah Customer Baru'}
                 </h3>
-                <p className="text-sm text-gray-500">Isi data pelanggan</p>
+                <p className="text-sm text-gray-500">{entryMode === 'company' ? 'Isi data perusahaan; PIC dapat dilengkapi kemudian' : 'Isi data customer dan kontak utama'}</p>
               </div>
               <button
                 onClick={() => handleCloseModal()}
@@ -539,24 +551,24 @@ export default function Customers() {
               <div className="grid gap-8 lg:grid-cols-2">
                 <section>
                   <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Umum</h4>
-                  <div className="space-y-4">
-                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                  <div className="flex flex-col gap-4">
+                    <div className="order-0 grid items-center gap-2 sm:grid-cols-[150px_1fr]">
                       <label className="text-sm font-medium text-gray-700">ID Pelanggan</label>
                       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-mono font-bold text-blue-700">{editingCustomer ? editingCustomer.customerCode : generateCustomerCode()}</div>
                     </div>
-                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
-                      <label className="text-sm font-medium text-gray-700">Nama Customer/PIC <span className="text-red-500">*</span></label>
-                      <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama orang yang dapat dihubungi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <div className={`${entryMode === 'company' ? 'order-2' : 'order-1'} grid items-center gap-2 sm:grid-cols-[150px_1fr]`}>
+                      <label className="text-sm font-medium text-gray-700">Nama Customer/PIC {entryMode === 'customer' && <span className="text-red-500">*</span>} {entryMode === 'company' && <span className="block text-xs font-normal text-gray-400">Boleh dilengkapi nanti</span>}</label>
+                      <input type="text" required={entryMode === 'customer'} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Nama orang yang dapat dihubungi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
-                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
-                      <label className="text-sm font-medium text-gray-700">Nama Perusahaan <span className="block text-xs font-normal text-gray-400">Opsional</span></label>
-                      <input type="text" value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value.toUpperCase() })} placeholder="Perusahaan atau instansi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <div className={`${entryMode === 'company' ? 'order-1' : 'order-2'} grid items-center gap-2 sm:grid-cols-[150px_1fr]`}>
+                      <label className="text-sm font-medium text-gray-700">Nama Perusahaan {entryMode === 'company' ? <span className="text-red-500">*</span> : <span className="block text-xs font-normal text-gray-400">Opsional</span>}</label>
+                      <input type="text" required={entryMode === 'company'} value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value.toUpperCase() })} placeholder="Perusahaan atau instansi" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
-                    <div className="grid items-center gap-2 sm:grid-cols-[150px_1fr]">
-                      <label className="text-sm font-medium text-gray-700">No. Telepon <span className="text-red-500">*</span></label>
-                      <input type="tel" required value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="08xxxxxxxxxx" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <div className="order-3 grid items-center gap-2 sm:grid-cols-[150px_1fr]">
+                      <label className="text-sm font-medium text-gray-700">No. Telepon {entryMode === 'customer' && <span className="text-red-500">*</span>} {entryMode === 'company' && <span className="block text-xs font-normal text-gray-400">Opsional</span>}</label>
+                      <input type="tel" required={entryMode === 'customer'} value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="08xxxxxxxxxx" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
-                    <div className="grid items-start gap-2 sm:grid-cols-[150px_1fr]">
+                    <div className="order-4 grid items-start gap-2 sm:grid-cols-[150px_1fr]">
                       <label className="pt-2.5 text-sm font-medium text-gray-700">Alamat</label>
                       <textarea value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="Alamat lengkap pelanggan" rows={4} className="w-full resize-y rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
@@ -602,16 +614,16 @@ export default function Customers() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!formData.name.trim() || !formData.phone.trim()}
+                  disabled={!canSaveCustomer}
                   className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
                 >
                   <Save className="h-4 w-4" />
-                  <span>{editingCustomer ? 'Simpan Perubahan' : 'Simpan Pelanggan'}</span>
+                  <span>{editingCustomer ? 'Simpan Perubahan' : entryMode === 'company' ? 'Simpan Perusahaan' : 'Simpan Customer'}</span>
                 </button>
               </div>
             </form>
           </div>
-          <button type="submit" form="customer-data-form" disabled={!formData.name.trim() || !formData.phone.trim()} title="Simpan Pelanggan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+          <button type="submit" form="customer-data-form" disabled={!canSaveCustomer} title={entryMode === 'company' ? 'Simpan Perusahaan' : 'Simpan Customer'} className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
             <Save className="h-12 w-12" />
           </button>
         </div>
