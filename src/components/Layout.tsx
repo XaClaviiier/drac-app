@@ -525,7 +525,13 @@ const desktopGroups = [
 }>;
 
 export default function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem("drac-desktop-sidebar-open") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -558,6 +564,17 @@ export default function Layout() {
       return [];
     }
   });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "drac-desktop-sidebar-open",
+        String(sidebarOpen),
+      );
+    } catch {
+      // Tetap gunakan state lokal bila penyimpanan browser tidak tersedia.
+    }
+  }, [sidebarOpen]);
   const location = useLocation();
   const navigate = useNavigate();
   const {
@@ -710,7 +727,7 @@ export default function Layout() {
     <div className="flex h-[100dvh] overflow-hidden bg-gray-100 lg:h-screen">
       {/* ========== SIDEBAR (desktop) ========== */}
       <aside
-        className={`${sidebarOpen ? "w-64" : "w-16"} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
+        className={`${sidebarOpen ? "w-64" : "w-[84px]"} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
       >
         <nav className="flex-1 overflow-visible py-4">
           {hasPermission("dashboard:view") && (
@@ -823,7 +840,7 @@ export default function Layout() {
                 className="fixed inset-0 z-30 hidden bg-transparent lg:block"
               />
               <section
-                className={`fixed top-14 z-[60] hidden max-h-[calc(100vh-4rem)] w-[min(520px,calc(100vw-18rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.28)] lg:block ${sidebarOpen ? "left-[16.5rem]" : "left-[4.5rem]"}`}
+                className={`fixed top-14 z-[60] hidden max-h-[calc(100vh-4rem)] w-[min(520px,calc(100vw-18rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.28)] lg:block ${sidebarOpen ? "left-[16.5rem]" : "left-[5.75rem]"}`}
               >
                 <span
                   className="absolute -left-2 top-24 h-4 w-4 rotate-45 border-b border-l border-gray-200 bg-white"

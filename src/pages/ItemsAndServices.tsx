@@ -1333,9 +1333,9 @@ export default function ItemsAndServices() {
                 <button type="button" onClick={() => setItemFormTab('warehouse')} className={`rounded-t border border-b-0 px-5 py-2 text-sm ${itemFormTab === 'warehouse' ? 'border-t-2 border-t-blue-600 bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>Gudang</button>
               </div>}
             </div>
-            <form onSubmit={saveItem} className="relative min-h-0 flex-1 overflow-y-auto bg-[#f4f4f4] p-3 pr-24 sm:p-5 sm:pr-28">
-              {itemFormTab === 'general' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-3 shadow-sm">
-                <div className="grid gap-10 lg:grid-cols-2 lg:gap-20">
+            <form onSubmit={saveItem} className="relative min-h-0 flex-1 overflow-y-auto bg-[#f4f4f4] p-2 pr-[76px] sm:p-3 sm:pr-[84px]">
+              {itemFormTab === 'general' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-4 shadow-sm">
+                <div className="grid gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-12">
                   <section>
                     <h4 className="mb-3 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Barang &amp; Jasa</h4>
                     <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-sm">
@@ -1613,9 +1613,9 @@ export default function ItemsAndServices() {
                   Layanan Cepat (Template)
                 </label>
               </div>}
-              <div className="absolute right-3 top-3 flex flex-col gap-3 sm:right-4">
-                <button type="submit" disabled={isSavingItem} title="Simpan" className="flex h-14 w-14 items-center justify-center rounded border border-blue-700 bg-blue-600 text-white shadow-md hover:bg-blue-700 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400"><Save className="h-7 w-7" /></button>
-                <button type="button" onClick={() => setShowItemModal(false)} title="Tutup" className="flex h-10 w-14 items-center justify-center rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+              <div className="absolute right-2 top-2 flex w-16 flex-col items-center gap-2 sm:right-2">
+                <button type="submit" disabled={isSavingItem} title="Simpan" className="flex h-12 w-12 items-center justify-center rounded border border-blue-700 bg-blue-600 text-white shadow-md hover:bg-blue-700 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400"><Save className="h-6 w-6" /></button>
+                <button type="button" onClick={() => setShowItemModal(false)} title="Tutup" className="flex h-10 w-12 items-center justify-center rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"><X className="h-5 w-5" /></button>
               </div>
             </form>
           </div>
