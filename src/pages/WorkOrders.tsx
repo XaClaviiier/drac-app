@@ -1641,6 +1641,25 @@ export default function WorkOrders() {
     return vehicle?.phone || '—';
   };
 
+  const customerIdentityForWO = (wo: WorkOrder) => {
+    const customer = data.customers.find(item =>
+      item.id === wo.customerRefId
+      || (!!wo.customerId && item.customerCode === wo.customerId)
+      || item.name.trim().toLowerCase() === wo.customerName.trim().toLowerCase()
+    );
+    const picName = customer?.name || wo.customerName;
+    const companyName = customer?.companyName?.trim() || '';
+    const driverName = (wo.driverName || '').trim();
+    return {
+      title: companyName || picName,
+      picName,
+      phone: customerPhoneForWO(wo),
+      driverName: driverName && driverName.toLowerCase() !== picName.toLowerCase() ? driverName : '',
+      driverPhone: wo.driverPhone || '',
+      isCompany: Boolean(companyName),
+    };
+  };
+
   const workOrderAuditTimeline = (wo: WorkOrder) => {
     const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name || wo.branchId;
     const events: Array<{ at: string; title: string; description: string; tone: string; continuation?: boolean }> = [{
@@ -2158,8 +2177,9 @@ export default function WorkOrders() {
                       </button>
                     </td>}
                     {isColumnVisible('customer') && <td className="px-4 py-3">
-                      <span className="block max-w-[180px] truncate text-sm font-semibold text-gray-900">{wo.customerName}</span>
-                      <span className="mt-0.5 block text-xs text-gray-500">{customerPhoneForWO(wo)}</span>
+                      <span className="block max-w-[210px] truncate text-sm font-bold text-gray-900">{customerIdentityForWO(wo).title}</span>
+                      <span className="mt-0.5 block max-w-[210px] truncate text-xs text-gray-600">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone}</span>
+                      {customerIdentityForWO(wo).driverName && <span className="mt-0.5 block max-w-[210px] truncate text-xs font-medium text-amber-700">Dibawa oleh: {customerIdentityForWO(wo).driverName}{customerIdentityForWO(wo).driverPhone ? ` · ${customerIdentityForWO(wo).driverPhone}` : ''}</span>}
                     </td>}
                     {isColumnVisible('vehicle') && <td className="px-4 py-3">
                       <span className="block font-mono text-sm font-bold text-gray-900">{formatPlateNumber(wo.plateNumber)}</span>
@@ -2254,7 +2274,9 @@ export default function WorkOrders() {
                   </span>
                 </div>
                 <p className="mt-1 truncate text-sm font-semibold text-gray-900">{formatPlateNumber(wo.plateNumber)} — {wo.vehicleInfo}</p>
-                <p className="mt-0.5 truncate text-xs text-gray-600">{wo.customerName} — {customerPhoneForWO(wo) || '-'}</p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-gray-700">{customerIdentityForWO(wo).title}</p>
+                <p className="truncate text-xs text-gray-600">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone || '-'}</p>
+                {customerIdentityForWO(wo).driverName && <p className="truncate text-xs text-amber-700">Dibawa oleh: {customerIdentityForWO(wo).driverName}{customerIdentityForWO(wo).driverPhone ? ` · ${customerIdentityForWO(wo).driverPhone}` : ''}</p>}
                 {wo.description && <p className="mt-1 line-clamp-2 text-xs text-gray-600"><span className="font-semibold text-gray-700">Keluhan:</span> {wo.description}</p>}
                 <p className="mt-1 truncate text-xs text-gray-500">
                   <span className="font-semibold text-gray-700">Layanan:</span>{' '}
