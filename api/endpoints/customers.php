@@ -12,6 +12,7 @@ switch ($method) {
         $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
         foreach ($rows as &$r) {
             $r['customerCode']       = $r['customer_code'];
+            $r['companyName']        = $r['company_name'] ?? '';
             $r['accountType']        = $r['account_type'] ?? 'Pribadi';
             $r['primaryContactId']   = $r['primary_contact_id'] ?? null;
             $r['billingContactId']   = $r['billing_contact_id'] ?? null;
@@ -45,16 +46,17 @@ switch ($method) {
         requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
         $customerId = $d['id'] ?? generateId();
-        $accountType = ($d['accountType'] ?? 'Pribadi') === 'Perusahaan' ? 'Perusahaan' : 'Pribadi';
+        $companyName = trim((string)($d['companyName'] ?? ''));
+        $accountType = $companyName !== '' ? 'Perusahaan' : 'Pribadi';
         $pdo->beginTransaction();
         try {
-            $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, account_type, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$customerId,$code,$name,$accountType,$phone,$d['email'] ?? '',$d['address'] ?? '',$branchId,$firstSeenBranchId]);
+            $stmt = $pdo->prepare("INSERT INTO customers (id, customer_code, name, company_name, account_type, phone, email, address, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$customerId,$code,$name,$companyName,$accountType,$phone,$d['email'] ?? '',$d['address'] ?? '',$branchId,$firstSeenBranchId]);
             $personId = 'CP-' . strtoupper(substr(hash('sha256', (string)$customerId), 0, 24));
             $pdo->prepare("INSERT INTO customer_people(id,customer_id,name,phone,email,relationship_label,is_active) VALUES(?,?,?,?,?,'Pemilik akun',1)")->execute([$personId,$customerId,$name,$phone,$d['email'] ?? '']);
             foreach (['Owner','PIC','Keuangan'] as $roleCode) $pdo->prepare("INSERT INTO customer_person_roles(person_id,role_code) VALUES(?,?)")->execute([$personId,$roleCode]);
             $pdo->prepare("UPDATE customers SET primary_contact_id=?,billing_contact_id=? WHERE id=?")->execute([$personId,$personId,$customerId]);
-            $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,after_json,user_id,user_name) VALUES('customer',?,'create',?,?,?)")->execute([$customerId,json_encode(['name'=>$name,'accountType'=>$accountType,'phone'=>$phone,'email'=>$d['email']??'','address'=>$d['address']??''],JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
+            $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,after_json,user_id,user_name) VALUES('customer',?,'create',?,?,?)")->execute([$customerId,json_encode(['name'=>$name,'companyName'=>$companyName,'accountType'=>$accountType,'phone'=>$phone,'email'=>$d['email']??'','address'=>$d['address']??''],JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
             $pdo->commit();
         } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
         $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
@@ -73,10 +75,11 @@ switch ($method) {
         $branchId = (string)$current['branch_id'];
         $name = $sanitizeCustomerName($d['name'] ?? '');
         if ($name === '') respondError('Nama pelanggan wajib diisi.', 422);
-        $accountType = ($d['accountType'] ?? ($current['account_type'] ?? 'Pribadi')) === 'Perusahaan' ? 'Perusahaan' : 'Pribadi';
-        $after = ['name'=>$name,'accountType'=>$accountType,'phone'=>$d['phone']??'','email'=>$d['email']??'','address'=>$d['address']??'','branchId'=>$branchId];
-        $stmt = $pdo->prepare("UPDATE customers SET name=?,account_type=?,phone=?,email=?,address=?,branch_id=? WHERE id=?");
-        $stmt->execute([$name,$accountType,$d['phone'] ?? '',$d['email'] ?? '',$d['address'] ?? '',$branchId,$id]);
+        $companyName = trim((string)($d['companyName'] ?? ($current['company_name'] ?? '')));
+        $accountType = $companyName !== '' ? 'Perusahaan' : 'Pribadi';
+        $after = ['name'=>$name,'companyName'=>$companyName,'accountType'=>$accountType,'phone'=>$d['phone']??'','email'=>$d['email']??'','address'=>$d['address']??'','branchId'=>$branchId];
+        $stmt = $pdo->prepare("UPDATE customers SET name=?,company_name=?,account_type=?,phone=?,email=?,address=?,branch_id=? WHERE id=?");
+        $stmt->execute([$name,$companyName,$accountType,$d['phone'] ?? '',$d['email'] ?? '',$d['address'] ?? '',$branchId,$id]);
         $pdo->prepare("UPDATE customer_people SET name=?,phone=?,email=? WHERE id=? AND relationship_label='Pemilik akun'")
             ->execute([$name,$d['phone'] ?? '',$d['email'] ?? '',$current['primary_contact_id'] ?? '']);
         $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,before_json,after_json,user_id,user_name) VALUES('customer',?,'update',?,?,?,?)")->execute([$id,json_encode($current,JSON_UNESCAPED_UNICODE),json_encode($after,JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
