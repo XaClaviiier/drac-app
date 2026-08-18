@@ -140,6 +140,9 @@ export default function WorkOrders() {
   const [isFollowingUpLostSales, setIsFollowingUpLostSales] = useState(false);
   const [resumeLostSalesAfterEstimate, setResumeLostSalesAfterEstimate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [showQuickContact, setShowQuickContact] = useState(false);
+  const [quickContactSaving, setQuickContactSaving] = useState(false);
+  const [quickContact, setQuickContact] = useState({ name: '', phone: '', description: '' });
   const canShowAdminRowActions = Boolean(
     currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
   );
@@ -561,11 +564,53 @@ export default function WorkOrders() {
 
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
   const selectedCustomerPeople = data.customerPeople.filter(person => person.customerId === formData.customerRefId && person.isActive);
-  const selectedVehiclePeople = selectedCustomerPeople.filter(person =>
-    person.vehicleAssignments.some(assignment => assignment.vehicleId === formData.vehicleRefId)
-  );
   const customerVehicleReady = Boolean(formData.customerRefId && formData.vehicleRefId);
   const customerVehicleLocked = Boolean(isAutoRegistering || editingWO);
+
+  const selectVisitContact = (personId: string) => {
+    const person = selectedCustomerPeople.find(item => item.id === personId);
+    setFormData(previous => ({
+      ...previous,
+      driverContactId: person?.id || '',
+      driverName: person?.name || '',
+      driverPhone: person?.phone || '',
+      approvalContactId: person?.id || selectedCustomer?.primaryContactId || '',
+      billingContactId: person?.id || selectedCustomer?.billingContactId || selectedCustomer?.primaryContactId || '',
+    }));
+  };
+
+  const saveQuickContact = async () => {
+    if (!formData.customerRefId || !quickContact.name.trim()) return;
+    setQuickContactSaving(true);
+    const result = await api.create('customer-people', {
+      customerId: formData.customerRefId,
+      name: quickContact.name.trim().toUpperCase(),
+      phone: quickContact.phone.trim(),
+      relationshipLabel: quickContact.description.trim(),
+      roles: [],
+      vehicleAssignments: [],
+      isActive: true,
+      isPrimaryPic: false,
+      isBillingContact: false,
+    });
+    setQuickContactSaving(false);
+    if (!result.success || !result.data) {
+      window.alert(result.message || 'Kontak gagal ditambahkan.');
+      return;
+    }
+    const person = result.data;
+    setFormData(previous => ({
+      ...previous,
+      driverContactId: person.id,
+      driverName: person.name,
+      driverPhone: person.phone || '',
+      approvalContactId: person.id,
+      billingContactId: person.id,
+    }));
+    setQuickContact({ name: '', phone: '', description: '' });
+    setShowQuickContact(false);
+    await refreshData();
+  };
 
   const handleCustomerSelect = (customerRefId: string) => {
     const customer = data.customers.find((item) => item.id === customerRefId);
@@ -2837,29 +2882,25 @@ export default function WorkOrders() {
                       : 'Isi keluhan/keterangan service sebelum Register.'
                     : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum Register.'}
               </div>
-              {customerVehicleReady && selectedCustomerPeople.length > 0 && (
-                <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
-                  <label className="text-xs font-semibold text-slate-600">Dibawa oleh
-                    <select value={formData.driverContactId} disabled={customerVehicleLocked} onChange={event => {
-                      const person = selectedCustomerPeople.find(item => item.id === event.target.value);
-                      setFormData(previous => ({ ...previous, driverContactId: person?.id || '', driverName: person?.name || '', driverPhone: person?.phone || '' }));
-                    }} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 disabled:bg-gray-100">
-                      <option value="">Belum dipilih</option>
-                      {(selectedVehiclePeople.length ? selectedVehiclePeople : selectedCustomerPeople.filter(person => person.roles.includes('Supir') || person.roles.includes('Owner'))).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || 'tanpa nomor'}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">PIC persetujuan
-                    <select value={formData.approvalContactId} disabled={customerVehicleLocked} onChange={event => setFormData(previous => ({ ...previous, approvalContactId: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 disabled:bg-gray-100">
-                      <option value="">Kontak utama akun</option>
-                      {selectedCustomerPeople.filter(person => person.roles.includes('PIC') || person.roles.includes('Owner')).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || 'tanpa nomor'}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">Penerima faktur
-                    <select value={formData.billingContactId} disabled={customerVehicleLocked} onChange={event => setFormData(previous => ({ ...previous, billingContactId: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 disabled:bg-gray-100">
-                      <option value="">Kontak tagihan akun</option>
-                      {selectedCustomerPeople.filter(person => person.roles.includes('Keuangan') || person.roles.includes('PIC') || person.roles.includes('Owner')).map(person => <option key={person.id} value={person.id}>{person.name} · {person.phone || 'tanpa nomor'}</option>)}
-                    </select>
-                  </label>
+              {customerVehicleReady && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">Kontak kunjungan</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Kontak utama otomatis digunakan. Tambahkan kontak hanya jika diperlukan.</p>
+                    </div>
+                    {!customerVehicleLocked && <button type="button" onClick={() => setShowQuickContact(value => !value)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Plus className="h-4 w-4" /> Tambah Kontak</button>}
+                  </div>
+                  {selectedCustomerPeople.length > 1 && !customerVehicleLocked && <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => selectVisitContact('')} className={`rounded-lg border px-3 py-2 text-xs ${!formData.driverContactId ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}>Kontak utama</button>
+                    {selectedCustomerPeople.filter(person => person.id !== selectedCustomer?.primaryContactId).map(person => <button type="button" key={person.id} onClick={() => selectVisitContact(person.id)} className={`rounded-lg border px-3 py-2 text-left text-xs ${formData.driverContactId === person.id ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}><strong className="block">{person.name}</strong><span>{person.relationshipLabel || person.phone || 'Kontak tambahan'}</span></button>)}
+                  </div>}
+                  {showQuickContact && !customerVehicleLocked && <div className="mt-3 grid gap-2 rounded-lg border border-blue-100 bg-white p-3 md:grid-cols-[1fr_1fr_1.4fr_auto]">
+                    <input autoFocus value={quickContact.name} onChange={event => setQuickContact(previous => ({ ...previous, name: event.target.value }))} placeholder="Nama kontak *" className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
+                    <input value={quickContact.phone} onChange={event => setQuickContact(previous => ({ ...previous, phone: event.target.value }))} placeholder="Nomor telepon" className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
+                    <input value={quickContact.description} onChange={event => setQuickContact(previous => ({ ...previous, description: event.target.value }))} placeholder="Keterangan: supir, owner, keuangan..." className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
+                    <button type="button" onClick={() => void saveQuickContact()} disabled={!quickContact.name.trim() || quickContactSaving} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white disabled:bg-gray-300">{quickContactSaving ? 'Menyimpan...' : 'Simpan'}</button>
+                  </div>}
                 </div>
               )}
               {data.settings.security.requireBackdateReason !== false && formData.date < localDateKey() && (
