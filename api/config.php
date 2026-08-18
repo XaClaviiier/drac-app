@@ -25,6 +25,7 @@ $allowedOrigins = [
 ];
 if ($requestOrigin !== '' && in_array($requestOrigin, $allowedOrigins, true)) {
     header('Access-Control-Allow-Origin: ' . $requestOrigin);
+    header('Access-Control-Allow-Credentials: true');
     header('Vary: Origin');
 }
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
@@ -51,11 +52,11 @@ try {
         ]
     );
 } catch (PDOException $e) {
+    error_log('DRAC database connection failed: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => 'Database connection failed',
-        'error' => $e->getMessage()
+        'message' => 'Database connection failed'
     ]);
     exit;
 }

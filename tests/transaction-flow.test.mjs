@@ -28,3 +28,20 @@ test('penghapusan faktur mengembalikan stok dan melepas relasi WO', () => {
   assert.match(php, /UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL/);
   assert.match(php, /Hapus pembayaran terlebih dahulu sebelum menghapus faktur/);
 });
+
+test('sesi login memakai cookie HttpOnly dan tidak membocorkan token ke JavaScript', () => {
+  const auth = source('api/endpoints/auth.php');
+  const helpers = source('api/helpers.php');
+  const client = source('src/lib/apiClient.ts');
+  assert.match(auth, /setcookie\('drac_session'/);
+  assert.match(auth, /'httponly'\s*=>\s*true/);
+  assert.doesNotMatch(auth, /\$user\['apiToken'\]\s*=/);
+  assert.match(helpers, /\$_COOKIE\['drac_session'\]/);
+  assert.match(client, /credentials:\s*'include'/);
+});
+
+test('respons gagal koneksi database tidak mengirim detail internal', () => {
+  const config = source('api/config.php');
+  assert.match(config, /error_log\('DRAC database connection failed:/);
+  assert.doesNotMatch(config, /'error'\s*=>\s*\$e->getMessage\(\)/);
+});

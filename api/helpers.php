@@ -580,6 +580,10 @@ function ensureApiSupportTables(PDO $pdo): void {
 }
 
 function getBearerToken(): string {
+    // Cookie HttpOnly menjadi sumber utama. Bearer token tetap didukung
+    // sementara agar sesi lama tidak terputus saat pembaruan diterapkan.
+    $cookieToken = trim((string)($_COOKIE['drac_session'] ?? ''));
+    if ($cookieToken !== '') return $cookieToken;
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     return preg_match('/^Bearer\s+(.+)$/i', $header, $match) ? trim($match[1]) : '';
 }

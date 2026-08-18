@@ -34,6 +34,7 @@ async function request<T = any>(
   try {
     const response = await fetch(url, {
       ...options,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(localStorage.getItem('apiToken') ? { Authorization: `Bearer ${localStorage.getItem('apiToken')}` } : {}),
@@ -70,7 +71,9 @@ export const api = {
   // ========== AUTH ==========
   login: async (username: string, password: string) => {
     const response = await request('/login', { method: 'POST', body: JSON.stringify({ username, password }) });
-    if (response.success && response.data?.apiToken) localStorage.setItem('apiToken', response.data.apiToken);
+    // Login baru memakai cookie HttpOnly. Token lama dibersihkan setelah cookie
+    // berhasil diterbitkan, sehingga tidak dapat lagi dibaca oleh JavaScript.
+    if (response.success) localStorage.removeItem('apiToken');
     return response;
   },
   logout: () => request('/logout', { method: 'POST' }),

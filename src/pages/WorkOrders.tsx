@@ -9,30 +9,13 @@ import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import ItemSearchOption from '../components/ItemSearchOption';
 import { childTabClass, ui } from '../components/ui/interfaceStandards';
+import { DEFAULT_COMPLAINT_TEMPLATES, DEFAULT_LOST_SALES_REASONS } from '../lib/workOrderRules';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
-
-const DEFAULT_COMPLAINT_TEMPLATES = [
-  'AC tidak dingin',
-  'Berisik',
-  'Berbau',
-  'Freon habis',
-  'Pengecekan rutin',
-  'Lainnya',
-];
 
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
 const COMPLAINT_TEMPLATE_VERSION_KEY = 'dokterac_complaint_templates_version';
 const COMPLAINT_TEMPLATE_VERSION = '2';
-const DEFAULT_LOST_SALES_REASONS = [
-  { id: 'customer-cancel', label: 'Pelanggan membatalkan', isActive: true, requiresNote: false },
-  { id: 'price-rejected', label: 'Harga tidak disetujui', isActive: true, requiresNote: false },
-  { id: 'customer-delay', label: 'Pelanggan menunda', isActive: true, requiresNote: false },
-  { id: 'parts-unavailable', label: 'Suku cadang tidak tersedia', isActive: true, requiresNote: false },
-  { id: 'other-workshop', label: 'Kendaraan dibawa ke bengkel lain', isActive: true, requiresNote: false },
-  { id: 'unreachable', label: 'Tidak dapat dihubungi', isActive: true, requiresNote: false },
-  { id: 'other', label: 'Lainnya', isActive: true, requiresNote: true },
-];
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
   { id: 'fund', label: 'Menyiapkan dana', isActive: true },

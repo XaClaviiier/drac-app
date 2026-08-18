@@ -97,6 +97,16 @@ $pdo->prepare("INSERT INTO api_sessions (token_hash,user_id,expires_at,last_acti
     ->execute([hash('sha256',$token),$user['id'],$expiresAt->format('Y-m-d H:i:s'),requestIp(),requestUserAgent()]);
 writeLoginAudit($pdo,$user['id'],$username,'login_success','Login berhasil');
 
+$forwardedProto = strtolower(trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || $forwardedProto === 'https';
+setcookie('drac_session', $token, [
+    'expires' => $expiresAt->getTimestamp(),
+    'path' => '/',
+    'secure' => $isHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
 // Remove password from response
 unset($user['password']);
 $user['roleName'] = $user['role_name'];
@@ -108,7 +118,6 @@ $user['branchIds'] = getAccessibleBranchIds($pdo, $user);
 $user['isActive'] = (bool)$user['is_active'];
 $user['isOwner'] = (bool)($user['is_owner'] ?? false);
 $user['isProtected'] = (bool)($user['is_protected'] ?? false);
-$user['apiToken'] = $token;
 $user['sessionExpiresAt'] = $expiresAt->format(DateTimeInterface::ATOM);
 $user['idleTimeoutMinutes'] = empty($user['is_owner']) ? $idleTimeoutMinutes : 0;
 
