@@ -142,6 +142,7 @@ export default function WorkOrders() {
   const [successMsg, setSuccessMsg] = useState('');
   const [showQuickContact, setShowQuickContact] = useState(false);
   const [quickContactSaving, setQuickContactSaving] = useState(false);
+  const [quickContactDeletingId, setQuickContactDeletingId] = useState('');
   const [quickContact, setQuickContact] = useState({ name: '', phone: '', description: '' });
   const canShowAdminRowActions = Boolean(
     currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
@@ -609,6 +610,40 @@ export default function WorkOrders() {
     }));
     setQuickContact({ name: '', phone: '', description: '' });
     setShowQuickContact(false);
+    await refreshData();
+  };
+
+  const cancelQuickContact = () => {
+    setQuickContact({ name: '', phone: '', description: '' });
+    setShowQuickContact(false);
+  };
+
+  const deleteQuickContact = async (personId: string) => {
+    const person = selectedCustomerPeople.find(item => item.id === personId);
+    if (!person || person.id === selectedCustomer?.primaryContactId) return;
+    if (!window.confirm(`Hapus kontak ${person.name}?`)) return;
+    setQuickContactDeletingId(person.id);
+    let result = await api.remove('customer-people', person.id);
+    if (!result.success && /digunakan pada WO/i.test(result.message || '')) {
+      result = await api.update('customer-people', person.id, {
+        customerId: person.customerId,
+        name: person.name,
+        phone: person.phone,
+        email: person.email,
+        relationshipLabel: person.relationshipLabel,
+        roles: person.roles,
+        vehicleAssignments: person.vehicleAssignments,
+        isPrimaryPic: false,
+        isBillingContact: false,
+        isActive: false,
+      });
+    }
+    setQuickContactDeletingId('');
+    if (!result.success) {
+      window.alert(result.message || 'Kontak gagal dihapus.');
+      return;
+    }
+    if (formData.driverContactId === person.id || formData.approvalContactId === person.id || formData.billingContactId === person.id) selectVisitContact('');
     await refreshData();
   };
 
@@ -2889,16 +2924,17 @@ export default function WorkOrders() {
                       <p className="text-sm font-semibold text-slate-700">Kontak kunjungan</p>
                       <p className="mt-0.5 text-xs text-slate-500">Kontak utama otomatis digunakan. Tambahkan kontak hanya jika diperlukan.</p>
                     </div>
-                    {!customerVehicleLocked && <button type="button" onClick={() => setShowQuickContact(value => !value)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Plus className="h-4 w-4" /> Tambah Kontak</button>}
+                    {!customerVehicleLocked && !showQuickContact && <button type="button" onClick={() => setShowQuickContact(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Plus className="h-4 w-4" /> Tambah Kontak</button>}
                   </div>
                   {selectedCustomerPeople.length > 1 && !customerVehicleLocked && <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" onClick={() => selectVisitContact('')} className={`rounded-lg border px-3 py-2 text-xs ${!formData.driverContactId ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}>Kontak utama</button>
-                    {selectedCustomerPeople.filter(person => person.id !== selectedCustomer?.primaryContactId).map(person => <button type="button" key={person.id} onClick={() => selectVisitContact(person.id)} className={`rounded-lg border px-3 py-2 text-left text-xs ${formData.driverContactId === person.id ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}><strong className="block">{person.name}</strong><span>{person.relationshipLabel || person.phone || 'Kontak tambahan'}</span></button>)}
+                    {selectedCustomerPeople.filter(person => person.id !== selectedCustomer?.primaryContactId).map(person => <div key={person.id} className={`relative rounded-lg border ${formData.driverContactId === person.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}><button type="button" onClick={() => selectVisitContact(person.id)} className="min-w-24 px-3 py-2 pr-8 text-left text-xs"><strong className="block">{person.name}</strong><span>{person.relationshipLabel || person.phone || 'Kontak tambahan'}</span></button><button type="button" onClick={() => void deleteQuickContact(person.id)} disabled={quickContactDeletingId === person.id} title={`Hapus kontak ${person.name}`} aria-label={`Hapus kontak ${person.name}`} className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full text-red-500 hover:bg-red-50 hover:text-red-700 disabled:text-gray-300"><X className="h-3.5 w-3.5" /></button></div>)}
                   </div>}
-                  {showQuickContact && !customerVehicleLocked && <div className="mt-3 grid gap-2 rounded-lg border border-blue-100 bg-white p-3 md:grid-cols-[1fr_1fr_1.4fr_auto]">
+                  {showQuickContact && !customerVehicleLocked && <div className="mt-3 grid gap-2 rounded-lg border border-blue-100 bg-white p-3 md:grid-cols-[1fr_1fr_1.4fr_auto_auto]">
                     <input autoFocus value={quickContact.name} onChange={event => setQuickContact(previous => ({ ...previous, name: event.target.value }))} placeholder="Nama kontak *" className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
                     <input value={quickContact.phone} onChange={event => setQuickContact(previous => ({ ...previous, phone: event.target.value }))} placeholder="Nomor telepon" className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
                     <input value={quickContact.description} onChange={event => setQuickContact(previous => ({ ...previous, description: event.target.value }))} placeholder="Keterangan: supir, owner, keuangan..." className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
+                    <button type="button" onClick={cancelQuickContact} disabled={quickContactSaving} className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">Batal</button>
                     <button type="button" onClick={() => void saveQuickContact()} disabled={!quickContact.name.trim() || quickContactSaving} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white disabled:bg-gray-300">{quickContactSaving ? 'Menyimpan...' : 'Simpan'}</button>
                   </div>}
                 </div>
