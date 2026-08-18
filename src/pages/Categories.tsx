@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FolderTree, Plus, Edit, Trash2, X, Save, Search, Package, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { FolderTree, Plus, Edit, Trash2, X, Save, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { ItemCategory } from '../types';
 
@@ -13,13 +13,6 @@ export default function Categories() {
   const [editing, setEditing] = useState<ItemCategory | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [msg, setMsg] = useState('');
-
-  const stats = useMemo(() => ({
-    total: data.itemCategories.length,
-    active: data.itemCategories.filter(c => c.isActive).length,
-    used: data.itemCategories.filter(c => data.items.some(i => i.categoryId === c.id)).length,
-    empty: data.itemCategories.filter(c => !data.items.some(i => i.categoryId === c.id)).length,
-  }), [data.itemCategories, data.items]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -111,26 +104,6 @@ export default function Categories() {
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Total Kategori</p>
-          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Aktif</p>
-          <p className="text-2xl font-bold text-green-600">{stats.active}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Terpakai</p>
-          <p className="text-2xl font-bold text-blue-600">{stats.used}</p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Kosong</p>
-          <p className="text-2xl font-bold text-amber-600">{stats.empty}</p>
-        </div>
-      </div>
-
       {/* Filter */}
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row">
         <div className="relative flex-1">
@@ -144,22 +117,19 @@ export default function Categories() {
         </select>
       </div>
 
-      {/* Table (desktop) */}
-      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
+      {/* Table */}
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <table className="w-full">
           <thead className="bg-blue-900 text-white">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase">Kode</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase">Nama Kategori</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase">Keterangan</th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase">Jml Item</th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase">Kategori</th>
               <th className="px-4 py-3 text-center text-xs font-medium uppercase">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+              <tr><td colSpan={3} className="px-6 py-12 text-center text-gray-500">
                 <FolderTree className="mx-auto mb-3 h-12 w-12 text-gray-300" />
                 <p className="font-medium">Belum ada kategori</p>
               </td></tr>
@@ -169,15 +139,6 @@ export default function Categories() {
                 <tr key={cat.id} className="transition-colors hover:bg-blue-50/50">
                   <td className="px-4 py-3 font-mono text-sm font-medium text-blue-700">{cat.code}</td>
                   <td className="px-4 py-3 text-sm font-semibold text-gray-900">{cat.name}</td>
-                  <td className="max-w-xs truncate px-4 py-3 text-sm text-gray-500">{cat.description || '-'}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`inline-flex min-w-[2rem] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${count > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>{count}</span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${cat.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {cat.isActive ? 'Aktif' : 'Nonaktif'}
-                    </span>
-                  </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-center gap-2">
                       {hasPermission('item:edit') && (
@@ -197,32 +158,6 @@ export default function Categories() {
             })}
           </tbody>
         </table>
-      </div>
-
-      {/* Cards (mobile) */}
-      <div className="grid gap-3 md:hidden">
-        {filtered.map(cat => {
-          const count = itemCount(cat.id);
-          return (
-            <div key={cat.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900">{cat.name}</p>
-                  <p className="font-mono text-xs text-blue-600">{cat.code}</p>
-                </div>
-                <div className="flex gap-1">
-                  {hasPermission('item:edit') && <button onClick={() => openModal(cat)} className="rounded p-1.5 text-blue-600 hover:bg-blue-100"><Edit className="h-4 w-4" /></button>}
-                  {hasPermission('item:delete') && <button onClick={() => remove(cat)} className={`rounded p-1.5 ${count > 0 ? 'text-gray-300' : 'text-red-600 hover:bg-red-100'}`}><Trash2 className="h-4 w-4" /></button>}
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">{cat.description || '-'}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700"><Package className="h-3 w-3" /> {count} item</span>
-                <span className={`rounded-full px-2 py-0.5 text-xs ${cat.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{cat.isActive ? 'Aktif' : 'Nonaktif'}</span>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {/* Modal */}
