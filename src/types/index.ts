@@ -133,6 +133,7 @@ export interface WorkOrder {
   billingContactId?: string;
   billingContactName?: string;
   billingContactPhone?: string;
+  correctionReason?: string;
   description?: string;       // keluhan pelanggan
   findings?: string;          // hasil pemeriksaan teknisi
   diagnosisTemperature?: number;

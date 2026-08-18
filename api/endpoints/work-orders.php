@@ -300,7 +300,7 @@ switch ($method) {
                 true
             );
             $contacts = $resolveWorkOrderContacts($pdo, (string)$customer['id'], $d);
-            $currentStmt = $pdo->prepare("SELECT wo_number,vehicle_ref_id,date,transaction_time,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
+            $currentStmt = $pdo->prepare("SELECT wo_number,customer_ref_id,customer_name,vehicle_ref_id,plate_number,date,transaction_time,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
             if (!$currentWorkOrder) {
@@ -310,6 +310,13 @@ switch ($method) {
             requireAccessibleBranch($pdo, $actor, (string)$currentWorkOrder['branch_id']);
             if (!empty($currentWorkOrder['invoice_id'])) {
                 throw new DomainException('WO yang sudah difakturkan tidak dapat diedit. Ubah rincian pada faktur atau hapus faktur terlebih dahulu.');
+            }
+            $identityChanged = (string)$currentWorkOrder['customer_ref_id'] !== (string)$customer['id']
+                || (string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id'];
+            $correctionReason = trim((string)($d['correctionReason'] ?? ''));
+            if ($identityChanged) {
+                requireUserPermission($pdo, 'wo:edit');
+                if ($correctionReason === '') throw new InvalidArgumentException('Alasan koreksi customer/kendaraan wajib diisi.');
             }
             $legacyStatusMap = [
                 'Pengecekan' => 'Register',
@@ -406,6 +413,16 @@ switch ($method) {
             }
             $statusLog = json_decode((string)($currentWorkOrder['status_log'] ?? '[]'), true);
             if (!is_array($statusLog)) $statusLog = [];
+            if ($identityChanged) {
+                $statusLog[] = [
+                    'from' => $currentStatus,
+                    'to' => $currentStatus,
+                    'at' => date('c'),
+                    'byUserId' => $actor['id'] ?? '-',
+                    'byUserName' => $actor['name'] ?? 'System',
+                    'reason' => sprintf('Koreksi customer/kendaraan: %s. %s / %s menjadi %s / %s.', $correctionReason, (string)$currentWorkOrder['customer_name'], normalizeVehiclePlate((string)$currentWorkOrder['plate_number']), (string)$customer['name'], normalizeVehiclePlate((string)$vehicle['plate_number'])),
+                ];
+            }
             if ($nextStatus !== $currentStatus) {
                 $statusReason = $nextStatus === 'Closed'
                     ? trim((string)($d['cancelReason'] ?? ''))
