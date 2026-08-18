@@ -1,5 +1,4 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ui, workspaceTabClass } from "./ui/interfaceStandards";
 import {
   LayoutDashboard,
   Car,
@@ -219,9 +218,6 @@ const pageTitles: Record<string, string> = {
   "/performance-bonus": "Kinerja & Bonus",
   "/historical-entry": "Input Cepat Historis",
 };
-
-const workspacePathFor = (path: string) =>
-  path.startsWith("/receipts/") ? "/receipts" : path;
 
 type DesktopMenuItem = {
   label: string;
@@ -535,29 +531,6 @@ export default function Layout() {
     readProcessQueue(),
   );
   const [processClock, setProcessClock] = useState(() => Date.now());
-  const [workspaceTabs, setWorkspaceTabs] = useState<
-    Array<{ path: string; label: string }>
-  >(() => {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem("drac-workspace-tabs") || "[]",
-      );
-      if (!Array.isArray(saved)) return [];
-      return saved
-        .filter((tab) => tab?.path && tab.path !== "/" && tab?.label)
-        .reduce<Array<{ path: string; label: string }>>((tabs, tab) => {
-          const path = workspacePathFor(tab.path);
-          if (tabs.some((current) => current.path === path)) return tabs;
-          tabs.push({
-            path,
-            label: path === "/receipts" ? "Penerimaan Barang" : tab.label,
-          });
-          return tabs;
-        }, []);
-    } catch {
-      return [];
-    }
-  });
   const location = useLocation();
   const navigate = useNavigate();
   const {
@@ -618,42 +591,11 @@ export default function Layout() {
     );
   };
 
-  const closeWorkspaceTab = (path: string) => {
-    const index = workspaceTabs.findIndex((tab) => tab.path === path);
-    const remaining = workspaceTabs.filter((tab) => tab.path !== path);
-    setWorkspaceTabs(remaining);
-    if (workspacePathFor(location.pathname) === path) {
-      const fallback =
-        remaining[Math.min(index, remaining.length - 1)]?.path || "/";
-      navigate(fallback);
-    }
-  };
-
   // Tutup menu mobile saat pindah halaman
   useEffect(() => {
     setMobileMenuOpen(false);
     setDesktopMenuOpen(null);
   }, [location.pathname]);
-  useEffect(() => {
-    if (location.pathname === "/") return;
-    const path = workspacePathFor(location.pathname);
-    const label = path === "/receipts" ? "Penerimaan Barang" : getPageTitle();
-    setWorkspaceTabs((current) => {
-      const withoutReceiptChildren =
-        path === "/receipts"
-          ? current.filter((tab) => !tab.path.startsWith("/receipts/"))
-          : current;
-      const existing = withoutReceiptChildren.find((tab) => tab.path === path);
-      if (!existing) return [...withoutReceiptChildren, { path, label }];
-      if (existing.label === label) return withoutReceiptChildren;
-      return withoutReceiptChildren.map((tab) =>
-        tab.path === path ? { ...tab, label } : tab,
-      );
-    });
-  }, [location.pathname, data.goodsReceipts]);
-  useEffect(() => {
-    localStorage.setItem("drac-workspace-tabs", JSON.stringify(workspaceTabs));
-  }, [workspaceTabs]);
   useEffect(() => {
     const syncProcesses = (event: Event) =>
       setSystemProcesses(
@@ -1167,63 +1109,6 @@ export default function Layout() {
             </div>
           </div>
         </header>
-
-        <div className={`${ui.workspaceBar} mb-0.5 hidden lg:flex`}>
-          <div className="relative z-10 flex h-10 min-w-0 flex-1 items-start overflow-x-auto overflow-y-hidden">
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className={`${workspaceTabClass(location.pathname === "/")} justify-between gap-3 px-4 text-sm`}
-            >
-              <span className="truncate">Dashboard</span>
-            </button>
-            {workspaceTabs.map((tab) => {
-              const active = workspacePathFor(location.pathname) === tab.path;
-              return (
-                <div
-                  key={tab.path}
-                  className={`${workspaceTabClass(active)} min-w-40 max-w-56`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => navigate(tab.path)}
-                    title={tab.label}
-                    className={`min-w-0 flex-1 truncate px-3 text-left text-sm ${active ? "font-semibold" : ""}`}
-                  >
-                    {tab.label}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => closeWorkspaceTab(tab.path)}
-                    title={`Tutup ${tab.label}`}
-                    className={`mr-1 rounded p-1 ${active ? "hover:bg-blue-700" : "hover:bg-gray-300"}`}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {workspaceTabs.length > 0 && (
-            <select
-              aria-label="Pilih modul yang terbuka"
-              title="Pilih tab yang terbuka"
-              value=""
-              onChange={(event) =>
-                event.target.value && navigate(event.target.value)
-              }
-              className="relative z-10 ml-1 h-10 w-16 flex-shrink-0 rounded-t-lg border border-b-0 border-gray-300 bg-gray-200 px-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
-            >
-              <option value="">{workspaceTabs.length + 1}</option>
-              <option value="/">Dashboard</option>
-              {workspaceTabs.map((tab) => (
-                <option key={tab.path} value={tab.path}>
-                  {tab.label}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
 
         {isDemoMode && (
           <div className="flex-shrink-0 border-b border-yellow-300 bg-yellow-100 px-4 py-2 text-center text-xs text-yellow-800 sm:text-sm">
