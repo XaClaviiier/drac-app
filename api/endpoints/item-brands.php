@@ -9,12 +9,23 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS item_brands (
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("INSERT IGNORE INTO item_brands(id,code,name,sort_order)
  SELECT CONCAT('IB-',SUBSTRING(SHA1(UPPER(TRIM(brand))),1,16)),
         LEFT(UPPER(REPLACE(TRIM(brand),' ','')),30), UPPER(TRIM(brand)), 100
  FROM items WHERE TRIM(COALESCE(brand,''))<>'' GROUP BY UPPER(TRIM(brand))");
 $pdo->exec("UPDATE items i JOIN item_brands b ON UPPER(TRIM(b.name))=UPPER(TRIM(i.brand))
  SET i.item_brand_id=b.id WHERE i.item_brand_id IS NULL AND TRIM(COALESCE(i.brand,''))<>''");
+$pdo->exec("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order)
+ SELECT i.id,vb.id,COALESCE(existing.next_order,0)
+ FROM items i JOIN item_brands ib ON ib.id=i.item_brand_id
+ JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(ib.name))
+ LEFT JOIN (SELECT item_id,MAX(sort_order)+1 next_order FROM item_vehicle_brands GROUP BY item_id) existing ON existing.item_id=i.id");
+$pdo->exec("UPDATE items i JOIN item_brands ib ON ib.id=i.item_brand_id
+ JOIN vehicle_brands matched ON UPPER(TRIM(matched.name))=UPPER(TRIM(ib.name))
+ LEFT JOIN vehicle_brands current_brand ON current_brand.id=i.vehicle_brand_id
+ SET i.vehicle_brand_id=matched.id,i.vehicle_brand_name=matched.name
+ WHERE i.vehicle_brand_id IS NULL OR UPPER(TRIM(COALESCE(current_brand.name,'')))='UNIVERSAL'");
 $pdo->exec("UPDATE items i JOIN item_brands ib ON ib.id=i.item_brand_id JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(ib.name)) SET i.item_brand_id=NULL,i.brand=''");
 $pdo->exec("DELETE ib FROM item_brands ib JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(ib.name)) LEFT JOIN items i ON i.item_brand_id=ib.id WHERE i.id IS NULL");
 
