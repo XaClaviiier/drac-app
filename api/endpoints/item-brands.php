@@ -18,6 +18,16 @@ $pdo->exec("UPDATE items i JOIN item_brands b ON UPPER(TRIM(b.name))=UPPER(TRIM(
  SET i.item_brand_id=b.id WHERE i.item_brand_id IS NULL AND TRIM(COALESCE(i.brand,''))<>''");
 $pdo->exec("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order)
  SELECT i.id,vb.id,COALESCE(existing.next_order,0)
+ FROM items i JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(i.brand))
+ LEFT JOIN (SELECT item_id,MAX(sort_order)+1 next_order FROM item_vehicle_brands GROUP BY item_id) existing ON existing.item_id=i.id
+ WHERE TRIM(COALESCE(i.brand,''))<>''");
+$pdo->exec("UPDATE items i JOIN vehicle_brands matched ON UPPER(TRIM(matched.name))=UPPER(TRIM(i.brand))
+ LEFT JOIN vehicle_brands current_brand ON current_brand.id=i.vehicle_brand_id
+ SET i.vehicle_brand_id=matched.id,i.vehicle_brand_name=matched.name
+ WHERE i.vehicle_brand_id IS NULL OR UPPER(TRIM(COALESCE(current_brand.name,'')))='UNIVERSAL'");
+$pdo->exec("UPDATE items i JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(i.brand)) SET i.item_brand_id=NULL,i.brand='' WHERE TRIM(COALESCE(i.brand,''))<>''");
+$pdo->exec("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order)
+ SELECT i.id,vb.id,COALESCE(existing.next_order,0)
  FROM items i JOIN item_brands ib ON ib.id=i.item_brand_id
  JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(ib.name))
  LEFT JOIN (SELECT item_id,MAX(sort_order)+1 next_order FROM item_vehicle_brands GROUP BY item_id) existing ON existing.item_id=i.id");
