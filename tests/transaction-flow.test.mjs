@@ -62,6 +62,14 @@ test('pencarian barang mendukung filter stok cabang dan mengecualikan jasa', () 
   assert.match(page, /value="stok!=0"/);
 });
 
+test('cetak barang dapat dikelompokkan berdasarkan kategori', () => {
+  const page = source('src/pages/ItemsAndServices.tsx');
+  assert.match(page, /printGroupByCategory/);
+  assert.match(page, /Group berdasarkan kategori/);
+  assert.match(page, /class="category-group"/);
+  assert.match(page, /items\.length} item/);
+});
+
 test('refresh mutasi barang meminta histori per item dan menerima penyesuaian satu sisi', () => {
   const endpoint = source('api/endpoints/stock-movements.php');
   const page = source('src/pages/ItemsAndServices.tsx');

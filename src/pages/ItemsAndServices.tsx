@@ -117,6 +117,8 @@ export default function ItemsAndServices() {
   const [filterType, setFilterType] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStock, setFilterStock] = useState('');
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const [printGroupByCategory, setPrintGroupByCategory] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [itemListTab, setItemListTab] = useState<'list' | 'verification'>('list');
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
@@ -657,7 +659,7 @@ export default function ItemsAndServices() {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
-    const printableColumns = itemTableColumns.filter(column => column !== 'actions');
+    const printableColumns = itemTableColumns.filter(column => column !== 'actions' && (!printGroupByCategory || column !== 'category'));
     const columnValue = (item: Item, column: ItemColumn) => {
       if (column === 'code') return item.code;
       if (column === 'name') return item.name;
@@ -677,11 +679,24 @@ export default function ItemsAndServices() {
     const headers = printableColumns.map(column => (
       `<th class="${numericColumns.has(column) ? 'numeric' : ''}">${escapeHtml(column === 'code' ? 'Kode Barang' : itemColumnLabels[column])}</th>`
     )).join('');
-    const rows = filteredItems.length > 0
-      ? filteredItems.map(item => `<tr>${printableColumns.map(column => (
-          `<td class="${numericColumns.has(column) ? 'numeric' : ''}">${escapeHtml(columnValue(item, column))}</td>`
-        )).join('')}</tr>`).join('')
-      : `<tr><td colspan="${printableColumns.length}" class="empty">Tidak ada barang/jasa yang sesuai dengan filter.</td></tr>`;
+    const itemRow = (item: Item) => `<tr>${printableColumns.map(column => (
+      `<td class="${numericColumns.has(column) ? 'numeric' : ''}">${escapeHtml(columnValue(item, column))}</td>`
+    )).join('')}</tr>`;
+    let rows = `<tr><td colspan="${printableColumns.length}" class="empty">Tidak ada barang/jasa yang sesuai dengan filter.</td></tr>`;
+    if (filteredItems.length > 0 && printGroupByCategory) {
+      const groups = filteredItems.reduce<Map<string, Item[]>>((result, item) => {
+        const category = item.categoryName?.trim() || 'Tanpa Kategori';
+        result.set(category, [...(result.get(category) || []), item]);
+        return result;
+      }, new Map());
+      rows = [...groups.entries()]
+        .sort(([left], [right]) => left.localeCompare(right, 'id', { sensitivity: 'base' }))
+        .map(([category, items]) => (
+          `<tr class="category-group"><td colspan="${printableColumns.length}">${escapeHtml(category)}<span>${items.length} item</span></td></tr>${items.map(itemRow).join('')}`
+        )).join('');
+    } else if (filteredItems.length > 0) {
+      rows = filteredItems.map(itemRow).join('');
+    }
 
     const activeFilters = [
       filterActive === 'active' ? 'Status: Aktif' : filterActive === 'inactive' ? 'Status: Nonaktif' : '',
@@ -690,6 +705,7 @@ export default function ItemsAndServices() {
       filterType ? `Jenis: ${filterType}` : '',
       filterStock ? `Stok: ${filterStock.replace(/^stok\s*/i, '')}` : '',
       search.trim() ? `Pencarian: ${search.trim()}` : '',
+      printGroupByCategory ? 'Tampilan: Group per Kategori' : '',
     ].filter(Boolean);
     const branchName = currentBranchId === 'ALL'
       ? 'Semua Cabang'
@@ -707,6 +723,8 @@ export default function ItemsAndServices() {
         thead{display:table-header-group}tr{break-inside:avoid}
         th{background:#637c93;color:#fff;text-align:left;padding:7px;border:1px solid #526b82;white-space:nowrap}
         td{padding:6px 7px;border:1px solid #d0d5dd;vertical-align:top}tbody tr:nth-child(even){background:#f8fafc}
+        .category-group{break-after:avoid}.category-group td{background:#dbe8f3!important;color:#29455f;font-size:11px;font-weight:700;padding:7px 9px;border-color:#9fb5c8}
+        .category-group span{float:right;font-size:9px;font-weight:600;color:#526b82}
         .numeric{text-align:right;white-space:nowrap}.empty{text-align:center;padding:24px;color:#667085}
         @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
       </style></head><body>
@@ -1236,7 +1254,7 @@ export default function ItemsAndServices() {
           <div className="relative flex items-center gap-2">
             <button type="button" onClick={exportCurrentData} title="Download / Export" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Download className="h-5 w-5" /></button>
             {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Share2 className="h-5 w-5" /></button>}
-            <button type="button" onClick={printCurrentData} title="Cetak / Simpan PDF sesuai filter" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setShowPrintOptions(true)} title="Cetak / Simpan PDF sesuai filter" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
             <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Settings2 className="h-5 w-5" /></button>
             <div className="relative w-80"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari atau ketik stok=0, stok!=0, stok>0" title="Filter stok: stok=0, stok!=0 atau stok<>0, stok>=1 atau stok=>1. Pisahkan koma untuk kombinasi OR." className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
             <span className="flex h-10 min-w-16 items-center justify-center rounded border border-slate-300 bg-white px-3 text-sm text-slate-600">{filteredItems.length}</span>
@@ -1752,6 +1770,31 @@ export default function ItemsAndServices() {
       {/* ============================================================ */}
       {/* IMPORT CSV MODAL */}
       {/* ============================================================ */}
+      {showPrintOptions && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl">
+            <header className="flex items-center justify-between border-b px-5 py-4">
+              <div><h3 className="text-lg font-bold text-slate-900">Opsi Cetak Barang &amp; Jasa</h3><p className="text-sm text-slate-500">{filteredItems.length} item sesuai filter aktif</p></div>
+              <button type="button" onClick={() => setShowPrintOptions(false)} className="rounded p-2 hover:bg-slate-100" aria-label="Tutup opsi cetak"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="space-y-3 p-5">
+              <label className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 ${!printGroupByCategory ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                <input type="radio" name="print-layout" checked={!printGroupByCategory} onChange={() => setPrintGroupByCategory(false)} className="mt-1" />
+                <span><strong className="block text-slate-900">Daftar biasa</strong><span className="text-sm text-slate-500">Urutan mengikuti tabel yang sedang ditampilkan.</span></span>
+              </label>
+              <label className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 ${printGroupByCategory ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                <input type="radio" name="print-layout" checked={printGroupByCategory} onChange={() => setPrintGroupByCategory(true)} className="mt-1" />
+                <span><strong className="flex items-center gap-2 text-slate-900"><FolderTree className="h-4 w-4 text-blue-700" />Group berdasarkan kategori</strong><span className="text-sm text-slate-500">Kategori diurutkan A-Z dan menampilkan jumlah item per kategori.</span></span>
+              </label>
+            </div>
+            <footer className="flex justify-end gap-3 border-t bg-slate-50 px-5 py-4">
+              <button type="button" onClick={() => setShowPrintOptions(false)} className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 font-medium text-slate-700">Batal</button>
+              <button type="button" onClick={() => { setShowPrintOptions(false); printCurrentData(); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-5 py-2.5 font-semibold text-white hover:bg-blue-800"><Printer className="h-4 w-4" />Cetak / Simpan PDF</button>
+            </footer>
+          </div>
+        </div>
+      )}
+
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[95vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white shadow-2xl">
