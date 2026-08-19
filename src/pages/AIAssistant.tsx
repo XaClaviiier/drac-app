@@ -330,11 +330,26 @@ export default function AIAssistant() {
         let brand = [...brands]
           .sort((left, right) => right.name.length - left.name.length)
           .find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')));
+        let inferredModel: AIVehicleCatalog['brands'][number]['models'][number] | undefined;
         if (!brand) {
-          brand = brands.find(candidate => candidate.models.some(model =>
-            model.isActive && normalizeCatalogTerm(model.name).length > 2
-            && normalizedCatalogRaw.includes(normalizeCatalogTerm(model.name))
-          ));
+          const rawWords = new Set(normalizedCatalogRaw.split(' ').filter(word => word.length >= 4));
+          const modelMatches = brands.flatMap(candidate => candidate.models
+            .filter(model => model.isActive)
+            .filter(model => {
+              const modelTerm = normalizeCatalogTerm(model.name);
+              const modelWords = modelTerm.split(' ').filter(word => word.length >= 4);
+              return normalizedCatalogRaw.includes(modelTerm) || modelWords.some(word => rawWords.has(word));
+            })
+            .map(model => ({ brand: candidate, model })));
+          const matchingBrandIds = new Set(modelMatches.map(match => match.brand.id));
+          if (matchingBrandIds.size === 1) {
+            brand = modelMatches[0].brand;
+            inferredModel = modelMatches.sort((left, right) => right.model.name.length - left.model.name.length)[0].model;
+          }
+        }
+        if (!brand && /\bpajero\b/i.test(raw)) {
+          brand = brands.find(candidate => normalizeCatalogTerm(candidate.name) === 'mitsubishi');
+          inferredModel = brand?.models.find(model => model.isActive && normalizeCatalogTerm(model.name).includes('pajero'));
         }
         const firstToken = raw.split(/[\s,/-]+/).find(Boolean) || '';
         const brandCandidate = titleCaseVehicleName(brand?.name || firstToken);
@@ -352,7 +367,7 @@ export default function AIAssistant() {
           } : current);
           return;
         }
-        const model = [...brand.models]
+        const model = inferredModel || [...brand.models]
           .filter(item => item.isActive)
           .sort((left, right) => right.name.length - left.name.length)
           .find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')));
