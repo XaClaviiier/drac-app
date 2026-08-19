@@ -327,9 +327,15 @@ export default function AIAssistant() {
           const candidate = normalizeCatalogTerm(item.name);
           return candidate.length > 0 && normalizedCatalogRaw.includes(candidate);
         })?.name;
-        const brand = [...brands]
+        let brand = [...brands]
           .sort((left, right) => right.name.length - left.name.length)
           .find(item => normalizedRaw.includes(item.name.toLocaleLowerCase('id-ID')));
+        if (!brand) {
+          brand = brands.find(candidate => candidate.models.some(model =>
+            model.isActive && normalizeCatalogTerm(model.name).length > 2
+            && normalizedCatalogRaw.includes(normalizeCatalogTerm(model.name))
+          ));
+        }
         const firstToken = raw.split(/[\s,/-]+/).find(Boolean) || '';
         const brandCandidate = titleCaseVehicleName(brand?.name || firstToken);
         let modelText = raw;
@@ -747,9 +753,15 @@ export default function AIAssistant() {
     const requestedWords = words(name);
     const normalizedPhone = phone.replace(/\D/g, '');
 
+    if (normalizedPhone.length >= 8) {
+      const exactPhone = data.customers.filter(customer => customer.phone.replace(/\D/g, '') === normalizedPhone);
+      if (exactPhone.length > 0) return exactPhone.slice(0, 5);
+      const exactName = name.trim().toUpperCase();
+      return data.customers.filter(customer => customer.name.trim().toUpperCase() === exactName).slice(0, 5);
+    }
+
     return data.customers.filter(customer => {
-      if (customer.name.trim().toUpperCase() === name.trim().toUpperCase()) return false;
-      if (normalizedPhone.length >= 8 && customer.phone.replace(/\D/g, '') === normalizedPhone) return true;
+      if (customer.name.trim().toUpperCase() === name.trim().toUpperCase()) return true;
       const customerWords = words(customer.name);
       return requestedWords.some(requested => customerWords.some(existing =>
         Math.min(requested.length, existing.length) >= 4
@@ -2600,7 +2612,7 @@ ${buildSmartContext(userMsgText)}`;
                   {pendingAction.address && <p>Alamat: <b className="text-white">{pendingAction.address}</b></p>}
                   {pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved && (
                     <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
-                      <p className="mb-2 font-semibold text-amber-200">Ada pelanggan dengan nama atau telepon mirip. Pakai data lama?</p>
+                      <p className="mb-2 font-semibold text-amber-200">Data pelanggan sudah pernah terdaftar. Pakai data lama?</p>
                       <div className="space-y-2">
                         {pendingAction.customerCandidates.map((customerId: string) => {
                           const customer = data.customers.find(item => item.id === customerId);
@@ -2613,7 +2625,7 @@ ${buildSmartContext(userMsgText)}`;
                   )}
                   <p>Kendaraan: <b className="text-white">{pendingAction.plateNumber}</b> — {pendingAction.vehicleInfo}</p>
                   {pendingAction.vehicleCatalogResolution?.status === 'checking' && <div className="my-3 flex items-center gap-2 rounded-lg border border-cyan-500/50 bg-cyan-950/50 p-3 text-cyan-200"><Loader2 className="h-4 w-4 animate-spin" /> Memeriksa Master Kendaraan…</div>}
-                  {pendingAction.vehicleCatalogResolution?.status === 'ready' && <div className="my-3 rounded-lg border border-emerald-500/50 bg-emerald-950/40 p-3 text-emerald-200"><p className="font-semibold">✓ Data kendaraan cocok dengan master</p><p className="mt-1 text-xs">{pendingAction.vehicleCatalogResolution.brandName} · {pendingAction.vehicleCatalogResolution.modelName}{pendingAction.vehicleCatalogResolution.color ? ` · ${pendingAction.vehicleCatalogResolution.color}` : ''}</p></div>}
+                  {pendingAction.vehicleCatalogResolution?.status === 'ready' && <p className="text-emerald-300">✓ {pendingAction.vehicleCatalogResolution.brandName} · {pendingAction.vehicleCatalogResolution.modelName}{pendingAction.vehicleCatalogResolution.color ? ` · ${pendingAction.vehicleCatalogResolution.color}` : ''}</p>}
                   {pendingAction.vehicleCatalogResolution?.status === 'missing_brand' && (
                     <div className="my-3 rounded-lg border border-amber-400 bg-amber-950/40 p-3">
                       <p className="font-semibold text-amber-200">Merek <b>{pendingAction.vehicleCatalogResolution.brandCandidate || '-'}</b> belum ada di Master Kendaraan.</p>
@@ -2658,8 +2670,14 @@ ${buildSmartContext(userMsgText)}`;
                   )}
                   {pendingAction.action === 'create_quick_invoice' && <p>Metode pembayaran: <b className="text-white">{pendingAction.paymentMethod}</b></p>}
                   <div className="mt-3">
-                    <p className="mb-2 font-semibold text-white">Cabang tempat WO dibuat:</p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {pendingBranchId && !showBranchChooser ? (
+                      <div className="flex items-center justify-between rounded-lg border border-cyan-500/40 bg-slate-800 px-3 py-2">
+                        <span>Cabang: <b className="text-white">{cabangName(pendingBranchId).replace('CABANG ', '')}</b></span>
+                        <button type="button" onClick={() => setShowBranchChooser(true)} className="text-xs font-semibold text-cyan-300">Ubah</button>
+                      </div>
+                    ) : <>
+                    <p className="mb-2 font-semibold text-white">Pilih cabang:</p>
+                    <div className="grid grid-cols-3 gap-2">
                       {data.branches.filter(branch => branch.isActive).map(branch => (
                         <button
                           key={branch.id}
@@ -2668,6 +2686,7 @@ ${buildSmartContext(userMsgText)}`;
                             setPendingBranchId(branch.id);
                             // Cabang tujuan transaksi harus sama dengan cabang aktif.
                             setCurrentBranchId(branch.id);
+                            setShowBranchChooser(false);
                           }}
                           className={`rounded-lg border px-3 py-2 text-left font-semibold transition-colors ${
                             pendingBranchId === branch.id
@@ -2679,15 +2698,9 @@ ${buildSmartContext(userMsgText)}`;
                         </button>
                       ))}
                     </div>
-                    {pendingBranchId ? (
-                      <p className="mt-2 text-cyan-200">
-                        WO akan dicatat di <b>{cabangName(pendingBranchId)}</b>. Cabang ini menjadi cabang aktif transaksi.
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-amber-300">Pilih cabang aktif sebelum membuat WO.</p>
-                    )}
+                    </>}
                   </div>
-                  <div className="mt-2 rounded bg-slate-800 p-2">
+                  {(pendingAction.services || []).length > 0 && <div className="mt-2 rounded bg-slate-800 p-2">
                     {(pendingAction.services || []).map((s: any, i: number) => (
                       <div key={i} className="flex justify-between"><span>{s.name} ×{s.qty}</span><span className="font-medium text-white">{fmt((s.price || 0) * (s.qty || 1))}</span></div>
                     ))}
@@ -2695,7 +2708,7 @@ ${buildSmartContext(userMsgText)}`;
                       <span>Estimasi</span>
                       <span>{fmt((pendingAction.services || []).reduce((t: number, s: any) => t + (s.price || 0) * (s.qty || 1), 0))}</span>
                     </div>
-                  </div>
+                  </div>}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => { setPendingAction(null); setPendingBranchId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
