@@ -54,6 +54,12 @@ test('pencarian barang mendukung filter stok cabang dan mengecualikan jasa', () 
   assert.match(page, /matchesStockSearch\(displayStock\(item\)/);
   assert.match(rules, /stok\\s\*/);
   assert.match(rules, /normalized\.match/);
+  assert.match(rules, /operator === '!='/);
+  assert.match(rules, /replace\(\/<>\/g, '!='\)/);
+  assert.match(rules, /replace\(\/=>\/g, '>='\)/);
+  assert.match(rules, /matchAll/);
+  assert.match(page, /selectedStocks\.some/);
+  assert.match(page, /value="stok!=0"/);
 });
 
 test('refresh mutasi barang meminta histori per item dan menerima penyesuaian satu sisi', () => {

@@ -291,16 +291,17 @@ export default function ItemsAndServices() {
 
   const filteredItems = useMemo(() => {
     const parsedSearch = parseItemStockSearch(search);
-    const selectedStock = filterStock ? parseItemStockSearch(filterStock).stock : parsedSearch.stock;
+    const parsedStockFilter = filterStock ? parseItemStockSearch(filterStock) : parsedSearch;
+    const selectedStocks = parsedStockFilter.stocks || (parsedStockFilter.stock ? [parsedStockFilter.stock] : []);
     const q = parsedSearch.text;
     return data.items.filter((item) => {
       const activeMatch = filterActive === 'all' || (filterActive === 'active' ? item.isActive : !item.isActive);
       const categoryMatch = !filterCategory || item.categoryId === filterCategory;
       const typeMatch = !filterType || item.type === filterType;
       const brandMatch = !filterBrand || item.brand === filterBrand;
-      const stockMatch = !selectedStock || (
+      const stockMatch = selectedStocks.length === 0 || (
         item.type === 'Persediaan'
-        && matchesStockSearch(displayStock(item), selectedStock.operator, selectedStock.value)
+        && selectedStocks.some(condition => matchesStockSearch(displayStock(item), condition.operator, condition.value))
       );
       const searchMatch =
         item.code.toLowerCase().includes(q) ||
@@ -641,6 +642,79 @@ export default function ItemsAndServices() {
     link.click();
     URL.revokeObjectURL(url);
     finishSystemProcess(processId, `${rows.length} item berhasil diekspor`);
+  };
+
+  const printCurrentData = () => {
+    const popup = window.open('', '_blank', 'width=1200,height=800');
+    if (!popup) {
+      window.alert('Popup diblokir browser. Izinkan popup untuk mencetak atau menyimpan PDF.');
+      return;
+    }
+
+    const escapeHtml = (value: unknown) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    const printableColumns = itemTableColumns.filter(column => column !== 'actions');
+    const columnValue = (item: Item, column: ItemColumn) => {
+      if (column === 'code') return item.code;
+      if (column === 'name') return item.name;
+      if (column === 'receiptDescription') return item.receiptDescription || item.name;
+      if (column === 'type') return item.type;
+      if (column === 'category') return item.categoryName;
+      if (column === 'barcode') return item.barcode || '—';
+      if (column === 'price') return formatCurrency(item.sellingPrice);
+      if (column === 'stock') return item.type === 'Persediaan' ? displayStock(item) : '—';
+      if (column === 'unit') return item.unit;
+      if (column === 'brand') return item.brand || '—';
+      if (column === 'purchasePrice') return formatCurrency(item.purchasePrice);
+      if (column === 'status') return item.isActive ? 'Aktif' : 'Nonaktif';
+      return '';
+    };
+    const numericColumns = new Set<ItemColumn>(['stock', 'purchasePrice', 'price']);
+    const headers = printableColumns.map(column => (
+      `<th class="${numericColumns.has(column) ? 'numeric' : ''}">${escapeHtml(column === 'code' ? 'Kode Barang' : itemColumnLabels[column])}</th>`
+    )).join('');
+    const rows = filteredItems.length > 0
+      ? filteredItems.map(item => `<tr>${printableColumns.map(column => (
+          `<td class="${numericColumns.has(column) ? 'numeric' : ''}">${escapeHtml(columnValue(item, column))}</td>`
+        )).join('')}</tr>`).join('')
+      : `<tr><td colspan="${printableColumns.length}" class="empty">Tidak ada barang/jasa yang sesuai dengan filter.</td></tr>`;
+
+    const activeFilters = [
+      filterActive === 'active' ? 'Status: Aktif' : filterActive === 'inactive' ? 'Status: Nonaktif' : '',
+      filterBrand ? `Merek: ${filterBrand}` : '',
+      filterCategory ? `Kategori: ${data.itemCategories.find(category => category.id === filterCategory)?.name || filterCategory}` : '',
+      filterType ? `Jenis: ${filterType}` : '',
+      filterStock ? `Stok: ${filterStock.replace(/^stok\s*/i, '')}` : '',
+      search.trim() ? `Pencarian: ${search.trim()}` : '',
+    ].filter(Boolean);
+    const branchName = currentBranchId === 'ALL'
+      ? 'Semua Cabang'
+      : data.branches.find(branch => branch.id === currentBranchId)?.name || currentBranchId;
+    const filterSummary = activeFilters.length > 0 ? activeFilters.join(' · ') : 'Tanpa filter';
+    const printedAt = new Date().toLocaleString('id-ID');
+
+    popup.document.write(`<!doctype html>
+      <html lang="id"><head><meta charset="utf-8"><title>Daftar Barang dan Jasa</title>
+      <style>
+        @page{size:landscape;margin:10mm}
+        *{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;color:#172033}
+        h1{margin:0 0 4px;font-size:20px}.meta{color:#667085;font-size:11px;line-height:1.5;margin-bottom:14px}
+        table{width:100%;border-collapse:collapse;font-size:10px;table-layout:auto}
+        thead{display:table-header-group}tr{break-inside:avoid}
+        th{background:#637c93;color:#fff;text-align:left;padding:7px;border:1px solid #526b82;white-space:nowrap}
+        td{padding:6px 7px;border:1px solid #d0d5dd;vertical-align:top}tbody tr:nth-child(even){background:#f8fafc}
+        .numeric{text-align:right;white-space:nowrap}.empty{text-align:center;padding:24px;color:#667085}
+        @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+      </style></head><body>
+      <h1>DOKTER AC MOBIL — Daftar Barang &amp; Jasa</h1>
+      <div class="meta">Cabang: ${escapeHtml(branchName)} · Dicetak: ${escapeHtml(printedAt)} · ${filteredItems.length} item<br>Filter: ${escapeHtml(filterSummary)}</div>
+      <table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>
+      <script>window.onload=()=>{window.focus();window.print()}<\/script></body></html>`);
+    popup.document.close();
   };
 
   // ==================== CSV PARSER ====================
@@ -1140,7 +1214,7 @@ export default function ItemsAndServices() {
             <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua jenis</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
             <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua kategori</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
             <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua merek</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
-            <select value={filterStock} onChange={(e) => setFilterStock(e.target.value)} className="col-span-2 h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua stok</option><option value="stok=0">Stok = 0</option><option value="stok=1">Stok = 1</option><option value="stok>0">Stok &gt; 0</option><option value="stok<0">Stok &lt; 0</option><option value="stok<=1">Stok ≤ 1</option></select>
+            <select value={filterStock} onChange={(e) => setFilterStock(e.target.value)} className="col-span-2 h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua stok</option><option value="stok=0">Stok = 0</option><option value="stok!=0">Stok ≠ 0</option><option value="stok=1">Stok = 1</option><option value="stok>0">Stok &gt; 0</option><option value="stok<0">Stok &lt; 0</option><option value="stok<=1">Stok ≤ 1</option></select>
             {hasPermission('item:create') && <button type="button" onClick={() => openCategoryModal()} className="flex h-9 items-center justify-center gap-1 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700"><FolderTree className="h-4 w-4" /> Kelola Kategori</button>}
             <button type="button" onClick={() => { setFilterActive('all'); setFilterType(''); setFilterCategory(''); setFilterBrand(''); setFilterStock(''); setSearch(''); }} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
           </div>}
@@ -1162,9 +1236,9 @@ export default function ItemsAndServices() {
           <div className="relative flex items-center gap-2">
             <button type="button" onClick={exportCurrentData} title="Download / Export" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Download className="h-5 w-5" /></button>
             {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Share2 className="h-5 w-5" /></button>}
-            <button type="button" onClick={() => window.print()} title="Cetak" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
+            <button type="button" onClick={printCurrentData} title="Cetak / Simpan PDF sesuai filter" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
             <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Settings2 className="h-5 w-5" /></button>
-            <div className="relative w-80"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari atau ketik stok=0, stok>0, stok<0" title="Filter stok: stok=0, stok>0, stok<0, stok<=1" className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
+            <div className="relative w-80"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari atau ketik stok=0, stok!=0, stok>0" title="Filter stok: stok=0, stok!=0 atau stok<>0, stok>=1 atau stok=>1. Pisahkan koma untuk kombinasi OR." className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
             <span className="flex h-10 min-w-16 items-center justify-center rounded border border-slate-300 bg-white px-3 text-sm text-slate-600">{filteredItems.length}</span>
             {showColumnSettings && (
               <div className="absolute right-0 top-12 z-30 w-72 rounded border border-slate-300 bg-white p-4 shadow-xl">
