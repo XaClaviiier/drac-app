@@ -116,6 +116,7 @@ export default function ItemsAndServices() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
+  const [filterStock, setFilterStock] = useState('');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [itemListTab, setItemListTab] = useState<'list' | 'verification'>('list');
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
@@ -288,15 +289,16 @@ export default function ItemsAndServices() {
 
   const filteredItems = useMemo(() => {
     const parsedSearch = parseItemStockSearch(search);
+    const selectedStock = filterStock ? parseItemStockSearch(filterStock).stock : parsedSearch.stock;
     const q = parsedSearch.text;
     return data.items.filter((item) => {
       const activeMatch = filterActive === 'all' || (filterActive === 'active' ? item.isActive : !item.isActive);
       const categoryMatch = !filterCategory || item.categoryId === filterCategory;
       const typeMatch = !filterType || item.type === filterType;
       const brandMatch = !filterBrand || item.brand === filterBrand;
-      const stockMatch = !parsedSearch.stock || (
+      const stockMatch = !selectedStock || (
         item.type === 'Persediaan'
-        && matchesStockSearch(displayStock(item), parsedSearch.stock.operator, parsedSearch.stock.value)
+        && matchesStockSearch(displayStock(item), selectedStock.operator, selectedStock.value)
       );
       const searchMatch =
         item.code.toLowerCase().includes(q) ||
@@ -312,7 +314,7 @@ export default function ItemsAndServices() {
       const result = String(left || '').localeCompare(String(right || ''), 'id', { numeric: true, sensitivity: 'base' });
       return sortConfig.direction === 'asc' ? result : -result;
     });
-  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand, sortConfig, currentBranchId]);
+  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand, filterStock, sortConfig, currentBranchId]);
 
   // Items available for group picking (exclude Groups and current item)
   const pickableItems = useMemo(() => {
@@ -1124,7 +1126,7 @@ export default function ItemsAndServices() {
             <div className="relative min-w-0 flex-1"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari barang, kode, atau stok..." className={`${ui.search} w-full px-3 pr-9`} /><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" /></div>
             {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Barang Baru" aria-label="Barang Baru" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded bg-blue-700 text-white hover:bg-blue-800"><Plus className="h-5 w-5" /></button>}
             <button type="button" onClick={() => refreshData()} title="Refresh" aria-label="Refresh" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5" /></button>
-            <button type="button" onClick={() => setShowMobileFilters(value => !value)} title="Filter" aria-label="Filter" className={`relative flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border ${showMobileFilters || filterActive !== 'all' || filterBrand || filterCategory || filterType ? 'border-blue-700 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}><Filter className="h-5 w-5" />{(filterActive !== 'all' || filterBrand || filterCategory || filterType) && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600" />}</button>
+            <button type="button" onClick={() => setShowMobileFilters(value => !value)} title="Filter" aria-label="Filter" className={`relative flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border ${showMobileFilters || filterActive !== 'all' || filterBrand || filterCategory || filterType || filterStock ? 'border-blue-700 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}><Filter className="h-5 w-5" />{(filterActive !== 'all' || filterBrand || filterCategory || filterType || filterStock) && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600" />}</button>
             <span className="flex h-10 min-w-12 flex-shrink-0 items-center justify-center rounded border border-slate-300 bg-white px-2 text-xs font-medium text-slate-600">{filteredItems.length}</span>
           </div>
           {showMobileFilters && <div className="grid grid-cols-2 gap-2 rounded border border-slate-200 bg-slate-50 p-2">
@@ -1132,8 +1134,9 @@ export default function ItemsAndServices() {
             <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua jenis</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
             <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua kategori</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
             <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua merek</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
+            <select value={filterStock} onChange={(e) => setFilterStock(e.target.value)} className="col-span-2 h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua stok</option><option value="stok=0">Stok = 0</option><option value="stok=1">Stok = 1</option><option value="stok>0">Stok &gt; 0</option><option value="stok<0">Stok &lt; 0</option><option value="stok<=1">Stok ≤ 1</option></select>
             {hasPermission('item:create') && <button type="button" onClick={() => openCategoryModal()} className="flex h-9 items-center justify-center gap-1 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700"><FolderTree className="h-4 w-4" /> Kelola Kategori</button>}
-            <button type="button" onClick={() => { setFilterActive('all'); setFilterType(''); setFilterCategory(''); setFilterBrand(''); setSearch(''); }} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
+            <button type="button" onClick={() => { setFilterActive('all'); setFilterType(''); setFilterCategory(''); setFilterBrand(''); setFilterStock(''); setSearch(''); }} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
           </div>}
         </div>
         <div className="hidden flex-wrap items-center gap-3 lg:flex">
