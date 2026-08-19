@@ -1315,7 +1315,8 @@ NAMA PELANGGAN/KENDARAAN:
 - Format registrasi lengkap adalah: "reg wo [nama] [nomor telepon] [alamat], [plat] [merek] [tipe] [warna], [keluhan]".
 - Teks sesudah nomor telepon sampai koma pertama SELALU alamat, bukan keluhan.
 - Bagian sesudah koma pertama SELALU data kendaraan. Keluhan hanya bagian sesudah koma kedua atau sesudah label "keluhan:".
-- Merek, tipe, dan warna wajib berasal dari Master Kendaraan. Jangan menebak tipe kendaraan yang tidak tersedia.
+- Merek, tipe, dan warna wajib berasal dari Master Kendaraan. Tahun kendaraan OPSIONAL dan tidak boleh menghambat pembuatan WO.
+- Jika user menyebut model yang unik tanpa merek (contoh: Pajero), keluarkan JSON memakai teks kendaraan yang diberikan; aplikasi akan mencocokkan model itu ke mereknya di Master Kendaraan.
 
 MEMBUAT WO (HANYA UNTUK PESAN YANG DIMULAI "reg wo"):
 Format tanggal singkat yang boleh dipakai user:
@@ -1330,7 +1331,7 @@ Kalau user MENYEBUT layanan atau KODE layanan (misalnya "flushing", "SV-0102"):
 - Cari kode atau nama PERSIS di LAYANAN CEPAT berikut: ${quickServices || 'tidak ada data layanan'}
 - Kalau tidak ada, jangan membuat layanan dengan harga Rp 0. Minta user memilih kode layanan yang terdaftar.
 
-Setelah ada plat, pelanggan, dan keluhan — LANGSUNG keluarkan JSON tanpa bertanya lebih lanjut:
+Setelah ada plat, pelanggan, kendaraan, warna, dan keluhan — LANGSUNG keluarkan JSON tanpa meminta tahun atau bertanya lebih lanjut:
 \`\`\`json
 {"action":"create_wo","date":"YYYY-MM-DD","customerName":"NAMA_PERSIS","phone":"08xx","plateNumber":"PLAT_PERSIS","vehicleInfo":"Merek Model Tahun - Warna","description":"keluhan","services":[]}
 \`\`\`
@@ -2067,11 +2068,24 @@ ${buildSmartContext(userMsgText)}`;
       }
       const json = await res.json();
       const reply = json.choices?.[0]?.message?.content || 'Maaf, tidak ada jawaban.';
-      const action = extractAction(reply);
+      let action = extractAction(reply);
+      const inlineRegistration = parseInlineRegistrationIdentity(content);
+      if (!action && /^reg(?:\s+wo)?\b/i.test(content.trim()) && inlineRegistration?.plateNumber && inlineRegistration.description) {
+        action = {
+          action: 'create_wo',
+          customerName: inlineRegistration.customerName,
+          phone: inlineRegistration.phone,
+          address: inlineRegistration.address,
+          plateNumber: inlineRegistration.plateNumber,
+          vehicleInfo: inlineRegistration.vehicleInfo,
+          description: inlineRegistration.description,
+          services: [],
+        };
+      }
 
       if (action?.action === 'create_wo') {
         const parsedDate = parseCompactTransactionDate(content);
-        const inlineIdentity = parseInlineRegistrationIdentity(content);
+        const inlineIdentity = inlineRegistration;
         const plateFromCommand = extractIndonesianPlate(content);
         const codedServices = servicesFromCodes(content);
         if (parsedDate) action.date = parsedDate.date;
