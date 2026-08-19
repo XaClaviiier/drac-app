@@ -373,6 +373,9 @@ export interface StockMovement {
   movementType: string;
   notes: string;
   createdAt: string;
+  incoming?: number;
+  outgoing?: number;
+  balance?: number;
 }
 
 export interface Supplier {

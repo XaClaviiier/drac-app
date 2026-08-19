@@ -2,8 +2,42 @@
 $actor=requireAuthenticatedUser($pdo);
 if($method==='GET'){
     $allowed=array_fill_keys(getAccessibleBranchIds($pdo,$actor),true);
-    $rows=array_values(array_filter($pdo->query("SELECT m.*,i.name item_name,sw.name source_name,sw.branch_id source_branch_id,dw.name destination_name,dw.branch_id destination_branch_id FROM stock_movements m JOIN items i ON i.id=m.item_id COLLATE utf8mb4_unicode_ci LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id ORDER BY m.created_at DESC LIMIT 200")->fetchAll(),fn($row)=>isset($allowed[(string)$row['source_branch_id']])&&isset($allowed[(string)$row['destination_branch_id']])));
-    foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['createdAt']=$r['created_at'];}
+    $itemId=trim((string)($_GET['itemId']??''));
+    $dateFrom=trim((string)($_GET['dateFrom']??''));
+    $dateTo=trim((string)($_GET['dateTo']??''));
+    $search=trim((string)($_GET['search']??''));
+    $validDate=fn($value)=>$value===''||preg_match('/^\d{4}-\d{2}-\d{2}$/',$value);
+    if(!$validDate($dateFrom)||!$validDate($dateTo)||($dateFrom!==''&&$dateTo!==''&&$dateFrom>$dateTo))respondError('Periode mutasi tidak valid',422);
+
+    $sql="SELECT m.*,i.name item_name,sw.name source_name,sw.branch_id source_branch_id,dw.name destination_name,dw.branch_id destination_branch_id
+          FROM stock_movements m
+          JOIN items i ON i.id=m.item_id COLLATE utf8mb4_unicode_ci
+          LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id
+          LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id";
+    $params=[];
+    if($itemId!==''){$sql.=" WHERE m.item_id=?";$params[]=$itemId;}
+    else{$sql.=" ORDER BY m.created_at DESC LIMIT 200";}
+    if($itemId!=='')$sql.=" ORDER BY m.created_at DESC,m.id DESC";
+    $stmt=$pdo->prepare($sql);$stmt->execute($params);$allRows=$stmt->fetchAll();
+    $isAllowed=fn($row)=>(!empty($row['source_branch_id'])&&isset($allowed[(string)$row['source_branch_id']]))||(!empty($row['destination_branch_id'])&&isset($allowed[(string)$row['destination_branch_id']]));
+    $allRows=array_values(array_filter($allRows,$isAllowed));
+
+    $runningBalance=0;
+    if($itemId!==''){
+        $balanceStmt=$pdo->prepare("SELECT COALESCE(SUM(ws.quantity),0) FROM warehouse_stocks ws JOIN warehouses w ON w.id=ws.warehouse_id WHERE ws.item_id=? AND w.branch_id IN (".implode(',',array_fill(0,max(1,count($allowed)),'?')).")");
+        $balanceParams=array_merge([$itemId],count($allowed)?array_keys($allowed):['__none__']);$balanceStmt->execute($balanceParams);$runningBalance=(int)$balanceStmt->fetchColumn();
+    }
+    $rows=[];$needle=strtolower($search);
+    foreach($allRows as $row){
+        $sourceAllowed=!empty($row['source_branch_id'])&&isset($allowed[(string)$row['source_branch_id']]);
+        $destinationAllowed=!empty($row['destination_branch_id'])&&isset($allowed[(string)$row['destination_branch_id']]);
+        $incoming=$destinationAllowed?(int)$row['quantity']:0;$outgoing=$sourceAllowed?(int)$row['quantity']:0;
+        $rowDate=substr((string)$row['created_at'],0,10);$searchable=strtolower(implode(' ',[$row['movement_type'],$row['notes'],$row['source_name'],$row['destination_name']]));
+        $row['running_balance']=$runningBalance;$runningBalance-=$incoming-$outgoing;
+        if(($dateFrom!==''&&$rowDate<$dateFrom)||($dateTo!==''&&$rowDate>$dateTo)||($needle!==''&&!str_contains($searchable,$needle)))continue;
+        $row['incoming']=$incoming;$row['outgoing']=$outgoing;$rows[]=$row;
+    }
+    foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['quantity']=(int)$r['quantity'];$r['createdAt']=$r['created_at'];$r['incoming']=(int)$r['incoming'];$r['outgoing']=(int)$r['outgoing'];$r['balance']=(int)$r['running_balance'];}
     respondSuccess($rows);
 }
 if($method!=='POST')respondError('Method not allowed',405);

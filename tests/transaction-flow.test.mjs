@@ -55,3 +55,14 @@ test('pencarian barang mendukung filter stok cabang dan mengecualikan jasa', () 
   assert.match(rules, /stok\\s\*/);
   assert.match(rules, /normalized\.match/);
 });
+
+test('refresh mutasi barang meminta histori per item dan menerima penyesuaian satu sisi', () => {
+  const endpoint = source('api/endpoints/stock-movements.php');
+  const page = source('src/pages/ItemsAndServices.tsx');
+  assert.match(endpoint, /\$_GET\['itemId'\]/);
+  assert.match(endpoint, /\$_GET\['dateFrom'\]/);
+  assert.match(endpoint, /\$_GET\['dateTo'\]/);
+  assert.match(endpoint, /source_branch_id[^\n]+\|\|[^\n]+destination_branch_id/);
+  assert.match(page, /stock-movements\?\$\{query\.toString\(\)\}/);
+  assert.match(page, /onClick=\{loadItemMovements\}/);
+});

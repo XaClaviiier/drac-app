@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2, RefreshCw, Printer, Share2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { Item, ItemCategory, ItemType, GroupMember } from '../types';
+import type { Item, ItemCategory, ItemType, GroupMember, StockMovement } from '../types';
 import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
@@ -125,6 +125,9 @@ export default function ItemsAndServices() {
   });
   const [movementDateTo, setMovementDateTo] = useState(() => localDateKey());
   const [movementSearch, setMovementSearch] = useState('');
+  const [itemMovementRows, setItemMovementRows] = useState<StockMovement[]>([]);
+  const [movementLoading, setMovementLoading] = useState(false);
+  const [movementError, setMovementError] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState<any[]>([]);
@@ -1023,30 +1026,22 @@ export default function ItemsAndServices() {
         })
         .sort((a, b) => a.warehouse.name.localeCompare(b.warehouse.name, 'id'))
     : [];
-  const itemMovementRows = useMemo(() => {
-    if (!editingItem) return [];
-    const query = movementSearch.trim().toLowerCase();
-    let runningBalance = data.warehouseStocks
-      .filter(stock => stock.itemId === editingItem.id)
-      .reduce((total, stock) => total + Number(stock.quantity || 0), 0);
-    return data.stockMovements
-      .filter(movement => movement.itemId === editingItem.id)
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-      .map(movement => {
-        const destinationAllowed = movement.destinationWarehouseId ? data.warehouses.some(warehouse => warehouse.id === movement.destinationWarehouseId) : false;
-        const sourceAllowed = movement.sourceWarehouseId ? data.warehouses.some(warehouse => warehouse.id === movement.sourceWarehouseId) : false;
-        const incoming = destinationAllowed ? Number(movement.quantity || 0) : 0;
-        const outgoing = sourceAllowed ? Number(movement.quantity || 0) : 0;
-        const row = { ...movement, incoming, outgoing, balance: runningBalance };
-        runningBalance -= incoming - outgoing;
-        return row;
-      })
-      .filter(movement => {
-        const date = String(movement.createdAt || '').slice(0, 10);
-        const searchable = `${movement.movementType} ${movement.notes || ''} ${movement.sourceName || ''} ${movement.destinationName || ''}`.toLowerCase();
-        return (!movementDateFrom || date >= movementDateFrom) && (!movementDateTo || date <= movementDateTo) && (!query || searchable.includes(query));
-      });
-  }, [editingItem, data.stockMovements, data.warehouseStocks, data.warehouses, movementDateFrom, movementDateTo, movementSearch]);
+  const loadItemMovements = async () => {
+    if (!editingItem) return;
+    setMovementLoading(true);setMovementError('');
+    const query = new URLSearchParams({ itemId: editingItem.id, dateFrom: movementDateFrom, dateTo: movementDateTo });
+    if (movementSearch.trim()) query.set('search', movementSearch.trim());
+    const response = await api.get<StockMovement[]>(`stock-movements?${query.toString()}`);
+    if (response.success) setItemMovementRows(response.data || []);
+    else { setItemMovementRows([]); setMovementError(response.message || 'Data mutasi gagal dimuat.'); }
+    setMovementLoading(false);
+  };
+
+  useEffect(() => {
+    if (showItemModal && itemFormTab === 'movement' && editingItem) void loadItemMovements();
+    // Filter diterapkan hanya ketika tab dibuka atau tombol Refresh ditekan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showItemModal, itemFormTab, editingItem?.id]);
   const verifyPendingItem = async (itemId: string, targetItemId?: string) => {
     setVerifyingItemId(itemId);
     try {
@@ -1378,14 +1373,15 @@ export default function ItemsAndServices() {
                   <input type="date" value={movementDateFrom} onChange={event => setMovementDateFrom(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
                   <span className="text-sm font-medium text-slate-600">s/d</span>
                   <input type="date" value={movementDateTo} onChange={event => setMovementDateTo(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
-                  <button type="button" onClick={() => refreshData()} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5" /></button>
+                  <button type="button" onClick={loadItemMovements} disabled={movementLoading} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 disabled:opacity-50" title="Terapkan filter dan refresh mutasi"><RefreshCw className={`h-5 w-5 ${movementLoading ? 'animate-spin' : ''}`} /></button>
                   <div className="relative ml-auto w-80 max-w-full"><input value={movementSearch} onChange={event => setMovementSearch(event.target.value)} placeholder="Cari/Pilih..." className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-sm"/><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2"/></div>
                 </div>
                 <div className="overflow-auto rounded-t-lg border border-slate-300">
                   <table className="min-w-[1100px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-3 py-2.5 text-left">Tanggal</th><th className="px-3 py-2.5 text-left">No. Sumber #</th><th className="px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Nilai Satuan</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
-                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5">{new Date(movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.id}</td><td className="px-3 py-2.5">{movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right">—</td><td className="px-3 py-2.5 text-right text-emerald-700">{movement.incoming || ''}</td><td className="px-3 py-2.5 text-right text-red-700">{movement.outgoing || ''}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance}</td></tr>)}</tbody>
+                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5">{new Date(movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.id}</td><td className="px-3 py-2.5">{movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right">—</td><td className="px-3 py-2.5 text-right text-emerald-700">{movement.incoming || ''}</td><td className="px-3 py-2.5 text-right text-red-700">{movement.outgoing || ''}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td></tr>)}</tbody>
                   </table>
-                  {!itemMovementRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada data mutasi pada periode ini.</div>}
+                  {movementError && <div className="bg-red-50 py-3 text-center text-sm text-red-700">{movementError}</div>}
+                  {!movementLoading && !movementError && !itemMovementRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada data mutasi pada periode ini.</div>}
                 </div>
               </div>}
               {itemFormTab === 'warehouse' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
