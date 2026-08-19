@@ -66,3 +66,17 @@ test('refresh mutasi barang meminta histori per item dan menerima penyesuaian sa
   assert.match(page, /stock-movements\?\$\{query\.toString\(\)\}/);
   assert.match(page, /onClick=\{loadItemMovements\}/);
 });
+
+test('hapus import stok membersihkan mutasi tanpa membalik dokumen batal dua kali', () => {
+  const endpoint = source('api/endpoints/stock-adjustments.php');
+  const helpers = source('api/helpers.php');
+  const page = source('src/pages/OpeningStockImport.tsx');
+  assert.match(endpoint, /\$doc\['status'\]===\s*'Posted'/);
+  assert.doesNotMatch(endpoint, /\$doc\['status'\]===\s*'Cancelled'[^}]+adjustWarehouseStockAllowNegative/s);
+  assert.match(endpoint, /DELETE FROM stock_movements WHERE notes=\?/);
+  assert.match(endpoint, /stock_adjustment_maintenance_logs/);
+  assert.match(endpoint, /confirmation[^\n]+HAPUS/);
+  assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_adjustment_maintenance_logs/);
+  assert.match(page, /Hapus Import/);
+  assert.match(page, /removeWithBody\("stock-adjustments"/);
+});

@@ -103,6 +103,46 @@ if ($method === 'PUT' && $id) {
 
 if ($method === 'DELETE' && $id) {
     $pdo->beginTransaction();
-    try { $stmt=$pdo->prepare("SELECT status FROM stock_adjustments WHERE id=? FOR UPDATE");$stmt->execute([$id]);$status=$stmt->fetchColumn();if(!$status)throw new InvalidArgumentException('Penyesuaian stok tidak ditemukan');if($status!=='Draft')throw new InvalidArgumentException('Hanya Draft yang dapat dihapus');$pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]);$pdo->prepare("DELETE FROM stock_adjustments WHERE id=?")->execute([$id]);$pdo->commit();respondSuccess(null,'Draft penyesuaian stok dihapus'); } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
+    try {
+        $stmt=$pdo->prepare("SELECT * FROM stock_adjustments WHERE id=? FOR UPDATE");
+        $stmt->execute([$id]); $doc=$stmt->fetch();
+        if(!$doc) throw new InvalidArgumentException('Penyesuaian stok tidak ditemukan');
+
+        $reason=trim((string)($d['reason']??''));
+        $confirmation=strtoupper(trim((string)($d['confirmation']??'')));
+        if($doc['status']!=='Draft' && $reason==='') throw new InvalidArgumentException('Alasan hapus import wajib diisi');
+        if($doc['status']!=='Draft' && $confirmation!=='HAPUS') throw new InvalidArgumentException('Ketik HAPUS untuk konfirmasi');
+
+        $lineStmt=$pdo->prepare("SELECT sai.*,w.branch_id,w.name warehouse_name FROM stock_adjustment_items sai JOIN warehouses w ON w.id=sai.warehouse_id WHERE sai.adjustment_id=? ORDER BY sai.id");
+        $lineStmt->execute([$id]); $lines=$lineStmt->fetchAll();
+        foreach($lines as $line) requireAccessibleBranch($pdo,$actor,(string)$line['branch_id']);
+
+        // Dokumen Posted masih memengaruhi stok sehingga harus dibalik satu kali.
+        // Dokumen Cancelled sudah pernah dibalik oleh proses pembatalan.
+        if($doc['status']==='Posted') {
+            foreach($lines as $line) {
+                adjustWarehouseStockAllowNegative($pdo,$line['warehouse_id'],$line['branch_id'],$line['item_id'],-(int)$line['quantity']);
+            }
+        }
+
+        $markers=['STOCK_ADJUSTMENT:'.$doc['adjustment_number'],'CANCEL_STOCK_ADJUSTMENT:'.$doc['adjustment_number']];
+        if(!empty($doc['batch_key'])) $markers[]='OPENING_BALANCE:'.$doc['batch_key'];
+        $movementRows=[];
+        foreach($markers as $marker) {
+            $movementStmt=$pdo->prepare("SELECT * FROM stock_movements WHERE notes=? OR notes LIKE CONCAT(?,' %') FOR UPDATE");
+            $movementStmt->execute([$marker,$marker]);
+            $movementRows=array_merge($movementRows,$movementStmt->fetchAll());
+        }
+        $snapshot=json_encode(['document'=>$doc,'items'=>$lines,'movements'=>$movementRows],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        $pdo->prepare("INSERT INTO stock_adjustment_maintenance_logs(adjustment_id,adjustment_number,previous_status,reason,snapshot_json,deleted_by,deleted_by_name) VALUES(?,?,?,?,?,?,?)")
+            ->execute([$id,$doc['adjustment_number'],$doc['status'],$reason?:'Hapus Draft',$snapshot?:null,$actor['id']??null,$actor['name']??$actor['username']??null]);
+        foreach($markers as $marker) {
+            $pdo->prepare("DELETE FROM stock_movements WHERE notes=? OR notes LIKE CONCAT(?,' %')")->execute([$marker,$marker]);
+        }
+        $pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]);
+        $pdo->prepare("DELETE FROM stock_adjustments WHERE id=?")->execute([$id]);
+        $pdo->commit();
+        respondSuccess(null,$doc['status']==='Draft'?'Draft penyesuaian stok dihapus':'Import salah dihapus total. Stok dan mutasi telah dirapikan.');
+    } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
 }
 respondError('Method not allowed',405);

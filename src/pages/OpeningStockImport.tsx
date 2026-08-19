@@ -456,15 +456,29 @@ export default function OpeningStockImport() {
     }
     if (
       action === "delete" &&
+      document.status === "Draft" &&
       !window.confirm(`Hapus Draft ${document.adjustmentNumber}?`)
     )
       return;
+    let confirmation = "";
+    if (action === "delete" && document.status !== "Draft") {
+      reason = window.prompt(`Alasan menghapus import ${document.adjustmentNumber}:`)?.trim() || "";
+      if (!reason) return;
+      confirmation = window.prompt("Ketik HAPUS untuk konfirmasi akhir:")?.trim() || "";
+      if (confirmation.toUpperCase() !== "HAPUS") {
+        setMessage("Penghapusan dibatalkan karena konfirmasi tidak sesuai.");
+        return;
+      }
+    }
     setLoading(true);
     setMessage("");
     try {
       const response =
         action === "delete"
-          ? await api.remove("stock-adjustments", document.id)
+          ? await api.removeWithBody("stock-adjustments", document.id, {
+              reason,
+              confirmation,
+            })
           : await api.update("stock-adjustments", document.id, {
               action,
               reason,
@@ -472,6 +486,7 @@ export default function OpeningStockImport() {
       if (!response.success)
         throw new Error(response.message || "Proses gagal.");
       await Promise.all([loadDocuments(), refreshData()]);
+      if (action === "delete") closeDetailTab(document.id);
       setMessage(response.message || "Penyesuaian stok diperbarui.");
     } catch (error: any) {
       setMessage(error?.message || "Proses penyesuaian stok gagal.");
@@ -1031,6 +1046,15 @@ export default function OpeningStockImport() {
                                 <Undo2 className="h-4 w-4" />
                               </button>
                             )}
+                            {document.status !== "Draft" && (
+                              <button
+                                title="Hapus import salah secara total"
+                                onClick={() => processDocument(document, "delete")}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1140,6 +1164,12 @@ export default function OpeningStockImport() {
                   Batalkan Penyesuaian
                 </button>
               )}
+              <button
+                onClick={() => processDocument(selectedDocument, "delete")}
+                className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
+              >
+                {selectedDocument.status === "Draft" ? "Hapus Draft" : "Hapus Import"}
+              </button>
               <button
                 onClick={() => closeDetailTab(selectedDocument.id)}
                 className="rounded bg-blue-700 px-5 py-2 text-sm font-semibold text-white"

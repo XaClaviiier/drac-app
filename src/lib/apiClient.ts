@@ -124,6 +124,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payment),
     }),
+  removeWithBody: (resource: string, id: string, body: Record<string, unknown>) =>
+    request(`/${resource}/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+    }),
   deletePurchasePayment: (invoiceId: string, paymentId: string) =>
     request(`/purchase-invoices/${invoiceId}/payments`, {
       method: 'DELETE',
