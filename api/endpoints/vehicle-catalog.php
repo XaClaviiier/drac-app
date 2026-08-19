@@ -372,6 +372,7 @@ switch ($method) {
             if ($entity === 'brand') {
                 $pdo->prepare("UPDATE vehicles SET brand=?,brand_id=? WHERE brand_id=? OR LOWER(TRIM(brand))=LOWER(TRIM(?))")
                     ->execute([$name,$id,$id,$old['name']]);
+                $pdo->prepare("UPDATE items SET vehicle_brand_name=? WHERE vehicle_brand_id=?")->execute([$name,$id]);
             } elseif ($entity === 'model') {
                 $pdo->prepare("UPDATE vehicles SET model=?,model_id=? WHERE (model_id=? OR LOWER(TRIM(model))=LOWER(TRIM(?))) AND (brand_id=? OR LOWER(TRIM(brand))=(SELECT LOWER(TRIM(name)) FROM vehicle_brands WHERE id=?))")
                     ->execute([$name,$id,$id,$old['name'],$old['brand_id'],$old['brand_id']]);
