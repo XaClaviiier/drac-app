@@ -276,10 +276,13 @@ export default function ItemsAndServices() {
   );
 
   // Master barang bersifat global. Hanya saldo stok yang mengikuti cabang aktif.
-  const displayStock = (item: Item) =>
-    currentBranchId === 'ALL'
+  const displayStock = (item: Item) => {
+    const stock = currentBranchId === 'ALL'
       ? item.stock
       : (item.branchStocks?.[currentBranchId]?.stock ?? 0);
+    const numericStock = Number(stock);
+    return Number.isFinite(numericStock) ? numericStock : 0;
+  };
 
   const filteredItems = useMemo(() => {
     const parsedSearch = parseItemStockSearch(search);
