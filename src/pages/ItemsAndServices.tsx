@@ -114,6 +114,7 @@ export default function ItemsAndServices() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [itemListTab, setItemListTab] = useState<'list' | 'verification'>('list');
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [verifyingItemId, setVerifyingItemId] = useState('');
@@ -1084,42 +1085,33 @@ export default function ItemsAndServices() {
       </section>}
       <div className={itemListTab === 'list' ? '' : 'hidden'}>
       {/* Header */}
-      <div className="flex flex-col gap-3 lg:hidden">
-        <div className="lg:hidden">
+      <div className="lg:hidden">
+        <div>
           <h2 className="text-2xl font-bold text-gray-900">Barang & Jasa</h2>
           <p className="mt-1 text-gray-500">Kelola master sparepart, bahan, jasa service, group, dan kategori.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 lg:ml-auto">
-          {hasPermission('item:create') && (
-            <>
-              <button
-                onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }}
-                className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 font-medium text-green-700 transition-colors hover:bg-green-100"
-                title="Import barang & jasa dari file CSV / Excel"
-              >
-                <Upload className="h-4 w-4" /> Import CSV
-              </button>
-              <button
-                onClick={exportCurrentData}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                title="Download semua data ke CSV"
-              >
-                <Download className="h-4 w-4" /> Export
-              </button>
-              <button onClick={() => openCategoryModal()} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-medium text-blue-700 transition-colors hover:bg-blue-100">
-                <FolderTree className="h-4 w-4" /> Kategori Baru
-              </button>
-              <button onClick={() => openItemModal()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
-                <Plus className="h-4 w-4" /> Barang/Jasa Baru
-              </button>
-            </>
-          )}
         </div>
       </div>
 
       {/* Filters */}
       <div className={`${ui.toolbar} border p-3 shadow-sm lg:border-x-0 lg:border-t-0 lg:shadow-none`}>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="space-y-2 lg:hidden">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari barang, kode, atau stok..." className={`${ui.search} w-full px-3 pr-9`} /><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" /></div>
+            {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Barang Baru" aria-label="Barang Baru" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded bg-blue-700 text-white hover:bg-blue-800"><Plus className="h-5 w-5" /></button>}
+            <button type="button" onClick={() => refreshData()} title="Refresh" aria-label="Refresh" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setShowMobileFilters(value => !value)} title="Filter" aria-label="Filter" className={`relative flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border ${showMobileFilters || filterActive !== 'all' || filterBrand || filterCategory || filterType ? 'border-blue-700 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}><Filter className="h-5 w-5" />{(filterActive !== 'all' || filterBrand || filterCategory || filterType) && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600" />}</button>
+            <span className="flex h-10 min-w-12 flex-shrink-0 items-center justify-center rounded border border-slate-300 bg-white px-2 text-xs font-medium text-slate-600">{filteredItems.length}</span>
+          </div>
+          {showMobileFilters && <div className="grid grid-cols-2 gap-2 rounded border border-slate-200 bg-slate-50 p-2">
+            <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="all">Semua status</option><option value="active">Aktif</option><option value="inactive">Nonaktif</option></select>
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua jenis</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua kategori</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
+            <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua merek</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
+            {hasPermission('item:create') && <button type="button" onClick={() => openCategoryModal()} className="flex h-9 items-center justify-center gap-1 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700"><FolderTree className="h-4 w-4" /> Kelola Kategori</button>}
+            <button type="button" onClick={() => { setFilterActive('all'); setFilterType(''); setFilterCategory(''); setFilterBrand(''); setSearch(''); }} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
+          </div>}
+        </div>
+        <div className="hidden flex-wrap items-center gap-3 lg:flex">
           <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500">
             <option value="all">Non Aktif: Semua</option><option value="active">Non Aktif: Tidak</option><option value="inactive">Non Aktif: Ya</option>
           </select>
@@ -1128,7 +1120,7 @@ export default function ItemsAndServices() {
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500"><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
           <button type="button" className="flex h-10 w-12 items-center justify-center rounded border border-blue-500 bg-blue-50 text-blue-700" title="Filter lanjutan"><Filter className="h-5 w-5" /></button>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-3 hidden flex-wrap items-center justify-between gap-3 lg:flex">
           <div className="flex gap-2">
             {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Data Baru" className="flex h-11 w-16 items-center justify-center rounded bg-blue-800 text-white hover:bg-blue-900"><Plus className="h-6 w-6" /></button>}
             <button type="button" onClick={() => refreshData()} title="Refresh" className="flex h-11 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"><RefreshCw className="h-5 w-5" /></button>
@@ -1153,6 +1145,21 @@ export default function ItemsAndServices() {
 
       {/* Table */}
       <div className={`${ui.tableShell} mx-1`}>
+        <div className="lg:hidden">
+          <div className="grid grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 bg-[#2442a8] px-2 py-2 text-[10px] font-semibold uppercase text-white">
+            <span>Barang/Jasa</span><span className="text-center">Stok</span><span>Kategori</span><span className="text-center">Aksi</span>
+          </div>
+          <div className="max-h-[calc(100vh-330px)] divide-y divide-slate-200 overflow-y-auto">
+            {filteredItems.length === 0 ? <div className="px-4 py-16 text-center text-sm text-slate-500">Tidak ada barang/jasa ditemukan</div> : filteredItems.map((item, rowIndex) => (
+              <div key={item.id} onClick={() => openItemModal(item)} className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 px-2 py-2.5 text-xs ${!item.isActive ? 'bg-red-50/60 opacity-75' : rowIndex % 2 ? 'bg-slate-50' : 'bg-white'}`}>
+                <div className="min-w-0"><p className="line-clamp-2 font-semibold leading-4 text-slate-900">{item.name}</p><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500">{item.code}</p></div>
+                <div className="text-center font-semibold tabular-nums text-slate-800"><span>{item.type === 'Persediaan' ? displayStock(item) : '—'}</span><span className="ml-1 text-[10px] font-normal text-slate-500">{item.unit}</span></div>
+                <div className="truncate text-[10px] text-slate-600" title={item.categoryName}>{item.categoryName}</div>
+                <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>{hasPermission('item:edit') && <button type="button" onClick={() => openItemModal(item)} aria-label={`Edit ${item.name}`} className="rounded p-1.5 text-blue-600 hover:bg-blue-100"><Edit className="h-4 w-4" /></button>}</div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Filter className="h-4 w-4" />
@@ -1180,7 +1187,7 @@ export default function ItemsAndServices() {
             )}
           </div>
         </div>
-        <div className="max-h-[calc(100vh-420px)] overflow-auto lg:max-h-[calc(100vh-265px)]">
+        <div className="hidden max-h-[calc(100vh-420px)] overflow-auto lg:block lg:max-h-[calc(100vh-265px)]">
           <table className="w-full table-fixed" style={{ minWidth: tableMinWidth }}>
             <thead className="sticky top-0 z-10 bg-[#637c93] text-white">
               <tr>
