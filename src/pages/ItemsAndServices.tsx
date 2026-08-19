@@ -149,7 +149,7 @@ export default function ItemsAndServices() {
   type ItemBrandMaster={id:string;code:string;name:string;description:string;isActive:boolean;sortOrder?:number};
   const [itemBrands,setItemBrands]=useState<ItemBrandMaster[]>([]);
   const [brandForm,setBrandForm]=useState({id:'',code:'',name:'',description:'',isActive:true});
-  const loadItemBrands=()=>api.get<ItemBrandMaster[]>('item-brands').then(res=>setItemBrands(res.data||[]));
+  const loadItemBrands=()=>api.get<ItemBrandMaster[]>('item-brands').then(res=>{const vehicleNames=new Set(vehicleBrands.map(row=>row.name.trim().toLowerCase()));setItemBrands((res.data||[]).filter(row=>!vehicleNames.has(row.name.trim().toLowerCase())));});
   useEffect(()=>{void loadItemBrands();},[]);
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());

@@ -15,6 +15,13 @@ $pdo->exec("INSERT IGNORE INTO item_brands(id,code,name,sort_order)
  FROM items WHERE TRIM(COALESCE(brand,''))<>'' GROUP BY UPPER(TRIM(brand))");
 $pdo->exec("UPDATE items i JOIN item_brands b ON UPPER(TRIM(b.name))=UPPER(TRIM(i.brand))
  SET i.item_brand_id=b.id WHERE i.item_brand_id IS NULL AND TRIM(COALESCE(i.brand,''))<>''");
+$pdo->exec("UPDATE items i JOIN item_brands ib ON ib.id=i.item_brand_id JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(ib.name)) SET i.item_brand_id=NULL,i.brand=''");
+$pdo->exec("DELETE ib FROM item_brands ib JOIN vehicle_brands vb ON UPPER(TRIM(vb.name))=UPPER(TRIM(ib.name)) LEFT JOIN items i ON i.item_brand_id=ib.id WHERE i.id IS NULL");
+
+function rejectVehicleBrandAsItemBrand(PDO $pdo,string $name): void {
+ $check=$pdo->prepare("SELECT name FROM vehicle_brands WHERE UPPER(TRIM(name))=UPPER(TRIM(?)) LIMIT 1");$check->execute([$name]);
+ if($check->fetch())respondError('Merek kendaraan tidak boleh digunakan sebagai Merek Barang',422);
+}
 
 switch ($method) {
  case 'GET':
@@ -24,11 +31,13 @@ switch ($method) {
  case 'POST':
   $d=getInput(); $name=strtoupper(trim((string)($d['name']??''))); $code=strtoupper(trim((string)($d['code']??'')));
   if($name===''||$code==='')respondError('Kode dan nama merek wajib diisi',422);
+  rejectVehicleBrandAsItemBrand($pdo,$name);
   $dup=$pdo->prepare("SELECT id FROM item_brands WHERE UPPER(code)=? OR UPPER(name)=? LIMIT 1");$dup->execute([$code,$name]);if($dup->fetch())respondError('Kode atau nama merek sudah digunakan',409);
   $id=(string)($d['id']??generateId());$pdo->prepare("INSERT INTO item_brands(id,code,name,description,is_active,sort_order) VALUES(?,?,?,?,?,?)")->execute([$id,$code,$name,$d['description']??'',!empty($d['isActive'])?1:0,(int)($d['sortOrder']??100)]);
   respondSuccess(['id'=>$id],'Merek barang ditambahkan'); break;
  case 'PUT':
   if(!$id)respondError('ID required',422);$d=getInput();$name=strtoupper(trim((string)($d['name']??'')));$code=strtoupper(trim((string)($d['code']??'')));
+  rejectVehicleBrandAsItemBrand($pdo,$name);
   $dup=$pdo->prepare("SELECT id FROM item_brands WHERE (UPPER(code)=? OR UPPER(name)=?) AND id<>? LIMIT 1");$dup->execute([$code,$name,$id]);if($dup->fetch())respondError('Kode atau nama merek sudah digunakan',409);
   $pdo->beginTransaction();try{$pdo->prepare("UPDATE item_brands SET code=?,name=?,description=?,is_active=?,sort_order=? WHERE id=?")->execute([$code,$name,$d['description']??'',!empty($d['isActive'])?1:0,(int)($d['sortOrder']??100),$id]);$pdo->prepare("UPDATE items SET brand=? WHERE item_brand_id=?")->execute([$name,$id]);$pdo->commit();respondSuccess(null,'Merek barang diperbarui');}catch(Throwable $e){$pdo->rollBack();throw $e;} break;
  case 'DELETE':
