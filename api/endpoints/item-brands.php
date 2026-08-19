@@ -44,14 +44,29 @@ function rejectVehicleBrandAsItemBrand(PDO $pdo,string $name): void {
  if($check->fetch())respondError('Merek kendaraan tidak boleh digunakan sebagai Merek Barang',422);
 }
 
+function normalizeItemBrandCodes(PDO $pdo): void {
+ $rows=$pdo->query("SELECT b.id,COUNT(i.id) AS usage_count FROM item_brands b LEFT JOIN items i ON i.item_brand_id=b.id GROUP BY b.id,b.name ORDER BY usage_count DESC,b.name ASC")->fetchAll();
+ if(!$rows)return;
+ $pdo->beginTransaction();
+ try{
+  $temporary=$pdo->prepare("UPDATE item_brands SET code=? WHERE id=?");
+  foreach($rows as $index=>$row)$temporary->execute(['TMP-'.str_pad((string)($index+1),4,'0',STR_PAD_LEFT),$row['id']]);
+  $final=$pdo->prepare("UPDATE item_brands SET code=?,sort_order=? WHERE id=?");
+  foreach($rows as $index=>$row){$order=$index+1;$final->execute([str_pad((string)$order,2,'0',STR_PAD_LEFT),$order,$row['id']]);}
+  $pdo->commit();
+ }catch(Throwable $e){$pdo->rollBack();throw $e;}
+}
+
 switch ($method) {
  case 'GET':
-  $rows=$pdo->query("SELECT id,code,name,description,is_active AS isActive,sort_order AS sortOrder FROM item_brands ORDER BY sort_order,name")->fetchAll();
-  foreach($rows as &$row)$row['isActive']=(bool)$row['isActive'];
+  normalizeItemBrandCodes($pdo);
+  $rows=$pdo->query("SELECT b.id,b.code,b.name,b.description,b.is_active AS isActive,b.sort_order AS sortOrder,COUNT(i.id) AS usageCount FROM item_brands b LEFT JOIN items i ON i.item_brand_id=b.id GROUP BY b.id,b.code,b.name,b.description,b.is_active,b.sort_order ORDER BY usageCount DESC,b.name")->fetchAll();
+  foreach($rows as &$row){$row['isActive']=(bool)$row['isActive'];$row['usageCount']=(int)$row['usageCount'];}
   respondSuccess($rows); break;
  case 'POST':
   $d=getInput(); $name=strtoupper(trim((string)($d['name']??''))); $code=strtoupper(trim((string)($d['code']??'')));
-  if($name===''||$code==='')respondError('Kode dan nama merek wajib diisi',422);
+  if($name==='')respondError('Nama merek wajib diisi',422);
+  if($code==='')$code='NEW-'.substr(sha1($name.microtime(true)),0,12);
   rejectVehicleBrandAsItemBrand($pdo,$name);
   $dup=$pdo->prepare("SELECT id FROM item_brands WHERE UPPER(code)=? OR UPPER(name)=? LIMIT 1");$dup->execute([$code,$name]);if($dup->fetch())respondError('Kode atau nama merek sudah digunakan',409);
   $id=(string)($d['id']??generateId());$pdo->prepare("INSERT INTO item_brands(id,code,name,description,is_active,sort_order) VALUES(?,?,?,?,?,?)")->execute([$id,$code,$name,$d['description']??'',!empty($d['isActive'])?1:0,(int)($d['sortOrder']??100)]);
