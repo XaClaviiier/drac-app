@@ -32,6 +32,8 @@ const emptyItem = {
   type: 'Persediaan' as ItemType,
   brand: '',
   vehicleBrandId: '',
+  vehicleBrandIds: [] as string[],
+  itemBrandId: '',
   unit: 'PCS',
   stock: 0,
   purchasePrice: 0,
@@ -130,6 +132,7 @@ export default function ItemsAndServices() {
   const [movementLoading, setMovementLoading] = useState(false);
   const [movementError, setMovementError] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showBrandModal, setShowBrandModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -140,6 +143,11 @@ export default function ItemsAndServices() {
   const [itemForm, setItemForm] = useState(emptyItem);
   const [vehicleBrands,setVehicleBrands]=useState<Array<{id:string;name:string;itemCode?:string;isActive:boolean}>>([]);
   useEffect(()=>{api.get<any>('vehicle-catalog').then(res=>setVehicleBrands(res.data?.brands||[])).catch(()=>setVehicleBrands([]));},[]);
+  type ItemBrandMaster={id:string;code:string;name:string;description:string;isActive:boolean;sortOrder?:number};
+  const [itemBrands,setItemBrands]=useState<ItemBrandMaster[]>([]);
+  const [brandForm,setBrandForm]=useState({id:'',code:'',name:'',description:'',isActive:true});
+  const loadItemBrands=()=>api.get<ItemBrandMaster[]>('item-brands').then(res=>setItemBrands(res.data||[]));
+  useEffect(()=>{void loadItemBrands();},[]);
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showColumnSettings, setShowColumnSettings] = useState(false);
@@ -350,6 +358,8 @@ export default function ItemsAndServices() {
         type: item.type,
         brand: item.brand,
         vehicleBrandId: item.vehicleBrandId || vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id || '',
+        vehicleBrandIds: item.vehicleBrandIds?.length ? [...item.vehicleBrandIds] : [item.vehicleBrandId || vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id || ''].filter(Boolean),
+        itemBrandId: item.itemBrandId || '',
         unit: item.unit,
         stock: item.stock,
         purchasePrice: item.purchasePrice,
@@ -364,7 +374,8 @@ export default function ItemsAndServices() {
     } else {
       setEditingItem(null);
       const defaultCategory = data.itemCategories.find(category => category.isActive);
-      setItemForm({ ...emptyItem, categoryId: defaultCategory?.id || '', vehicleBrandId:vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id||'', code: '', groupMembers: [] });
+      const universalId=vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id||'';
+      setItemForm({ ...emptyItem, categoryId: defaultCategory?.id || '', vehicleBrandId:universalId, vehicleBrandIds:universalId?[universalId]:[], code: '', groupMembers: [] });
     }
     setMemberSearch('');
     setShowItemModal(true);
@@ -484,6 +495,10 @@ export default function ItemsAndServices() {
     }
 
     const category = data.itemCategories.find((cat) => cat.id === itemForm.categoryId);
+    if (itemForm.vehicleBrandIds.length === 0) {
+      window.alert('Pilih minimal satu merek kendaraan. Pilihan pertama menjadi dasar kode barang.');
+      return;
+    }
     const isGroup = itemForm.type === 'Group';
     if (isGroup && itemForm.groupMembers.length === 0) {
       window.alert('Group/Paket wajib memiliki minimal satu barang atau jasa.');
@@ -498,6 +513,8 @@ export default function ItemsAndServices() {
       type: itemForm.type,
       brand: itemForm.brand,
       vehicleBrandId: itemForm.vehicleBrandId || undefined,
+      vehicleBrandIds: itemForm.vehicleBrandIds,
+      itemBrandId: itemForm.itemBrandId || undefined,
       unit: itemForm.unit,
       // Saldo stok dan harga beli dikelola oleh transaksi persediaan/pembelian,
       // bukan dari master Barang & Jasa.
@@ -1038,6 +1055,9 @@ export default function ItemsAndServices() {
     setMovementLoading(false);
   };
 
+  const saveItemBrand=async(e:React.FormEvent)=>{e.preventDefault();const payload={...brandForm,code:brandForm.code.trim().toUpperCase(),name:brandForm.name.trim().toUpperCase()};if(!payload.code||!payload.name)return;const result=payload.id?await api.update('item-brands',payload.id,payload):await api.create('item-brands',{...payload,id:`IB-${Date.now()}`});if(!result.success)return window.alert(result.message||'Merek gagal disimpan');setBrandForm({id:'',code:'',name:'',description:'',isActive:true});await loadItemBrands();};
+  const removeItemBrand=async(brand:ItemBrandMaster)=>{if(!window.confirm(`Hapus merek ${brand.name}?`))return;const result=await api.remove('item-brands',brand.id);if(!result.success)return window.alert(result.message||'Merek gagal dihapus');await loadItemBrands();};
+
   useEffect(() => {
     if (showItemModal && itemFormTab === 'movement' && editingItem) void loadItemMovements();
     // Filter diterapkan hanya ketika tab dibuka atau tombol Refresh ditekan.
@@ -1341,13 +1361,10 @@ export default function ItemsAndServices() {
                   <section>
                     <h4 className="mb-3 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Lainnya</h4>
                     <div className="grid grid-cols-[170px_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-sm">
-                      <label>Merek Kendaraan <span className="text-red-600">*</span></label>
-                      <select required value={itemForm.vehicleBrandId} onChange={e => setItemForm({ ...itemForm, vehicleBrandId: e.target.value })} className="h-9 rounded border border-slate-300 bg-white px-2">
-                        <option value="">Pilih merek kendaraan</option>
-                        {vehicleBrands.filter(b => b.isActive).map(b => <option key={b.id} value={b.id}>{b.itemCode || '--'} - {b.name}</option>)}
-                      </select>
+                      <label>Merek Kendaraan <span className="text-red-600">*</span><small className="block font-normal text-slate-500">Bisa pilih lebih dari satu</small></label>
+                      <div className="max-h-36 overflow-y-auto rounded border border-slate-300 bg-white p-2">{vehicleBrands.filter(b=>b.isActive).map(b=><label key={b.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-blue-50"><input type="checkbox" checked={itemForm.vehicleBrandIds.includes(b.id)} onChange={e=>setItemForm(current=>{const ids=e.target.checked?[...current.vehicleBrandIds,b.id]:current.vehicleBrandIds.filter(id=>id!==b.id);return {...current,vehicleBrandIds:ids,vehicleBrandId:ids[0]||''};})}/><span>{b.itemCode||'--'} - {b.name}</span>{itemForm.vehicleBrandIds[0]===b.id&&<small className="ml-auto rounded bg-blue-100 px-1.5 text-blue-700">kode utama</small>}</label>)}</div>
                       <label>Merek Barang</label>
-                      <input disabled={itemForm.type === 'Jasa' || itemForm.type === 'Group'} value={itemForm.brand} onChange={(e) => setItemForm({ ...itemForm, brand: e.target.value.toUpperCase() })} placeholder="Cari/Pilih Merek..." className="h-9 rounded border border-slate-300 bg-white px-3 uppercase outline-none disabled:bg-slate-100" />
+                      <div className="flex gap-2"><select disabled={itemForm.type==='Jasa'||itemForm.type==='Group'} value={itemForm.itemBrandId} onChange={e=>{const selected=itemBrands.find(row=>row.id===e.target.value);setItemForm({...itemForm,itemBrandId:e.target.value,brand:selected?.name||''});}} className="h-9 min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 disabled:bg-slate-100"><option value="">Tanpa merek</option>{itemBrands.filter(row=>row.isActive||row.id===itemForm.itemBrandId).map(row=><option key={row.id} value={row.id}>{row.code} - {row.name}</option>)}</select><button type="button" onClick={()=>setShowBrandModal(true)} className="rounded border border-blue-500 px-3 text-xs font-semibold text-blue-700">Kelola</button></div>
                       <span>Aktifkan No. Seri/Produksi</span>
                       <button type="button" title="Fitur nomor seri disiapkan untuk pengembangan berikutnya" className="relative h-5 w-9 rounded-full bg-slate-300"><span className="absolute left-1 top-1 h-3 w-3 rounded-full bg-white" /></button>
                     </div>
@@ -1639,6 +1656,8 @@ export default function ItemsAndServices() {
           </div>
         </div>
       )}
+
+      {showBrandModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="text-lg font-bold">Master Merek Barang</h3><p className="text-sm text-slate-500">Kelola merek produk seperti Denso, Sanden, atau Wurth.</p></div><button type="button" onClick={()=>setShowBrandModal(false)}><X/></button></header><form onSubmit={saveItemBrand} className="grid gap-2 border-b bg-slate-50 p-4 sm:grid-cols-[110px_1fr_auto_auto]"><input required value={brandForm.code} onChange={e=>setBrandForm({...brandForm,code:e.target.value})} placeholder="Kode" className="rounded border px-3 py-2 uppercase"/><input required value={brandForm.name} onChange={e=>setBrandForm({...brandForm,name:e.target.value})} placeholder="Nama merek" className="rounded border px-3 py-2 uppercase"/><label className="flex items-center gap-2 px-2 text-sm"><input type="checkbox" checked={brandForm.isActive} onChange={e=>setBrandForm({...brandForm,isActive:e.target.checked})}/>Aktif</label><button className="rounded bg-blue-600 px-5 py-2 font-semibold text-white">{brandForm.id?'Perbarui':'Tambah'}</button></form><div className="max-h-[50vh] overflow-y-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-slate-600 text-white"><tr><th className="p-3 text-left">Kode</th><th className="text-left">Nama Merek</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{itemBrands.map(row=><tr key={row.id} className="border-b"><td className="p-3 font-mono">{row.code}</td><td>{row.name}</td><td className="text-center">{row.isActive?'Aktif':'Nonaktif'}</td><td className="text-center"><button type="button" onClick={()=>setBrandForm({id:row.id,code:row.code,name:row.name,description:row.description||'',isActive:row.isActive})} className="p-2 text-blue-600"><Edit className="h-4 w-4"/></button><button type="button" onClick={()=>void removeItemBrand(row)} className="p-2 text-red-600"><Trash2 className="h-4 w-4"/></button></td></tr>)}</tbody></table></div><footer className="flex justify-between border-t p-4"><button type="button" onClick={()=>setBrandForm({id:'',code:'',name:'',description:'',isActive:true})} className="rounded border px-4 py-2">Data Baru</button><button type="button" onClick={()=>setShowBrandModal(false)} className="rounded border px-5 py-2">Tutup</button></footer></div></div>}
 
       {/* ============================================================ */}
       {/* IMPORT CSV MODAL */}

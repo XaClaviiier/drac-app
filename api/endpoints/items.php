@@ -5,6 +5,8 @@ $brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPE
 $universalId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
@@ -60,6 +62,12 @@ switch ($method) {
             $r['isActive'] = (bool)$r['is_active'];
             $r['vehicleBrandId'] = $r['vehicle_brand_id'] ?? null;
             $r['vehicleBrandName'] = $r['vehicle_brand_name'] ?? '';
+            $r['itemBrandId'] = $r['item_brand_id'] ?? null;
+            $brandLinks=$pdo->prepare("SELECT ivb.vehicle_brand_id,b.name FROM item_vehicle_brands ivb JOIN vehicle_brands b ON b.id=ivb.vehicle_brand_id WHERE ivb.item_id=? ORDER BY ivb.sort_order,b.name");
+            $brandLinks->execute([$r['id']]);$linked=$brandLinks->fetchAll();
+            if(!$linked && !empty($r['vehicle_brand_id']))$linked=[['vehicle_brand_id'=>$r['vehicle_brand_id'],'name'=>$r['vehicle_brand_name']]];
+            $r['vehicleBrandIds']=array_values(array_column($linked,'vehicle_brand_id'));
+            $r['vehicleBrandNames']=array_values(array_column($linked,'name'));
             $r['verificationStatus'] = $r['verification_status'] ?? 'Verified';
             $r['createdBy'] = $r['created_by'] ?? null;
             $r['verifiedBy'] = $r['verified_by'] ?? null;
@@ -109,7 +117,7 @@ switch ($method) {
             $categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
             $name=strtoupper(trim((string)$d['name']));$brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
-            $vehicleBrandId=(string)($d['vehicleBrandId']??'');
+            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[])))));$vehicleBrandId=(string)($vehicleBrandIds[0]??($d['vehicleBrandId']??''));
             $vehicleBrandStmt=$pdo->prepare("SELECT id,name,item_code FROM vehicle_brands WHERE id=? AND is_active=1");
             if($vehicleBrandId!==''){$vehicleBrandStmt->execute([$vehicleBrandId]);$vehicleBrand=$vehicleBrandStmt->fetch();}else{$vehicleBrand=$pdo->query("SELECT id,name,item_code FROM vehicle_brands WHERE UPPER(name)='UNIVERSAL' AND is_active=1 LIMIT 1")->fetch();}
             if(!$vehicleBrand)throw new InvalidArgumentException('Merek kendaraan untuk kode barang wajib dipilih');
@@ -125,11 +133,11 @@ switch ($method) {
             if($type==='Group'&&empty($d['groupMembers']))throw new InvalidArgumentException('Group/Paket wajib memiliki minimal satu komponen');
             $itemId = $d['id'] ?? generateId();
             $isProvisional=!empty($d['provisional']);
-            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, vehicle_brand_id, vehicle_brand_name, unit, stock, sellable_stock, purchase_price, selling_price, is_active, verification_status, created_by, verified_by, is_quick_service, description, receipt_description, barcode, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, type, brand, item_brand_id, vehicle_brand_id, vehicle_brand_name, unit, stock, sellable_stock, purchase_price, selling_price, is_active, verification_status, created_by, verified_by, is_quick_service, description, receipt_description, barcode, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $itemId, $code, $name,
                 $category['id'], $category['name'],
-                $type, $brand, $vehicleBrand['id'], $vehicleBrand['name'], $unit,
+                $type, $brand, $d['itemBrandId']??null, $vehicleBrand['id'], $vehicleBrand['name'], $unit,
                 0, 0,
                 0, max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $isProvisional?'Pending':'Verified', $actor['id']??null, $isProvisional?null:($actor['id']??null), $quickService,
@@ -137,6 +145,7 @@ switch ($method) {
                 $normalizedBarcode,
                 $branchId
             ]);
+            if(!$vehicleBrandIds)$vehicleBrandIds=[$vehicleBrand['id']];$link=$pdo->prepare("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");foreach($vehicleBrandIds as $position=>$linkedBrandId){$vehicleBrandStmt->execute([$linkedBrandId]);if(!$vehicleBrandStmt->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');$link->execute([$itemId,$linkedBrandId,$position]);}
 
             $stockStmt = $pdo->prepare("
                 INSERT INTO branch_item_stocks (branch_id, item_id, stock, sellable_stock)
@@ -229,6 +238,7 @@ switch ($method) {
             $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=?");$categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
             $name=strtoupper(trim((string)$d['name']));$brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
+            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[])))));$primaryBrandId=(string)($vehicleBrandIds[0]??($d['vehicleBrandId']??$current['vehicle_brand_id']??''));$primaryBrand=$pdo->prepare("SELECT id,name FROM vehicle_brands WHERE id=? AND is_active=1");$primaryBrand->execute([$primaryBrandId]);$primaryBrandRow=$primaryBrand->fetch();if(!$primaryBrandRow)throw new InvalidArgumentException('Minimal satu merek kendaraan wajib dipilih');
             $unit=$type==='Jasa'?'JASA':($type==='Group'?'PAKET':strtoupper(trim((string)($d['unit']??'PCS'))));
             $quickService=in_array($type,['Jasa','Group'],true)?(int)!empty($d['isQuickService']):0;
             $normalizedBarcode=in_array($type,['Jasa','Group'],true)?null:($barcode!==''?$barcode:null);
@@ -242,17 +252,18 @@ switch ($method) {
             }
             // Harga beli dan saldo stok hanya boleh berubah melalui transaksi
             // penerimaan, pembelian, atau penyesuaian persediaan.
-            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, unit=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=? WHERE id=?");
+            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, type=?, brand=?, item_brand_id=?, vehicle_brand_id=?, vehicle_brand_name=?, unit=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=? WHERE id=?");
             $stmt->execute([
                 $current['code'], $name,
                 $category['id'], $category['name'],
-                $type, $brand, $unit,
+                $type, $brand, $d['itemBrandId']??null,$primaryBrandRow['id'],$primaryBrandRow['name'],$unit,
                 max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $quickService,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
                 $normalizedBarcode,
                 $id
             ]);
+            $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);if(!$vehicleBrandIds)$vehicleBrandIds=[$primaryBrandId];$link=$pdo->prepare("INSERT INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");foreach($vehicleBrandIds as $position=>$linkedBrandId){$primaryBrand->execute([$linkedBrandId]);if(!$primaryBrand->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');$link->execute([$id,$linkedBrandId,$position]);}
 
             // Refresh group members
             $pdo->prepare("DELETE FROM item_group_members WHERE group_item_id = ?")->execute([$id]);

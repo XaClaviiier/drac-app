@@ -216,6 +216,9 @@ export interface Item {
   brand: string;
   vehicleBrandId?: string;
   vehicleBrandName?: string;
+  vehicleBrandIds?: string[];
+  vehicleBrandNames?: string[];
+  itemBrandId?: string;
   unit: string;
   stock: number;
   sellableStock: number;

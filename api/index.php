@@ -43,7 +43,7 @@ $permissionByResource = [
     'branches' => 'branch', 'roles' => 'role', 'users' => 'user',
     'customers' => 'customer', 'customer-people' => 'customer', 'vehicles' => 'vehicle',
     'suppliers' => 'supplier', 'items' => 'item',
-    'item-categories' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item', 'stock-adjustments' => 'item',
+    'item-categories' => 'item', 'item-brands' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item', 'stock-adjustments' => 'item',
     'warehouse-transfers' => 'item',
     'work-orders' => 'wo', 'sales-invoices' => 'invoice',
     'goods-receipts' => 'receipt', 'purchase-invoices' => 'purchase',
@@ -171,6 +171,9 @@ try {
         // ----- ITEM CATEGORIES -----
         case 'item-categories':
             require 'endpoints/item-categories.php';
+            break;
+        case 'item-brands':
+            require 'endpoints/item-brands.php';
             break;
 
         // ----- WORK ORDERS -----
