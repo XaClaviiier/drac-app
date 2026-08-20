@@ -82,7 +82,6 @@ export default function WorkOrders() {
     currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings, refreshData, isLoading,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
-  const defaultNewTabOpenedRef = useRef(false);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [serviceEditMode, setServiceEditMode] = useState(false);
   const diagnosisSubmitAction = useRef<'save' | 'process' | 'invoice' | 'lost'>('save');
@@ -926,16 +925,6 @@ export default function WorkOrders() {
   const requestedNewWO = searchParams.get('new');
   const requestedEditWO = searchParams.get('edit');
   const requestedViewWO = searchParams.get('view');
-
-  // Saat modul WO pertama kali dibuka, tampilkan Data Baru sekali saja.
-  // Setelah pengguna menutupnya, jangan membuka kembali sampai modul dibuka ulang.
-  useEffect(() => {
-    if (defaultNewTabOpenedRef.current || isLoading) return;
-    if (requestedNewWO || requestedEditWO || requestedViewWO) return;
-    if (!hasPermission('wo:create') || currentBranchId === 'ALL') return;
-    defaultNewTabOpenedRef.current = true;
-    handleOpenModal();
-  }, [isLoading, requestedNewWO, requestedEditWO, requestedViewWO, currentBranchId]);
 
   // Aksi dari WO Timeline selalu membawa ID WO agar baris yang dipilih itulah
   // yang dibuka. WO yang sudah difakturkan hanya boleh dilihat (read-only).
