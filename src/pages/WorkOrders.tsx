@@ -1491,13 +1491,15 @@ export default function WorkOrders() {
     setIsSavingWorkResult(true);
     try {
       const trimmed = workResultText.trim();
+      const now = new Date().toISOString();
       const nextWorkOrder: WorkOrder = {
         ...workResultEditor,
         findings: trimmed,
+        updatedAt: now,
       };
       await updateWorkOrder(workResultEditor.id, nextWorkOrder);
       setDetailWO(current => current?.id === workResultEditor.id
-        ? { ...current, findings: trimmed }
+        ? { ...current, findings: trimmed, updatedAt: now }
         : current);
       setSuccessMsg(`Keterangan hasil kerja ${workResultEditor.woNumber} berhasil disimpan.`);
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -2701,15 +2703,18 @@ export default function WorkOrders() {
                       <button
                         type="button"
                         onClick={() => openWorkResultEditor(detailWO)}
-                        className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-white px-2 py-1 text-xs font-semibold text-cyan-700 hover:bg-cyan-50"
+                        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50"
                         title="Edit keterangan hasil kerja"
                       >
-                        <Edit className="h-3.5 w-3.5" /> Edit
+                        <Edit className="h-4 w-4" /> Edit
                       </button>
                     )}
                   </div>
                   {diagnosisMeasurementLabel(detailWO) && <p className="mt-2 text-sm font-semibold text-cyan-800">{diagnosisMeasurementLabel(detailWO)}</p>}
                   <p className="mt-2 whitespace-pre-wrap text-sm text-cyan-900">{detailWO.findings?.trim() || 'Belum ada keterangan hasil kerja.'}</p>
+                  {detailWO.updatedAt && (
+                    <p className="mt-2 text-xs text-cyan-700">Terakhir diperbarui: {formatAuditTime(detailWO.updatedAt)}</p>
+                  )}
                 </div>
               )}
               <div className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(360px,460px)]">
