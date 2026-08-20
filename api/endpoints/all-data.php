@@ -427,6 +427,16 @@ try {
             'qty' => (int)$i['qty'],
             'unit' => $i['unit'],
             'qtyInvoiced' => (int)$i['qty_invoiced'],
+            'unitPrice' => (float)($i['unit_price'] ?? 0),
+            'discountPercent' => (float)($i['discount_percent'] ?? 0),
+            'discountAmount' => (float)($i['discount_amount'] ?? 0),
+            'subtotal' => (float)($i['subtotal'] ?? 0),
+            'technicianId' => $i['technician_id'] ?? '',
+            'technicianName' => $i['technician_name'] ?? '',
+            'lineNotes' => $i['line_notes'] ?? '',
+            'isDeferred' => (bool)($i['is_deferred'] ?? false),
+            'deferReason' => $i['defer_reason'] ?? '',
+            'deferUntil' => $i['defer_until'] ?? '',
         ];
     }
     foreach ($rows as &$r) {

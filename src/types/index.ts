@@ -417,6 +417,16 @@ export interface GoodsReceiptItem {
   qty: number;
   unit: string;
   qtyInvoiced: number; // sudah difakturkan berapa
+  unitPrice?: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  subtotal?: number;
+  technicianId?: string;
+  technicianName?: string;
+  lineNotes?: string;
+  isDeferred?: boolean;
+  deferReason?: string;
+  deferUntil?: string;
 }
 
 export interface GoodsReceipt {

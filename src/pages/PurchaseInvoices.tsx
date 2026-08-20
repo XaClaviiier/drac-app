@@ -170,9 +170,9 @@ export default function PurchaseInvoicesPage() {
             receiptId: receipt.id, receiptNumber: receipt.receiptNumber,
             itemId: it.itemId, itemCode: it.itemCode, itemName: it.itemName,
             qty: remainingQty, unit: it.unit,
-            unitPrice: masterItem?.purchasePrice || 0,
-            discount: 0,
-            subtotal: remainingQty * (masterItem?.purchasePrice || 0),
+            unitPrice: it.unitPrice ?? masterItem?.purchasePrice ?? 0,
+            discount: (it.discountAmount || 0) * (remainingQty / Math.max(1, it.qty)),
+            subtotal: Math.max(0, remainingQty * (it.unitPrice ?? masterItem?.purchasePrice ?? 0) - ((it.discountAmount || 0) * (remainingQty / Math.max(1, it.qty)))),
           };
         });
       setForm(prev => ({

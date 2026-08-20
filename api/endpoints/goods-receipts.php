@@ -8,6 +8,16 @@ $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_type VARC
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_warehouse_id VARCHAR(20) NULL AFTER source_type");
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_branch_id VARCHAR(20) NULL AFTER source_warehouse_id");
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS transfer_number VARCHAR(40) NULL AFTER source_branch_id");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS unit_price DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER qty_invoiced");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS discount_percent DECIMAL(8,4) NOT NULL DEFAULT 0 AFTER unit_price");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_percent");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS subtotal DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_amount");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS technician_id VARCHAR(64) NULL AFTER subtotal");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS technician_name VARCHAR(160) NULL AFTER technician_id");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS line_notes VARCHAR(500) NULL AFTER technician_name");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS is_deferred TINYINT(1) NOT NULL DEFAULT 0 AFTER line_notes");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS defer_reason VARCHAR(255) NULL AFTER is_deferred");
+$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS defer_until DATE NULL AFTER defer_reason");
 $pdo->exec("UPDATE goods_receipts r JOIN warehouses w ON w.branch_id=r.branch_id AND w.is_default=1 SET r.warehouse_id=w.id WHERE r.warehouse_id IS NULL OR r.warehouse_id=''");
 $receiptJournalMigration='backfill_receipt_stock_journal_20260820_v1';
 $migrationCheck=$pdo->prepare("SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?");$migrationCheck->execute([$receiptJournalMigration]);
@@ -81,6 +91,16 @@ switch ($method) {
                     'qty' => (int)$i['qty'],
                     'unit' => $i['unit'],
                     'qtyInvoiced' => (int)$i['qty_invoiced'],
+                    'unitPrice' => (float)($i['unit_price'] ?? 0),
+                    'discountPercent' => (float)($i['discount_percent'] ?? 0),
+                    'discountAmount' => (float)($i['discount_amount'] ?? 0),
+                    'subtotal' => (float)($i['subtotal'] ?? 0),
+                    'technicianId' => $i['technician_id'] ?? '',
+                    'technicianName' => $i['technician_name'] ?? '',
+                    'lineNotes' => $i['line_notes'] ?? '',
+                    'isDeferred' => (bool)($i['is_deferred'] ?? false),
+                    'deferReason' => $i['defer_reason'] ?? '',
+                    'deferUntil' => $i['defer_until'] ?? '',
                 ];
             }, $items);
         }
@@ -127,8 +147,9 @@ switch ($method) {
             ]);
 
             if (!empty($d['items'])) {
-                $iStmt = $pdo->prepare("INSERT INTO goods_receipt_items (receipt_id, item_id, item_code, item_name, qty, unit, qty_invoiced) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $iStmt = $pdo->prepare("INSERT INTO goods_receipt_items (receipt_id,item_id,item_code,item_name,qty,unit,qty_invoiced,unit_price,discount_percent,discount_amount,subtotal,technician_id,technician_name,line_notes,is_deferred,defer_reason,defer_until) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
                 $itemCheck = $pdo->prepare("SELECT code,name,unit,type FROM items WHERE id=? AND is_active=1");
+                $technicianCheck = $pdo->prepare("SELECT id,name,is_active FROM users WHERE id=? LIMIT 1");
                 $seenItems = [];
                 foreach ($d['items'] as $i) {
                     $itemCheck->execute([$i['itemId'] ?? '']);
@@ -137,7 +158,10 @@ switch ($method) {
                     if (!$item || $item['type'] !== 'Persediaan' || $qty <= 0) throw new InvalidArgumentException('Penerimaan hanya boleh berisi barang persediaan aktif dengan qty lebih dari 0');
                     if (isset($seenItems[(string)$i['itemId']])) throw new InvalidArgumentException('Barang yang sama tidak boleh diduplikasi dalam satu penerimaan');
                     $seenItems[(string)$i['itemId']] = true;
-                    $iStmt->execute([$rId, $i['itemId'], $item['code'], $item['name'], $qty, $item['unit'], 0]);
+                    $unitPrice=max(0,(float)($i['unitPrice']??0));$discountPercent=min(100,max(0,(float)($i['discountPercent']??0)));$gross=$qty*$unitPrice;$discountAmount=min($gross,max(0,(float)($i['discountAmount']??($gross*$discountPercent/100))));$subtotal=max(0,$gross-$discountAmount);
+                    $technicianId=trim((string)($i['technicianId']??''));$technicianName='';if($technicianId!==''){$technicianCheck->execute([$technicianId]);$technician=$technicianCheck->fetch();if(!$technician||!(bool)$technician['is_active'])throw new InvalidArgumentException('Petugas/teknisi rincian tidak valid');$technicianName=(string)$technician['name'];}
+                    $isDeferred=!empty($i['isDeferred']);$deferReason=trim((string)($i['deferReason']??''));$deferUntil=trim((string)($i['deferUntil']??''))?:null;if($isDeferred&&$deferReason==='')throw new InvalidArgumentException('Alasan penangguhan wajib diisi');
+                    $iStmt->execute([$rId,$i['itemId'],$item['code'],$item['name'],$qty,$item['unit'],0,$unitPrice,$discountPercent,$discountAmount,$subtotal,$technicianId?:null,$technicianName?:null,trim((string)($i['lineNotes']??'')),$isDeferred?1:0,$isDeferred?$deferReason:null,$isDeferred?$deferUntil:null]);
                 }
             }
 
@@ -206,8 +230,9 @@ switch ($method) {
 
             $pdo->prepare("DELETE FROM goods_receipt_items WHERE receipt_id = ?")->execute([$id]);
             if (!empty($d['items'])) {
-                $iStmt = $pdo->prepare("INSERT INTO goods_receipt_items (receipt_id, item_id, item_code, item_name, qty, unit, qty_invoiced) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $iStmt = $pdo->prepare("INSERT INTO goods_receipt_items (receipt_id,item_id,item_code,item_name,qty,unit,qty_invoiced,unit_price,discount_percent,discount_amount,subtotal,technician_id,technician_name,line_notes,is_deferred,defer_reason,defer_until) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
                 $itemCheck = $pdo->prepare("SELECT code,name,unit,type FROM items WHERE id=? AND is_active=1");
+                $technicianCheck = $pdo->prepare("SELECT id,name,is_active FROM users WHERE id=? LIMIT 1");
                 $seenItems = [];
                 foreach ($d['items'] as $i) {
                     $itemCheck->execute([$i['itemId'] ?? '']);
@@ -216,7 +241,10 @@ switch ($method) {
                     if (!$item || $item['type'] !== 'Persediaan' || $qty <= 0) throw new InvalidArgumentException('Penerimaan hanya boleh berisi barang persediaan aktif dengan qty lebih dari 0');
                     if (isset($seenItems[(string)$i['itemId']])) throw new InvalidArgumentException('Barang yang sama tidak boleh diduplikasi dalam satu penerimaan');
                     $seenItems[(string)$i['itemId']] = true;
-                    $iStmt->execute([$id, $i['itemId'], $item['code'], $item['name'], $qty, $item['unit'], 0]);
+                    $unitPrice=max(0,(float)($i['unitPrice']??0));$discountPercent=min(100,max(0,(float)($i['discountPercent']??0)));$gross=$qty*$unitPrice;$discountAmount=min($gross,max(0,(float)($i['discountAmount']??($gross*$discountPercent/100))));$subtotal=max(0,$gross-$discountAmount);
+                    $technicianId=trim((string)($i['technicianId']??''));$technicianName='';if($technicianId!==''){$technicianCheck->execute([$technicianId]);$technician=$technicianCheck->fetch();if(!$technician||!(bool)$technician['is_active'])throw new InvalidArgumentException('Petugas/teknisi rincian tidak valid');$technicianName=(string)$technician['name'];}
+                    $isDeferred=!empty($i['isDeferred']);$deferReason=trim((string)($i['deferReason']??''));$deferUntil=trim((string)($i['deferUntil']??''))?:null;if($isDeferred&&$deferReason==='')throw new InvalidArgumentException('Alasan penangguhan wajib diisi');
+                    $iStmt->execute([$id,$i['itemId'],$item['code'],$item['name'],$qty,$item['unit'],0,$unitPrice,$discountPercent,$discountAmount,$subtotal,$technicianId?:null,$technicianName?:null,trim((string)($i['lineNotes']??'')),$isDeferred?1:0,$isDeferred?$deferReason:null,$isDeferred?$deferUntil:null]);
                 }
             }
 
