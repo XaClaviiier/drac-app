@@ -99,6 +99,7 @@ export default function WorkOrders() {
   const [completionError, setCompletionError] = useState('');
   const [isCompletingWO, setIsCompletingWO] = useState(false);
   const [workResultEditor, setWorkResultEditor] = useState<WorkOrder | null>(null);
+  const [workComplaintText, setWorkComplaintText] = useState('');
   const [workResultText, setWorkResultText] = useState('');
   const [isSavingWorkResult, setIsSavingWorkResult] = useState(false);
   const [statusReason, setStatusReason] = useState('');
@@ -1477,35 +1478,43 @@ export default function WorkOrders() {
 
   const openWorkResultEditor = (wo: WorkOrder) => {
     setWorkResultEditor(wo);
-    setWorkResultText(wo.findings || '');
+    setWorkComplaintText(wo.description || '');
+    setWorkResultText(wo.findings || wo.notes || '');
   };
 
   const closeWorkResultEditor = () => {
     if (isSavingWorkResult) return;
     setWorkResultEditor(null);
+    setWorkComplaintText('');
     setWorkResultText('');
   };
 
   const saveWorkResult = async () => {
     if (!workResultEditor || isSavingWorkResult) return;
+    const complaint = workComplaintText.trim();
+    if (!complaint) {
+      window.alert('Keluhan pelanggan wajib diisi.');
+      return;
+    }
     setIsSavingWorkResult(true);
     try {
       const trimmed = workResultText.trim();
       const now = new Date().toISOString();
       const nextWorkOrder: WorkOrder = {
         ...workResultEditor,
+        description: complaint,
         findings: trimmed,
         updatedAt: now,
       };
       await updateWorkOrder(workResultEditor.id, nextWorkOrder);
       setDetailWO(current => current?.id === workResultEditor.id
-        ? { ...current, findings: trimmed, updatedAt: now }
+        ? { ...current, description: complaint, findings: trimmed, updatedAt: now }
         : current);
-      setSuccessMsg(`Keterangan hasil kerja ${workResultEditor.woNumber} berhasil disimpan.`);
+      setSuccessMsg(`Catatan ${workResultEditor.woNumber} berhasil disimpan.`);
       setTimeout(() => setSuccessMsg(''), 3000);
       closeWorkResultEditor();
     } catch (error: any) {
-      window.alert(error?.message || 'Gagal menyimpan keterangan hasil kerja.');
+      window.alert(error?.message || 'Gagal menyimpan catatan.');
     } finally {
       setIsSavingWorkResult(false);
     }
@@ -2695,33 +2704,26 @@ export default function WorkOrders() {
                   </tbody>
                 </table></div>
               </div>
-              {(statusLabel(detailWO.status) === 'Selesai' || detailWO.findings || diagnosisMeasurementLabel(detailWO)) && (
-                <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <h4 className="font-semibold text-cyan-900">Keterangan Hasil Kerja</h4>
+              <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
+                <section className="min-h-[104px] rounded border border-gray-300 bg-white px-4 py-3 text-sm text-gray-700">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h4 className="font-semibold text-gray-900">Catatan</h4>
                     {canEditWorkResult(detailWO) && (
-                      <button
-                        type="button"
-                        onClick={() => openWorkResultEditor(detailWO)}
-                        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50"
-                        title="Edit keterangan hasil kerja"
-                      >
-                        <Edit className="h-4 w-4" /> Edit
+                      <button type="button" onClick={() => openWorkResultEditor(detailWO)} className="inline-flex items-center gap-1 rounded border border-blue-200 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                        <Edit className="h-3.5 w-3.5" /> Edit
                       </button>
                     )}
                   </div>
-                  {diagnosisMeasurementLabel(detailWO) && <p className="mt-2 text-sm font-semibold text-cyan-800">{diagnosisMeasurementLabel(detailWO)}</p>}
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-cyan-900">{detailWO.findings?.trim() || 'Belum ada keterangan hasil kerja.'}</p>
-                  {detailWO.updatedAt && (
-                    <p className="mt-2 text-xs text-cyan-700">Terakhir diperbarui: {formatAuditTime(detailWO.updatedAt)}</p>
-                  )}
-                </div>
-              )}
-              <div className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(360px,460px)]">
-                <textarea readOnly rows={2} value={detailWO.description || ''} placeholder="Keluhan / keterangan service" className="h-[88px] w-full resize-none rounded border border-gray-300 bg-white px-3 py-2 text-sm leading-5 text-gray-700 outline-none" />
-                <div className="grid h-[88px] grid-cols-2 rounded border border-gray-300 bg-white p-2 shadow-sm"><div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Jumlah Item</span><strong className="text-right text-lg tabular-nums">{detailWO.services.length}</strong></div><div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total Estimasi</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {detailWO.total.toLocaleString('id-ID')}</strong></div></div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="min-w-0"><span className="block text-xs font-semibold text-gray-500">Keluhan</span><p className="mt-0.5 whitespace-pre-wrap break-words">{detailWO.description?.trim() || '— Belum diisi'}</p></div>
+                    <div className="min-w-0 border-t border-gray-100 pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"><span className="block text-xs font-semibold text-gray-500">Keterangan Servis</span><p className="mt-0.5 whitespace-pre-wrap break-words">{detailWO.findings?.trim() || detailWO.notes?.trim() || '— Belum diisi'}</p>{diagnosisMeasurementLabel(detailWO) && <p className="mt-1 text-xs font-semibold text-cyan-700">{diagnosisMeasurementLabel(detailWO)}</p>}</div>
+                  </div>
+                </section>
+                <section className="flex min-h-[104px] flex-col justify-between rounded border border-gray-300 bg-white px-4 py-3 shadow-sm">
+                  <span className="text-sm font-medium text-gray-600">Total Estimasi ({detailWO.services.filter(service => !isPackageMemberService(service)).length} item)</span>
+                  <strong className="text-right text-xl font-bold tabular-nums text-blue-700">Rp {detailWO.total.toLocaleString('id-ID')}</strong>
+                </section>
               </div>
-              {detailWO.notes && <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700"><strong>Catatan:</strong> {detailWO.notes}</div>}
               <details className="rounded border border-gray-200 bg-white">
                 <summary className="flex cursor-pointer list-none items-center gap-2 p-3 font-semibold text-gray-900">
                   <Clock3 className="h-5 w-5 text-blue-600" />
@@ -3602,9 +3604,9 @@ export default function WorkOrders() {
                   </div>
                   <label className="text-[11px] font-semibold text-slate-600">Suhu (°C)<input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
                 </div>}
-                <div className="grid min-h-[148px] grid-rows-2 overflow-hidden rounded-xl border border-gray-300 bg-white shadow-sm">
-                  <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-gray-600">Jumlah Item</span><strong className="text-xl tabular-nums">{formData.services.filter(service => !isPackageMemberService(service)).length}</strong></div>
-                  <div className="flex items-center justify-between border-t border-gray-200 px-4 py-2"><span className="text-sm text-gray-600">Total Estimasi</span><strong className="text-lg tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong></div>
+                <div className="flex min-h-[148px] flex-col justify-between rounded-xl border border-gray-300 bg-white px-4 py-3 shadow-sm">
+                  <span className="text-sm font-medium text-gray-600">Total Estimasi ({formData.services.filter(service => !isPackageMemberService(service)).length} item)</span>
+                  <strong className="text-right text-xl font-bold tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong>
                 </div>
               </div>
               </>}
@@ -3736,7 +3738,7 @@ export default function WorkOrders() {
       {/* ===== Form penyelesaian pekerjaan ===== */}
       {completionWO && (
         <div className="fixed inset-0 z-[75] flex items-stretch justify-center bg-black/55 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="completion-title">
-          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
+          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
             <div className="flex flex-shrink-0 items-start justify-between bg-gradient-to-r from-emerald-600 to-green-700 px-5 py-4 text-white">
               <div className="flex min-w-0 items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-6 w-6 flex-shrink-0" />
@@ -3811,7 +3813,7 @@ export default function WorkOrders() {
         </div>
       )}
 
-      {/* ===== Edit Catatan Hasil Kerja ===== */}
+      {/* ===== Edit Catatan WO ===== */}
       {workResultEditor && (
         <div className="fixed inset-0 z-[75] flex items-stretch justify-center bg-black/55 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="work-result-title">
           <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
@@ -3819,7 +3821,7 @@ export default function WorkOrders() {
               <div className="flex min-w-0 items-start gap-3">
                 <Edit className="mt-0.5 h-6 w-6 flex-shrink-0" />
                 <div className="min-w-0">
-                  <h3 id="work-result-title" className="text-lg font-bold">Edit Keterangan Hasil Kerja</h3>
+                  <h3 id="work-result-title" className="text-lg font-bold">Edit Catatan</h3>
                   <p className="truncate font-mono text-xs text-blue-100">{workResultEditor.woNumber} · {workResultEditor.plateNumber}</p>
                 </div>
               </div>
@@ -3833,15 +3835,15 @@ export default function WorkOrders() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
-              <label className="mb-2 block text-sm font-semibold text-gray-900">Catatan Hasil Kerja</label>
-              <textarea
-                rows={8}
-                value={workResultText}
-                onChange={(event) => setWorkResultText(event.target.value)}
-                placeholder="Tuliskan keterangan hasil kerja..."
-                className="w-full resize-y rounded-xl border border-gray-300 px-3 py-3 text-sm outline-none focus:border-cyan-500"
-              />
+            <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2 sm:p-6">
+              <label className="block text-sm font-semibold text-gray-900">
+                Keluhan Pelanggan <span className="text-red-500">*</span>
+                <textarea rows={7} value={workComplaintText} onChange={(event) => setWorkComplaintText(event.target.value)} placeholder="Tuliskan keluhan pelanggan..." className="mt-2 w-full resize-y rounded-xl border border-gray-300 px-3 py-3 text-sm font-normal outline-none focus:border-cyan-500" autoFocus />
+              </label>
+              <label className="block text-sm font-semibold text-gray-900">
+                Keterangan Servis
+                <textarea rows={7} value={workResultText} onChange={(event) => setWorkResultText(event.target.value)} placeholder="Tuliskan pekerjaan atau hasil servis..." className="mt-2 w-full resize-y rounded-xl border border-gray-300 px-3 py-3 text-sm font-normal outline-none focus:border-cyan-500" />
+              </label>
             </div>
             <div className="flex flex-shrink-0 gap-3 border-t border-gray-200 bg-white p-4 sm:justify-end sm:px-6">
               <button
@@ -3859,7 +3861,7 @@ export default function WorkOrders() {
                 className="inline-flex flex-[1.5] items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-700 disabled:cursor-wait disabled:opacity-60 sm:flex-none"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                {isSavingWorkResult ? 'Menyimpan...' : 'Simpan'}
+                {isSavingWorkResult ? 'Menyimpan...' : 'Simpan Catatan'}
               </button>
             </div>
           </div>
