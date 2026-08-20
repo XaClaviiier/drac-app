@@ -180,11 +180,11 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   const page = source('src/pages/GoodsReceiptEntry.tsx');
   const endpoint = source('api/endpoints/items.php');
   const allData = source('api/endpoints/all-data.php');
-  assert.match(page, /Merek Mobil \*/);
+  assert.match(page, /Merek Kendaraan/);
   assert.match(page, /Model \/ Tipe/);
   assert.match(page, /Generasi/);
   assert.match(page, /Mesin \/ CC/);
-  assert.match(page, /Kode Barcode \/ Kode Barang Asli/);
+  assert.match(page, /UPC\/Barcode/);
   assert.match(page, /barcode:quick\.barcode\.trim\(\)/);
   assert.match(page, /\(i\.barcode\|\|''\)\.toLowerCase\(\)\.includes\(q\)/);
   assert.match(page, /Merek Barang/);
@@ -201,6 +201,11 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /onMouseDown=\{event=>\{event\.preventDefault\(\);addLine\(i\)\}\}/);
   assert.match(page, /fixed inset-0 z-\[79\].*Buat Barang Baru/s);
   assert.match(page, /barcode:looksLikeCode\?value:''/);
+  assert.match(page, /grid-cols-\[32%_minmax\(0,1fr\)\]/);
+  assert.match(page, /quickTab==='general'/);
+  assert.match(page, /Dibuat otomatis/);
+  assert.match(page, /Aktifkan No\. Seri\/Produksi/);
+  assert.match(page, /grid-cols-2 gap-2 border-t/);
   const receiptEndpoint = source('api/endpoints/goods-receipts.php');
   assert.match(receiptEndpoint, /unit_price DECIMAL/);
   assert.match(receiptEndpoint, /discount_percent DECIMAL/);
