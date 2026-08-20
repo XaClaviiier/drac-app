@@ -442,6 +442,62 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_adjustment_maintenance_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS stock_count_orders (
+            id VARCHAR(30) NOT NULL PRIMARY KEY,
+            order_number VARCHAR(40) NOT NULL UNIQUE,
+            order_date DATE NOT NULL,
+            start_date DATE NOT NULL,
+            warehouse_id VARCHAR(20) NOT NULL,
+            branch_id VARCHAR(20) NOT NULL,
+            category_id VARCHAR(20) NULL,
+            assigned_user_id VARCHAR(20) NOT NULL,
+            assigned_user_name VARCHAR(120) NOT NULL,
+            status VARCHAR(30) NOT NULL DEFAULT 'Menunggu Eksekusi',
+            notes VARCHAR(255) NOT NULL DEFAULT '',
+            created_by VARCHAR(20) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME NULL,
+            INDEX idx_stock_count_order_date (start_date),
+            INDEX idx_stock_count_order_status (status),
+            INDEX idx_stock_count_order_warehouse (warehouse_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS stock_count_results (
+            id VARCHAR(30) NOT NULL PRIMARY KEY,
+            result_number VARCHAR(40) NOT NULL UNIQUE,
+            order_id VARCHAR(30) NOT NULL UNIQUE,
+            result_date DATE NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'Draft',
+            adjustment_id VARCHAR(30) NULL UNIQUE,
+            adjustment_number VARCHAR(40) NULL,
+            notes VARCHAR(255) NOT NULL DEFAULT '',
+            created_by VARCHAR(20) NULL,
+            posted_by VARCHAR(20) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            posted_at DATETIME NULL,
+            INDEX idx_stock_count_result_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS stock_count_result_items (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            result_id VARCHAR(30) NOT NULL,
+            item_id VARCHAR(20) NOT NULL,
+            item_code VARCHAR(80) NOT NULL,
+            item_name VARCHAR(255) NOT NULL,
+            category_name VARCHAR(120) NOT NULL DEFAULT '',
+            unit VARCHAR(30) NOT NULL DEFAULT '',
+            system_quantity INT NOT NULL DEFAULT 0,
+            count_1 INT NULL,
+            count_2 INT NULL,
+            final_quantity INT NULL,
+            variance INT NULL,
+            INDEX idx_stock_count_result_parent (result_id),
+            INDEX idx_stock_count_result_item (item_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
     $pdo->exec("CREATE TABLE IF NOT EXISTS cash_accounts (
         id VARCHAR(64) PRIMARY KEY, code VARCHAR(30) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL,
         account_type ENUM('cash','bank','qris') NOT NULL, branch_id VARCHAR(20) NULL,

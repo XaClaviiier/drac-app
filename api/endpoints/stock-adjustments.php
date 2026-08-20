@@ -136,6 +136,7 @@ if ($method === 'DELETE' && $id) {
         foreach($markers as $marker) {
             $pdo->prepare("DELETE FROM stock_movements WHERE notes=? OR notes LIKE CONCAT(?,' %')")->execute([$marker,$marker]);
         }
+        $pdo->prepare("UPDATE stock_count_results SET adjustment_id=NULL,adjustment_number=NULL WHERE adjustment_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM stock_adjustments WHERE id=?")->execute([$id]);
         $pdo->commit();

@@ -6,7 +6,7 @@ const reports = [
   { label: 'Laporan Penjualan', description: 'Faktur, pembayaran, pendapatan, dan piutang.', icon: BarChart3, path: '/reports/sales', tone: 'green' },
   { label: 'Laporan Pembelian', description: 'Pembelian, pembayaran supplier, dan utang.', icon: ShoppingCart, path: '/reports/purchases', tone: 'blue' },
   { label: 'Laporan Persediaan', description: 'Stok, nilai persediaan, gudang, dan stok kosong.', icon: Boxes, path: '/reports/inventory', tone: 'blue' },
-  { label: 'Lembar Penghitungan Stok', description: 'Form stok opname per tanggal, gudang, cabang, dan kategori.', icon: ClipboardList, path: '/reports/stock-count-sheet', tone: 'blue' },
+  { label: 'Stok Opname', description: 'Perintah, hasil penghitungan fisik, dan penyesuaian selisih otomatis.', icon: ClipboardList, path: '/reports/stock-count-sheet', tone: 'blue' },
   { label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, transfer, dan saldo akun.', icon: Landmark, path: '/reports/cash-bank', tone: 'purple' },
   { label: 'Kinerja & Bonus', description: 'Kehadiran, produktivitas teknisi, rules custom, dan pembayaran bonus.', icon: Coins, path: '/performance-bonus', tone: 'purple' },
   { label: 'Audit Log', description: 'Riwayat aktivitas dan perubahan data pengguna.', icon: History, tone: 'purple' },

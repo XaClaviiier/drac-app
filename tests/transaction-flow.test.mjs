@@ -70,20 +70,22 @@ test('cetak barang dapat dikelompokkan berdasarkan kategori', () => {
   assert.match(page, /items\.length} item/);
 });
 
-test('lembar penghitungan stok menghitung saldo per tanggal dan gudang', () => {
-  const endpoint = source('api/endpoints/stock-count-report.php');
+test('stok opname mengikuti Perintah, Hasil, lalu Penyesuaian otomatis', () => {
+  const endpoint = source('api/endpoints/stock-opnames.php');
+  const helpers = source('api/helpers.php');
   const page = source('src/pages/StockCountSheetReport.tsx');
   const router = source('api/index.php');
-  assert.match(router, /'stock-count-report'\s*=>\s*'report'/);
-  assert.match(endpoint, /warehouse_id=\?/);
-  assert.match(endpoint, /sales_invoices/);
-  assert.match(endpoint, /goods_receipts/);
-  assert.match(endpoint, /warehouse_transfers/);
-  assert.match(endpoint, /stock_adjustments/);
-  assert.match(page, /Per Tanggal/);
+  assert.match(router, /'stock-opnames'\s*=>\s*'item'/);
+  assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_count_orders/);
+  assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_count_results/);
+  assert.match(endpoint, /Menunggu Eksekusi/);
+  assert.match(endpoint, /Dalam Penghitungan/);
+  assert.match(endpoint, /adjustment_type.*stock_opname/);
+  assert.match(endpoint, /Hapus Penyesuaian Stok/);
+  assert.match(page, /Perintah → Hasil Penghitungan → Penyesuaian Stok/);
   assert.match(page, /Hitung #1/);
   assert.match(page, /Hitung #2/);
-  assert.match(page, /Penyaringan Data/);
+  assert.match(page, /Posting Hasil/);
 });
 
 test('refresh mutasi barang meminta histori per item dan menerima penyesuaian satu sisi', () => {

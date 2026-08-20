@@ -197,8 +197,8 @@ export const helpArticles: HelpArticle[] = [
     ],
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Cara pakai", steps: ["Pilih Per Tanggal, Gudang, dan Cabang.", "Tambahkan penyaring kategori bila diperlukan.", "Tampilkan lembar lalu cetak atau simpan sebagai PDF.", "Petugas mengisi Hitung #1 dan Hitung #2 saat pemeriksaan fisik.", "Buat Penyesuaian Stok hanya untuk selisih yang sudah disetujui."] },
-      { title: "Aturan", rules: ["Kuantitas laporan adalah saldo sistem sampai akhir tanggal yang dipilih.", "Satu lembar harus mewakili gudang yang jelas.", "Hasil hitung fisik bukan perubahan stok sebelum dibuatkan dokumen penyesuaian.", "Jika rangkaian stok opname kelak disimpan sebagai dokumen, urutan hapus mengikuti Accurate: Penyesuaian Stok, Hasil Stok Opname, lalu Perintah Stok Opname."] },
+      { title: "Cara pakai", steps: ["Buat Perintah Stok Opname dengan Tanggal Mulai, Gudang, Cabang, Petugas, dan kategori bila diperlukan.", "Pada Tanggal Mulai, petugas membuat Hasil Stok Opname lalu mencetak lembar.", "Petugas mengisi Hitung #1 dan, bila diperlukan, Hitung #2.", "Posting Hasil setelah seluruh Hitung #1 lengkap.", "Sistem membuat Penyesuaian Stok otomatis hanya sebesar selisih yang ditemukan."] },
+      { title: "Aturan", rules: ["Tanggal Mulai tidak boleh mundur.", "Saldo sistem dikunci saat Hasil Stok Opname dibuat.", "Hitung #2 menjadi nilai final jika diisi; jika kosong, Hitung #1 menjadi nilai final.", "Hasil hitung fisik belum mengubah stok sebelum diposting.", "Urutan hapus mengikuti Accurate: Penyesuaian Stok, Hasil Stok Opname, lalu Perintah Stok Opname."] },
     ],
   },
   {
