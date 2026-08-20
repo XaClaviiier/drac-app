@@ -413,6 +413,11 @@ Fitur:
   - `GR-C-...` untuk Cakalang
   - `GR-M-...` untuk Mamuju
 - Input qty dan satuan tanpa harga.
+- Barang yang belum ada dapat dibuat langsung dari formulir penerimaan dan otomatis masuk ke baris transaksi.
+- Pembuatan cepat barang mewajibkan nama, kategori, satuan, serta minimal Merek Mobil atau `Universal / Semua Mobil`.
+- Model/tipe, generasi, dan CC dipilih bertingkat dari Master Kendaraan bila kecocokan barang diketahui.
+- Barang baru berstatus `Menunggu Verifikasi`; nama yang sudah ada harus memakai master lama agar stok tidak terpecah menjadi barang duplikat.
+- Kesalahan validasi ditampilkan pada formulir dan tombol menampilkan status `Menyimpan...` selama proses berjalan.
 - Status barang terpisah dari status faktur.
 - Status barang:
   - Draft

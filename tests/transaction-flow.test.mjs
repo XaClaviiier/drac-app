@@ -159,3 +159,22 @@ test('dokumentasi online mencatat aturan dan alur kerja lintas modul', () => {
   assert.match(page, /Pedoman Accurate \+ Adaptasi DRAC/);
   assert.match(page, /Sumber Pedoman/);
 });
+
+test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobil', () => {
+  const page = source('src/pages/GoodsReceiptEntry.tsx');
+  const endpoint = source('api/endpoints/items.php');
+  const allData = source('api/endpoints/all-data.php');
+  assert.match(page, /Merek Mobil \*/);
+  assert.match(page, /Model \/ Tipe/);
+  assert.match(page, /Generasi/);
+  assert.match(page, /Mesin \/ CC/);
+  assert.match(page, /vehicleCompatibilities/);
+  assert.match(page, /Menyimpan\.\.\./);
+  assert.match(page, /sudah ada dengan kode/);
+  assert.match(page, /setQuickError\(error\?\.message/);
+  assert.match(endpoint, /CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities/);
+  assert.match(endpoint, /replaceItemVehicleCompatibilities/);
+  assert.match(endpoint, /Model\/tipe kendaraan tidak sesuai dengan merek/);
+  assert.match(endpoint, /CC mesin tidak tersedia pada generasi yang dipilih/);
+  assert.match(allData, /vehicleCompatibilities/);
+});

@@ -7,6 +7,7 @@ $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
 $pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
@@ -36,6 +37,45 @@ function nextAutomaticItemCode(PDO $pdo, string $categoryCode, string $categoryN
     return $prefix.'-'.str_pad((string)($max+1),4,'0',STR_PAD_LEFT);
 }
 
+function replaceItemVehicleCompatibilities(PDO $pdo, string $itemId, array $rawRows, string $fallbackBrandId): void {
+    $rows = $rawRows ?: [['brandId' => $fallbackBrandId]];
+    $brandCheck = $pdo->prepare("SELECT id FROM vehicle_brands WHERE id=? AND is_active=1");
+    $modelCheck = $pdo->prepare("SELECT id FROM vehicle_models WHERE id=? AND brand_id=? AND is_active=1");
+    $generationCheck = $pdo->prepare("SELECT id FROM vehicle_generations WHERE id=? AND model_id=? AND is_active=1");
+    $engineCheck = $pdo->prepare("SELECT 1 FROM vehicle_generation_engines WHERE generation_id=? AND engine_cc=?");
+    $insert = $pdo->prepare("INSERT INTO item_vehicle_compatibilities(item_id,brand_id,model_id,generation_id,engine_cc,sort_order) VALUES(?,?,?,?,?,?)");
+    $pdo->prepare("DELETE FROM item_vehicle_compatibilities WHERE item_id=?")->execute([$itemId]);
+    $seen = [];
+    foreach ($rows as $position => $row) {
+        $brandId = trim((string)($row['brandId'] ?? '')) ?: $fallbackBrandId;
+        $modelId = trim((string)($row['modelId'] ?? '')) ?: null;
+        $generationId = trim((string)($row['generationId'] ?? '')) ?: null;
+        $engineCc = max(0, (int)($row['engineCc'] ?? 0)) ?: null;
+        $brandCheck->execute([$brandId]);
+        if (!$brandCheck->fetchColumn()) throw new InvalidArgumentException('Merek kendaraan pada kecocokan barang tidak valid');
+        if ($modelId !== null) {
+            $modelCheck->execute([$modelId, $brandId]);
+            if (!$modelCheck->fetchColumn()) throw new InvalidArgumentException('Model/tipe kendaraan tidak sesuai dengan merek');
+        } elseif ($generationId !== null || $engineCc !== null) {
+            throw new InvalidArgumentException('Pilih model kendaraan sebelum generasi atau CC');
+        }
+        if ($generationId !== null) {
+            $generationCheck->execute([$generationId, $modelId]);
+            if (!$generationCheck->fetchColumn()) throw new InvalidArgumentException('Generasi kendaraan tidak sesuai dengan model');
+        } elseif ($engineCc !== null) {
+            throw new InvalidArgumentException('Pilih generasi kendaraan sebelum CC');
+        }
+        if ($engineCc !== null) {
+            $engineCheck->execute([$generationId, $engineCc]);
+            if (!$engineCheck->fetchColumn()) throw new InvalidArgumentException('CC mesin tidak tersedia pada generasi yang dipilih');
+        }
+        $key = implode('|', [$brandId, $modelId ?? '', $generationId ?? '', $engineCc ?? '']);
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $insert->execute([$itemId, $brandId, $modelId, $generationId, $engineCc, $position]);
+    }
+}
+
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
@@ -53,6 +93,7 @@ switch ($method) {
                 'sellableStock' => (int)$stockRow['sellable_stock'],
             ];
         }
+        $compatibilityRows = $pdo->prepare("SELECT c.brand_id AS brandId,b.name AS brandName,c.model_id AS modelId,m.name AS modelName,c.generation_id AS generationId,g.name AS generationName,c.engine_cc AS engineCc FROM item_vehicle_compatibilities c JOIN vehicle_brands b ON b.id=c.brand_id LEFT JOIN vehicle_models m ON m.id=c.model_id LEFT JOIN vehicle_generations g ON g.id=c.generation_id WHERE c.item_id=? ORDER BY c.sort_order,c.id");
         foreach ($rows as &$r) {
             $r['categoryId'] = $r['category_id'];
             $r['categoryName'] = $r['category_name'];
@@ -68,6 +109,7 @@ switch ($method) {
             if(!$linked && !empty($r['vehicle_brand_id']))$linked=[['vehicle_brand_id'=>$r['vehicle_brand_id'],'name'=>$r['vehicle_brand_name']]];
             $r['vehicleBrandIds']=array_values(array_column($linked,'vehicle_brand_id'));
             $r['vehicleBrandNames']=array_values(array_column($linked,'name'));
+            $compatibilityRows->execute([$r['id']]);$r['vehicleCompatibilities']=array_map(function($row){$row['engineCc']=$row['engineCc']!==null?(int)$row['engineCc']:null;return $row;},$compatibilityRows->fetchAll());
             $r['verificationStatus'] = $r['verification_status'] ?? 'Verified';
             $r['createdBy'] = $r['created_by'] ?? null;
             $r['verifiedBy'] = $r['verified_by'] ?? null;
@@ -146,6 +188,7 @@ switch ($method) {
                 $branchId
             ]);
             if(!$vehicleBrandIds)$vehicleBrandIds=[$vehicleBrand['id']];$link=$pdo->prepare("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");foreach($vehicleBrandIds as $position=>$linkedBrandId){$vehicleBrandStmt->execute([$linkedBrandId]);if(!$vehicleBrandStmt->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');$link->execute([$itemId,$linkedBrandId,$position]);}
+            replaceItemVehicleCompatibilities($pdo,$itemId,(array)($d['vehicleCompatibilities']??[]),(string)$vehicleBrand['id']);
 
             $stockStmt = $pdo->prepare("
                 INSERT INTO branch_item_stocks (branch_id, item_id, stock, sellable_stock)
@@ -216,6 +259,10 @@ switch ($method) {
                 }
                 foreach(['goods_receipt_items','purchase_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,item_code=?,item_name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
                 foreach(['work_order_services','sales_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,code=?,name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
+                $pdo->prepare("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) SELECT ?,vehicle_brand_id,sort_order FROM item_vehicle_brands WHERE item_id=?")->execute([$targetId,$id]);
+                $pdo->prepare("INSERT INTO item_vehicle_compatibilities(item_id,brand_id,model_id,generation_id,engine_cc,sort_order) SELECT ?,s.brand_id,s.model_id,s.generation_id,s.engine_cc,s.sort_order FROM item_vehicle_compatibilities s WHERE s.item_id=? AND NOT EXISTS(SELECT 1 FROM item_vehicle_compatibilities t WHERE t.item_id=? AND t.brand_id=s.brand_id AND t.model_id<=>s.model_id AND t.generation_id<=>s.generation_id AND t.engine_cc<=>s.engine_cc)")->execute([$targetId,$id,$targetId]);
+                $pdo->prepare("DELETE FROM item_vehicle_compatibilities WHERE item_id=?")->execute([$id]);
+                $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);
                 $pdo->prepare("UPDATE items SET is_active=0,verification_status='Merged',merged_into_item_id=?,verified_by=?,stock=0,sellable_stock=0 WHERE id=?")->execute([$targetId,$actor['id']??null,$id]);
                 $pdo->prepare("UPDATE items SET stock=(SELECT COALESCE(SUM(stock),0) FROM branch_item_stocks WHERE item_id=?),sellable_stock=(SELECT COALESCE(SUM(sellable_stock),0) FROM branch_item_stocks WHERE item_id=?) WHERE id=?")->execute([$targetId,$targetId,$targetId]);
                 $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??'']);
@@ -264,6 +311,7 @@ switch ($method) {
                 $id
             ]);
             $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);if(!$vehicleBrandIds)$vehicleBrandIds=[$primaryBrandId];$link=$pdo->prepare("INSERT INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");foreach($vehicleBrandIds as $position=>$linkedBrandId){$primaryBrand->execute([$linkedBrandId]);if(!$primaryBrand->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');$link->execute([$id,$linkedBrandId,$position]);}
+            if(array_key_exists('vehicleCompatibilities',$d))replaceItemVehicleCompatibilities($pdo,$id,(array)$d['vehicleCompatibilities'],(string)$primaryBrandRow['id']);
 
             // Refresh group members
             $pdo->prepare("DELETE FROM item_group_members WHERE group_item_id = ?")->execute([$id]);
@@ -305,7 +353,16 @@ switch ($method) {
             $check->execute([$id]);
             if ((int)$check->fetchColumn() > 0) respondError('Barang/jasa sudah dipakai. Nonaktifkan agar histori transaksi tetap utuh.', 409);
         }
-        $pdo->prepare("DELETE FROM items WHERE id=?")->execute([$id]);
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("DELETE FROM item_vehicle_compatibilities WHERE item_id=?")->execute([$id]);
+            $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);
+            $pdo->prepare("DELETE FROM items WHERE id=?")->execute([$id]);
+            $pdo->commit();
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            respondError('Item gagal dihapus',500,$e->getMessage());
+        }
         respondSuccess(null, 'Item dihapus');
         break;
 

@@ -3,6 +3,7 @@ $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
 $pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
@@ -250,6 +251,7 @@ try {
     }
     $groupMembersAll = $pdo->query("SELECT * FROM item_group_members")->fetchAll();
     $vehicleBrandLinks=$pdo->query("SELECT ivb.item_id,ivb.vehicle_brand_id,b.name FROM item_vehicle_brands ivb JOIN vehicle_brands b ON b.id=ivb.vehicle_brand_id ORDER BY ivb.sort_order,b.name")->fetchAll();$vehicleBrandsByItem=[];foreach($vehicleBrandLinks as $link)$vehicleBrandsByItem[$link['item_id']][]=$link;
+    $compatibilityLinks=$pdo->query("SELECT c.item_id,c.brand_id AS brandId,b.name AS brandName,c.model_id AS modelId,m.name AS modelName,c.generation_id AS generationId,g.name AS generationName,c.engine_cc AS engineCc FROM item_vehicle_compatibilities c JOIN vehicle_brands b ON b.id=c.brand_id LEFT JOIN vehicle_models m ON m.id=c.model_id LEFT JOIN vehicle_generations g ON g.id=c.generation_id ORDER BY c.item_id,c.sort_order,c.id")->fetchAll();$compatibilitiesByItem=[];foreach($compatibilityLinks as $compatibility){$compatibility['engineCc']=$compatibility['engineCc']!==null?(int)$compatibility['engineCc']:null;$compatibilitiesByItem[$compatibility['item_id']][]=$compatibility;}
     $membersByGroup = [];
     foreach ($groupMembersAll as $m) {
         $membersByGroup[$m['group_item_id']][] = [
@@ -274,6 +276,7 @@ try {
         $linkedBrands=$vehicleBrandsByItem[$r['id']]??[];if(!$linkedBrands&&!empty($r['vehicle_brand_id']))$linkedBrands=[['vehicle_brand_id'=>$r['vehicle_brand_id'],'name'=>$r['vehicle_brand_name']]];
         $r['vehicleBrandIds']=array_values(array_column($linkedBrands,'vehicle_brand_id'));
         $r['vehicleBrandNames']=array_values(array_column($linkedBrands,'name'));
+        $r['vehicleCompatibilities']=$compatibilitiesByItem[$r['id']]??[];
         $r['verificationStatus'] = $r['verification_status'] ?? 'Verified';
         $r['createdBy'] = $r['created_by'] ?? null;
         $r['verifiedBy'] = $r['verified_by'] ?? null;

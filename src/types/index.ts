@@ -207,6 +207,16 @@ export interface ItemCategory {
   isActive: boolean;
 }
 
+export interface ItemVehicleCompatibility {
+  brandId: string;
+  brandName?: string;
+  modelId?: string;
+  modelName?: string;
+  generationId?: string;
+  generationName?: string;
+  engineCc?: number | null;
+}
+
 export interface Item {
   id: string;
   code: string;
@@ -219,6 +229,7 @@ export interface Item {
   vehicleBrandName?: string;
   vehicleBrandIds?: string[];
   vehicleBrandNames?: string[];
+  vehicleCompatibilities?: ItemVehicleCompatibility[];
   itemBrandId?: string;
   unit: string;
   stock: number;

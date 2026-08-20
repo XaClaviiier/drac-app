@@ -113,8 +113,8 @@ export const helpArticles: HelpArticle[] = [
     ],
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Alur kerja", steps: ["Buat Penerimaan Barang ketika barang tiba di gudang.", "Periksa gudang dan jumlah fisik, lalu terima barang agar stok bertambah.", "Buat Faktur Pembelian dari penerimaan terkait.", "Catat pembayaran supplier sebagian atau lunas."] },
-      { title: "Aturan", rules: ["Penerimaan yang sudah difakturkan tidak dapat diedit atau dihapus.", "Untuk koreksi, hapus pembayaran supplier, lalu faktur pembelian, kemudian penerimaan barang.", "Menghapus penerimaan yang belum difakturkan mengoreksi stok otomatis."] },
+      { title: "Alur kerja", steps: ["Buat Penerimaan Barang ketika barang tiba di gudang.", "Jika barang belum ada, pilih Barang belum ada lalu isi nama, kategori, merek mobil minimal, serta model/generasi/CC bila diketahui.", "Periksa gudang dan jumlah fisik, lalu terima barang agar stok bertambah.", "Buat Faktur Pembelian dari penerimaan terkait.", "Catat pembayaran supplier sebagian atau lunas."] },
+      { title: "Aturan", rules: ["Barang baru dari penerimaan disimpan sebagai Menunggu Verifikasi; gunakan Universal / Semua Mobil hanya bila barang memang tidak khusus kendaraan tertentu.", "Jika nama barang sudah ada, pilih barang lama agar master dan stok tidak terduplikasi.", "Penerimaan yang sudah difakturkan tidak dapat diedit atau dihapus.", "Untuk koreksi, hapus pembayaran supplier, lalu faktur pembelian, kemudian penerimaan barang.", "Menghapus penerimaan yang belum difakturkan mengoreksi stok otomatis."] },
     ],
   },
   {
