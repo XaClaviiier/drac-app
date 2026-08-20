@@ -1,4 +1,15 @@
 <?php
+$pdo->exec("ALTER TABLE sales_invoice_items ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER item_id");
+$salesJournalMigration='backfill_sales_stock_journal_20260820_v1';
+$migrationCheck=$pdo->prepare("SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?");$migrationCheck->execute([$salesJournalMigration]);
+if(!(int)$migrationCheck->fetchColumn()){$pdo->beginTransaction();try{
+    $pdo->exec("UPDATE sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id JOIN warehouses w ON w.branch_id=i.branch_id AND w.is_default=1 AND w.is_active=1 SET d.warehouse_id=w.id WHERE d.warehouse_id IS NULL OR d.warehouse_id=''");
+    $pdo->exec("INSERT IGNORE INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by,created_at)
+        SELECT CONCAT('MOV-BFS-',d.id),d.item_id,d.warehouse_id,NULL,d.qty,'sale','sales_invoice',i.id,i.invoice_number,CONCAT('Migrasi penjualan ',i.invoice_number),NULL,CONCAT(i.date,' 12:00:00')
+        FROM sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id JOIN items m ON m.id=d.item_id
+        WHERE m.type='Persediaan' AND d.item_id IS NOT NULL AND d.warehouse_id IS NOT NULL");
+    $pdo->prepare("INSERT INTO app_schema_migrations(migration_key) VALUES(?)")->execute([$salesJournalMigration]);$pdo->commit();
+}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}}
 $normalizeSalesInvoiceItems = static function (PDO $pdo, array $items): array {
     if (!$items) throw new InvalidArgumentException('Tambahkan minimal satu barang atau jasa ke faktur');
     $result=[];$total=0.0;$itemStmt=$pdo->prepare("SELECT id,code,name,receipt_description,type,is_active FROM items WHERE id=?");
@@ -6,7 +17,8 @@ $normalizeSalesInvoiceItems = static function (PDO $pdo, array $items): array {
         $qty=max(1,(int)($line['qty']??1));$price=max(0,(float)($line['price']??0));$itemId=!empty($line['itemId'])?(string)$line['itemId']:null;
         if($itemId){$itemStmt->execute([$itemId]);$item=$itemStmt->fetch();if(!$item||!(bool)$item['is_active'])throw new InvalidArgumentException('Barang atau jasa faktur tidak ditemukan atau nonaktif');$code=(string)$item['code'];$name=(string)$item['name'];$description=trim((string)($line['description']??''))?:(string)($item['receipt_description']??'');$isStockItem=(string)$item['type']==='Persediaan';}
         else{$code=trim((string)($line['code']??''));$name=trim((string)($line['name']??''));$description=trim((string)($line['description']??''));$isStockItem=false;if($name==='')throw new InvalidArgumentException('Nama baris faktur manual wajib diisi');}
-        $subtotal=$qty*$price;$total+=$subtotal;$result[]=compact('itemId','code','name','description','price','qty','subtotal','isStockItem');
+        $warehouseId=trim((string)($line['warehouseId']??''))?:null;
+        $subtotal=$qty*$price;$total+=$subtotal;$result[]=compact('itemId','warehouseId','code','name','description','price','qty','subtotal','isStockItem');
     }
     if($total<=0)throw new InvalidArgumentException('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
     return ['items'=>$result,'total'=>$total];
@@ -25,6 +37,13 @@ $recordInitialCustomerPayment = static function (PDO $pdo, string $invoiceId, st
         ->execute([generateId(),$paymentNumber,$invoiceId,$date,$amount,$method,$account['id'],$account['name'],'Pembayaran saat pembuatan faktur',$branchId,$actor['id']??null,$actor['name']??$actor['username']??null]);
 };
 
+$resolveSalesWarehouse=static function(PDO $pdo,string $branchId,?string $requested):string{
+    $warehouseId=$requested?:defaultWarehouseId($pdo,$branchId);$stmt=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1 AND is_sellable=1");$stmt->execute([$warehouseId,$branchId]);if(!$stmt->fetchColumn())throw new InvalidArgumentException('Gudang penjualan tidak valid, nonaktif, atau tidak diizinkan untuk penjualan');return $warehouseId;
+};
+$journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $warehouseId,string $itemId,int $qty,bool $reverse,array $actor):void{
+    recordStockMovement($pdo,$itemId,$reverse?null:$warehouseId,$reverse?$warehouseId:null,abs($qty),$reverse?'reversal':'sale','sales_invoice',$invoiceId,$invoiceNumber,($reverse?'Pembalik penjualan ':'Penjualan ').$invoiceNumber,(string)($actor['id']??''),$date.' 12:00:00');
+};
+
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
@@ -37,7 +56,7 @@ switch ($method) {
         $detailsByInvoice = [];
         foreach ($detailRows as $detail) {
             $detailsByInvoice[$detail['invoice_id']][] = [
-                'id' => (string)$detail['id'], 'itemId' => $detail['item_id'], 'code' => $detail['code'],
+                'id' => (string)$detail['id'], 'itemId' => $detail['item_id'], 'warehouseId' => $detail['warehouse_id']??null, 'code' => $detail['code'],
                 'name' => $detail['name'], 'description' => $detail['description'],
                 'price' => (float)$detail['price'], 'qty' => (int)$detail['qty'],
             ];
@@ -143,16 +162,18 @@ switch ($method) {
 
                 $insertItem = $pdo->prepare("
                     INSERT INTO sales_invoice_items
-                    (invoice_id, item_id, code, name, description, price, qty, subtotal)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (invoice_id, item_id, warehouse_id, code, name, description, price, qty, subtotal)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 foreach ($invoiceItems as $service) {
                     $insertItem->execute([
-                        $invoiceId, $service['itemId'], $service['code'], $service['name'],
+                        $invoiceId, $service['itemId'], $service['warehouseId'], $service['code'], $service['name'],
                         $service['description'], $service['price'], $service['qty'], $service['subtotal'],
                     ]);
                     if (!empty($service['itemId']) && $service['isStockItem']) {
-                        adjustBranchStockAllowNegative($pdo, $wo['branch_id'], $service['itemId'], -$service['qty']);
+                        $salesWarehouseId=$resolveSalesWarehouse($pdo,(string)$wo['branch_id'],$service['warehouseId']);
+                        adjustWarehouseStock($pdo,$salesWarehouseId,(string)$wo['branch_id'],(string)$service['itemId'],-(int)$service['qty']);
+                        $journalSale($pdo,$invoiceId,$invoiceNumber,$date,$salesWarehouseId,(string)$service['itemId'],(int)$service['qty'],false,$actor);
                     }
                 }
 
@@ -209,15 +230,17 @@ switch ($method) {
             // Stok dipotong di AKHIR, saat faktur dibuat dari WO.
             // Hanya item Persediaan; jasa dan header Group tidak mengurangi stok.
             if (!empty($normalizedInvoice['items'])) {
-                $itemStmt = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id, item_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                $itemStmt = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id, item_id, warehouse_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 foreach ($normalizedInvoice['items'] as $item) {
                     $itemStmt->execute([
-                        $invoiceId, $item['itemId'], $item['code'],
+                        $invoiceId, $item['itemId'], $item['warehouseId'], $item['code'],
                         $item['name'], $item['description'],
                         $item['price'], $item['qty'], $item['subtotal']
                     ]);
                     if (!empty($item['itemId']) && $item['isStockItem']) {
-                        adjustBranchStockAllowNegative($pdo, $branchId, $item['itemId'], -$item['qty']);
+                        $salesWarehouseId=$resolveSalesWarehouse($pdo,$branchId,$item['warehouseId']);
+                        adjustWarehouseStock($pdo,$salesWarehouseId,$branchId,(string)$item['itemId'],-(int)$item['qty']);
+                        $journalSale($pdo,$invoiceId,$invoiceNumber,$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor);
                     }
                 }
             }
@@ -290,10 +313,14 @@ switch ($method) {
             if ($paymentDate && $paymentDate < $invoiceDate) throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
             if (isBackdateReasonRequired($pdo) && ($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') throw new Exception('Alasan tanggal mundur wajib diisi');
 
-            $oldDetails = $pdo->prepare("SELECT d.item_id,d.qty,i.type FROM sales_invoice_items d LEFT JOIN items i ON i.id=d.item_id WHERE d.invoice_id=?");
+            $oldDetails = $pdo->prepare("SELECT d.item_id,d.warehouse_id,d.qty,i.type FROM sales_invoice_items d LEFT JOIN items i ON i.id=d.item_id WHERE d.invoice_id=?");
             $oldDetails->execute([$id]);
             foreach ($oldDetails->fetchAll() as $detail) {
-                if (!empty($detail['item_id']) && (string)$detail['type']==='Persediaan') adjustBranchStockAllowNegative($pdo, $current['branch_id'], $detail['item_id'], (int)$detail['qty']);
+                if (!empty($detail['item_id']) && (string)$detail['type']==='Persediaan') {
+                    $oldWarehouseId=(string)($detail['warehouse_id']?:defaultWarehouseId($pdo,(string)$current['branch_id']));
+                    adjustWarehouseStockAllowNegative($pdo,$oldWarehouseId,(string)$current['branch_id'],(string)$detail['item_id'],(int)$detail['qty']);
+                    $journalSale($pdo,$id,(string)$current['invoice_number'],(string)$current['date'],$oldWarehouseId,(string)$detail['item_id'],(int)$detail['qty'],true,$actor);
+                }
             }
 
             $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,isset($d['items'])&&is_array($d['items'])?$d['items']:[]);
@@ -328,10 +355,14 @@ switch ($method) {
             ]);
 
             $pdo->prepare("DELETE FROM sales_invoice_items WHERE invoice_id=?")->execute([$id]);
-            $insertItem = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id,item_id,code,name,description,price,qty,subtotal) VALUES (?,?,?,?,?,?,?,?)");
+            $insertItem = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id,item_id,warehouse_id,code,name,description,price,qty,subtotal) VALUES (?,?,?,?,?,?,?,?,?)");
             foreach ($items as $item) {
-                $insertItem->execute([$id,$item['itemId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['subtotal']]);
-                if (!empty($item['itemId']) && $item['isStockItem']) adjustBranchStockAllowNegative($pdo,$branchId,$item['itemId'],-$item['qty']);
+                $insertItem->execute([$id,$item['itemId'],$item['warehouseId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['subtotal']]);
+                if (!empty($item['itemId']) && $item['isStockItem']) {
+                    $salesWarehouseId=$resolveSalesWarehouse($pdo,(string)$branchId,$item['warehouseId']);
+                    adjustWarehouseStock($pdo,$salesWarehouseId,(string)$branchId,(string)$item['itemId'],-(int)$item['qty']);
+                    $journalSale($pdo,$id,(string)$current['invoice_number'],$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor);
+                }
             }
             $pdo->commit();
             respondSuccess(null, 'Faktur dan stok berhasil diperbarui');
@@ -345,7 +376,7 @@ switch ($method) {
         if (!$id) respondError('ID required');
         $pdo->beginTransaction();
         try {
-            $invoiceStmt = $pdo->prepare("SELECT wo_id,payment,branch_id FROM sales_invoices WHERE id=? FOR UPDATE");
+            $invoiceStmt = $pdo->prepare("SELECT wo_id,payment,branch_id,invoice_number,date FROM sales_invoices WHERE id=? FOR UPDATE");
             $invoiceStmt->execute([$id]);
             $invoiceRow = $invoiceStmt->fetch();
             if (!$invoiceRow) throw new Exception('Faktur tidak ditemukan');
@@ -355,7 +386,7 @@ switch ($method) {
             $linkedWoId = $invoiceRow['wo_id'];
             // Kembalikan stok sebelum detail ikut terhapus oleh ON DELETE CASCADE.
             $details = $pdo->prepare("
-                SELECT d.item_id, d.qty, i.branch_id, m.type
+                SELECT d.item_id, d.warehouse_id, d.qty, i.branch_id, m.type
                 FROM sales_invoice_items d
                 JOIN sales_invoices i ON i.id = d.invoice_id
                 LEFT JOIN items m ON m.id = d.item_id
@@ -364,7 +395,9 @@ switch ($method) {
             $details->execute([$id]);
             foreach ($details->fetchAll() as $detail) {
                 if (!empty($detail['item_id']) && (string)$detail['type']==='Persediaan') {
-                    adjustBranchStockAllowNegative($pdo, $detail['branch_id'], $detail['item_id'], (int)$detail['qty']);
+                    $oldWarehouseId=(string)($detail['warehouse_id']?:defaultWarehouseId($pdo,(string)$detail['branch_id']));
+                    adjustWarehouseStockAllowNegative($pdo,$oldWarehouseId,(string)$detail['branch_id'],(string)$detail['item_id'],(int)$detail['qty']);
+                    $journalSale($pdo,$id,(string)$invoiceRow['invoice_number'],(string)$invoiceRow['date'],$oldWarehouseId,(string)$detail['item_id'],(int)$detail['qty'],true,$requestUser ?? requireAuthenticatedUser($pdo));
                 }
             }
             $pdo->prepare("DELETE FROM sales_invoices WHERE id=?")->execute([$id]);

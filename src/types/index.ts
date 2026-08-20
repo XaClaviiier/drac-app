@@ -179,6 +179,7 @@ export interface WorkOrder {
 export interface WorkOrderService {
   id: string;
   itemId?: string;
+  warehouseId?: string;
   code?: string;
   name: string;
   description: string;
@@ -302,6 +303,7 @@ export type Permission =
   | 'customer:view' | 'customer:create' | 'customer:edit' | 'customer:delete'
   | 'vehicle:view' | 'vehicle:create' | 'vehicle:edit' | 'vehicle:delete'
   | 'item:view' | 'item:create' | 'item:edit' | 'item:delete'
+  | 'stock_opname:view' | 'stock_opname:create' | 'stock_opname:count' | 'stock_opname:post' | 'stock_opname:delete'
   | 'user:view' | 'user:create' | 'user:edit' | 'user:delete'
   | 'role:view' | 'role:create' | 'role:edit' | 'role:delete'
   | 'branch:view' | 'branch:create' | 'branch:edit' | 'branch:delete'
@@ -374,6 +376,9 @@ export interface StockMovement {
   destinationName?: string;
   quantity: number;
   movementType: string;
+  referenceType?: string;
+  referenceId?: string;
+  referenceNumber?: string;
   notes: string;
   createdAt: string;
   incoming?: number;

@@ -443,9 +443,10 @@ export default function OpeningStockImport() {
 
   const processDocument = async (
     document: AdjustmentDocument,
-    action: "post" | "delete",
+    action: "post" | "cancel" | "delete",
   ) => {
-    const reason = "";
+    const reason = action === "cancel" ? window.prompt(`Alasan pembatalan ${document.adjustmentNumber}:`)?.trim() || "" : "";
+    if (action === "cancel" && !reason) return;
     if (action === "delete") {
       const impact =
         document.status === "Posted"
@@ -1125,12 +1126,14 @@ export default function OpeningStockImport() {
               </table>
             </div>
             <div className="flex justify-end gap-2 border-t bg-[#eeeeee] px-5 py-3">
-              <button
+              {selectedDocument.status === "Draft" && <button
                 onClick={() => processDocument(selectedDocument, "delete")}
                 className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
-              >
-                {selectedDocument.status === "Draft" ? "Hapus Draft" : "Hapus Penyesuaian"}
-              </button>
+              >Hapus Draft</button>}
+              {selectedDocument.status === "Posted" && <button
+                onClick={() => processDocument(selectedDocument, "cancel")}
+                className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
+              >Batalkan dengan Mutasi Pembalik</button>}
               <button
                 onClick={() => closeDetailTab(selectedDocument.id)}
                 className="rounded bg-blue-700 px-5 py-2 text-sm font-semibold text-white"

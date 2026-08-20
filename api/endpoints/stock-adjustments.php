@@ -85,18 +85,16 @@ if ($method === 'PUT' && $id) {
         if($requestedAction==='cancel' && $doc['status']!=='Posted') throw new InvalidArgumentException('Hanya dokumen Diposting yang dapat dibatalkan');
         $reason=trim((string)($d['reason']??'')); if($requestedAction==='cancel' && $reason==='') throw new InvalidArgumentException('Alasan pembatalan wajib diisi');
         $lineStmt=$pdo->prepare("SELECT sai.*,w.branch_id FROM stock_adjustment_items sai JOIN warehouses w ON w.id=sai.warehouse_id WHERE sai.adjustment_id=?"); $lineStmt->execute([$id]); $lines=$lineStmt->fetchAll(); if(!$lines) throw new InvalidArgumentException('Rincian penyesuaian kosong');
-        foreach($lines as $line){ requireAccessibleBranch($pdo,$actor,(string)$line['branch_id']); $original=(int)$line['quantity']; $delta=$requestedAction==='post'?$original:-$original; adjustWarehouseStockAllowNegative($pdo,$line['warehouse_id'],$line['branch_id'],$line['item_id'],$delta);
-            $source=$delta<0?$line['warehouse_id']:null; $destination=$delta>0?$line['warehouse_id']:null; $movementId='MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8); $note=($requestedAction==='post'?'STOCK_ADJUSTMENT:':'CANCEL_STOCK_ADJUSTMENT:').$doc['adjustment_number'].($reason?' '.$reason:'');
-            if($requestedAction==='post') {
-                $pdo->prepare("INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,notes,created_by,created_at) VALUES(?,?,?,?,?,'adjustment',?,?,CONCAT(?,' 00:00:00'))")
-                    ->execute([$movementId,$line['item_id'],$source,$destination,abs($delta),$note,$actor['id'],$doc['adjustment_date']]);
-            } else {
-                $pdo->prepare("INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,notes,created_by) VALUES(?,?,?,?,?,'adjustment',?,?)")
-                    ->execute([$movementId,$line['item_id'],$source,$destination,abs($delta),$note,$actor['id']]);
-            }
+        foreach($lines as $line){ requireAccessibleBranch($pdo,$actor,(string)$line['branch_id']); $original=(int)$line['quantity']; $delta=$requestedAction==='post'?$original:-$original; if($delta<0)adjustWarehouseStock($pdo,$line['warehouse_id'],$line['branch_id'],$line['item_id'],$delta);else adjustWarehouseStockAllowNegative($pdo,$line['warehouse_id'],$line['branch_id'],$line['item_id'],$delta);
+            $source=$delta<0?$line['warehouse_id']:null; $destination=$delta>0?$line['warehouse_id']:null; $note=($requestedAction==='post'?'Penyesuaian ':'Pembatalan penyesuaian ').$doc['adjustment_number'].($reason?' - '.$reason:'');
+            recordStockMovement($pdo,(string)$line['item_id'],$source,$destination,abs($delta),$requestedAction==='post'?'adjustment':'reversal','stock_adjustment',(string)$doc['id'],(string)$doc['adjustment_number'],$note,(string)$actor['id'],$requestedAction==='post'?$doc['adjustment_date'].' 00:00:00':null);
         }
         if($requestedAction==='post') $pdo->prepare("UPDATE stock_adjustments SET status='Posted',posted_by=?,posted_at=NOW() WHERE id=?")->execute([$actor['id'],$id]);
-        else $pdo->prepare("UPDATE stock_adjustments SET status='Cancelled',cancelled_by=?,cancelled_at=NOW(),cancellation_reason=? WHERE id=?")->execute([$actor['id'],$reason,$id]);
+        else {
+            $pdo->prepare("UPDATE stock_adjustments SET status='Cancelled',cancelled_by=?,cancelled_at=NOW(),cancellation_reason=? WHERE id=?")->execute([$actor['id'],$reason,$id]);
+            $pdo->prepare("UPDATE stock_count_results SET status='Cancelled' WHERE adjustment_id=?")->execute([$id]);
+            $pdo->prepare("UPDATE stock_count_orders o JOIN stock_count_results r ON r.order_id=o.id SET o.status='Dibatalkan' WHERE r.adjustment_id=?")->execute([$id]);
+        }
         $pdo->commit(); respondSuccess(['status'=>$requestedAction==='post'?'Posted':'Cancelled'],$requestedAction==='post'?'Penyesuaian stok berhasil diposting':'Penyesuaian stok dibatalkan dan stok telah dibalik');
     } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
 }
@@ -108,19 +106,12 @@ if ($method === 'DELETE' && $id) {
         $stmt->execute([$id]); $doc=$stmt->fetch();
         if(!$doc) throw new InvalidArgumentException('Penyesuaian stok tidak ditemukan');
 
+        if($doc['status']!=='Draft')throw new DomainException('Dokumen yang sudah diposting tidak boleh dihapus. Gunakan Batalkan agar mutasi pembalik dan jejak audit tetap tersimpan.');
         $reason=trim((string)($d['reason']??''));
 
         $lineStmt=$pdo->prepare("SELECT sai.*,w.branch_id,w.name warehouse_name FROM stock_adjustment_items sai JOIN warehouses w ON w.id=sai.warehouse_id WHERE sai.adjustment_id=? ORDER BY sai.id");
         $lineStmt->execute([$id]); $lines=$lineStmt->fetchAll();
         foreach($lines as $line) requireAccessibleBranch($pdo,$actor,(string)$line['branch_id']);
-
-        // Dokumen Posted masih memengaruhi stok sehingga harus dibalik satu kali.
-        // Dokumen Cancelled sudah pernah dibalik oleh proses pembatalan.
-        if($doc['status']==='Posted') {
-            foreach($lines as $line) {
-                adjustWarehouseStockAllowNegative($pdo,$line['warehouse_id'],$line['branch_id'],$line['item_id'],-(int)$line['quantity']);
-            }
-        }
 
         $markers=['STOCK_ADJUSTMENT:'.$doc['adjustment_number'],'CANCEL_STOCK_ADJUSTMENT:'.$doc['adjustment_number']];
         if(!empty($doc['batch_key'])) $markers[]='OPENING_BALANCE:'.$doc['batch_key'];

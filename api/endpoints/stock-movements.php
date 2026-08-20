@@ -3,11 +3,13 @@ $actor=requireAuthenticatedUser($pdo);
 if($method==='GET'){
     $allowed=array_fill_keys(getAccessibleBranchIds($pdo,$actor),true);
     $itemId=trim((string)($_GET['itemId']??''));
+    $warehouseId=trim((string)($_GET['warehouseId']??''));
     $dateFrom=trim((string)($_GET['dateFrom']??''));
     $dateTo=trim((string)($_GET['dateTo']??''));
     $search=trim((string)($_GET['search']??''));
     $validDate=fn($value)=>$value===''||preg_match('/^\d{4}-\d{2}-\d{2}$/',$value);
     if(!$validDate($dateFrom)||!$validDate($dateTo)||($dateFrom!==''&&$dateTo!==''&&$dateFrom>$dateTo))respondError('Periode mutasi tidak valid',422);
+    if($warehouseId!==''){$warehouseAccess=$pdo->prepare("SELECT branch_id FROM warehouses WHERE id=? AND is_active=1");$warehouseAccess->execute([$warehouseId]);$warehouseBranch=$warehouseAccess->fetchColumn();if($warehouseBranch===false||!isset($allowed[(string)$warehouseBranch]))respondError('Gudang tidak ditemukan atau tidak dapat diakses',403);}
 
     $sql="SELECT m.*,i.name item_name,sw.name source_name,sw.branch_id source_branch_id,dw.name destination_name,dw.branch_id destination_branch_id
           FROM stock_movements m
@@ -24,20 +26,28 @@ if($method==='GET'){
 
     $runningBalance=0;
     if($itemId!==''){
-        $balanceStmt=$pdo->prepare("SELECT COALESCE(SUM(ws.quantity),0) FROM warehouse_stocks ws JOIN warehouses w ON w.id=ws.warehouse_id WHERE ws.item_id=? AND w.branch_id IN (".implode(',',array_fill(0,max(1,count($allowed)),'?')).")");
-        $balanceParams=array_merge([$itemId],count($allowed)?array_keys($allowed):['__none__']);$balanceStmt->execute($balanceParams);$runningBalance=(int)$balanceStmt->fetchColumn();
+        if($warehouseId!==''){$balanceStmt=$pdo->prepare("SELECT COALESCE(quantity,0) FROM warehouse_stocks WHERE item_id=? AND warehouse_id=?");$balanceStmt->execute([$itemId,$warehouseId]);}
+        else{$balanceStmt=$pdo->prepare("SELECT COALESCE(SUM(ws.quantity),0) FROM warehouse_stocks ws JOIN warehouses w ON w.id=ws.warehouse_id WHERE ws.item_id=? AND w.branch_id IN (".implode(',',array_fill(0,max(1,count($allowed)),'?')).")");$balanceParams=array_merge([$itemId],count($allowed)?array_keys($allowed):['__none__']);$balanceStmt->execute($balanceParams);}
+        $runningBalance=(int)$balanceStmt->fetchColumn();
     }
     $rows=[];$needle=strtolower($search);
     foreach($allRows as $row){
         $sourceAllowed=!empty($row['source_branch_id'])&&isset($allowed[(string)$row['source_branch_id']]);
         $destinationAllowed=!empty($row['destination_branch_id'])&&isset($allowed[(string)$row['destination_branch_id']]);
-        $incoming=$destinationAllowed?(int)$row['quantity']:0;$outgoing=$sourceAllowed?(int)$row['quantity']:0;
+        if($warehouseId!==''){
+            $incoming=(string)$row['destination_warehouse_id']===$warehouseId&&$row['movement_type']!=='transfer_send'?(int)$row['quantity']:0;
+            $outgoing=(string)$row['source_warehouse_id']===$warehouseId&&$row['movement_type']!=='transfer_receive'?(int)$row['quantity']:0;
+        }else{
+            $incoming=$destinationAllowed&&$row['movement_type']!=='transfer_send'?(int)$row['quantity']:0;
+            $outgoing=$sourceAllowed&&$row['movement_type']!=='transfer_receive'?(int)$row['quantity']:0;
+        }
+        if($warehouseId!==''&&$incoming===0&&$outgoing===0)continue;
         $rowDate=substr((string)$row['created_at'],0,10);$searchable=strtolower(implode(' ',[$row['movement_type'],$row['notes'],$row['source_name'],$row['destination_name']]));
         $row['running_balance']=$runningBalance;$runningBalance-=$incoming-$outgoing;
         if(($dateFrom!==''&&$rowDate<$dateFrom)||($dateTo!==''&&$rowDate>$dateTo)||($needle!==''&&!str_contains($searchable,$needle)))continue;
         $row['incoming']=$incoming;$row['outgoing']=$outgoing;$rows[]=$row;
     }
-    foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['quantity']=(int)$r['quantity'];$r['createdAt']=$r['created_at'];$r['incoming']=(int)$r['incoming'];$r['outgoing']=(int)$r['outgoing'];$r['balance']=(int)$r['running_balance'];}
+    foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['referenceType']=$r['reference_type']??null;$r['referenceId']=$r['reference_id']??null;$r['referenceNumber']=$r['reference_number']??null;$r['quantity']=(int)$r['quantity'];$r['createdAt']=$r['created_at'];$r['incoming']=(int)$r['incoming'];$r['outgoing']=(int)$r['outgoing'];$r['balance']=(int)$r['running_balance'];}
     respondSuccess($rows);
 }
 if($method!=='POST')respondError('Method not allowed',405);
@@ -75,16 +85,9 @@ $pdo->beginTransaction();
 try{
     $stmt=$pdo->prepare("SELECT quantity FROM warehouse_stocks WHERE warehouse_id=? AND item_id=? FOR UPDATE");$stmt->execute([$source,$d['itemId']]);$available=(int)($stmt->fetchColumn()?:0);
     if($available<$qty)throw new Exception("Stok sumber tidak mencukupi (tersedia {$available})");
-    $pdo->prepare("UPDATE warehouse_stocks SET quantity=quantity-? WHERE warehouse_id=? AND item_id=?")->execute([$qty,$source,$d['itemId']]);
-    $pdo->prepare("INSERT INTO warehouse_stocks(warehouse_id,item_id,quantity) VALUES(?,?,?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)")->execute([$destination,$d['itemId'],$qty]);
     $sourceBranch=(string)$warehouseMap[$source]['branch_id'];$destinationBranch=(string)$warehouseMap[$destination]['branch_id'];
-    if($sourceBranch!==$destinationBranch){
-        $branchQtyStmt=$pdo->prepare("SELECT COALESCE(SUM(ws.quantity),0) FROM warehouse_stocks ws JOIN warehouses w ON w.id=ws.warehouse_id WHERE w.branch_id=? AND ws.item_id=?");
-        $branchUpsert=$pdo->prepare("INSERT INTO branch_item_stocks(branch_id,item_id,stock,sellable_stock) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE stock=VALUES(stock),sellable_stock=VALUES(sellable_stock)");
-        foreach([$sourceBranch,$destinationBranch] as $branchId){$branchQtyStmt->execute([$branchId,$d['itemId']]);$branchQty=(int)$branchQtyStmt->fetchColumn();$branchUpsert->execute([$branchId,$d['itemId'],$branchQty,$branchQty]);}
-    }
-    $mid='MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(3)),0,6);
-    $pdo->prepare("INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,notes,created_by) VALUES(?,?,?,?,?,'transfer',?,?)")
-        ->execute([$mid,$d['itemId'],$source,$destination,$qty,$d['notes']??'',$actor['id']]);
+    adjustWarehouseStockAllowNegative($pdo,$source,$sourceBranch,(string)$d['itemId'],-$qty);
+    adjustWarehouseStockAllowNegative($pdo,$destination,$destinationBranch,(string)$d['itemId'],$qty);
+    $mid=recordStockMovement($pdo,(string)$d['itemId'],$source,$destination,$qty,'transfer','manual_transfer',null,null,(string)($d['notes']??''),(string)$actor['id']);
     $pdo->commit();respondSuccess(['id'=>$mid],'Mutasi stok berhasil');
 }catch(Exception $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}

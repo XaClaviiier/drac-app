@@ -131,6 +131,7 @@ export default function ItemsAndServices() {
   });
   const [movementDateTo, setMovementDateTo] = useState(() => localDateKey());
   const [movementSearch, setMovementSearch] = useState('');
+  const [movementWarehouseId, setMovementWarehouseId] = useState('');
   const [itemMovementRows, setItemMovementRows] = useState<StockMovement[]>([]);
   const [movementLoading, setMovementLoading] = useState(false);
   const [movementError, setMovementError] = useState('');
@@ -1149,6 +1150,7 @@ export default function ItemsAndServices() {
     if (!editingItem) return;
     setMovementLoading(true);setMovementError('');
     const query = new URLSearchParams({ itemId: editingItem.id, dateFrom: movementDateFrom, dateTo: movementDateTo });
+    if (movementWarehouseId) query.set('warehouseId', movementWarehouseId);
     if (movementSearch.trim()) query.set('search', movementSearch.trim());
     const response = await api.get<StockMovement[]>(`stock-movements?${query.toString()}`);
     if (response.success) setItemMovementRows(response.data || []);
@@ -1500,6 +1502,10 @@ export default function ItemsAndServices() {
               </div>}
               {itemFormTab === 'movement' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
                 <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <select value={movementWarehouseId} onChange={event => setMovementWarehouseId(event.target.value)} className="h-10 min-w-56 rounded border border-slate-300 bg-white px-3 text-sm">
+                    <option value="">Semua Gudang yang Diakses</option>
+                    {data.warehouses.filter(warehouse => warehouse.isActive && !warehouse.isSystem).map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.branchName} · {warehouse.name}</option>)}
+                  </select>
                   <input type="date" value={movementDateFrom} onChange={event => setMovementDateFrom(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
                   <span className="text-sm font-medium text-slate-600">s/d</span>
                   <input type="date" value={movementDateTo} onChange={event => setMovementDateTo(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
@@ -1508,7 +1514,7 @@ export default function ItemsAndServices() {
                 </div>
                 <div className="overflow-auto rounded-t-lg border border-slate-300">
                   <table className="min-w-[1100px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-3 py-2.5 text-left">Tanggal</th><th className="px-3 py-2.5 text-left">No. Sumber #</th><th className="px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Nilai Satuan</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
-                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5">{new Date(movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.id}</td><td className="px-3 py-2.5">{movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right">—</td><td className="px-3 py-2.5 text-right text-emerald-700">{movement.incoming || ''}</td><td className="px-3 py-2.5 text-right text-red-700">{movement.outgoing || ''}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td></tr>)}</tbody>
+                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5">{new Date(movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.referenceNumber || movement.id}</td><td className="px-3 py-2.5">{movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right">—</td><td className="px-3 py-2.5 text-right text-emerald-700">{movement.incoming || ''}</td><td className="px-3 py-2.5 text-right text-red-700">{movement.outgoing || ''}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td></tr>)}</tbody>
                   </table>
                   {movementError && <div className="bg-red-50 py-3 text-center text-sm text-red-700">{movementError}</div>}
                   {!movementLoading && !movementError && !itemMovementRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada data mutasi pada periode ini.</div>}

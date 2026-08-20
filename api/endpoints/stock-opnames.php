@@ -1,5 +1,8 @@
 <?php
 $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+$hasOpnamePermission=static function(PDO $pdo,array $actor,string $permission,string $fallback):bool{
+    return !empty($actor['is_owner'])||authenticatedUserHasPermission($pdo,$actor,$permission)||authenticatedUserHasPermission($pdo,$actor,$fallback);
+};
 
 $loadOrder = static function(PDO $pdo, string $id): ?array {
     $stmt=$pdo->prepare("SELECT o.*,w.code warehouse_code,w.name warehouse_name,b.name branch_name,
@@ -34,6 +37,7 @@ $orderRows = static function(PDO $pdo, string $resultId): array {
 };
 
 if($method==='GET') {
+    if(!$hasOpnamePermission($pdo,$actor,'stock_opname:view','item:view'))respondError('Akun tidak memiliki izin melihat Stok Opname',403);
     if($id) {
         $row=$loadOrder($pdo,$id); if(!$row)respondError('Perintah Stok Opname tidak ditemukan',404);
         requireAccessibleBranch($pdo,$actor,(string)$row['branch_id']); $payload=$mapOrder($row);
@@ -50,6 +54,7 @@ if($method==='GET') {
 
 $d=getInput();
 if($method==='POST') {
+    if(!$hasOpnamePermission($pdo,$actor,'stock_opname:create','item:create'))respondError('Akun tidak memiliki izin membuat Perintah Stok Opname',403);
     $startDate=trim((string)($d['startDate']??'')); $warehouseId=trim((string)($d['warehouseId']??'')); $assignedId=trim((string)($d['assignedUserId']??''));
     if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$startDate)||$startDate<date('Y-m-d'))respondError('Tanggal mulai tidak boleh mundur',422);
     $warehouseStmt=$pdo->prepare("SELECT id,branch_id FROM warehouses WHERE id=? AND is_active=1 AND is_system=0");$warehouseStmt->execute([$warehouseId]);$warehouse=$warehouseStmt->fetch();if(!$warehouse)respondError('Gudang tidak valid',422);
@@ -70,6 +75,8 @@ if($method==='POST') {
 
 if($method==='PUT'&&$id) {
     $action=(string)($d['action']??''); if(!in_array($action,['start','save-result','post-result'],true))respondError('Aksi Stok Opname tidak valid',422);
+    if($action==='post-result'&&!$hasOpnamePermission($pdo,$actor,'stock_opname:post','__no_fallback__'))respondError('Posting hasil hanya boleh dilakukan Owner atau Supervisor yang diberi izin Posting Stok Opname',403);
+    if($action!=='post-result'&&!$hasOpnamePermission($pdo,$actor,'stock_opname:count','item:view'))respondError('Akun tidak memiliki izin melakukan penghitungan stok',403);
     $pdo->beginTransaction();try{
         $row=$loadOrder($pdo,$id);if(!$row)throw new InvalidArgumentException('Perintah Stok Opname tidak ditemukan');requireAccessibleBranch($pdo,$actor,(string)$row['branch_id']);
         if($action==='start') {
@@ -78,11 +85,12 @@ if($method==='PUT'&&$id) {
             if((string)$row['assigned_user_id']!==(string)$actor['id']&&empty($actor['is_owner']))throw new InvalidArgumentException('Hanya petugas yang ditunjuk atau Owner dapat memulai penghitungan');
             $period=date('ym');$seq=$pdo->prepare("SELECT result_number FROM stock_count_results WHERE result_number LIKE ? ORDER BY result_number DESC LIMIT 1 FOR UPDATE");$seq->execute(['HSO-'.$period.'-%']);$last=(string)($seq->fetchColumn()?:'');$next=preg_match('/(\d{4})$/',$last,$m)?(int)$m[1]+1:1;$resultNumber='HSO-'.$period.'-'.str_pad((string)$next,4,'0',STR_PAD_LEFT);$resultId='SCR-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);
             $pdo->prepare("INSERT INTO stock_count_results(id,result_number,order_id,result_date,status,created_by) VALUES(?,?,?,?, 'Draft',?)")->execute([$resultId,$resultNumber,$id,date('Y-m-d'),$actor['id']]);
-            $sql="SELECT i.id,i.code,i.name,i.category_name,i.unit,COALESCE(s.quantity,0) system_qty FROM items i LEFT JOIN warehouse_stocks s ON s.item_id=i.id COLLATE utf8mb4_unicode_ci AND s.warehouse_id=? WHERE i.type='Persediaan' AND i.is_active=1";
-            $params=[$row['warehouse_id']];if($row['category_id']){$sql.=" AND i.category_id=?";$params[]=$row['category_id'];}$sql.=" ORDER BY i.category_name,i.name,i.code";$items=$pdo->prepare($sql);$items->execute($params);$insert=$pdo->prepare("INSERT INTO stock_count_result_items(result_id,item_id,item_code,item_name,category_name,unit,system_quantity) VALUES(?,?,?,?,?,?,?)");$count=0;foreach($items->fetchAll()as$item){$insert->execute([$resultId,$item['id'],$item['code'],$item['name'],$item['category_name']?:'Tanpa Kategori',$item['unit']??'',(int)$item['system_qty']]);$count++;}if(!$count)throw new InvalidArgumentException('Tidak ada barang untuk dihitung');
+            $sql="SELECT i.id,i.code,i.name,i.category_name,i.unit,COALESCE(s.quantity,0) system_qty,COALESCE(s.stock_version,0) system_version FROM items i LEFT JOIN warehouse_stocks s ON s.item_id=i.id COLLATE utf8mb4_unicode_ci AND s.warehouse_id=? WHERE i.type='Persediaan' AND i.is_active=1";
+            $params=[$row['warehouse_id']];if($row['category_id']){$sql.=" AND i.category_id=?";$params[]=$row['category_id'];}$sql.=" ORDER BY i.category_name,i.name,i.code";$items=$pdo->prepare($sql);$items->execute($params);$insert=$pdo->prepare("INSERT INTO stock_count_result_items(result_id,item_id,item_code,item_name,category_name,unit,system_quantity,system_version) VALUES(?,?,?,?,?,?,?,?)");$count=0;foreach($items->fetchAll()as$item){$insert->execute([$resultId,$item['id'],$item['code'],$item['name'],$item['category_name']?:'Tanpa Kategori',$item['unit']??'',(int)$item['system_qty'],(int)$item['system_version']]);$count++;}if(!$count)throw new InvalidArgumentException('Tidak ada barang untuk dihitung');
             $pdo->prepare("UPDATE stock_count_orders SET status='Dalam Penghitungan' WHERE id=?")->execute([$id]);$pdo->commit();respondSuccess(['resultId'=>$resultId,'resultNumber'=>$resultNumber],'Hasil Stok Opname dibuat');
         }
         if(!$row['result_id']||$row['result_status']!=='Draft')throw new InvalidArgumentException('Hasil Stok Opname tidak dapat diubah');
+        if($action==='save-result'&&(string)$row['assigned_user_id']!==(string)$actor['id']&&empty($actor['is_owner'])&&!authenticatedUserHasPermission($pdo,$actor,'stock_opname:post'))throw new InvalidArgumentException('Hanya petugas yang ditunjuk atau Supervisor dapat menyimpan hasil penghitungan');
         $inputRows=is_array($d['rows']??null)?$d['rows']:[];
         $byId=[];foreach($inputRows as $input)$byId[(int)($input['id']??0)]=$input;
         $stored=$pdo->prepare("SELECT * FROM stock_count_result_items WHERE result_id=? FOR UPDATE");$stored->execute([$row['result_id']]);$storedRows=$stored->fetchAll();
@@ -100,6 +108,13 @@ if($method==='PUT'&&$id) {
         }
         if($action==='save-result'){$pdo->prepare("UPDATE stock_count_results SET notes=? WHERE id=?")->execute([trim((string)($d['notes']??'')),$row['result_id']]);$pdo->commit();respondSuccess(null,'Hasil hitung disimpan sebagai Draft');}
         if(!$complete)throw new InvalidArgumentException('Hitung #1 wajib diisi untuk seluruh barang sebelum diposting');
+        // Optimistic warehouse lock: setiap perubahan stok menaikkan versi.
+        // Hasil tidak boleh diposting bila ada penerimaan/penjualan/transfer/
+        // penyesuaian sejak lembar hitung dibuat, walaupun saldo akhirnya sama.
+        $versionStmt=$pdo->prepare("SELECT stock_version FROM warehouse_stocks WHERE warehouse_id=? AND item_id=? FOR UPDATE");
+        $changed=[];
+        foreach($storedRows as $item){$versionStmt->execute([$row['warehouse_id'],$item['item_id']]);$currentVersion=$versionStmt->fetchColumn();$currentVersion=$currentVersion===false?0:(int)$currentVersion;if($currentVersion!==(int)$item['system_version'])$changed[]=$item['item_code'].' '.$item['item_name'];}
+        if($changed)throw new DomainException('Posting ditolak karena ada mutasi stok setelah penghitungan dimulai: '.implode(', ',array_slice($changed,0,5)).(count($changed)>5?' dan lainnya':'').'. Buat ulang Hasil Stok Opname agar saldo acuan diperbarui.');
         $adjustmentId=null;$adjustmentNumber=null;
         if($differences){
             $period=date('ym');$seq=$pdo->prepare("SELECT adjustment_number FROM stock_adjustments WHERE adjustment_number LIKE ? ORDER BY adjustment_number DESC LIMIT 1 FOR UPDATE");$seq->execute(['ADJ-'.$period.'-%']);$last=(string)($seq->fetchColumn()?:'');$next=preg_match('/(\d{4})$/',$last,$m)?(int)$m[1]+1:1;
@@ -111,7 +126,7 @@ if($method==='PUT'&&$id) {
                 $lineInsert->execute([$adjustmentId,$item['item_id'],$row['warehouse_id'],$item['item_code'],$item['item_name'],$item['unit'],$variance]);
                 adjustWarehouseStockAllowNegative($pdo,$row['warehouse_id'],$row['branch_id'],$item['item_id'],$variance);
                 $source=$variance<0?$row['warehouse_id']:null;$dest=$variance>0?$row['warehouse_id']:null;
-                $pdo->prepare("INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,notes,created_by) VALUES(?,?,?,?,?,'adjustment',?,?)")->execute(['MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8),$item['item_id'],$source,$dest,abs($variance),'STOCK_ADJUSTMENT:'.$adjustmentNumber.' STOCK_OPNAME:'.$row['order_number'],$actor['id']]);
+                recordStockMovement($pdo,(string)$item['item_id'],$source,$dest,abs($variance),'adjustment','stock_opname',(string)$row['result_id'],(string)$row['result_number'],'Penyesuaian '.$adjustmentNumber.' dari '.$row['order_number'],(string)$actor['id']);
             }
         }
         $pdo->prepare("UPDATE stock_count_results SET status='Posted',adjustment_id=?,adjustment_number=?,notes=?,posted_by=?,posted_at=NOW() WHERE id=?")->execute([$adjustmentId,$adjustmentNumber,trim((string)($d['notes']??'')),$actor['id'],$row['result_id']]);$pdo->prepare("UPDATE stock_count_orders SET status='Selesai',completed_at=NOW() WHERE id=?")->execute([$id]);$pdo->commit();respondSuccess(['adjustmentId'=>$adjustmentId,'adjustmentNumber'=>$adjustmentNumber],'Hasil Stok Opname diposting dan selisih stok disesuaikan');
@@ -119,6 +134,7 @@ if($method==='PUT'&&$id) {
 }
 
 if($method==='DELETE'&&$id) {
+    if(!$hasOpnamePermission($pdo,$actor,'stock_opname:delete','item:delete'))respondError('Akun tidak memiliki izin menghapus dokumen Stok Opname',403);
     $target=(string)($d['target']??'order');$pdo->beginTransaction();try{$row=$loadOrder($pdo,$id);if(!$row)throw new InvalidArgumentException('Perintah Stok Opname tidak ditemukan');requireAccessibleBranch($pdo,$actor,(string)$row['branch_id']);
         if($target==='result'){if(!$row['result_id'])throw new InvalidArgumentException('Hasil Stok Opname belum tersedia');if($row['adjustment_id'])throw new InvalidArgumentException('Hapus Penyesuaian Stok '.$row['adjustment_number'].' terlebih dahulu');$pdo->prepare("DELETE FROM stock_count_result_items WHERE result_id=?")->execute([$row['result_id']]);$pdo->prepare("DELETE FROM stock_count_results WHERE id=?")->execute([$row['result_id']]);$pdo->prepare("UPDATE stock_count_orders SET status='Menunggu Eksekusi',completed_at=NULL WHERE id=?")->execute([$id]);$pdo->commit();respondSuccess(null,'Hasil Stok Opname dihapus');}
         if($row['result_id'])throw new InvalidArgumentException('Hapus Hasil Stok Opname terlebih dahulu');$pdo->prepare("DELETE FROM stock_count_orders WHERE id=?")->execute([$id]);$pdo->commit();respondSuccess(null,'Perintah Stok Opname dihapus');

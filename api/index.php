@@ -44,7 +44,7 @@ $permissionByResource = [
     'customers' => 'customer', 'customer-people' => 'customer', 'vehicles' => 'vehicle',
     'suppliers' => 'supplier', 'items' => 'item',
     'item-categories' => 'item', 'item-brands' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item', 'stock-adjustments' => 'item',
-    'warehouse-transfers' => 'item', 'stock-count-report' => 'report', 'stock-opnames' => 'item',
+    'warehouse-transfers' => 'item', 'stock-count-report' => 'report',
     'work-orders' => 'wo', 'sales-invoices' => 'invoice',
     'goods-receipts' => 'receipt', 'purchase-invoices' => 'purchase',
 ];

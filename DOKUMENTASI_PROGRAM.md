@@ -740,7 +740,28 @@ Sebelum go-live penuh, lakukan pengujian berikut:
 
 ---
 
-## 15. Penutup
+## 15. Aturan Operasional Stok dan Gudang
+
+1. `warehouse_stocks` adalah sumber saldo stok per gudang. Saldo cabang dan stok
+   pada master barang merupakan hasil sinkronisasi.
+2. Setiap penerimaan, faktur penjualan, transfer, penyesuaian, dan hasil stok
+   opname yang diposting wajib membuat jurnal mutasi dengan nomor dokumen sumber.
+3. Faktur penjualan mengurangi gudang penjualan yang dipilih. Gudang harus aktif,
+   berada pada cabang faktur, dan diizinkan untuk penjualan.
+4. Transfer dapat disimpan sebagai Draft. Saat dikirim, stok gudang asal berkurang;
+   saat diterima, stok gudang tujuan bertambah. Penerimaan sebagian diperbolehkan.
+5. Draft dapat dihapus. Transfer atau penyesuaian yang sudah diposting tidak
+   dihapus langsung; gunakan pembatalan dengan alasan agar mutasi pembalik tercatat.
+6. Gudang tidak dapat dinonaktifkan atau dipindahkan cabang apabila masih memiliki
+   saldo, transfer terbuka, penerimaan Draft, atau stok opname yang belum selesai.
+7. Hasil stok opname menyimpan versi saldo ketika penghitungan dimulai. Posting
+   ditolak bila ada mutasi pada barang/gudang tersebut selama proses penghitungan.
+8. Petugas yang ditunjuk mengisi hitungan, sedangkan persetujuan dan posting hanya
+   dilakukan Owner atau role dengan izin `stock_opname:post`.
+9. Kartu Stok dapat difilter per gudang. Saldo berjalan dihitung relatif terhadap
+   gudang yang dipilih dan menampilkan nomor dokumen sumber.
+
+## 16. Penutup
 
 Dokter AC Mobil Management System dirancang sebagai pusat operasional bengkel multi-cabang. Data pelanggan dan kendaraan dapat digunakan bersama, sedangkan transaksi, stok, nomor dokumen, dan tanggung jawab pekerjaan tetap dapat dilacak berdasarkan cabang.
 

@@ -4,10 +4,12 @@ import test from 'node:test';
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('pembuatan faktur berjalan atomik dan mengizinkan stok minus', () => {
+test('pembuatan faktur berjalan atomik, memilih gudang, dan menolak stok minus', () => {
   const php = source('api/endpoints/sales-invoices.php');
   assert.match(php, /beginTransaction\s*\(/);
-  assert.match(php, /adjustBranchStockAllowNegative\s*\(/);
+  assert.match(php, /adjustWarehouseStock\s*\(/);
+  assert.match(php, /warehouse_id/);
+  assert.match(php, /recordStockMovement\s*\(/);
   assert.match(php, /->commit\s*\(/);
   assert.match(php, /->rollBack\s*\(/);
   assert.match(php, /invoice_id\s*=\s*\?/);
@@ -24,7 +26,8 @@ test('pembayaran mengunci faktur dan menolak nilai melebihi sisa tagihan', () =>
 
 test('penghapusan faktur mengembalikan stok dan melepas relasi WO', () => {
   const php = source('api/endpoints/sales-invoices.php');
-  assert.match(php, /adjustBranchStockAllowNegative\([^;]+\(int\)\$detail\['qty'\]/s);
+  assert.match(php, /adjustWarehouseStockAllowNegative\([^;]+\(int\)\$detail\['qty'\]/s);
+  assert.match(php, /Pembalik penjualan/);
   assert.match(php, /UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL/);
   assert.match(php, /Hapus pembayaran terlebih dahulu sebelum menghapus faktur/);
 });
@@ -74,18 +77,18 @@ test('stok opname mengikuti Perintah, Hasil, lalu Penyesuaian otomatis', () => {
   const endpoint = source('api/endpoints/stock-opnames.php');
   const helpers = source('api/helpers.php');
   const page = source('src/pages/StockCountSheetReport.tsx');
-  const router = source('api/index.php');
-  assert.match(router, /'stock-opnames'\s*=>\s*'item'/);
   assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_count_orders/);
   assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_count_results/);
   assert.match(endpoint, /Menunggu Eksekusi/);
   assert.match(endpoint, /Dalam Penghitungan/);
   assert.match(endpoint, /adjustment_type.*stock_opname/);
+  assert.match(endpoint, /system_version/);
+  assert.match(endpoint, /stock_opname:post/);
   assert.match(endpoint, /Hapus Penyesuaian Stok/);
   assert.match(page, /Perintah → Hasil Penghitungan → Penyesuaian Stok/);
   assert.match(page, /Hitung #1/);
   assert.match(page, /Hitung #2/);
-  assert.match(page, /Posting Hasil/);
+  assert.match(page, /Setujui & Posting/);
 });
 
 test('refresh mutasi barang meminta histori per item dan menerima penyesuaian satu sisi', () => {
@@ -94,23 +97,47 @@ test('refresh mutasi barang meminta histori per item dan menerima penyesuaian sa
   assert.match(endpoint, /\$_GET\['itemId'\]/);
   assert.match(endpoint, /\$_GET\['dateFrom'\]/);
   assert.match(endpoint, /\$_GET\['dateTo'\]/);
+  assert.match(endpoint, /\$_GET\['warehouseId'\]/);
   assert.match(endpoint, /source_branch_id[^\n]+\|\|[^\n]+destination_branch_id/);
   assert.match(page, /stock-movements\?\$\{query\.toString\(\)\}/);
   assert.match(page, /onClick=\{loadItemMovements\}/);
+  assert.match(page, /Semua Gudang yang Diakses/);
 });
 
-test('hapus penyesuaian stok mengikuti alur Accurate dan mengoreksi stok otomatis', () => {
+test('seluruh dokumen stok menulis jurnal bernomor dan transfer mendukung pembatalan', () => {
+  const helpers = source('api/helpers.php');
+  const sales = source('api/endpoints/sales-invoices.php');
+  const receipts = source('api/endpoints/goods-receipts.php');
+  const transfers = source('api/endpoints/warehouse-transfers.php');
+  assert.match(helpers, /function recordStockMovement/);
+  assert.match(helpers, /reference_number/);
+  assert.match(sales, /'sales_invoice'/);
+  assert.match(receipts, /'goods_receipt'/);
+  assert.match(transfers, /transfer_send/);
+  assert.match(transfers, /transfer_receive/);
+  assert.match(transfers, /mutasi pembalik/i);
+  assert.match(transfers, /Hanya transfer Draft yang dapat dikirim/);
+});
+
+test('gudang tidak dapat dinonaktifkan saat saldo atau dokumen masih terbuka', () => {
+  const endpoint = source('api/endpoints/warehouses.php');
+  assert.match(endpoint, /SUM\(ABS\(quantity\)\+ABS\(reserved_quantity\)\)/);
+  assert.match(endpoint, /warehouse_transfers/);
+  assert.match(endpoint, /stock_count_orders/);
+  assert.match(endpoint, /goods_receipts/);
+});
+
+test('penyesuaian posted dibatalkan dengan mutasi pembalik dan tidak dihapus', () => {
   const endpoint = source('api/endpoints/stock-adjustments.php');
   const helpers = source('api/helpers.php');
   const page = source('src/pages/OpeningStockImport.tsx');
-  assert.match(endpoint, /\$doc\['status'\]===\s*'Posted'/);
-  assert.doesNotMatch(endpoint, /\$doc\['status'\]===\s*'Cancelled'[^}]+adjustWarehouseStockAllowNegative/s);
+  assert.match(endpoint, /Dokumen yang sudah diposting tidak boleh dihapus/);
+  assert.match(endpoint, /movementType|'reversal'/);
   assert.match(endpoint, /DELETE FROM stock_movements WHERE notes=\?/);
   assert.match(endpoint, /stock_adjustment_maintenance_logs/);
   assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_adjustment_maintenance_logs/);
-  assert.match(page, /Hapus Penyesuaian/);
-  assert.doesNotMatch(page, /Batalkan Penyesuaian/);
-  assert.match(page, /Stok dan mutasi yang dibuat dokumen ini akan dikoreksi otomatis/);
+  assert.match(page, /Batalkan dengan Mutasi Pembalik/);
+  assert.doesNotMatch(page, /Hapus Penyesuaian/);
   assert.match(page, /removeWithBody\("stock-adjustments"/);
 });
 

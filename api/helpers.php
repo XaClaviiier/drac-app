@@ -377,6 +377,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_stock_item (item_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    $pdo->exec("ALTER TABLE warehouse_stocks ADD COLUMN IF NOT EXISTS stock_version BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER reserved_quantity");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_movements (
             id VARCHAR(30) NOT NULL PRIMARY KEY,
@@ -392,6 +393,13 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_movement_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    // VARCHAR keeps the journal extensible (send/receive/reversal) and avoids
+    // silently coercing new movement types to an empty MySQL ENUM value.
+    $movementTypeColumn=$pdo->query("SHOW COLUMNS FROM stock_movements LIKE 'movement_type'")->fetch();
+    if($movementTypeColumn&&str_starts_with(strtolower((string)$movementTypeColumn['Type']),'enum('))$pdo->exec("ALTER TABLE stock_movements MODIFY movement_type VARCHAR(30) NOT NULL DEFAULT 'transfer'");
+    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_type VARCHAR(40) NULL AFTER movement_type");
+    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id VARCHAR(64) NULL AFTER reference_type");
+    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_number VARCHAR(60) NULL AFTER reference_id");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_adjustments (
             id VARCHAR(30) NOT NULL PRIMARY KEY,
@@ -498,6 +506,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_stock_count_result_item (item_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    $pdo->exec("ALTER TABLE stock_count_result_items ADD COLUMN IF NOT EXISTS system_version BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER system_quantity");
     $pdo->exec("CREATE TABLE IF NOT EXISTS cash_accounts (
         id VARCHAR(64) PRIMARY KEY, code VARCHAR(30) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL,
         account_type ENUM('cash','bank','qris') NOT NULL, branch_id VARCHAR(20) NULL,
@@ -688,6 +697,13 @@ function ensureApiSupportTables(PDO $pdo): void {
             $roleCode = strtoupper(trim((string)($roleRow['code'] ?? '')));
             $roleName = strtolower(trim((string)($roleRow['name'] ?? '')));
             if ($roleCode === 'ADM' || str_contains($roleName, 'administrator')) $next[] = 'payment:edit';
+            if (in_array('item:view', $permissions, true)) {
+                $next[]='stock_opname:view';
+                $next[]='stock_opname:count';
+            }
+            if (in_array('item:create', $permissions, true)) $next[]='stock_opname:create';
+            if (in_array('item:delete', $permissions, true)) $next[]='stock_opname:delete';
+            if ($roleCode === 'ADM' || str_contains($roleName, 'administrator')) $next[]='stock_opname:post';
             $next = array_values(array_unique($next));
             if ($next !== $permissions) $roleUpdate->execute([json_encode($next), $roleRow['id']]);
         }
@@ -975,9 +991,9 @@ if (!function_exists('adjustBranchStock')) {
             throw new Exception("Stok item {$itemId} di gudang utama cabang {$branchId} tidak mencukupi");
         }
         $warehouseUpsert = $pdo->prepare("
-            INSERT INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
-            VALUES (?, ?, ?, 0)
-            ON DUPLICATE KEY UPDATE quantity = GREATEST(0, quantity + VALUES(quantity))
+            INSERT INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity, stock_version)
+            VALUES (?, ?, ?, 0, 1)
+            ON DUPLICATE KEY UPDATE quantity = GREATEST(0, quantity + VALUES(quantity)), stock_version = stock_version + 1
         ");
         $warehouseUpsert->execute([$warehouseId, $itemId, $delta]);
 
@@ -1064,9 +1080,9 @@ function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $item
 
     $warehouseId = defaultWarehouseId($pdo, $branchId);
     $warehouseUpsert = $pdo->prepare("
-        INSERT INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
-        VALUES (?, ?, ?, 0)
-        ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
+        INSERT INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity, stock_version)
+        VALUES (?, ?, ?, 0, 1)
+        ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity), stock_version = stock_version + 1
     ");
     $warehouseUpsert->execute([$warehouseId, $itemId, $delta]);
 
@@ -1100,12 +1116,47 @@ function adjustWarehouseStockAllowNegative(PDO $pdo, string $warehouseId, string
     $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id=?");
     $itemStmt->execute([$itemId]);
     if ($itemStmt->fetchColumn() !== 'Persediaan') return;
-    $pdo->prepare("INSERT INTO warehouse_stocks(warehouse_id,item_id,quantity,reserved_quantity) VALUES(?,?,?,0) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)")
+    $pdo->prepare("INSERT INTO warehouse_stocks(warehouse_id,item_id,quantity,reserved_quantity,stock_version) VALUES(?,?,?,0,1) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity),stock_version=stock_version+1")
         ->execute([$warehouseId,$itemId,$delta]);
     $pdo->prepare("INSERT INTO branch_item_stocks(branch_id,item_id,stock,sellable_stock) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE stock=stock+VALUES(stock),sellable_stock=sellable_stock+VALUES(sellable_stock)")
         ->execute([$branchId,$itemId,$delta,$delta]);
     $pdo->prepare("UPDATE items i JOIN branch_item_stocks s ON s.item_id COLLATE utf8mb4_unicode_ci=i.id COLLATE utf8mb4_unicode_ci AND s.branch_id COLLATE utf8mb4_unicode_ci=i.branch_id COLLATE utf8mb4_unicode_ci SET i.stock=s.stock,i.sellable_stock=s.sellable_stock WHERE i.id=? AND i.branch_id=?")
         ->execute([$itemId,$branchId]);
+}
+
+function adjustWarehouseStock(PDO $pdo,string $warehouseId,string $branchId,string $itemId,int $delta):void{
+    if($delta<0){$stmt=$pdo->prepare("SELECT quantity FROM warehouse_stocks WHERE warehouse_id=? AND item_id=? FOR UPDATE");$stmt->execute([$warehouseId,$itemId]);$available=(int)($stmt->fetchColumn()?:0);if($available+$delta<0)throw new DomainException("Stok item {$itemId} di gudang tidak mencukupi (tersedia {$available})");}
+    adjustWarehouseStockAllowNegative($pdo,$warehouseId,$branchId,$itemId,$delta);
+}
+
+/**
+ * Catat satu kejadian stok dengan referensi dokumen yang dapat diaudit.
+ * Kuantitas selalu positif; arah ditentukan oleh gudang sumber/tujuan.
+ */
+function recordStockMovement(
+    PDO $pdo,
+    string $itemId,
+    ?string $sourceWarehouseId,
+    ?string $destinationWarehouseId,
+    int $quantity,
+    string $movementType,
+    string $referenceType,
+    ?string $referenceId,
+    ?string $referenceNumber,
+    string $notes,
+    ?string $createdBy,
+    ?string $occurredAt = null
+): string {
+    if ($quantity <= 0 || ($sourceWarehouseId === null && $destinationWarehouseId === null)) {
+        throw new InvalidArgumentException('Jurnal stok tidak valid');
+    }
+    $id='MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);
+    $sql="INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by";
+    $values=[$id,$itemId,$sourceWarehouseId,$destinationWarehouseId,$quantity,$movementType,$referenceType,$referenceId,$referenceNumber,$notes,$createdBy];
+    if($occurredAt!==null){$sql.=',created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)';$values[]=$occurredAt;}
+    else{$sql.=') VALUES(?,?,?,?,?,?,?,?,?,?,?)';}
+    $pdo->prepare($sql)->execute($values);
+    return $id;
 }
 
 /**

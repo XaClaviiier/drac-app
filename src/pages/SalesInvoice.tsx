@@ -638,7 +638,7 @@ export default function SalesInvoice() {
     setDetailPrice(formRow.price);
     setDetailDiscountPercent(0);
     setDetailDiscountAmount(0);
-    setDetailWarehouseId(item.type === 'Persediaan' ? defaultWarehouse?.id || '' : '');
+    setDetailWarehouseId(item.type === 'Persediaan' ? formRow.warehouseId || defaultWarehouse?.id || '' : '');
     setDetailActiveTab('detail');
     setItemSearchOpen(false);
   };
@@ -650,7 +650,7 @@ export default function SalesInvoice() {
       if (detailQty > detailWarehouseStock) return window.alert(`Stok tidak cukup. Tersedia ${detailWarehouseStock} ${detailItem.unit}.`);
     }
     const effectivePrice = detailQty > 0 ? Math.max(0, Math.round(detailFinalTotal / detailQty)) : 0;
-    setFormItems(current => current.map(entry => entry.id === detailFormRowId ? { ...entry, qty: detailQty, price: effectivePrice } : entry));
+    setFormItems(current => current.map(entry => entry.id === detailFormRowId ? { ...entry, qty: detailQty, price: effectivePrice, warehouseId: detailItem.type === 'Persediaan' ? detailWarehouseId : undefined } : entry));
     setDetailFormRowId('');
     setDetailItemId('');
     setFormItemSearch('');

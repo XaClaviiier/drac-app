@@ -131,9 +131,9 @@ export const helpArticles: HelpArticle[] = [
     ],
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Peta alur", steps: ["Saldo awal atau Penyesuaian Stok membentuk posisi awal barang per gudang.", "Penerimaan Barang menambah stok gudang penerima.", "Transfer Kirim mengurangi stok gudang asal; Transfer Terima menambah stok gudang tujuan.", "Faktur Penjualan final mengurangi stok barang pada cabang transaksi DRAC.", "Retur atau penyesuaian yang sah menambah/mengurangi stok sesuai kejadian sebenarnya.", "Stok Opname membandingkan saldo sistem dengan fisik; selisih yang disetujui menghasilkan Penyesuaian Stok."] },
+      { title: "Peta alur", steps: ["Saldo awal atau Penyesuaian Stok membentuk posisi awal barang per gudang.", "Penerimaan Barang menambah stok gudang penerima.", "Transfer Kirim mengurangi stok gudang asal; Transfer Terima menambah stok gudang tujuan.", "Faktur Penjualan final mengurangi stok dari gudang penjualan yang dipilih.", "Retur atau penyesuaian yang sah menambah/mengurangi stok sesuai kejadian sebenarnya.", "Stok Opname membandingkan saldo sistem dengan fisik; selisih yang disetujui Supervisor menghasilkan Penyesuaian Stok."] },
       { title: "Dokumen yang mengubah stok", rules: ["Tambah stok: penerimaan barang, transfer diterima, penyesuaian positif, dan retur penjualan ketika modul retur tersedia.", "Kurangi stok: faktur penjualan, transfer dikirim, penyesuaian negatif, dan retur pembelian ketika modul retur tersedia.", "Tidak mengubah stok: WO/Register, estimasi layanan, pembayaran pelanggan, pembayaran supplier, dan lembar hitung yang belum diposting."] },
-      { title: "Kontrol wajib", rules: ["Setiap mutasi harus mempunyai tanggal, barang, gudang, kuantitas, jenis transaksi, nomor dokumen, dan pembuat.", "Stok dilihat per gudang; angka Semua Cabang merupakan hasil agregasi, bukan gudang tersendiri.", "Koreksi dimulai dari dokumen paling akhir agar hubungan sumber dan turunan tetap konsisten.", "Sesudah koreksi, cocokkan Stok per Gudang, Kartu Stok/Mutasi, serta laporan terkait."] },
+      { title: "Kontrol wajib", rules: ["Setiap mutasi harus mempunyai tanggal, barang, gudang, kuantitas, jenis transaksi, nomor dokumen, dan pembuat.", "Stok dilihat per gudang; angka Semua Cabang merupakan hasil agregasi, bukan gudang tersendiri.", "Dokumen Draft boleh diedit atau dihapus. Dokumen Posted tidak dihapus; batalkan dengan mutasi pembalik dan alasan.", "Gudang yang masih mempunyai saldo atau dokumen terbuka tidak dapat dinonaktifkan.", "Koreksi dimulai dari dokumen paling akhir agar hubungan sumber dan turunan tetap konsisten.", "Sesudah koreksi, cocokkan Stok per Gudang, Kartu Stok/Mutasi, serta laporan terkait."] },
       { title: "Perbedaan penerapan DRAC", paragraphs: ["Accurate dapat memisahkan Pengiriman Pesanan dan Faktur Penjualan. Pada alur servis DRAC saat ini, stok barang jasa servis berkurang ketika Faktur Penjualan final dibuat. Perbedaan ini harus tetap disebutkan dalam dokumentasi agar pengguna tidak mengira WO sudah memotong stok."] },
     ],
   },
@@ -163,8 +163,8 @@ export const helpArticles: HelpArticle[] = [
     ],
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Alur kerja", steps: ["Pilih gudang asal dan gudang tujuan.", "Tambahkan barang dan jumlah yang akan dikirim.", "Posting pengiriman; stok gudang asal berkurang.", "Saat barang tiba, catat penerimaan; stok gudang tujuan bertambah."] },
-      { title: "Aturan", rules: ["Gudang asal dan tujuan harus berbeda.", "Jumlah kirim harus tersedia pada gudang asal.", "Jumlah terima tidak boleh melebihi sisa kiriman.", "Transfer selesai setelah seluruh jumlah diterima.", "Barang hilang atau rusak di perjalanan dicatat melalui penyesuaian yang merujuk transfer; penerimaan tetap memakai jumlah fisik yang benar-benar tiba."] },
+      { title: "Alur kerja", steps: ["Pilih gudang asal dan gudang tujuan.", "Tambahkan barang dan simpan sebagai Draft jika belum final.", "Kirim transfer; stok gudang asal berkurang dan barang berstatus Dalam Perjalanan.", "Saat barang tiba, catat penerimaan sebagian atau seluruhnya; stok gudang tujuan bertambah.", "Jika transfer yang sudah dikirim harus dibatalkan, isi alasan dan gunakan Batalkan agar sistem membuat mutasi pembalik."] },
+      { title: "Aturan", rules: ["Gudang asal dan tujuan harus berbeda.", "Jumlah kirim harus tersedia pada gudang asal.", "Jumlah terima tidak boleh melebihi sisa kiriman.", "Transfer selesai setelah seluruh jumlah diterima.", "Hanya Draft yang dapat dihapus langsung.", "Pembatalan ditolak jika barang yang sudah diterima tidak lagi cukup untuk dikembalikan.", "Barang hilang atau rusak di perjalanan dicatat melalui penyesuaian yang merujuk transfer; penerimaan tetap memakai jumlah fisik yang benar-benar tiba."] },
     ],
   },
   {
@@ -181,7 +181,7 @@ export const helpArticles: HelpArticle[] = [
     updatedAt: "20 Agustus 2026",
     sections: [
       { title: "Cara pakai", steps: ["Buat atau impor rincian barang, gudang, dan kuantitas.", "Simpan sebagai Draft dan periksa baris yang tidak valid.", "Posting dokumen setelah seluruh nilai benar.", "Periksa hasilnya pada stok per gudang dan mutasi barang."] },
-      { title: "Aturan koreksi seperti Accurate", rules: ["Draft dapat diedit atau dihapus.", "Dokumen posted dapat dihapus jika pengguna berwenang dan tidak mempunyai dokumen turunan.", "Saat dokumen posted dihapus, stok dan mutasi yang dibuat dokumen tersebut dikoreksi otomatis.", "Snapshot penghapusan tetap dicatat untuk audit internal."] },
+      { title: "Aturan koreksi seperti Accurate", rules: ["Draft dapat diedit atau dihapus.", "Dokumen Posted tidak dapat dihapus langsung.", "Gunakan Batalkan, isi alasan, lalu sistem membuat mutasi pembalik tanpa menghilangkan dokumen asli.", "Pembatalan ditolak jika akan membuat saldo gudang menjadi negatif."] },
     ],
   },
   {
@@ -197,8 +197,8 @@ export const helpArticles: HelpArticle[] = [
     ],
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Cara pakai", steps: ["Buat Perintah Stok Opname dengan Tanggal Mulai, Gudang, Cabang, Petugas, dan kategori bila diperlukan.", "Pada Tanggal Mulai, petugas membuat Hasil Stok Opname lalu mencetak lembar.", "Petugas mengisi Hitung #1 dan, bila diperlukan, Hitung #2.", "Posting Hasil setelah seluruh Hitung #1 lengkap.", "Sistem membuat Penyesuaian Stok otomatis hanya sebesar selisih yang ditemukan."] },
-      { title: "Aturan", rules: ["Tanggal Mulai tidak boleh mundur.", "Saldo sistem dikunci saat Hasil Stok Opname dibuat.", "Hitung #2 menjadi nilai final jika diisi; jika kosong, Hitung #1 menjadi nilai final.", "Hasil hitung fisik belum mengubah stok sebelum diposting.", "Urutan hapus mengikuti Accurate: Penyesuaian Stok, Hasil Stok Opname, lalu Perintah Stok Opname."] },
+      { title: "Cara pakai", steps: ["Buat Perintah Stok Opname dengan Tanggal Mulai, Gudang, Cabang, Petugas, dan kategori bila diperlukan.", "Pada Tanggal Mulai, petugas membuat Hasil Stok Opname lalu mencetak lembar.", "Petugas mengisi Hitung #1 dan, bila diperlukan, Hitung #2, kemudian menyimpan hasil.", "Supervisor yang memiliki izin Posting Stok Opname memeriksa dan menyetujui hasil.", "Sistem membuat Penyesuaian Stok otomatis hanya sebesar selisih yang ditemukan."] },
+      { title: "Aturan", rules: ["Tanggal Mulai tidak boleh mundur.", "Saldo dan versi stok dikunci saat Hasil Stok Opname dibuat.", "Hitung #2 menjadi nilai final jika diisi; jika kosong, Hitung #1 menjadi nilai final.", "Hasil hitung fisik belum mengubah stok sebelum diposting.", "Posting ditolak jika ada penerimaan, penjualan, transfer, atau penyesuaian setelah lembar hitung dibuat; hapus Draft Hasil lalu buat ulang.", "Penyesuaian hasil opname yang sudah Posted dibatalkan dengan mutasi pembalik, bukan dihapus."] },
     ],
   },
   {
@@ -214,7 +214,7 @@ export const helpArticles: HelpArticle[] = [
     ],
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Prinsip", paragraphs: ["Dokumen tersimpan atau posted dapat dihapus bila hak akses mengizinkan, periode tidak dikunci, dan belum dipakai oleh dokumen berikutnya. Dampak stok dan saldo dikoreksi otomatis oleh sistem."] },
+      { title: "Prinsip", paragraphs: ["Dokumen Draft dapat diedit atau dihapus selama belum mempunyai dokumen turunan. Dokumen Posted yang memengaruhi stok tidak dihapus langsung; koreksi dilakukan melalui pembatalan atau dokumen pembalik agar dokumen asli dan jejak audit tetap tersedia."] },
       { title: "Urutan koreksi", steps: ["Hapus pembayaran terlebih dahulu.", "Hapus faktur penjualan atau pembelian.", "Hapus dokumen sumber seperti penerimaan bila masih perlu.", "Periksa kembali stok, piutang/utang, dan laporan setelah koreksi."] },
       { title: "Aturan", rules: ["Sistem menolak penghapusan dokumen yang masih memiliki transaksi turunan.", "Retur digunakan bila benar-benar terjadi pengembalian barang, bukan untuk menutupi salah input.", "Master yang memiliki histori tidak dihapus; nonaktifkan agar referensi transaksi tetap utuh."] },
     ],
