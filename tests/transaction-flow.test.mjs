@@ -196,6 +196,11 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /Total Harga/);
   assert.match(page, /confirmLineDraft/);
   assert.match(page, /lineDraftMode==='edit'/);
+  assert.match(page, /const openQuickCreate=/);
+  assert.match(page, /onKeyDown=\{e=>\{if\(e\.key==='Enter'\)/);
+  assert.match(page, /onMouseDown=\{event=>\{event\.preventDefault\(\);addLine\(i\)\}\}/);
+  assert.match(page, /fixed inset-0 z-\[79\].*Buat Barang Baru/s);
+  assert.match(page, /barcode:looksLikeCode\?value:''/);
   const receiptEndpoint = source('api/endpoints/goods-receipts.php');
   assert.match(receiptEndpoint, /unit_price DECIMAL/);
   assert.match(receiptEndpoint, /discount_percent DECIMAL/);
