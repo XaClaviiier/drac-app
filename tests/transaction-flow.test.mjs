@@ -4,10 +4,10 @@ import test from 'node:test';
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('pembuatan faktur berjalan atomik, memilih gudang, dan menolak stok minus', () => {
+test('pembuatan faktur berjalan atomik, memilih gudang, dan mengizinkan stok minus', () => {
   const php = source('api/endpoints/sales-invoices.php');
   assert.match(php, /beginTransaction\s*\(/);
-  assert.match(php, /adjustWarehouseStock\s*\(/);
+  assert.match(php, /adjustWarehouseStockAllowNegative\s*\(/);
   assert.match(php, /warehouse_id/);
   assert.match(php, /recordStockMovement\s*\(/);
   assert.match(php, /->commit\s*\(/);
@@ -15,19 +15,20 @@ test('pembuatan faktur berjalan atomik, memilih gudang, dan menolak stok minus',
   assert.match(php, /invoice_id\s*=\s*\?/);
 });
 
-test('faktur dari WO memilih gudang per barang dan menjelaskan kekurangan stok', () => {
+test('faktur dari WO memilih gudang per barang dan memperingatkan stok negatif', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const endpoint = source('api/endpoints/sales-invoices.php');
   assert.match(page, /invoiceItemWarehouses/);
   assert.match(page, /Gudang Pengeluaran Stok/);
   assert.match(page, /Butuh \{line\.service\.qty\}/);
   assert.match(page, /invoiceHasStockShortage/);
-  assert.match(page, /Pilih gudang lain atau lakukan penerimaan\/transfer\/penyesuaian stok/);
+  assert.match(page, /AKAN NEGATIF/);
+  assert.match(page, /saldo gudang akan tercatat negatif/);
+  assert.doesNotMatch(page, /disabled=\{isCreatingInvoice\|\|invoiceHasStockShortage/);
   assert.match(page, /createInvoiceFromWO\([^;]+invoiceItems/s);
   assert.match(endpoint, /prepareSalesStockItems/);
-  assert.match(endpoint, /warehouse_id=\? AND item_id=\? FOR UPDATE/);
-  assert.match(endpoint, /Stok \{\$requirement\['code'\]\} - \{\$requirement\['name'\]\}/);
-  assert.match(endpoint, /Pilih gudang lain atau lakukan penerimaan, transfer, atau penyesuaian stok/);
+  assert.match(endpoint, /adjustWarehouseStockAllowNegative\([^;]+-\(int\)\$service\['qty'\]/s);
+  assert.doesNotMatch(endpoint, /Stok \{\$requirement\['code'\]\} - \{\$requirement\['name'\]\}/);
 });
 
 test('pembayaran mengunci faktur dan menolak nilai melebihi sisa tagihan', () => {

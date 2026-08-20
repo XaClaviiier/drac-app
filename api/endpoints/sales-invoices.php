@@ -41,20 +41,11 @@ $resolveSalesWarehouse=static function(PDO $pdo,string $branchId,?string $reques
     $warehouseId=$requested?:defaultWarehouseId($pdo,$branchId);$stmt=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1 AND is_sellable=1");$stmt->execute([$warehouseId,$branchId]);if(!$stmt->fetchColumn())throw new InvalidArgumentException('Gudang penjualan tidak valid, nonaktif, atau tidak diizinkan untuk penjualan');return $warehouseId;
 };
 $prepareSalesStockItems=static function(PDO $pdo,string $branchId,array $items)use($resolveSalesWarehouse):array{
-    $requirements=[];
     foreach($items as &$item){
         if(empty($item['itemId'])||empty($item['isStockItem']))continue;
-        $warehouseId=$resolveSalesWarehouse($pdo,$branchId,$item['warehouseId']??null);$item['warehouseId']=$warehouseId;$key=$warehouseId.'|'.$item['itemId'];
-        if(isset($requirements[$key])){$requirements[$key]['qty']+=(int)$item['qty'];continue;}
-        $requirements[$key]=['warehouseId'=>$warehouseId,'itemId'=>(string)$item['itemId'],'code'=>(string)$item['code'],'name'=>(string)$item['name'],'qty'=>(int)$item['qty']];
+        $item['warehouseId']=$resolveSalesWarehouse($pdo,$branchId,$item['warehouseId']??null);
     }
     unset($item);
-    $stockStmt=$pdo->prepare("SELECT COALESCE(quantity,0) FROM warehouse_stocks WHERE warehouse_id=? AND item_id=? FOR UPDATE");
-    $warehouseStmt=$pdo->prepare("SELECT name FROM warehouses WHERE id=?");
-    foreach($requirements as $requirement){
-        $stockStmt->execute([$requirement['warehouseId'],$requirement['itemId']]);$available=(int)($stockStmt->fetchColumn()?:0);
-        if($available<$requirement['qty']){$warehouseStmt->execute([$requirement['warehouseId']]);$warehouseName=(string)($warehouseStmt->fetchColumn()?:'Gudang');$shortage=$requirement['qty']-$available;throw new DomainException("Stok {$requirement['code']} - {$requirement['name']} di {$warehouseName} kurang {$shortage} (dibutuhkan {$requirement['qty']}, tersedia {$available}). Pilih gudang lain atau lakukan penerimaan, transfer, atau penyesuaian stok.");}
-    }
     return $items;
 };
 $journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $warehouseId,string $itemId,int $qty,bool $reverse,array $actor):void{
@@ -189,7 +180,7 @@ switch ($method) {
                     ]);
                     if (!empty($service['itemId']) && $service['isStockItem']) {
                         $salesWarehouseId=$resolveSalesWarehouse($pdo,(string)$wo['branch_id'],$service['warehouseId']);
-                        adjustWarehouseStock($pdo,$salesWarehouseId,(string)$wo['branch_id'],(string)$service['itemId'],-(int)$service['qty']);
+                        adjustWarehouseStockAllowNegative($pdo,$salesWarehouseId,(string)$wo['branch_id'],(string)$service['itemId'],-(int)$service['qty']);
                         $journalSale($pdo,$invoiceId,$invoiceNumber,$date,$salesWarehouseId,(string)$service['itemId'],(int)$service['qty'],false,$actor);
                     }
                 }
@@ -257,7 +248,7 @@ switch ($method) {
                     ]);
                     if (!empty($item['itemId']) && $item['isStockItem']) {
                         $salesWarehouseId=$resolveSalesWarehouse($pdo,$branchId,$item['warehouseId']);
-                        adjustWarehouseStock($pdo,$salesWarehouseId,$branchId,(string)$item['itemId'],-(int)$item['qty']);
+                        adjustWarehouseStockAllowNegative($pdo,$salesWarehouseId,$branchId,(string)$item['itemId'],-(int)$item['qty']);
                         $journalSale($pdo,$invoiceId,$invoiceNumber,$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor);
                     }
                 }
@@ -378,7 +369,7 @@ switch ($method) {
                 $insertItem->execute([$id,$item['itemId'],$item['warehouseId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['subtotal']]);
                 if (!empty($item['itemId']) && $item['isStockItem']) {
                     $salesWarehouseId=$resolveSalesWarehouse($pdo,(string)$branchId,$item['warehouseId']);
-                    adjustWarehouseStock($pdo,$salesWarehouseId,(string)$branchId,(string)$item['itemId'],-(int)$item['qty']);
+                    adjustWarehouseStockAllowNegative($pdo,$salesWarehouseId,(string)$branchId,(string)$item['itemId'],-(int)$item['qty']);
                     $journalSale($pdo,$id,(string)$current['invoice_number'],$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor);
                 }
             }

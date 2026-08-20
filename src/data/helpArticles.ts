@@ -80,8 +80,8 @@ export const helpArticles: HelpArticle[] = [
     ],
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Cara membuat", steps: ["Buka WO berstatus Selesai.", "Periksa pelanggan, kendaraan, tanggal, layanan, barang, harga, dan diskon.", "Untuk setiap barang Persediaan, pilih Gudang Pengeluaran Stok dan pastikan indikatornya CUKUP.", "Simpan faktur.", "Catat pembayaran sekarang atau biarkan sebagai piutang."] },
-      { title: "Dampak", paragraphs: ["Saat faktur dibuat, barang persediaan mengurangi stok gudang yang dipilih. Jasa tidak memengaruhi stok.", "Jika stok kurang, faktur ditahan. Lakukan penerimaan, transfer antar gudang, atau penyesuaian stok yang sah; jangan mengubah barang menjadi Jasa hanya untuk melewati pemeriksaan stok."] },
+      { title: "Cara membuat", steps: ["Buka WO berstatus Selesai.", "Periksa pelanggan, kendaraan, tanggal, layanan, barang, harga, dan diskon.", "Untuk setiap barang Persediaan, pilih Gudang Pengeluaran Stok dan perhatikan saldo setelah faktur.", "Jika muncul AKAN NEGATIF, faktur tetap dapat dibuat setelah memastikan gudang yang dipilih benar.", "Simpan faktur.", "Catat pembayaran sekarang atau biarkan sebagai piutang."] },
+      { title: "Dampak", paragraphs: ["Saat faktur dibuat, barang persediaan mengurangi stok gudang yang dipilih. Jasa tidak memengaruhi stok.", "Stok yang kurang diperbolehkan menjadi negatif dan tetap dicatat dalam mutasi gudang. Segera cocokkan dengan penerimaan, transfer antar gudang, atau penyesuaian stok yang sah agar saldo kembali sesuai kondisi fisik."] },
       { title: "Aturan koreksi", rules: ["Faktur yang sudah memiliki pembayaran tidak dapat dihapus; hapus pembayaran terlebih dahulu.", "Menghapus faktur mengembalikan stok secara otomatis dan melepas relasi faktur dari WO.", "WO tetap tersimpan sebagai histori pekerjaan Selesai."] },
     ],
   },

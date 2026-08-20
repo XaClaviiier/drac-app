@@ -1666,11 +1666,6 @@ export default function WorkOrders() {
         setInvoiceStockError('Pilih gudang pengeluaran untuk setiap barang persediaan.');
         return;
       }
-      if (invoiceHasStockShortage) {
-        const shortage=invoiceStockRequirements.find(requirement=>requirement.available<requirement.required);
-        setInvoiceStockError(shortage?`Stok ${shortage.code} - ${shortage.name} belum cukup: dibutuhkan ${shortage.required} ${shortage.unit}, tersedia ${shortage.available} ${shortage.unit}. Pilih gudang lain atau lakukan penerimaan/transfer/penyesuaian stok.`:'Stok barang belum mencukupi.');
-        return;
-      }
       setIsCreatingInvoice(true);
       try {
         const invoiceItems=invoiceWO.services.map(service=>{const item=data.items.find(candidate=>candidate.id===service.itemId);return item?.type==='Persediaan'?{...service,warehouseId:invoiceItemWarehouses[service.id]}:service});
@@ -4351,7 +4346,9 @@ export default function WorkOrders() {
                 </div>
               </div>
 
-              {invoiceStockLines.length>0&&<div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3"><div className="mb-2 flex items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-blue-950">Gudang Pengeluaran Stok</h4><p className="text-xs text-blue-700">Pilih gudang untuk setiap barang. Faktur hanya dapat dibuat bila stok mencukupi.</p></div><Building2 className="h-5 w-5 shrink-0 text-blue-700"/></div><div className="space-y-2">{invoiceStockLines.map(line=>{const requirement=invoiceStockRequirements.find(row=>row.itemId===line.item.id&&row.warehouseId===line.warehouseId);const enough=Boolean(line.warehouseId&&requirement&&requirement.available>=requirement.required);return <div key={line.service.id} className={`rounded border bg-white p-2 ${enough?'border-emerald-200':'border-red-300'}`}><div className="mb-1 flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-900">{line.item.code} · {line.item.name}</p><p className={`text-xs font-medium ${enough?'text-emerald-700':'text-red-600'}`}>Butuh {line.service.qty} {line.item.unit} · Stok gudang {requirement?.available||0} {line.item.unit}</p></div><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${enough?'bg-emerald-100 text-emerald-700':'bg-red-100 text-red-700'}`}>{enough?'CUKUP':'KURANG'}</span></div><select aria-label={`Gudang untuk ${line.item.name}`} value={line.warehouseId} onChange={event=>{setInvoiceItemWarehouses(current=>({...current,[line.service.id]:event.target.value}));setInvoiceStockError('')}} className="h-9 w-full rounded border border-gray-300 bg-white px-2 text-sm"><option value="">Pilih gudang...</option>{invoiceWarehouses.map(warehouse=>{const stock=data.warehouseStocks.find(row=>row.warehouseId===warehouse.id&&row.itemId===line.item.id)?.quantity||0;return <option key={warehouse.id} value={warehouse.id}>{warehouse.name} · Stok {stock} {line.item.unit}</option>})}</select></div>})}</div></div>}
+              {invoiceStockLines.length>0&&<div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3"><div className="mb-2 flex items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-blue-950">Gudang Pengeluaran Stok</h4><p className="text-xs text-blue-700">Pilih gudang untuk setiap barang. Stok kurang tetap dapat diposting dan akan menjadi negatif.</p></div><Building2 className="h-5 w-5 shrink-0 text-blue-700"/></div><div className="space-y-2">{invoiceStockLines.map(line=>{const requirement=invoiceStockRequirements.find(row=>row.itemId===line.item.id&&row.warehouseId===line.warehouseId);const enough=Boolean(line.warehouseId&&requirement&&requirement.available>=requirement.required);const ending=(requirement?.available||0)-(requirement?.required||line.service.qty);return <div key={line.service.id} className={`rounded border bg-white p-2 ${enough?'border-emerald-200':'border-amber-300'}`}><div className="mb-1 flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-900">{line.item.code} · {line.item.name}</p><p className={`text-xs font-medium ${enough?'text-emerald-700':'text-amber-700'}`}>Butuh {line.service.qty} {line.item.unit} · Stok {requirement?.available||0} {line.item.unit} · Setelah faktur {ending} {line.item.unit}</p></div><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${enough?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-800'}`}>{enough?'CUKUP':'AKAN NEGATIF'}</span></div><select aria-label={`Gudang untuk ${line.item.name}`} value={line.warehouseId} onChange={event=>{setInvoiceItemWarehouses(current=>({...current,[line.service.id]:event.target.value}));setInvoiceStockError('')}} className="h-9 w-full rounded border border-gray-300 bg-white px-2 text-sm"><option value="">Pilih gudang...</option>{invoiceWarehouses.map(warehouse=>{const stock=data.warehouseStocks.find(row=>row.warehouseId===warehouse.id&&row.itemId===line.item.id)?.quantity||0;return <option key={warehouse.id} value={warehouse.id}>{warehouse.name} · Stok {stock} {line.item.unit}</option>})}</select></div>})}</div></div>}
+
+              {invoiceHasStockShortage&&<div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-800"><AlertTriangle className="mr-2 inline h-4 w-4"/>Stok tidak mencukupi. Faktur tetap dapat dibuat dan saldo gudang akan tercatat negatif.</div>}
 
               {invoiceStockError&&<div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-medium text-red-700"><AlertTriangle className="mr-2 inline h-4 w-4"/>{invoiceStockError}</div>}
 
@@ -4447,8 +4444,8 @@ export default function WorkOrders() {
               <button
                 type="button"
                 onClick={handleCreateInvoice}
-                disabled={isCreatingInvoice||invoiceHasStockShortage||invoiceStockLines.some(line=>!line.warehouseId)}
-                title={invoiceHasStockShortage?'Stok barang belum mencukupi di gudang yang dipilih':'Buat faktur'}
+                disabled={isCreatingInvoice||invoiceStockLines.some(line=>!line.warehouseId)}
+                title={invoiceHasStockShortage?'Buat faktur dan izinkan saldo stok menjadi negatif':'Buat faktur'}
                 className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-green-600/20 transition-colors hover:bg-green-700 disabled:bg-gray-400 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
               >
                 <Receipt className="w-4 h-4" />

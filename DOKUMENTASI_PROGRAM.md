@@ -381,9 +381,9 @@ Fitur:
 
 - Saat faktur dari WO dibuat, WO tetap Selesai dan ditautkan ke nomor faktur.
 - Setiap barang Persediaan wajib memiliki Gudang Pengeluaran Stok.
-- Modal faktur menampilkan kebutuhan dan saldo barang per gudang dengan indikator CUKUP atau KURANG.
+- Modal faktur menampilkan kebutuhan, saldo awal, dan saldo setelah faktur dengan indikator CUKUP atau AKAN NEGATIF.
 - Stok barang persediaan dipotong dari gudang yang dipilih saat faktur dibuat; jasa tidak memengaruhi stok.
-- Faktur tidak dapat dibuat bila stok kurang. Pengguna harus memilih gudang lain atau mencatat penerimaan, transfer, atau penyesuaian stok yang sah.
+- Faktur tetap dapat dibuat bila stok kurang dan saldo gudang akan menjadi negatif. Kekurangan harus segera ditindaklanjuti melalui penerimaan, transfer, atau penyesuaian stok yang sah.
 - Jika faktur dihapus, stok dikembalikan.
 
 ---
