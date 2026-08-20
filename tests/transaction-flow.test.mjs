@@ -70,6 +70,22 @@ test('cetak barang dapat dikelompokkan berdasarkan kategori', () => {
   assert.match(page, /items\.length} item/);
 });
 
+test('lembar penghitungan stok menghitung saldo per tanggal dan gudang', () => {
+  const endpoint = source('api/endpoints/stock-count-report.php');
+  const page = source('src/pages/StockCountSheetReport.tsx');
+  const router = source('api/index.php');
+  assert.match(router, /'stock-count-report'\s*=>\s*'report'/);
+  assert.match(endpoint, /warehouse_id=\?/);
+  assert.match(endpoint, /sales_invoices/);
+  assert.match(endpoint, /goods_receipts/);
+  assert.match(endpoint, /warehouse_transfers/);
+  assert.match(endpoint, /stock_adjustments/);
+  assert.match(page, /Per Tanggal/);
+  assert.match(page, /Hitung #1/);
+  assert.match(page, /Hitung #2/);
+  assert.match(page, /Penyaringan Data/);
+});
+
 test('refresh mutasi barang meminta histori per item dan menerima penyesuaian satu sisi', () => {
   const endpoint = source('api/endpoints/stock-movements.php');
   const page = source('src/pages/ItemsAndServices.tsx');
@@ -81,7 +97,7 @@ test('refresh mutasi barang meminta histori per item dan menerima penyesuaian sa
   assert.match(page, /onClick=\{loadItemMovements\}/);
 });
 
-test('hapus import stok membersihkan mutasi tanpa membalik dokumen batal dua kali', () => {
+test('hapus penyesuaian stok mengikuti alur Accurate dan mengoreksi stok otomatis', () => {
   const endpoint = source('api/endpoints/stock-adjustments.php');
   const helpers = source('api/helpers.php');
   const page = source('src/pages/OpeningStockImport.tsx');
@@ -89,8 +105,28 @@ test('hapus import stok membersihkan mutasi tanpa membalik dokumen batal dua kal
   assert.doesNotMatch(endpoint, /\$doc\['status'\]===\s*'Cancelled'[^}]+adjustWarehouseStockAllowNegative/s);
   assert.match(endpoint, /DELETE FROM stock_movements WHERE notes=\?/);
   assert.match(endpoint, /stock_adjustment_maintenance_logs/);
-  assert.match(endpoint, /confirmation[^\n]+HAPUS/);
   assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_adjustment_maintenance_logs/);
-  assert.match(page, /Hapus Import/);
+  assert.match(page, /Hapus Penyesuaian/);
+  assert.doesNotMatch(page, /Batalkan Penyesuaian/);
+  assert.match(page, /Stok dan mutasi yang dibuat dokumen ini akan dikoreksi otomatis/);
   assert.match(page, /removeWithBody\("stock-adjustments"/);
+});
+
+test('dokumentasi online mencatat aturan dan alur kerja lintas modul', () => {
+  const app = source('src/App.tsx');
+  const layout = source('src/components/Layout.tsx');
+  const page = source('src/pages/OnlineHelp.tsx');
+  const articles = source('src/data/helpArticles.ts');
+  assert.match(app, /path="help" element=\{<OnlineHelp/);
+  assert.match(layout, /Dokumentasi Online/);
+  assert.match(page, /useSearchParams/);
+  assert.match(page, /Buka modul terkait/);
+  assert.match(articles, /Aturan koreksi seperti Accurate/);
+  assert.match(articles, /Alur Order Kerja dari Register sampai Selesai/);
+  assert.match(articles, /Alur Penerimaan, Faktur, dan Pembayaran Pembelian/);
+  assert.match(articles, /Lembar Penghitungan Stok/);
+  assert.match(articles, /Siklus Stok Barang dari Masuk sampai Keluar/);
+  assert.match(articles, /help\.accurate\.id\/product\/persediaan/);
+  assert.match(page, /Pedoman Accurate \+ Adaptasi DRAC/);
+  assert.match(page, /Sumber Pedoman/);
 });

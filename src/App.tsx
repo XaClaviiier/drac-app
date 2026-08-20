@@ -33,6 +33,8 @@ import InventoryReport from './pages/InventoryReport';
 import CashBankReport from './pages/CashBankReport';
 import HistoricalQuickEntry from './pages/HistoricalQuickEntry';
 import OpeningStockImport from './pages/OpeningStockImport';
+import StockCountSheetReport from './pages/StockCountSheetReport';
+import OnlineHelp from './pages/OnlineHelp';
 import type { Permission } from './types';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -87,6 +89,7 @@ function AppRoutes() {
         <Route path="reports/sales" element={protectedPage('report:view', <SalesReport />)} />
         <Route path="reports/purchases" element={protectedPage('report:view', <PurchaseReport />)} />
         <Route path="reports/inventory" element={protectedPage('report:view', <InventoryReport />)} />
+        <Route path="reports/stock-count-sheet" element={protectedPage('report:view', <StockCountSheetReport />)} />
         <Route path="reports/cash-bank" element={protectedPage('report:view', <CashBankReport />)} />
         <Route path="reports" element={protectedPage('report:view', <ReportsIndex />)} />
         <Route path="performance-bonus" element={protectedPage('report:view', <PerformanceBonus />)} />
@@ -103,6 +106,7 @@ function AppRoutes() {
         <Route path="warehouses" element={protectedPage('item:view', <Warehouses />)} />
         <Route path="warehouse-transfers" element={protectedPage('item:view', <WarehouseTransfers />)} />
         <Route path="opening-stock" element={protectedPage('item:edit', <OpeningStockImport />)} />
+        <Route path="help" element={<OnlineHelp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

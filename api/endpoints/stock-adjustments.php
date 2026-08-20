@@ -109,9 +109,6 @@ if ($method === 'DELETE' && $id) {
         if(!$doc) throw new InvalidArgumentException('Penyesuaian stok tidak ditemukan');
 
         $reason=trim((string)($d['reason']??''));
-        $confirmation=strtoupper(trim((string)($d['confirmation']??'')));
-        if($doc['status']!=='Draft' && $reason==='') throw new InvalidArgumentException('Alasan hapus import wajib diisi');
-        if($doc['status']!=='Draft' && $confirmation!=='HAPUS') throw new InvalidArgumentException('Ketik HAPUS untuk konfirmasi');
 
         $lineStmt=$pdo->prepare("SELECT sai.*,w.branch_id,w.name warehouse_name FROM stock_adjustment_items sai JOIN warehouses w ON w.id=sai.warehouse_id WHERE sai.adjustment_id=? ORDER BY sai.id");
         $lineStmt->execute([$id]); $lines=$lineStmt->fetchAll();
@@ -135,14 +132,14 @@ if ($method === 'DELETE' && $id) {
         }
         $snapshot=json_encode(['document'=>$doc,'items'=>$lines,'movements'=>$movementRows],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         $pdo->prepare("INSERT INTO stock_adjustment_maintenance_logs(adjustment_id,adjustment_number,previous_status,reason,snapshot_json,deleted_by,deleted_by_name) VALUES(?,?,?,?,?,?,?)")
-            ->execute([$id,$doc['adjustment_number'],$doc['status'],$reason?:'Hapus Draft',$snapshot?:null,$actor['id']??null,$actor['name']??$actor['username']??null]);
+            ->execute([$id,$doc['adjustment_number'],$doc['status'],$reason?:'Dihapus oleh pengguna',$snapshot?:null,$actor['id']??null,$actor['name']??$actor['username']??null]);
         foreach($markers as $marker) {
             $pdo->prepare("DELETE FROM stock_movements WHERE notes=? OR notes LIKE CONCAT(?,' %')")->execute([$marker,$marker]);
         }
         $pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM stock_adjustments WHERE id=?")->execute([$id]);
         $pdo->commit();
-        respondSuccess(null,$doc['status']==='Draft'?'Draft penyesuaian stok dihapus':'Import salah dihapus total. Stok dan mutasi telah dirapikan.');
+        respondSuccess(null,$doc['status']==='Draft'?'Draft penyesuaian stok dihapus':'Penyesuaian stok dihapus dan dampak stok dikoreksi otomatis.');
     } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
 }
 respondError('Method not allowed',405);

@@ -42,6 +42,7 @@ import {
   Coins,
   CalendarClock,
   Upload,
+  CircleHelp,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
@@ -177,6 +178,14 @@ const navItems = [
     color: "from-slate-500 to-slate-700",
   },
   {
+    path: "/help",
+    label: "Dokumentasi Online",
+    short: "Panduan",
+    icon: CircleHelp,
+    perm: "dashboard:view" as const,
+    color: "from-blue-500 to-cyan-600",
+  },
+  {
     path: "/settings",
     label: "Pengaturan",
     short: "Atur",
@@ -210,7 +219,9 @@ const pageTitles: Record<string, string> = {
   "/reports/sales": "Laporan Penjualan",
   "/reports/purchases": "Laporan Pembelian",
   "/reports/inventory": "Laporan Persediaan",
+  "/reports/stock-count-sheet": "Lembar Penghitungan Stok",
   "/opening-stock": "Penyesuaian Stok",
+  "/help": "Dokumentasi Online",
   "/reports/cash-bank": "Laporan Kas & Bank",
   "/cash-accounts": "Kas Cabang",
   "/bank-accounts": "Rekening Bank",
@@ -237,6 +248,12 @@ const desktopGroups = [
     label: "Pengaturan",
     icon: Settings,
     items: [
+      {
+        label: "Dokumentasi Online",
+        path: "/help",
+        icon: CircleHelp,
+        tone: "blue",
+      },
       {
         label: "Profil & Preferensi",
         path: "/settings",
@@ -443,7 +460,7 @@ const desktopGroups = [
         perm: "item:edit",
         tone: "green",
       },
-      { label: "Stok Opname", icon: ClipboardList, tone: "green" },
+      { label: "Stok Opname", path: "/reports/stock-count-sheet", icon: ClipboardList, perm: "report:view", tone: "green" },
       { label: "Permintaan Barang", icon: FileText, tone: "blue" },
       {
         label: "Barang & Jasa",

@@ -21,7 +21,6 @@ import {
   Settings,
   Send,
   Trash2,
-  Undo2,
   Upload,
   X,
 } from "lucide-react";
@@ -444,31 +443,15 @@ export default function OpeningStockImport() {
 
   const processDocument = async (
     document: AdjustmentDocument,
-    action: "post" | "cancel" | "delete",
+    action: "post" | "delete",
   ) => {
-    let reason = "";
-    if (action === "cancel") {
-      reason =
-        window
-          .prompt(`Alasan pembatalan ${document.adjustmentNumber}:`)
-          ?.trim() || "";
-      if (!reason) return;
-    }
-    if (
-      action === "delete" &&
-      document.status === "Draft" &&
-      !window.confirm(`Hapus Draft ${document.adjustmentNumber}?`)
-    )
-      return;
-    let confirmation = "";
-    if (action === "delete" && document.status !== "Draft") {
-      reason = window.prompt(`Alasan menghapus import ${document.adjustmentNumber}:`)?.trim() || "";
-      if (!reason) return;
-      confirmation = window.prompt("Ketik HAPUS untuk konfirmasi akhir:")?.trim() || "";
-      if (confirmation.toUpperCase() !== "HAPUS") {
-        setMessage("Penghapusan dibatalkan karena konfirmasi tidak sesuai.");
-        return;
-      }
+    const reason = "";
+    if (action === "delete") {
+      const impact =
+        document.status === "Posted"
+          ? " Stok dan mutasi yang dibuat dokumen ini akan dikoreksi otomatis."
+          : "";
+      if (!window.confirm(`Hapus ${document.adjustmentNumber}?${impact}`)) return;
     }
     setLoading(true);
     setMessage("");
@@ -477,7 +460,6 @@ export default function OpeningStockImport() {
         action === "delete"
           ? await api.removeWithBody("stock-adjustments", document.id, {
               reason,
-              confirmation,
             })
           : await api.update("stock-adjustments", document.id, {
               action,
@@ -577,6 +559,7 @@ export default function OpeningStockImport() {
           </button>
           <button
             type="button"
+            onClick={() => window.open("/help?article=penyesuaian-stok", "_blank")}
             className="flex h-10 w-12 items-center justify-center rounded bg-amber-500 text-white"
             title="Panduan"
           >
@@ -1035,20 +1018,9 @@ export default function OpeningStockImport() {
                                 </button>
                               </>
                             )}
-                            {document.status === "Posted" && (
-                              <button
-                                title="Batalkan dan balik stok"
-                                onClick={() =>
-                                  processDocument(document, "cancel")
-                                }
-                                className="text-amber-700"
-                              >
-                                <Undo2 className="h-4 w-4" />
-                              </button>
-                            )}
                             {document.status !== "Draft" && (
                               <button
-                                title="Hapus import salah secara total"
+                                title="Hapus penyesuaian dan koreksi stok otomatis"
                                 onClick={() => processDocument(document, "delete")}
                                 className="text-red-600"
                               >
@@ -1153,22 +1125,11 @@ export default function OpeningStockImport() {
               </table>
             </div>
             <div className="flex justify-end gap-2 border-t bg-[#eeeeee] px-5 py-3">
-              {selectedDocument.status === "Posted" && (
-                <button
-                  onClick={async () => {
-                    closeDetailTab(selectedDocument.id);
-                    await processDocument(selectedDocument, "cancel");
-                  }}
-                  className="rounded border border-amber-500 bg-white px-4 py-2 text-sm font-semibold text-amber-700"
-                >
-                  Batalkan Penyesuaian
-                </button>
-              )}
               <button
                 onClick={() => processDocument(selectedDocument, "delete")}
                 className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
               >
-                {selectedDocument.status === "Draft" ? "Hapus Draft" : "Hapus Import"}
+                {selectedDocument.status === "Draft" ? "Hapus Draft" : "Hapus Penyesuaian"}
               </button>
               <button
                 onClick={() => closeDetailTab(selectedDocument.id)}
