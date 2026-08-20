@@ -15,6 +15,21 @@ test('pembuatan faktur berjalan atomik, memilih gudang, dan menolak stok minus',
   assert.match(php, /invoice_id\s*=\s*\?/);
 });
 
+test('faktur dari WO memilih gudang per barang dan menjelaskan kekurangan stok', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const endpoint = source('api/endpoints/sales-invoices.php');
+  assert.match(page, /invoiceItemWarehouses/);
+  assert.match(page, /Gudang Pengeluaran Stok/);
+  assert.match(page, /Butuh \{line\.service\.qty\}/);
+  assert.match(page, /invoiceHasStockShortage/);
+  assert.match(page, /Pilih gudang lain atau lakukan penerimaan\/transfer\/penyesuaian stok/);
+  assert.match(page, /createInvoiceFromWO\([^;]+invoiceItems/s);
+  assert.match(endpoint, /prepareSalesStockItems/);
+  assert.match(endpoint, /warehouse_id=\? AND item_id=\? FOR UPDATE/);
+  assert.match(endpoint, /Stok \{\$requirement\['code'\]\} - \{\$requirement\['name'\]\}/);
+  assert.match(endpoint, /Pilih gudang lain atau lakukan penerimaan, transfer, atau penyesuaian stok/);
+});
+
 test('pembayaran mengunci faktur dan menolak nilai melebihi sisa tagihan', () => {
   const php = source('api/endpoints/customer-payments.php');
   assert.match(php, /sales_invoices WHERE id=\? FOR UPDATE/);

@@ -123,6 +123,8 @@ export default function WorkOrders() {
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<WorkOrderColumnKey[]>(DEFAULT_WORK_ORDER_COLUMNS);
   const [invoiceWO, setInvoiceWO] = useState<WorkOrder | null>(null);
+  const [invoiceItemWarehouses, setInvoiceItemWarehouses] = useState<Record<string, string>>({});
+  const [invoiceStockError, setInvoiceStockError] = useState('');
   const [invoiceCashPayment, setInvoiceCashPayment] = useState(0);
   const [invoiceTransferPayment, setInvoiceTransferPayment] = useState(0);
   const invoicePayment = invoiceCashPayment + invoiceTransferPayment;
@@ -134,6 +136,10 @@ export default function WorkOrders() {
   const [woDateUnlocked, setWoDateUnlocked] = useState(false);
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+  const invoiceWarehouses = useMemo(() => invoiceWO ? data.warehouses.filter(warehouse => warehouse.branchId === invoiceWO.branchId && warehouse.isActive && warehouse.isSellable && !warehouse.isSystem) : [], [data.warehouses, invoiceWO]);
+  const invoiceStockLines = useMemo(() => (invoiceWO?.services || []).flatMap(service => { const item = data.items.find(candidate => candidate.id === service.itemId); return item?.type === 'Persediaan' ? [{ service, item, warehouseId: invoiceItemWarehouses[service.id] || '' }] : []; }), [data.items, invoiceItemWarehouses, invoiceWO]);
+  const invoiceStockRequirements = useMemo(() => { const groups = new Map<string, { itemId:string;code:string;name:string;unit:string;warehouseId:string;required:number;available:number }>(); for (const line of invoiceStockLines) { const key=`${line.item.id}|${line.warehouseId}`; const current=groups.get(key); if(current){current.required+=line.service.qty;continue} const available=line.warehouseId?(data.warehouseStocks.find(stock=>stock.warehouseId===line.warehouseId&&stock.itemId===line.item.id)?.quantity||0):0; groups.set(key,{itemId:line.item.id,code:line.item.code,name:line.item.name,unit:line.item.unit,warehouseId:line.warehouseId,required:line.service.qty,available}); } return [...groups.values()]; }, [data.warehouseStocks, invoiceStockLines]);
+  const invoiceHasStockShortage = invoiceStockRequirements.some(requirement => !requirement.warehouseId || requirement.available < requirement.required);
   const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
   const [linkedServiceDetail, setLinkedServiceDetail] = useState<WorkOrderService | null>(null);
   const [detailTabIds, setDetailTabIds] = useState<string[]>([]);
@@ -1561,6 +1567,20 @@ export default function WorkOrders() {
       window.alert(`WO ${wo.woNumber} masih berstatus ${wo.status}. Ubah status menjadi Selesai sebelum membuat faktur.`);
       return;
     }
+    const warehouses = data.warehouses.filter(warehouse => warehouse.branchId === wo.branchId && warehouse.isActive && warehouse.isSellable && !warehouse.isSystem);
+    const remaining = new Map<string, number>();
+    for (const warehouse of warehouses) for (const stock of data.warehouseStocks.filter(row => row.warehouseId === warehouse.id)) remaining.set(`${warehouse.id}|${stock.itemId}`, stock.quantity);
+    const selections:Record<string,string>={};
+    for (const service of wo.services) {
+      const item=data.items.find(candidate=>candidate.id===service.itemId);
+      if(item?.type!=='Persediaan')continue;
+      const preferred=warehouses.filter(warehouse=>warehouse.id===service.warehouseId||warehouse.isDefault);
+      const candidates=[...preferred,...warehouses.filter(warehouse=>!preferred.some(entry=>entry.id===warehouse.id))];
+      const selected=candidates.find(warehouse=>(remaining.get(`${warehouse.id}|${item.id}`)||0)>=service.qty)||candidates[0];
+      if(selected){selections[service.id]=selected.id;const key=`${selected.id}|${item.id}`;remaining.set(key,(remaining.get(key)||0)-service.qty)}
+    }
+    setInvoiceItemWarehouses(selections);
+    setInvoiceStockError('');
     setInvoiceWO(wo);
     setInvoiceCashPayment(wo.total);
     setInvoiceTransferPayment(0);
@@ -1623,6 +1643,7 @@ export default function WorkOrders() {
 
   const handleCreateInvoice = async () => {
     if (invoiceWO && !isCreatingInvoice) {
+      setInvoiceStockError('');
       const today = localDateKey();
       if (invoiceDate > today || (invoicePayment > 0 && invoicePaymentDate > today)) {
         window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
@@ -1641,9 +1662,19 @@ export default function WorkOrders() {
         window.alert(`Pembayaran melebihi tagihan Rp ${difference.toLocaleString('id-ID')}. Kurangi nominal Tunai atau Transfer.`);
         return;
       }
+      if (invoiceStockLines.some(line=>!line.warehouseId)) {
+        setInvoiceStockError('Pilih gudang pengeluaran untuk setiap barang persediaan.');
+        return;
+      }
+      if (invoiceHasStockShortage) {
+        const shortage=invoiceStockRequirements.find(requirement=>requirement.available<requirement.required);
+        setInvoiceStockError(shortage?`Stok ${shortage.code} - ${shortage.name} belum cukup: dibutuhkan ${shortage.required} ${shortage.unit}, tersedia ${shortage.available} ${shortage.unit}. Pilih gudang lain atau lakukan penerimaan/transfer/penyesuaian stok.`:'Stok barang belum mencukupi.');
+        return;
+      }
       setIsCreatingInvoice(true);
       try {
-        const invoice = await createInvoiceFromWO(invoiceWO.id, invoiceCashPayment, invoiceTransferPayment, invoiceDate, invoicePayment > 0 ? invoicePaymentDate : undefined, invoiceBackdateReason);
+        const invoiceItems=invoiceWO.services.map(service=>{const item=data.items.find(candidate=>candidate.id===service.itemId);return item?.type==='Persediaan'?{...service,warehouseId:invoiceItemWarehouses[service.id]}:service});
+        const invoice = await createInvoiceFromWO(invoiceWO.id, invoiceCashPayment, invoiceTransferPayment, invoiceDate, invoicePayment > 0 ? invoicePaymentDate : undefined, invoiceBackdateReason, invoiceItems);
       if (invoice) {
         setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${invoiceWO.woNumber}!`);
         setTimeout(() => setSuccessMsg(''), 4000);
@@ -1652,7 +1683,7 @@ export default function WorkOrders() {
         setInvoiceCashPayment(0);
         setInvoiceTransferPayment(0);
       } catch (error: any) {
-        window.alert(`Gagal membuat faktur: ${error?.message || 'terjadi kesalahan'}`);
+        setInvoiceStockError(error?.message || 'Faktur gagal dibuat. Periksa stok dan gudang lalu coba lagi.');
       } finally {
         setIsCreatingInvoice(false);
       }
@@ -4320,6 +4351,10 @@ export default function WorkOrders() {
                 </div>
               </div>
 
+              {invoiceStockLines.length>0&&<div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3"><div className="mb-2 flex items-center justify-between gap-2"><div><h4 className="text-sm font-semibold text-blue-950">Gudang Pengeluaran Stok</h4><p className="text-xs text-blue-700">Pilih gudang untuk setiap barang. Faktur hanya dapat dibuat bila stok mencukupi.</p></div><Building2 className="h-5 w-5 shrink-0 text-blue-700"/></div><div className="space-y-2">{invoiceStockLines.map(line=>{const requirement=invoiceStockRequirements.find(row=>row.itemId===line.item.id&&row.warehouseId===line.warehouseId);const enough=Boolean(line.warehouseId&&requirement&&requirement.available>=requirement.required);return <div key={line.service.id} className={`rounded border bg-white p-2 ${enough?'border-emerald-200':'border-red-300'}`}><div className="mb-1 flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-900">{line.item.code} · {line.item.name}</p><p className={`text-xs font-medium ${enough?'text-emerald-700':'text-red-600'}`}>Butuh {line.service.qty} {line.item.unit} · Stok gudang {requirement?.available||0} {line.item.unit}</p></div><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${enough?'bg-emerald-100 text-emerald-700':'bg-red-100 text-red-700'}`}>{enough?'CUKUP':'KURANG'}</span></div><select aria-label={`Gudang untuk ${line.item.name}`} value={line.warehouseId} onChange={event=>{setInvoiceItemWarehouses(current=>({...current,[line.service.id]:event.target.value}));setInvoiceStockError('')}} className="h-9 w-full rounded border border-gray-300 bg-white px-2 text-sm"><option value="">Pilih gudang...</option>{invoiceWarehouses.map(warehouse=>{const stock=data.warehouseStocks.find(row=>row.warehouseId===warehouse.id&&row.itemId===line.item.id)?.quantity||0;return <option key={warehouse.id} value={warehouse.id}>{warehouse.name} · Stok {stock} {line.item.unit}</option>})}</select></div>})}</div></div>}
+
+              {invoiceStockError&&<div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-medium text-red-700"><AlertTriangle className="mr-2 inline h-4 w-4"/>{invoiceStockError}</div>}
+
               <div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
@@ -4412,7 +4447,8 @@ export default function WorkOrders() {
               <button
                 type="button"
                 onClick={handleCreateInvoice}
-                disabled={isCreatingInvoice}
+                disabled={isCreatingInvoice||invoiceHasStockShortage||invoiceStockLines.some(line=>!line.warehouseId)}
+                title={invoiceHasStockShortage?'Stok barang belum mencukupi di gudang yang dipilih':'Buat faktur'}
                 className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-green-600/20 transition-colors hover:bg-green-700 disabled:bg-gray-400 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
               >
                 <Receipt className="w-4 h-4" />

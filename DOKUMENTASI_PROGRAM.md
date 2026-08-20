@@ -379,8 +379,11 @@ Fitur:
 | Cakalang | C- |
 | Mamuju | M- |
 
-- Saat faktur dari WO dibuat, WO berubah menjadi Dibayar.
-- Stok barang persediaan dipotong saat faktur dibuat.
+- Saat faktur dari WO dibuat, WO tetap Selesai dan ditautkan ke nomor faktur.
+- Setiap barang Persediaan wajib memiliki Gudang Pengeluaran Stok.
+- Modal faktur menampilkan kebutuhan dan saldo barang per gudang dengan indikator CUKUP atau KURANG.
+- Stok barang persediaan dipotong dari gudang yang dipilih saat faktur dibuat; jasa tidak memengaruhi stok.
+- Faktur tidak dapat dibuat bila stok kurang. Pengguna harus memilih gudang lain atau mencatat penerimaan, transfer, atau penyesuaian stok yang sah.
 - Jika faktur dihapus, stok dikembalikan.
 
 ---

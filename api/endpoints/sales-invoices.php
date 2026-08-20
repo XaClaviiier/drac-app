@@ -40,6 +40,23 @@ $recordInitialCustomerPayment = static function (PDO $pdo, string $invoiceId, st
 $resolveSalesWarehouse=static function(PDO $pdo,string $branchId,?string $requested):string{
     $warehouseId=$requested?:defaultWarehouseId($pdo,$branchId);$stmt=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1 AND is_sellable=1");$stmt->execute([$warehouseId,$branchId]);if(!$stmt->fetchColumn())throw new InvalidArgumentException('Gudang penjualan tidak valid, nonaktif, atau tidak diizinkan untuk penjualan');return $warehouseId;
 };
+$prepareSalesStockItems=static function(PDO $pdo,string $branchId,array $items)use($resolveSalesWarehouse):array{
+    $requirements=[];
+    foreach($items as &$item){
+        if(empty($item['itemId'])||empty($item['isStockItem']))continue;
+        $warehouseId=$resolveSalesWarehouse($pdo,$branchId,$item['warehouseId']??null);$item['warehouseId']=$warehouseId;$key=$warehouseId.'|'.$item['itemId'];
+        if(isset($requirements[$key])){$requirements[$key]['qty']+=(int)$item['qty'];continue;}
+        $requirements[$key]=['warehouseId'=>$warehouseId,'itemId'=>(string)$item['itemId'],'code'=>(string)$item['code'],'name'=>(string)$item['name'],'qty'=>(int)$item['qty']];
+    }
+    unset($item);
+    $stockStmt=$pdo->prepare("SELECT COALESCE(quantity,0) FROM warehouse_stocks WHERE warehouse_id=? AND item_id=? FOR UPDATE");
+    $warehouseStmt=$pdo->prepare("SELECT name FROM warehouses WHERE id=?");
+    foreach($requirements as $requirement){
+        $stockStmt->execute([$requirement['warehouseId'],$requirement['itemId']]);$available=(int)($stockStmt->fetchColumn()?:0);
+        if($available<$requirement['qty']){$warehouseStmt->execute([$requirement['warehouseId']]);$warehouseName=(string)($warehouseStmt->fetchColumn()?:'Gudang');$shortage=$requirement['qty']-$available;throw new DomainException("Stok {$requirement['code']} - {$requirement['name']} di {$warehouseName} kurang {$shortage} (dibutuhkan {$requirement['qty']}, tersedia {$available}). Pilih gudang lain atau lakukan penerimaan, transfer, atau penyesuaian stok.");}
+    }
+    return $items;
+};
 $journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $warehouseId,string $itemId,int $qty,bool $reverse,array $actor):void{
     recordStockMovement($pdo,$itemId,$reverse?null:$warehouseId,$reverse?$warehouseId:null,abs($qty),$reverse?'reversal':'sale','sales_invoice',$invoiceId,$invoiceNumber,($reverse?'Pembalik penjualan ':'Penjualan ').$invoiceNumber,(string)($actor['id']??''),$date.' 12:00:00');
 };
@@ -135,7 +152,7 @@ switch ($method) {
                     ];
                 }, $services);
                 $normalizedInvoice = $normalizeSalesInvoiceItems($pdo,$rawInvoiceItems);
-                $invoiceItems=$normalizedInvoice['items'];$total=$normalizedInvoice['total'];
+                $invoiceItems=$prepareSalesStockItems($pdo,(string)$wo['branch_id'],$normalizedInvoice['items']);$total=$normalizedInvoice['total'];
                 if($payment!==0.0 && abs($payment-$total)>0.001)throw new InvalidArgumentException('Jumlah Tunai + Transfer harus sama dengan total faktur, atau keduanya Rp0 untuk Belum Bayar');
                 $status = $payment >= $total ? 'Lunas' : 'Belum Lunas';
                 $invoiceId = generateId();
@@ -208,6 +225,7 @@ switch ($method) {
             }
             $invoiceDate = (string)($d['date'] ?? date('Y-m-d'));
             $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,is_array($d['items']??null)?$d['items']:[]);
+            $normalizedInvoice['items']=$prepareSalesStockItems($pdo,$branchId,$normalizedInvoice['items']);
             $invoiceTotal=$normalizedInvoice['total'];$initialPayment=max(0,(float)($d['payment']??0));
             if($initialPayment>$invoiceTotal)throw new InvalidArgumentException('Pembayaran awal tidak boleh melebihi total faktur');
             $paymentDate = (float)($d['payment'] ?? 0) > 0 ? ($d['paymentDate'] ?? $invoiceDate) : null;
