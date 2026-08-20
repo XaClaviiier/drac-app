@@ -184,6 +184,12 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /Model \/ Tipe/);
   assert.match(page, /Generasi/);
   assert.match(page, /Mesin \/ CC/);
+  assert.match(page, /Kode Barcode \/ Kode Barang Asli/);
+  assert.match(page, /barcode:quick\.barcode\.trim\(\)/);
+  assert.match(page, /\(i\.barcode\|\|''\)\.toLowerCase\(\)\.includes\(q\)/);
+  assert.match(page, /Merek Barang/);
+  assert.match(page, /itemBrandId:selectedItemBrand\?\.id/);
+  assert.match(page, /api\.get<QuickItemBrand\[]>\('item-brands'\)/);
   assert.match(page, /vehicleCompatibilities/);
   assert.match(page, /Menyimpan\.\.\./);
   assert.match(page, /sudah ada dengan kode/);
