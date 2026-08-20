@@ -98,6 +98,9 @@ export default function WorkOrders() {
   const [completionForm, setCompletionForm] = useState({ temperature: '', lp: '', hp: '', note: '' });
   const [completionError, setCompletionError] = useState('');
   const [isCompletingWO, setIsCompletingWO] = useState(false);
+  const [workResultEditor, setWorkResultEditor] = useState<WorkOrder | null>(null);
+  const [workResultText, setWorkResultText] = useState('');
+  const [isSavingWorkResult, setIsSavingWorkResult] = useState(false);
   const [statusReason, setStatusReason] = useState('');
   const [cancelStep, setCancelStep] = useState<1 | 2>(1);
   const [cancelReasonChoice, setCancelReasonChoice] = useState('');
@@ -1468,6 +1471,44 @@ export default function WorkOrders() {
     }
   };
 
+  const canEditWorkResult = (wo: WorkOrder) => (
+    hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId
+  );
+
+  const openWorkResultEditor = (wo: WorkOrder) => {
+    setWorkResultEditor(wo);
+    setWorkResultText(wo.findings || '');
+  };
+
+  const closeWorkResultEditor = () => {
+    if (isSavingWorkResult) return;
+    setWorkResultEditor(null);
+    setWorkResultText('');
+  };
+
+  const saveWorkResult = async () => {
+    if (!workResultEditor || isSavingWorkResult) return;
+    setIsSavingWorkResult(true);
+    try {
+      const trimmed = workResultText.trim();
+      const nextWorkOrder: WorkOrder = {
+        ...workResultEditor,
+        findings: trimmed,
+      };
+      await updateWorkOrder(workResultEditor.id, nextWorkOrder);
+      setDetailWO(current => current?.id === workResultEditor.id
+        ? { ...current, findings: trimmed }
+        : current);
+      setSuccessMsg(`Keterangan hasil kerja ${workResultEditor.woNumber} berhasil disimpan.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+      closeWorkResultEditor();
+    } catch (error: any) {
+      window.alert(error?.message || 'Gagal menyimpan keterangan hasil kerja.');
+    } finally {
+      setIsSavingWorkResult(false);
+    }
+  };
+
   const confirmStatusChange = async (reasonOverride?: string) => {
     if (!statusDialog) return;
     const { wo, next } = statusDialog;
@@ -2654,7 +2695,19 @@ export default function WorkOrders() {
               </div>
               {(statusLabel(detailWO.status) === 'Selesai' || detailWO.findings || diagnosisMeasurementLabel(detailWO)) && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
-                  <h4 className="font-semibold text-cyan-900">Keterangan Hasil Kerja</h4>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h4 className="font-semibold text-cyan-900">Keterangan Hasil Kerja</h4>
+                    {canEditWorkResult(detailWO) && (
+                      <button
+                        type="button"
+                        onClick={() => openWorkResultEditor(detailWO)}
+                        className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-white px-2 py-1 text-xs font-semibold text-cyan-700 hover:bg-cyan-50"
+                        title="Edit keterangan hasil kerja"
+                      >
+                        <Edit className="h-3.5 w-3.5" /> Edit
+                      </button>
+                    )}
+                  </div>
                   {diagnosisMeasurementLabel(detailWO) && <p className="mt-2 text-sm font-semibold text-cyan-800">{diagnosisMeasurementLabel(detailWO)}</p>}
                   <p className="mt-2 whitespace-pre-wrap text-sm text-cyan-900">{detailWO.findings?.trim() || 'Belum ada keterangan hasil kerja.'}</p>
                 </div>
@@ -3747,6 +3800,61 @@ export default function WorkOrders() {
               <button type="button" disabled={isCompletingWO} onClick={closeCompletionModal} className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 sm:flex-none">Batal</button>
               <button type="button" disabled={isCompletingWO} onClick={() => void completeWorkOrder()} className="inline-flex flex-[1.5] items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60 sm:flex-none">
                 <CheckCircle2 className="h-4 w-4" />{isCompletingWO ? 'Menyimpan...' : 'Simpan & Selesaikan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Edit Catatan Hasil Kerja ===== */}
+      {workResultEditor && (
+        <div className="fixed inset-0 z-[75] flex items-stretch justify-center bg-black/55 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="work-result-title">
+          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
+            <div className="flex flex-shrink-0 items-start justify-between bg-gradient-to-r from-cyan-600 to-blue-700 px-5 py-4 text-white">
+              <div className="flex min-w-0 items-start gap-3">
+                <Edit className="mt-0.5 h-6 w-6 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h3 id="work-result-title" className="text-lg font-bold">Edit Keterangan Hasil Kerja</h3>
+                  <p className="truncate font-mono text-xs text-blue-100">{workResultEditor.woNumber} · {workResultEditor.plateNumber}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isSavingWorkResult}
+                onClick={closeWorkResultEditor}
+                className="rounded-lg p-2 hover:bg-white/20 disabled:opacity-50"
+                aria-label="Tutup"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
+              <label className="mb-2 block text-sm font-semibold text-gray-900">Catatan Hasil Kerja</label>
+              <textarea
+                rows={8}
+                value={workResultText}
+                onChange={(event) => setWorkResultText(event.target.value)}
+                placeholder="Tuliskan keterangan hasil kerja..."
+                className="w-full resize-y rounded-xl border border-gray-300 px-3 py-3 text-sm outline-none focus:border-cyan-500"
+              />
+            </div>
+            <div className="flex flex-shrink-0 gap-3 border-t border-gray-200 bg-white p-4 sm:justify-end sm:px-6">
+              <button
+                type="button"
+                disabled={isSavingWorkResult}
+                onClick={closeWorkResultEditor}
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 sm:flex-none"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSavingWorkResult}
+                onClick={() => void saveWorkResult()}
+                className="inline-flex flex-[1.5] items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-700 disabled:cursor-wait disabled:opacity-60 sm:flex-none"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {isSavingWorkResult ? 'Menyimpan...' : 'Simpan'}
               </button>
             </div>
           </div>
