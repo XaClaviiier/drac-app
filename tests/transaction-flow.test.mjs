@@ -229,6 +229,8 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /Kode # \/ Barcode/);
   assert.match(page, /Kategori \/ Merek/);
   assert.match(page, /lg:grid-cols-\[minmax\(0,1\.1fr\)_minmax\(0,\.9fr\)\]/);
+  assert.match(page, /xl:max-w-\[860px\]/);
+  assert.match(page, /xl:grid-cols-\[448px_380px\]/);
   assert.match(page, /lg:grid-cols-\[128px_minmax\(0,1fr\)\]/);
   assert.match(page, /hidden lg:inline">:<\/span>/);
   assert.match(page, /Menyimpan\.\.\./);
