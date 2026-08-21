@@ -257,4 +257,5 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   assert.match(detail, /Gudang Aktif/);
   assert.match(list, /'Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'/);
   assert.match(list, /\{r\.notes\|\|'-'\}/);
+  assert.match(list, /\{r\.items\.length\} item \(\{r\.items\.reduce/);
 });
