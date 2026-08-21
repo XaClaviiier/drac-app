@@ -245,3 +245,16 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(allData, /vehicleCompatibilities/);
   assert.match(allData, /engineType/);
 });
+
+test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan keterangan', () => {
+  const detail = source('src/pages/GoodsReceiptDetail.tsx');
+  const list = source('src/pages/GoodsReceipt.tsx');
+  assert.match(detail, /lg:grid-cols-\[448px_minmax\(24px,1fr\)_300px\]/);
+  assert.match(detail, /Keterangan penerimaan \(opsional\)/);
+  assert.match(detail, /disabled=\{!editing\} value=\{form\.notes\}/);
+  assert.match(detail, /Edit Penerimaan/);
+  assert.match(detail, /Simpan perubahan/);
+  assert.match(detail, /Gudang Aktif/);
+  assert.match(list, /'Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'/);
+  assert.match(list, /\{r\.notes\|\|'-'\}/);
+});
