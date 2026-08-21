@@ -380,6 +380,7 @@ export interface WarehouseStock {
 
 export interface StockMovement {
   id: string;
+  movementSequence?: number;
   itemId: string;
   itemName: string;
   sourceWarehouseId?: string;
@@ -391,8 +392,13 @@ export interface StockMovement {
   referenceType?: string;
   referenceId?: string;
   referenceNumber?: string;
+  reversalOfId?: string;
+  correctionGroupId?: string;
+  unitCost?: number;
   notes: string;
   createdAt: string;
+  occurredAt?: string;
+  recordedAt?: string;
   incoming?: number;
   outgoing?: number;
   balance?: number;

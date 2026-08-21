@@ -38,18 +38,19 @@ function canSeeReceiptSupplier(PDO $pdo,array $actor):bool{
     $stmt=$pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');$stmt->execute([(string)($actor['role_id']??'')]);$role=$stmt->fetch()?:[];
     return strtoupper(trim((string)($role['code']??'')))==='ADM'||strtolower(trim((string)($role['name']??'')))==='administrator';
 }
-$journalReceipt = static function(PDO $pdo,array $row,string $itemId,int $qty,bool $reverse,array $actor):void{
+$journalReceipt = static function(PDO $pdo,array $row,string $itemId,int $qty,bool $reverse,array $actor,?string $correctionGroupId=null,?string $reversalOfId=null,?string $idempotencyKey=null,?float $unitCost=null):string{
     $warehouseId=(string)($row['warehouse_id']??'');
     if($warehouseId===''&&!empty($row['branch_id']))$warehouseId=defaultWarehouseId($pdo,(string)$row['branch_id']);
     $isTransfer=(string)($row['source_type']??'Supplier')==='Transfer Gudang'&&!empty($row['source_warehouse_id']);
     $source=$isTransfer?(string)$row['source_warehouse_id']:null;
     $destination=$warehouseId;
     if($reverse){[$source,$destination]=[$destination,$source];}
-    recordStockMovement(
+    return recordStockMovement(
         $pdo,$itemId,$source,$destination,abs($qty),$reverse?'reversal':($isTransfer?'transfer':'receipt'),
         'goods_receipt',(string)$row['id'],(string)$row['receipt_number'],
         ($reverse?'Pembalik ':'').($isTransfer?'Transfer penerimaan ':'Penerimaan ').$row['receipt_number'],
-        (string)($actor['id']??''),((string)($row['date']??date('Y-m-d'))).' 12:00:00'
+        (string)($actor['id']??''),((string)($row['date']??date('Y-m-d'))).' 12:00:00',
+        $reversalOfId,$correctionGroupId,$idempotencyKey,$unitCost
     );
 };
 switch ($method) {
@@ -170,7 +171,7 @@ switch ($method) {
                 foreach ($d['items'] as $i) {
                     if($sourceType==='Transfer Gudang')adjustWarehouseStock($pdo,$sourceWarehouseId,$sourceBranchId,$i['itemId'],-(int)$i['qty']);
                     adjustWarehouseStockAllowNegative($pdo,$warehouseId,$branchId,$i['itemId'],(int)$i['qty']);
-                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],(int)$i['qty'],false,$actor);
+                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],(int)$i['qty'],false,$actor,'POST-'.$rId,null,'goods_receipt:'.$rId.':'.$i['itemId'].':post',max(0,(float)($i['unitPrice']??0)));
                 }
             }
 
@@ -251,21 +252,33 @@ switch ($method) {
             // Stock logic
             $wasReceived = in_array($oldStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
             $isReceived = in_array($newStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
+            $oldStockLines=[];foreach($oldItemsList as $line){$key=(string)$line['item_id'];$oldStockLines[$key]=($oldStockLines[$key]??0)+(int)$line['qty'];}ksort($oldStockLines);
+            $newStockLines=[];foreach($d['items'] as $line){$key=(string)$line['itemId'];$newStockLines[$key]=($newStockLines[$key]??0)+(int)$line['qty'];}ksort($newStockLines);
+            $stockImpactChanged=$wasReceived!==$isReceived
+                ||($wasReceived&&$isReceived&&(
+                    $oldStockLines!==$newStockLines
+                    ||$oldWarehouseId!==$newWarehouseId
+                    ||(string)$oldBranchId!==$newBranchId
+                    ||(string)$oldRow['date']!==(string)$d['date']
+                ));
+            $correctionGroupId=$stockImpactChanged?'CORR-GR-'.date('YmdHis').'-'.substr(bin2hex(random_bytes(4)),0,8):null;
+            $activeMovementStmt=$pdo->prepare("SELECT id FROM stock_movements WHERE reference_type='goods_receipt' AND reference_id=? AND item_id=? AND movement_type IN('receipt','transfer') ORDER BY movement_sequence DESC LIMIT 1");
 
-            // Selalu balikkan dampak lama lalu terapkan dampak baru.
-            // Ini juga menangani perubahan qty, item, atau cabang.
-            if ($wasReceived) {
+            // Edit header/rincian non-stok tidak menulis mutasi. Koreksi barang,
+            // kuantitas, gudang, tanggal, atau status memakai pembalik tertaut.
+            if ($stockImpactChanged && $wasReceived) {
                 foreach ($oldItemsList as $i) {
                     adjustWarehouseStock($pdo,$oldWarehouseId,$oldBranchId,$i['item_id'],-(int)$i['qty']);
                     if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStockAllowNegative($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['item_id'],(int)$i['qty']);
-                    $journalReceipt($pdo,$oldRow,(string)$i['item_id'],(int)$i['qty'],true,$actor);
+                    $activeMovementStmt->execute([$id,(string)$i['item_id']]);$reversalOfId=$activeMovementStmt->fetchColumn()?:null;
+                    $journalReceipt($pdo,$oldRow,(string)$i['item_id'],(int)$i['qty'],true,$actor,$correctionGroupId,$reversalOfId,$correctionGroupId.':'.$i['item_id'].':reverse',max(0,(float)($i['unit_price']??0)));
                 }
             }
-            if ($isReceived) {
+            if ($stockImpactChanged && $isReceived) {
                 foreach ($d['items'] as $i) {
                     if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStock($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['itemId'],-(int)$i['qty']);
                     adjustWarehouseStockAllowNegative($pdo,$newWarehouseId,$newBranchId,$i['itemId'],(int)$i['qty']);
-                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],(int)$i['qty'],false,$actor);
+                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],(int)$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':apply',max(0,(float)($i['unitPrice']??0)));
                 }
             }
 

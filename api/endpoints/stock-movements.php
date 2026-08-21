@@ -10,6 +10,21 @@ if($method==='GET'){
     $validDate=fn($value)=>$value===''||preg_match('/^\d{4}-\d{2}-\d{2}$/',$value);
     if(!$validDate($dateFrom)||!$validDate($dateTo)||($dateFrom!==''&&$dateTo!==''&&$dateFrom>$dateTo))respondError('Periode mutasi tidak valid',422);
     if($warehouseId!==''){$warehouseAccess=$pdo->prepare("SELECT branch_id FROM warehouses WHERE id=? AND is_active=1");$warehouseAccess->execute([$warehouseId]);$warehouseBranch=$warehouseAccess->fetchColumn();if($warehouseBranch===false||!isset($allowed[(string)$warehouseBranch]))respondError('Gudang tidak ditemukan atau tidak dapat diakses',403);}
+    if(($_GET['reconcile']??'')==='1'){
+        $warehouseRows=$pdo->query("SELECT id,branch_id,name FROM warehouses WHERE is_active=1")->fetchAll();
+        $warehouseMap=[];foreach($warehouseRows as $warehouse)if(isset($allowed[(string)$warehouse['branch_id']]))$warehouseMap[(string)$warehouse['id']]=$warehouse;
+        $actual=[];$stockRows=$pdo->query("SELECT warehouse_id,item_id,quantity FROM warehouse_stocks")->fetchAll();
+        foreach($stockRows as $stock)if(isset($warehouseMap[(string)$stock['warehouse_id']]))$actual[(string)$stock['warehouse_id'].'|'.(string)$stock['item_id']]=(int)$stock['quantity'];
+        $ledger=[];$movementRows=$pdo->query("SELECT item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type FROM stock_movements ORDER BY movement_sequence")->fetchAll();
+        foreach($movementRows as $movement){$qty=(int)$movement['quantity'];$type=(string)$movement['movement_type'];$source=(string)($movement['source_warehouse_id']??'');$destination=(string)($movement['destination_warehouse_id']??'');$item=(string)$movement['item_id'];
+            if($destination!==''&&isset($warehouseMap[$destination])&&$type!=='transfer_send'){$key=$destination.'|'.$item;$ledger[$key]=($ledger[$key]??0)+$qty;}
+            if($source!==''&&isset($warehouseMap[$source])&&$type!=='transfer_receive'){$key=$source.'|'.$item;$ledger[$key]=($ledger[$key]??0)-$qty;}
+        }
+        $keys=array_unique(array_merge(array_keys($actual),array_keys($ledger)));$itemIds=array_values(array_unique(array_map(fn($key)=>explode('|',$key,2)[1],$keys)));$itemNames=[];
+        if($itemIds){$placeholders=implode(',',array_fill(0,count($itemIds),'?'));$itemStmt=$pdo->prepare("SELECT id,code,name FROM items WHERE id IN ($placeholders)");$itemStmt->execute($itemIds);foreach($itemStmt->fetchAll() as $item)$itemNames[(string)$item['id']]=$item;}
+        $differences=[];foreach($keys as $key){[$wid,$iid]=explode('|',$key,2);$balance=(int)($actual[$key]??0);$ledgerBalance=(int)($ledger[$key]??0);if($balance===$ledgerBalance)continue;$item=$itemNames[$iid]??[];$differences[]=['warehouseId'=>$wid,'warehouseName'=>$warehouseMap[$wid]['name']??$wid,'itemId'=>$iid,'itemCode'=>$item['code']??'','itemName'=>$item['name']??$iid,'balanceQuantity'=>$balance,'ledgerQuantity'=>$ledgerBalance,'difference'=>$balance-$ledgerBalance];}
+        respondSuccess(['checked'=>count($keys),'differences'=>$differences,'isBalanced'=>count($differences)===0]);
+    }
 
     $sql="SELECT m.*,i.name item_name,sw.name source_name,sw.branch_id source_branch_id,dw.name destination_name,dw.branch_id destination_branch_id
           FROM stock_movements m
@@ -18,8 +33,8 @@ if($method==='GET'){
           LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id";
     $params=[];
     if($itemId!==''){$sql.=" WHERE m.item_id=?";$params[]=$itemId;}
-    else{$sql.=" ORDER BY m.created_at DESC LIMIT 200";}
-    if($itemId!=='')$sql.=" ORDER BY m.created_at DESC,m.id DESC";
+    else{$sql.=" ORDER BY COALESCE(m.occurred_at,m.created_at) DESC,m.movement_sequence DESC LIMIT 200";}
+    if($itemId!=='')$sql.=" ORDER BY COALESCE(m.occurred_at,m.created_at) DESC,m.movement_sequence DESC";
     $stmt=$pdo->prepare($sql);$stmt->execute($params);$allRows=$stmt->fetchAll();
     $isAllowed=fn($row)=>(!empty($row['source_branch_id'])&&isset($allowed[(string)$row['source_branch_id']]))||(!empty($row['destination_branch_id'])&&isset($allowed[(string)$row['destination_branch_id']]));
     $allRows=array_values(array_filter($allRows,$isAllowed));
@@ -42,12 +57,12 @@ if($method==='GET'){
             $outgoing=$sourceAllowed&&$row['movement_type']!=='transfer_receive'?(int)$row['quantity']:0;
         }
         if($warehouseId!==''&&$incoming===0&&$outgoing===0)continue;
-        $rowDate=substr((string)$row['created_at'],0,10);$searchable=strtolower(implode(' ',[$row['movement_type'],$row['notes'],$row['source_name'],$row['destination_name']]));
+        $effectiveAt=(string)($row['occurred_at']??$row['created_at']);$rowDate=substr($effectiveAt,0,10);$searchable=strtolower(implode(' ',[$row['movement_type'],$row['notes'],$row['source_name'],$row['destination_name']]));
         $row['running_balance']=$runningBalance;$runningBalance-=$incoming-$outgoing;
         if(($dateFrom!==''&&$rowDate<$dateFrom)||($dateTo!==''&&$rowDate>$dateTo)||($needle!==''&&!str_contains($searchable,$needle)))continue;
         $row['incoming']=$incoming;$row['outgoing']=$outgoing;$rows[]=$row;
     }
-    foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['referenceType']=$r['reference_type']??null;$r['referenceId']=$r['reference_id']??null;$r['referenceNumber']=$r['reference_number']??null;$r['quantity']=(int)$r['quantity'];$r['createdAt']=$r['created_at'];$r['incoming']=(int)$r['incoming'];$r['outgoing']=(int)$r['outgoing'];$r['balance']=(int)$r['running_balance'];}
+    foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['referenceType']=$r['reference_type']??null;$r['referenceId']=$r['reference_id']??null;$r['referenceNumber']=$r['reference_number']??null;$r['movementSequence']=(int)($r['movement_sequence']??0);$r['reversalOfId']=$r['reversal_of_id']??null;$r['correctionGroupId']=$r['correction_group_id']??null;$r['unitCost']=$r['unit_cost']!==null?(float)$r['unit_cost']:null;$r['quantity']=(int)$r['quantity'];$r['occurredAt']=$r['occurred_at']??$r['created_at'];$r['recordedAt']=$r['created_at'];$r['createdAt']=$r['occurred_at']??$r['created_at'];$r['incoming']=(int)$r['incoming'];$r['outgoing']=(int)$r['outgoing'];$r['balance']=(int)$r['running_balance'];}
     respondSuccess($rows);
 }
 if($method!=='POST')respondError('Method not allowed',405);

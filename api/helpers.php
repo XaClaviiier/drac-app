@@ -381,6 +381,7 @@ function ensureApiSupportTables(PDO $pdo): void {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_movements (
             id VARCHAR(30) NOT NULL PRIMARY KEY,
+            movement_sequence BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
             item_id VARCHAR(20) NOT NULL,
             source_warehouse_id VARCHAR(20) NULL,
             destination_warehouse_id VARCHAR(20) NULL,
@@ -400,6 +401,36 @@ function ensureApiSupportTables(PDO $pdo): void {
     $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_type VARCHAR(40) NULL AFTER movement_type");
     $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id VARCHAR(64) NULL AFTER reference_type");
     $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_number VARCHAR(60) NULL AFTER reference_id");
+    $ledgerV2Migration='stock_movement_ledger_v2_20260821';
+    $ledgerV2Check=$pdo->prepare("SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?");
+    $ledgerV2Check->execute([$ledgerV2Migration]);
+    if(!(int)$ledgerV2Check->fetchColumn()){
+        try{
+            $movementColumns=array_column($pdo->query("SHOW COLUMNS FROM stock_movements")->fetchAll(),'Field');
+            if(!in_array('movement_sequence',$movementColumns,true)){
+                $pdo->exec("ALTER TABLE stock_movements ADD COLUMN movement_sequence BIGINT UNSIGNED NULL AFTER id");
+            }
+            $movementSequenceColumn=$pdo->query("SHOW COLUMNS FROM stock_movements LIKE 'movement_sequence'")->fetch();
+            if($movementSequenceColumn&&!str_contains(strtolower((string)($movementSequenceColumn['Extra']??'')),'auto_increment')){
+                $pdo->exec("SET @drac_movement_sequence := (SELECT COALESCE(MAX(movement_sequence),0) FROM stock_movements)");
+                $pdo->exec("UPDATE stock_movements SET movement_sequence=(@drac_movement_sequence:=@drac_movement_sequence+1) WHERE movement_sequence IS NULL ORDER BY created_at,id");
+                $sequenceIndex=$pdo->query("SHOW INDEX FROM stock_movements WHERE Key_name='uq_stock_movement_sequence'")->fetch();
+                $pdo->exec("ALTER TABLE stock_movements MODIFY movement_sequence BIGINT UNSIGNED NOT NULL AUTO_INCREMENT".($sequenceIndex?'':", ADD UNIQUE KEY uq_stock_movement_sequence(movement_sequence)"));
+            }
+            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS occurred_at DATETIME NULL AFTER notes");
+            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(15,2) NULL AFTER quantity");
+            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reversal_of_id VARCHAR(30) NULL AFTER reference_number");
+            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS correction_group_id VARCHAR(64) NULL AFTER reversal_of_id");
+            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(160) NULL AFTER correction_group_id");
+            $pdo->exec("UPDATE stock_movements SET occurred_at=created_at WHERE occurred_at IS NULL");
+            $indexRows=$pdo->query("SHOW INDEX FROM stock_movements")->fetchAll();
+            $indexNames=array_column($indexRows,'Key_name');
+            if(!in_array('uq_stock_movement_idempotency',$indexNames,true))$pdo->exec("ALTER TABLE stock_movements ADD UNIQUE KEY uq_stock_movement_idempotency(idempotency_key)");
+            if(!in_array('idx_stock_movement_occurred',$indexNames,true))$pdo->exec("ALTER TABLE stock_movements ADD INDEX idx_stock_movement_occurred(occurred_at,movement_sequence)");
+            if(!in_array('idx_stock_movement_reference',$indexNames,true))$pdo->exec("ALTER TABLE stock_movements ADD INDEX idx_stock_movement_reference(reference_type,reference_id,item_id)");
+            $pdo->prepare("INSERT INTO app_schema_migrations(migration_key) VALUES(?)")->execute([$ledgerV2Migration]);
+        }catch(Throwable $e){throw $e;}
+    }
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_adjustments (
             id VARCHAR(30) NOT NULL PRIMARY KEY,
@@ -1145,16 +1176,25 @@ function recordStockMovement(
     ?string $referenceNumber,
     string $notes,
     ?string $createdBy,
-    ?string $occurredAt = null
+    ?string $occurredAt = null,
+    ?string $reversalOfId = null,
+    ?string $correctionGroupId = null,
+    ?string $idempotencyKey = null,
+    ?float $unitCost = null
 ): string {
     if ($quantity <= 0 || ($sourceWarehouseId === null && $destinationWarehouseId === null)) {
         throw new InvalidArgumentException('Jurnal stok tidak valid');
     }
+    if($idempotencyKey!==null&&$idempotencyKey!==''){
+        $existing=$pdo->prepare("SELECT id FROM stock_movements WHERE idempotency_key=? LIMIT 1");
+        $existing->execute([$idempotencyKey]);
+        $existingId=$existing->fetchColumn();
+        if($existingId!==false)return (string)$existingId;
+    }
     $id='MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);
-    $sql="INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by";
-    $values=[$id,$itemId,$sourceWarehouseId,$destinationWarehouseId,$quantity,$movementType,$referenceType,$referenceId,$referenceNumber,$notes,$createdBy];
-    if($occurredAt!==null){$sql.=',created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)';$values[]=$occurredAt;}
-    else{$sql.=') VALUES(?,?,?,?,?,?,?,?,?,?,?)';}
+    $sql="INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,unit_cost,movement_type,reference_type,reference_id,reference_number,reversal_of_id,correction_group_id,idempotency_key,notes,occurred_at,created_by)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+    $values=[$id,$itemId,$sourceWarehouseId,$destinationWarehouseId,$quantity,$unitCost,$movementType,$referenceType,$referenceId,$referenceNumber,$reversalOfId,$correctionGroupId,$idempotencyKey,$notes,$occurredAt??date('Y-m-d H:i:s'),$createdBy];
     $pdo->prepare($sql)->execute($values);
     return $id;
 }

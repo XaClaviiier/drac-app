@@ -135,6 +135,28 @@ test('seluruh dokumen stok menulis jurnal bernomor dan transfer mendukung pembat
   assert.match(transfers, /Hanya transfer Draft yang dapat dikirim/);
 });
 
+test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat pembalik', () => {
+  const helpers = source('api/helpers.php');
+  const receipts = source('api/endpoints/goods-receipts.php');
+  const movements = source('api/endpoints/stock-movements.php');
+  const allData = source('api/endpoints/all-data.php');
+  const items = source('src/pages/ItemsAndServices.tsx');
+  assert.match(helpers, /movement_sequence BIGINT UNSIGNED/);
+  assert.match(helpers, /occurred_at DATETIME/);
+  assert.match(helpers, /reversal_of_id/);
+  assert.match(helpers, /correction_group_id/);
+  assert.match(helpers, /idempotency_key/);
+  assert.match(receipts, /stockImpactChanged/);
+  assert.match(receipts, /Edit header\/rincian non-stok tidak menulis mutasi/);
+  assert.match(receipts, /ORDER BY movement_sequence DESC/);
+  assert.match(receipts, /reversalOfId/);
+  assert.match(movements, /\(\$_GET\['reconcile'\]\?\?''\)==='1'/);
+  assert.match(movements, /COALESCE\(m\.occurred_at,m\.created_at\) DESC,m\.movement_sequence DESC/);
+  assert.match(allData, /m\.movement_sequence DESC/);
+  assert.match(items, /receipt:'Penerimaan Barang'/);
+  assert.match(items, /reversal:'Pembalik Transaksi'/);
+});
+
 test('gudang tidak dapat dinonaktifkan saat saldo atau dokumen masih terbuka', () => {
   const endpoint = source('api/endpoints/warehouses.php');
   assert.match(endpoint, /SUM\(ABS\(quantity\)\+ABS\(reserved_quantity\)\)/);

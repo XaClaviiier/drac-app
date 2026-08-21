@@ -12,6 +12,11 @@ import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
+const stockMovementLabels:Record<string,string>={
+  receipt:'Penerimaan Barang',sale:'Penjualan',reversal:'Pembalik Transaksi',
+  transfer:'Pemindahan Barang',transfer_send:'Kirim Barang',transfer_receive:'Terima Barang',
+  adjustment:'Penyesuaian Persediaan',
+};
 
 const twoDigitSegment = (value: string, fallback: string) => {
   const normalized = value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
@@ -1514,7 +1519,7 @@ export default function ItemsAndServices() {
                 </div>
                 <div className="overflow-auto rounded-t-lg border border-slate-300">
                   <table className="min-w-[1100px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-3 py-2.5 text-left">Tanggal</th><th className="px-3 py-2.5 text-left">No. Sumber #</th><th className="px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Nilai Satuan</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
-                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5">{new Date(movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.referenceNumber || movement.id}</td><td className="px-3 py-2.5">{movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right">—</td><td className="px-3 py-2.5 text-right text-emerald-700">{movement.incoming || ''}</td><td className="px-3 py-2.5 text-right text-red-700">{movement.outgoing || ''}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td></tr>)}</tbody>
+                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5">{new Date(movement.occurredAt||movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.referenceNumber || movement.id}</td><td className="px-3 py-2.5">{stockMovementLabels[movement.movementType]||movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right">{movement.unitCost!=null?formatCurrency(movement.unitCost):'—'}</td><td className="px-3 py-2.5 text-right text-emerald-700">{movement.incoming || ''}</td><td className="px-3 py-2.5 text-right text-red-700">{movement.outgoing || ''}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td></tr>)}</tbody>
                   </table>
                   {movementError && <div className="bg-red-50 py-3 text-center text-sm text-red-700">{movementError}</div>}
                   {!movementLoading && !movementError && !itemMovementRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada data mutasi pada periode ini.</div>}
