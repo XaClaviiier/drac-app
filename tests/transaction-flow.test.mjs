@@ -258,4 +258,9 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   assert.match(list, /'Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'/);
   assert.match(list, /\{r\.notes\|\|'-'\}/);
   assert.match(list, /\{r\.items\.length\} item \(\{r\.items\.reduce/);
+  assert.match(list, /space-y-2 px-2 py-2 lg:hidden/);
+  assert.match(list, /hidden lg:block/);
+  assert.match(list, /const totalQuantity=/);
+  assert.match(list, /\{r\.receivedBy\|\|'-'\}/);
+  assert.match(list, /\{r\.items\.length\} item \(\{totalQuantity\} pcs\)/);
 });

@@ -305,7 +305,23 @@ export default function GoodsReceiptPage() {
           </div>
         </div>
         {showSuccessMsg&&<div className="border-y border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-700">{showSuccessMsg}</div>}
+        <div className="space-y-2 px-2 py-2 lg:hidden">
+          {filtered.map(r=>{
+            const warehouseName=data.warehouses.find(w=>w.id===r.warehouseId)?.name||'-';
+            const documentNumber=r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber;
+            const totalQuantity=r.items.reduce((sum,item)=>sum+item.qty,0);
+            return <article key={r.id} role="button" tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="rounded border border-slate-300 bg-white px-3 py-2.5 shadow-sm active:bg-blue-50">
+              <div className="flex items-start justify-between gap-3"><time className="font-bold text-slate-900">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</time><span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.status==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span></div>
+              <div className="mt-0.5 font-mono text-[13px] font-semibold text-blue-700">{documentNumber}</div>
+              <div className="mt-2 grid grid-cols-[minmax(72px,auto)_1fr] gap-x-2 border-t border-slate-100 pt-2 text-xs text-slate-700"><span className="truncate font-medium">{r.receivedBy||'-'}</span><span className="truncate border-l border-slate-300 pl-2" title={r.notes||''}>{r.notes||'-'}</span></div>
+              <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs"><span className="shrink-0 font-semibold text-slate-800">{r.items.length} item ({totalQuantity} pcs)</span><span className="text-slate-300">|</span><span className="truncate text-slate-600" title={warehouseName}>{warehouseName}</span></div>
+            </article>
+          })}
+          {!filtered.length&&<div className="rounded border border-slate-200 bg-white py-14 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-10 w-10"/>Belum ada penerimaan barang.</div>}
+        </div>
+        <div className="hidden lg:block">
         <div className="mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{['Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'].map(label=><th key={label} className="border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0">{label}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]"><td className="border-r border-[#d8d8d8] p-3 font-normal text-blue-700 underline-offset-2 hover:underline">{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td><td className="whitespace-nowrap border-r border-[#d8d8d8] p-3">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td><td className="max-w-[280px] truncate border-r border-[#d8d8d8] p-3" title={r.notes||''}>{r.notes||'-'}</td><td className="border-r border-[#d8d8d8] p-3">{r.receivedBy||'-'}</td><td className="whitespace-nowrap border-r border-[#d8d8d8] p-3">{r.items.length} item ({r.items.reduce((sum,item)=>sum+item.qty,0)} pcs)</td><td className="border-r border-[#d8d8d8] p-3">{data.warehouses.find(w=>w.id===r.warehouseId)?.name||'-'}</td><td className="p-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${r.status==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span></td></tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
+        </div>
       </section>
       <div className="hidden">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
