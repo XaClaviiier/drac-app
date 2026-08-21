@@ -215,6 +215,7 @@ export interface ItemVehicleCompatibility {
   generationId?: string;
   generationName?: string;
   engineCc?: number | null;
+  engineType?: 'Bensin' | 'Diesel' | 'Hybrid' | 'Listrik' | null;
 }
 
 export interface Item {

@@ -178,12 +178,17 @@ test('dokumentasi online mencatat aturan dan alur kerja lintas modul', () => {
 
 test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobil', () => {
   const page = source('src/pages/GoodsReceiptEntry.tsx');
+  const compatibilityPicker = source('src/components/VehicleCompatibilityPicker.tsx');
   const endpoint = source('api/endpoints/items.php');
   const allData = source('api/endpoints/all-data.php');
-  assert.match(page, /Merek Kendaraan/);
-  assert.match(page, /Model \/ Tipe/);
-  assert.match(page, /Generasi/);
-  assert.match(page, /Mesin \/ CC/);
+  assert.match(compatibilityPicker, /Merek/);
+  assert.match(compatibilityPicker, /Tipe \/ Model/);
+  assert.match(compatibilityPicker, /Generasi/);
+  assert.match(compatibilityPicker, /Kapasitas Mesin/);
+  assert.match(compatibilityPicker, /Jenis Mesin/);
+  assert.match(compatibilityPicker, /Semua CC/);
+  assert.match(compatibilityPicker, /Bensin/);
+  assert.match(compatibilityPicker, /Diesel/);
   assert.match(page, /UPC\/Barcode/);
   assert.match(page, /barcode:quick\.barcode\.trim\(\)/);
   assert.match(page, /\(i\.barcode\|\|''\)\.toLowerCase\(\)\.includes\(q\)/);
@@ -220,6 +225,9 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(purchaseInvoice, /unitPrice: it\.unitPrice \?\?/);
   assert.match(purchaseInvoice, /it\.discountAmount/);
   assert.match(page, /vehicleCompatibilities/);
+  assert.match(page, /unitOptions\.map/);
+  assert.match(page, /Kode # \/ Barcode/);
+  assert.match(page, /Kategori \/ Merek/);
   assert.match(page, /Menyimpan\.\.\./);
   assert.match(page, /sudah ada dengan kode/);
   assert.match(page, /setQuickError\(error\?\.message/);
@@ -227,5 +235,7 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(endpoint, /replaceItemVehicleCompatibilities/);
   assert.match(endpoint, /Model\/tipe kendaraan tidak sesuai dengan merek/);
   assert.match(endpoint, /CC mesin tidak tersedia pada generasi yang dipilih/);
+  assert.match(endpoint, /engine_type/);
   assert.match(allData, /vehicleCompatibilities/);
+  assert.match(allData, /engineType/);
 });
