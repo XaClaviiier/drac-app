@@ -194,6 +194,10 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /Rincian Barang<\/button>.*Info lainnya<\/button>.*Penangguhan<\/button>/s);
   assert.match(page, /@Harga/);
   assert.match(page, /Total Harga/);
+  assert.match(page, /max-w-xl flex-col/);
+  assert.match(page, /grid-cols-\[32%_minmax\(0,1fr\)\]/);
+  assert.match(page, /grid-cols-\[minmax\(0,1fr\)_96px\]/);
+  assert.doesNotMatch(page, /<label>Satuan<\/label><input readOnly value=\{lineDraft\.unit\}/);
   assert.match(page, /confirmLineDraft/);
   assert.match(page, /lineDraftMode==='edit'/);
   assert.match(page, /const openQuickCreate=/);
