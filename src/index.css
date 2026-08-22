@@ -37,11 +37,85 @@ body { margin: 0; background: #f3f4f6; }
 :root {
   --app-blue: #2563eb;
   --app-blue-dark: #1d4ed8;
+  --app-field-border: #a6a6a6;
+  --app-field-focus: #1683ff;
+  --app-field-error: #dc2626;
   --app-canvas: #eeeeee;
   --app-tab-idle: #d8dce2;
   --app-border: #c7cdd5;
   --app-table-head: #637c93;
   --app-row-alt: #f5f5f5;
+}
+
+/*
+ * Standar baku field ala Accurate.
+ * Seluruh field satu baris memakai tinggi, border, radius dan status fokus
+ * yang sama. Checkbox/radio/file tidak termasuk karena bentuknya khusus.
+ */
+#root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not(.app-field-unstyled),
+#root select:not([multiple]) {
+  height: 36px !important;
+  min-height: 36px;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: var(--app-field-border) !important;
+  border-radius: 4px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 14px;
+  outline: none !important;
+  transition: border-color .12s ease, box-shadow .12s ease, background-color .12s ease;
+}
+
+#root textarea {
+  min-height: 72px;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: var(--app-field-border) !important;
+  border-radius: 4px !important;
+  font-size: 14px;
+  outline: none !important;
+  transition: border-color .12s ease, box-shadow .12s ease, background-color .12s ease;
+}
+
+#root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not(.app-field-unstyled):focus,
+#root select:not([multiple]):focus,
+#root textarea:focus {
+  border-color: var(--app-field-focus) !important;
+  box-shadow: 0 0 0 1px rgba(22, 131, 255, .28) !important;
+}
+
+#root input[aria-invalid="true"],
+#root select[aria-invalid="true"],
+#root textarea[aria-invalid="true"],
+#root .is-error,
+#root [data-error="true"] {
+  border-color: var(--app-field-error) !important;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, .20) !important;
+}
+
+#root input:disabled,
+#root select:disabled,
+#root textarea:disabled {
+  border-color: #c7cdd5 !important;
+  background-color: #f1f3f5;
+}
+
+.app-combobox-field {
+  min-height: 36px;
+  border: 1px solid var(--app-field-border) !important;
+  border-radius: 4px !important;
+  box-shadow: none;
+}
+.app-combobox-field:focus-within {
+  border-color: var(--app-field-focus) !important;
+  box-shadow: 0 0 0 1px rgba(22, 131, 255, .28) !important;
+}
+.app-combobox-field[aria-invalid="true"],
+.app-combobox-field.is-error,
+.app-combobox-field[data-error="true"] {
+  border-color: var(--app-field-error) !important;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, .20) !important;
 }
 
 /* Header pita biru: mengikuti ritme visual Accurate tanpa menyalin asetnya. */
@@ -268,6 +342,12 @@ body { margin: 0; background: #f3f4f6; }
 /* Android/iOS: cegah zoom otomatis saat input dan beri area sentuh nyaman. */
 @media (max-width: 640px) {
   input, select, textarea { font-size: 16px !important; }
+  #root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not(.app-field-unstyled),
+  #root select:not([multiple]) {
+    height: 42px !important;
+    min-height: 42px;
+  }
+  .app-combobox-field { min-height: 42px; }
   button, a { -webkit-tap-highlight-color: transparent; }
   .fixed.inset-0 > div { max-width: calc(100vw - 16px); }
 }

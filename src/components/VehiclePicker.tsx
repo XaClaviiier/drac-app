@@ -204,7 +204,18 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
     !customerVehicles.some(v => normalizePlate(v.plateNumber) === normalizePlate(plateTyped));
 
   return (
-    <div className="relative" ref={wrapperRef}>
+    <div
+      className="relative"
+      ref={wrapperRef}
+      tabIndex={-1}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false);
+          setShowNewForm(false);
+          setInputText(selectedVehicle?.plateNumber || '');
+        }
+      }}
+    >
       {/* Input utama */}
       <div className="relative">
         <Car className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
