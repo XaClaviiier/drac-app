@@ -281,6 +281,9 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(purchaseInvoice, /unitPrice: it\.unitPrice \?\?/);
   assert.match(purchaseInvoice, /it\.discountAmount/);
   assert.match(page, /vehicleCompatibilities/);
+  assert.match(page, /const withUniversalFallback=/);
+  assert.match(page, /setLineCompatibilities\(withUniversalFallback\(master\?\.vehicleCompatibilities\)\)/);
+  assert.doesNotMatch(page, /Pilih minimal satu kecocokan mobil atau Universal/);
   assert.match(page, /unitOptions\.map/);
   assert.match(page, /Kode # \/ Barcode/);
   assert.match(page, /Kategori \/ Merek/);
