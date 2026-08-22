@@ -746,15 +746,6 @@ export default function Layout() {
       <aside
         className={`${sidebarOpen ? "w-64" : "w-[84px]"} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] pt-12 text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
       >
-        <div className="app-brand-header absolute left-0 top-0 flex h-12 w-[320px] items-center gap-2.5 px-4">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
-            <Wrench className="h-4 w-4 text-white" />
-          </div>
-          <div className="whitespace-nowrap">
-            <h1 className="text-[13px] font-bold leading-4 text-white">DOKTER AC MOBIL</h1>
-            <p className="text-[10px] leading-3 text-blue-100">Management System</p>
-          </div>
-        </div>
         <nav className="flex-1 overflow-visible py-4">
           {hasPermission("dashboard:view") && (
             <NavLink
@@ -920,12 +911,12 @@ export default function Layout() {
         })()}
 
       {/* ========== MAIN ========== */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden lg:pt-12">
         {/* Header */}
         <header
-          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} app-brand-header flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:h-12 lg:py-1`}
+          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} app-brand-header relative flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:fixed lg:inset-x-0 lg:top-0 lg:z-[75] lg:h-12 lg:py-1`}
         >
-          <div className="hidden items-center gap-2.5">
+          <div className="hidden items-center gap-2.5 lg:flex">
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
               <Wrench className="h-4 w-4 text-white" />
             </div>

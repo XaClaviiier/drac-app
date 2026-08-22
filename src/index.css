@@ -46,7 +46,6 @@ body { margin: 0; background: #f3f4f6; }
 
 /* Header pita biru: mengikuti ritme visual Accurate tanpa menyalin asetnya. */
 .app-brand-header {
-  position: relative;
   background:
     linear-gradient(100deg, #071a43 0%, #0a2c68 34%, #104b9c 67%, #082657 100%);
   color: #fff;
