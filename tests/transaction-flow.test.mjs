@@ -334,6 +334,8 @@ test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak 
   assert.match(detail, /documentMenuOpen/);
   assert.match(detail, /actionMenuOpen/);
   assert.match(detail, /Simpan, bagikan, atau print tanda terima/);
+  assert.match(detail, /title="Simpan, bagikan, atau print tanda terima" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700/);
+  assert.match(detail, /<Printer className="h-5 w-5"\/><ChevronDown className="h-3 w-3"\/>/);
   assert.match(detail, /receipt\.status!==['"]Draft['"]&&receipt\.status!==['"]Batal['"]/);
   assert.match(acknowledgement, /renderGoodsReceiptImage/);
   assert.match(acknowledgement, /navigator\.share/);
