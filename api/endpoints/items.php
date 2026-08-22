@@ -284,13 +284,26 @@ switch ($method) {
         $d = getInput();
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         if (in_array((string)($d['action']??''), ['verify','merge'], true)) {
-            $roleStmt=$pdo->prepare("SELECT code,name FROM roles WHERE id=? LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$role=$roleStmt->fetch();
-            $isAdmin=!empty($actor['is_owner'])||strtoupper((string)($role['code']??''))==='ADM'||strtolower((string)($role['name']??''))==='administrator';
+            $roleStmt=$pdo->prepare("SELECT code,name FROM roles WHERE id=? LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$role=$roleStmt->fetch() ?: [];
+            $isAdmin=!empty($actor['is_owner'])||strtoupper(trim((string)($role['code']??'')))==='ADM'||strtolower(trim((string)($role['name']??'')))==='administrator';
             if(!$isAdmin)respondError('Verifikasi barang hanya untuk Owner atau Administrator',403);
             if($d['action']==='verify'){
-                $pdo->prepare("UPDATE items SET verification_status='Verified',verified_by=? WHERE id=? AND verification_status='Pending'")->execute([$actor['id']??null,$id]);
-                $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,user_id,user_name) VALUES (?,'Verified',?,?)")->execute([$id,$actor['id']??null,$actor['name']??'']);
-                respondSuccess(null,'Barang berhasil diverifikasi');
+                $pdo->beginTransaction();
+                try {
+                    $pendingStmt=$pdo->prepare("SELECT id FROM items WHERE id=? AND verification_status='Pending' FOR UPDATE");$pendingStmt->execute([$id]);
+                    if(!$pendingStmt->fetchColumn())throw new InvalidArgumentException('Barang tidak ditemukan atau sudah tidak menunggu verifikasi');
+                    $pdo->prepare("UPDATE items SET verification_status='Verified',verified_by=? WHERE id=?")->execute([$actor['id']??null,$id]);
+                    try {
+                        $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,user_id,user_name) VALUES (?,'Verified',?,?)")->execute([$id,$actor['id']??null,$actor['name']??$actor['username']??'']);
+                    } catch (Throwable $auditError) {
+                        error_log('item verification audit failed: '.$auditError->getMessage());
+                    }
+                    $pdo->commit();respondSuccess(null,'Barang berhasil diverifikasi');
+                } catch (InvalidArgumentException $e) {
+                    if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);
+                } catch (Throwable $e) {
+                    if($pdo->inTransaction())$pdo->rollBack();error_log('item verification failed: '.$e->getMessage());respondError('Verifikasi barang gagal disimpan. Silakan muat ulang dan coba lagi.',500);
+                }
             }
             $targetId=(string)($d['targetItemId']??'');
             if($targetId===''||$targetId===$id)respondError('Barang tujuan penggabungan tidak valid',422);
@@ -312,9 +325,9 @@ switch ($method) {
                 $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);
                 $pdo->prepare("UPDATE items SET is_active=0,verification_status='Merged',merged_into_item_id=?,verified_by=?,stock=0,sellable_stock=0 WHERE id=?")->execute([$targetId,$actor['id']??null,$id]);
                 $pdo->prepare("UPDATE items SET stock=(SELECT COALESCE(SUM(stock),0) FROM branch_item_stocks WHERE item_id=?),sellable_stock=(SELECT COALESCE(SUM(sellable_stock),0) FROM branch_item_stocks WHERE item_id=?) WHERE id=?")->execute([$targetId,$targetId,$targetId]);
-                $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??'']);
+                try{$pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??$actor['username']??'']);}catch(Throwable$auditError){error_log('item merge audit failed: '.$auditError->getMessage());}
                 $pdo->commit();respondSuccess(null,'Barang duplikat berhasil dikonversi dan stok digabungkan');
-            }catch(Exception $e){$pdo->rollBack();respondError($e->getMessage(),422);}
+            }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('item merge failed: '.$e->getMessage());respondError($e instanceof InvalidArgumentException?$e->getMessage():'Penggabungan barang gagal disimpan. Silakan muat ulang dan coba lagi.',$e instanceof InvalidArgumentException?422:500);}
         }
         $type = (string)($d['type'] ?? '');
         if (!in_array($type, ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'], true)) respondError('Jenis barang/jasa tidak valid', 422);
