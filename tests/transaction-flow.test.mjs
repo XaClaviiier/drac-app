@@ -320,6 +320,22 @@ test('rail aksi penerimaan baru mengikuti ukuran dan split button Accurate', () 
   assert.doesNotMatch(page, /Hapus tersedia setelah data disimpan/);
 });
 
+test('penerimaan mewajibkan satu cabang dan gudang yang sesuai', () => {
+  const entry = source('src/pages/GoodsReceiptEntry.tsx');
+  const list = source('src/pages/GoodsReceipt.tsx');
+  const endpoint = source('api/endpoints/goods-receipts.php');
+  assert.match(entry, /const branchId=currentBranchId==='ALL'\?'':currentBranchId/);
+  assert.match(entry, /Pilih Cabang Transaksi/);
+  assert.match(entry, /Semua Cabang hanya digunakan untuk melihat gabungan data/);
+  assert.match(entry, /warehouses\.find\(warehouse=>warehouse\.id===form\.warehouseId\)/);
+  assert.match(entry, /warehouseId:selectedWarehouse\.id/);
+  assert.doesNotMatch(entry, /currentBranchId==='ALL'\?currentUser\?\.branchId:currentBranchId/);
+  assert.match(list, /const openNewReceipt=.*currentBranchId==='ALL'/);
+  assert.match(list, /Gudang tujuan tidak sesuai dengan cabang transaksi/);
+  assert.match(endpoint, /SELECT id FROM warehouses WHERE id=\? AND branch_id=\? AND is_active=1/);
+  assert.match(endpoint, /Gudang tujuan tidak valid/);
+});
+
 test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan keterangan', () => {
   const detail = source('src/pages/GoodsReceiptDetail.tsx');
   const list = source('src/pages/GoodsReceipt.tsx');

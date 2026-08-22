@@ -221,8 +221,12 @@ export default function GoodsReceiptPage() {
         warehouseId: receipt.warehouseId || '',
       });
     } else {
+      if (currentBranchId === 'ALL') {
+        window.alert('Pilih satu cabang di bagian atas sebelum membuat penerimaan. Semua Cabang hanya untuk melihat data.');
+        return;
+      }
       setEditing(null);
-      const branchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
+      const branchId=currentBranchId;
       const defaultWarehouse=data.warehouses.find(w=>w.branchId===branchId&&w.isActive&&w.isDefault)||data.warehouses.find(w=>w.branchId===branchId&&w.isActive);
       setForm({
         date: localDateKey(),
@@ -260,9 +264,11 @@ export default function GoodsReceiptPage() {
     e.preventDefault();
     if (form.items.length === 0) { window.alert('Tambahkan minimal 1 barang'); return; }
     const supplier = data.suppliers.find(s => s.id === form.supplierId);
-    const branchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
+    const branchId = editing?.branchId || (currentBranchId === 'ALL' ? '' : currentBranchId);
+    if (!branchId) { window.alert('Pilih satu cabang transaksi terlebih dahulu. Semua Cabang hanya untuk melihat data.'); return; }
     const warehouseId = form.warehouseId || data.warehouses.find(w => w.branchId === branchId && w.isActive && w.isDefault)?.id || data.warehouses.find(w => w.branchId === branchId && w.isActive)?.id || '';
     if (!warehouseId) { window.alert('Gudang tujuan wajib dipilih.'); return; }
+    if (!data.warehouses.some(w => w.id === warehouseId && w.branchId === branchId && w.isActive)) { window.alert('Gudang tujuan tidak sesuai dengan cabang transaksi.'); return; }
 
     if (editing) {
       updateGoodsReceipt(editing.id, {
@@ -284,7 +290,8 @@ export default function GoodsReceiptPage() {
   const createQuickItem = async () => {
     const category=data.itemCategories.find(c=>c.id===quickItem.categoryId);
     if(!quickItem.name.trim()||!category){window.alert('Nama dan kategori barang wajib diisi.');return;}
-    const branchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
+    const branchId=editing?.branchId||(currentBranchId==='ALL'?'':currentBranchId);
+    if(!branchId){window.alert('Pilih satu cabang transaksi terlebih dahulu.');return;}
     const created=await addItem({id:Date.now().toString(),code:'AUTO',name:quickItem.name,categoryId:category.id,categoryName:category.name,type:'Persediaan',brand:'',vehicleBrandId:quickItem.vehicleBrandId||undefined,unit:quickItem.unit||'PCS',stock:0,sellableStock:0,purchasePrice:0,sellingPrice:0,isActive:true,isQuickService:false,description:'Dibuat saat penerimaan barang; menunggu verifikasi admin',barcode:quickItem.barcode,branchId,autoCode:true,provisional:true});
     addItemLine(created);setShowQuickItem(false);setQuickItem({name:'',categoryId:'',vehicleBrandId:'',unit:'PCS',barcode:''});
   };
@@ -322,8 +329,9 @@ export default function GoodsReceiptPage() {
   const draftCount = branchReceipts.filter(r => r.status === 'Draft').length;
   const pendingItems=data.items.filter(i=>i.verificationStatus==='Pending');
   const canVerify=Boolean(currentUser?.isOwner)||String(currentUser?.roleName||'').toLowerCase().includes('admin');
-  const transactionBranchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'BR-001';
+  const transactionBranchId=currentBranchId==='ALL'?'':currentBranchId;
   const activeWarehouses=data.warehouses.filter(w=>w.branchId===transactionBranchId&&w.isActive&&!w.isSystem);
+  const openNewReceipt=()=>{if(currentBranchId==='ALL'){window.alert('Pilih satu cabang di bagian atas sebelum membuat penerimaan. Semua Cabang hanya untuk melihat data.');return}navigate('/receipts/new')};
 
   return (
     <div className="space-y-5">
@@ -336,7 +344,7 @@ export default function GoodsReceiptPage() {
             <button onClick={()=>{setFilterFromDate('');setFilterStatus('');setFilterInvoice('')}} className="rounded border border-blue-600 bg-blue-50 px-3 py-2 text-blue-700" title="Bersihkan filter"><Filter className="h-5 w-5"/></button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={()=>navigate('/receipts/new')} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
+            <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={openNewReceipt} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
             <div className="flex items-center gap-2"><button onClick={()=>window.print()} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Cetak"><Printer className="h-5 w-5"/></button>{hasPermission('purchase:view')&&<button onClick={()=>navigate('/purchase-invoices')} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Faktur Pembelian"><Settings2 className="h-5 w-5"/></button>}<div className="relative"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className="w-64 rounded border border-slate-300 bg-white px-3 py-2.5 pr-10 text-slate-900 placeholder:text-slate-400 focus:bg-white"/><Search className="absolute right-3 top-3 h-5 w-5"/></div><span className="min-w-16 rounded border border-slate-300 bg-white px-4 py-2.5 text-center">{filtered.length}</span></div>
           </div>
         </div>
@@ -387,7 +395,7 @@ export default function GoodsReceiptPage() {
             </button>
           )}
           {hasPermission('receipt:create') && (
-            <button onClick={() => navigate('/receipts/new')} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+            <button onClick={openNewReceipt} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
               <Plus className="h-5 w-5" /> Terima Barang
             </button>
           )}
@@ -626,9 +634,7 @@ export default function GoodsReceiptPage() {
                 <span className="text-base font-bold text-blue-700 font-mono">
                   {editing
                     ? editing.receiptNumber
-                    : generateReceiptNumber(
-                        (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001'
-                      )}
+                    : currentBranchId === 'ALL' ? 'PILIH CABANG' : generateReceiptNumber(currentBranchId)}
                 </span>
               </div>
 
