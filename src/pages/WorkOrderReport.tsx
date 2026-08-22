@@ -6,6 +6,7 @@ import {
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WOStatus, WorkOrder } from '../types';
 import { localDateKey } from '../lib/date';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 const statuses: Array<WOStatus | ''> = ['', 'Register', 'Proses', 'Selesai', 'Closed'];
 const rupiah = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
@@ -147,8 +148,8 @@ export default function WorkOrderReport() {
           <label className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari WO, invoice, pelanggan, HP, atau plat..." className="h-9 w-full rounded-lg border border-gray-300 pl-9 pr-3 text-sm outline-none focus:border-blue-500" /></label>
           {currentBranchId === 'ALL' && <select value={branchId} onChange={event => setBranchId(event.target.value)} className="h-9 rounded-lg border border-gray-300 px-2 text-sm outline-none focus:border-blue-500"><option value="">Semua Cabang</option>{data.branches.filter(item => item.isActive).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
           <select value={creator} onChange={event => setCreator(event.target.value)} className="h-9 rounded-lg border border-gray-300 px-2 text-sm outline-none focus:border-blue-500"><option value="">Semua Pembuat</option>{creators.map(name => <option key={name} value={name}>{name}</option>)}</select>
-          <input aria-label="Dari tanggal" title="Dari tanggal" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} className="h-9 rounded-lg border border-gray-300 px-2 text-sm outline-none focus:border-blue-500" />
-          <input aria-label="Sampai tanggal" title="Sampai tanggal" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} className="h-9 rounded-lg border border-gray-300 px-2 text-sm outline-none focus:border-blue-500" />
+          <IndonesianDateInput ariaLabel="Dari tanggal" title="Dari tanggal" value={dateFrom} onChange={setDateFrom} className="h-9 w-36 text-sm" />
+          <IndonesianDateInput ariaLabel="Sampai tanggal" title="Sampai tanggal" value={dateTo} onChange={setDateTo} className="h-9 w-36 text-sm" />
           <button type="button" onClick={resetFilters} title="Reset filter" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"><FilterX className="h-4 w-4" /> Reset</button>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs"><span className="text-gray-500">Periode cepat:</span><button onClick={() => setPeriod('today')} className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50">Hari Ini</button><button onClick={() => setPeriod('week')} className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50">7 Hari</button><button onClick={() => setPeriod('month')} className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50">Bulan Ini</button></div>

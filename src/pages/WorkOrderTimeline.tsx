@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Activity, Banknote, CalendarDays, Check, CheckCircle2, ChevronRight,
+  Activity, Banknote, Check, CheckCircle2, ChevronRight,
   FileText, Gauge, Package, Plus, RefreshCw, Settings2, Stethoscope, Thermometer,
   UserRound, Wrench, XCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { LegacyWOStatus, SalesInvoice, WorkOrder, WOStatus } from '../types';
 import { localDateKey } from '../lib/date';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 type StageKey = 'register' | 'diagnosis' | 'approval' | 'parts' | 'working' | 'done' | 'lost';
 type Segment = { key: StageKey; label: string; start: Date; end: Date; duration: number };
@@ -213,7 +214,7 @@ export default function WorkOrderTimeline() {
           <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-semibold text-emerald-700"><FileText className="h-4 w-4"/>Faktur {invoicedCount}/{rowsWithSegments.length}</span>
           <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700"><Banknote className="h-4 w-4"/>Lunas {paidCount}/{invoicedCount}</span>
           <button type="button" onClick={() => void refreshData()} className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"><RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}/>Refresh</button>
-          <label className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-medium text-gray-700"><CalendarDays className="h-4 w-4"/><input type="date" value={date} max={localDateKey()} onChange={event => { setDate(event.target.value); setSelectedId(''); }} className="bg-transparent outline-none"/></label>
+          <IndonesianDateInput value={date} max={localDateKey()} onChange={value=>{setDate(value);setSelectedId('')}} className="h-10 w-40 text-sm"/>
           <div className="relative">
           <button type="button" onClick={() => setShowSettings(current => !current)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 font-semibold text-gray-600"><Settings2 className="h-4 w-4"/>Pengaturan Tampilan</button>
           {showSettings && <div className="absolute right-0 z-30 mt-2 w-56 rounded-xl border bg-white p-3 shadow-xl">

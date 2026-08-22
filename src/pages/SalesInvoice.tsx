@@ -9,6 +9,7 @@ import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
 import ItemSearchOption from '../components/ItemSearchOption';
 import { ui } from '../components/ui/interfaceStandards';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -803,13 +804,7 @@ export default function SalesInvoice() {
             <option value="Lunas">Status: Lunas</option>
             <option value="Belum Lunas">Status: Belum Lunas</option>
           </select>
-          <input
-            type="date"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="h-10 min-w-[145px] flex-1 rounded border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[150px]"
-            title="Tanggal faktur"
-          />
+          <IndonesianDateInput value={filterDate} onChange={setFilterDate} className="h-10 min-w-[145px] flex-1 text-sm sm:flex-none xl:w-[150px]" title="Tanggal faktur"/>
           <button type="button" onClick={() => { setFilterDate(''); setFilterCustomer(''); setFilterStatus(''); setSearchTerm(''); }} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded border border-blue-500 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100" title="Kosongkan semua filter"><Filter className="h-4 w-4"/><span className="hidden 2xl:inline">Reset</span></button>
           <div className="ml-auto flex flex-wrap items-center gap-2 xl:ml-0 xl:flex-nowrap">
             {hasPermission('invoice:create') && (
@@ -1166,14 +1161,11 @@ export default function SalesInvoice() {
                   Tanggal <span className="text-red-500">*</span>
                 </label>
                 <div className="flex items-center gap-1.5">
-                  <input
-                    type="date"
-                    required
-                    max={localDateKey()}
-                    disabled={!invoiceDateUnlocked}
+                  <IndonesianDateInput
+                    required max={localDateKey()} disabled={!invoiceDateUnlocked}
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="h-10 min-w-0 flex-1 rounded border border-gray-300 px-3 disabled:bg-gray-100 disabled:text-gray-500 focus:border-blue-500 outline-none"
+                    onChange={date=>setFormData({...formData,date})}
+                    className="h-10 min-w-0 flex-1"
                   />
                   <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} title={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} aria-label={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} className={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded border ${invoiceDateUnlocked ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}>
                     <Edit className="h-4 w-4" />
@@ -1464,11 +1456,11 @@ export default function SalesInvoice() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-semibold mb-1">Tanggal Faktur</label>
-                          <input type="date" max={localDateKey()} value={woInvoiceDate} onChange={(e) => setWoInvoiceDate(e.target.value)} disabled={!hasPermission('invoice:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                          <IndonesianDateInput max={localDateKey()} value={woInvoiceDate} onChange={setWoInvoiceDate} disabled={!hasPermission('invoice:backdate')} className="h-10 w-full" />
                         </div>
                         {woPayment > 0 && <div>
                           <label className="block text-xs font-semibold mb-1">Tanggal Pembayaran</label>
-                          <input type="date" min={woInvoiceDate} max={localDateKey()} value={woPaymentDate} onChange={(e) => setWoPaymentDate(e.target.value)} disabled={!hasPermission('payment:backdate')} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                          <IndonesianDateInput min={woInvoiceDate} max={localDateKey()} value={woPaymentDate} onChange={setWoPaymentDate} disabled={!hasPermission('payment:backdate')} className="h-10 w-full" />
                         </div>}
                       </div>
                       {data.settings.security.requireBackdateReason !== false && (woInvoiceDate < localDateKey() || (woPayment > 0 && woPaymentDate < localDateKey())) && (

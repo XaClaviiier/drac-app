@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import type { PurchaseInvoice, PurchaseInvoiceItem, PurchasePayment, GoodsReceipt } from '../types';
 import { addLocalDays, localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 type CashAccount = {
   id: string;
@@ -379,22 +380,9 @@ export default function PurchaseInvoicesPage() {
             </div>
             {periodFilter === 'custom' && (
               <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  aria-label="Tanggal awal"
-                  className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                />
+                <IndonesianDateInput value={dateFrom} onChange={setDateFrom} ariaLabel="Tanggal awal" className="h-10 w-36 text-sm"/>
                 <span className="text-sm text-gray-400">s.d.</span>
-                <input
-                  type="date"
-                  value={dateTo}
-                  min={dateFrom || undefined}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  aria-label="Tanggal akhir"
-                  className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                />
+                <IndonesianDateInput value={dateTo} min={dateFrom||undefined} onChange={setDateTo} ariaLabel="Tanggal akhir" className="h-10 w-36 text-sm"/>
               </div>
             )}
           </div>
@@ -557,11 +545,11 @@ export default function PurchaseInvoicesPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal Faktur *</label>
-                  <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <IndonesianDateInput required value={form.date} onChange={date=>setForm({...form,date})} className="h-11 w-full" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Jatuh Tempo *</label>
-                  <input type="date" required value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <IndonesianDateInput required value={form.dueDate} onChange={dueDate=>setForm({...form,dueDate})} className="h-11 w-full" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Supplier *</label>
@@ -717,7 +705,7 @@ export default function PurchaseInvoicesPage() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal Bayar *</label>
-                <input type="date" required value={paymentForm.date} onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500" />
+                <IndonesianDateInput required value={paymentForm.date} onChange={date=>setPaymentForm({...paymentForm,date})} className="h-11 w-full" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Jumlah Bayar *</label>

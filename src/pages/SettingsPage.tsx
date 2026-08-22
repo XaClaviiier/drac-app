@@ -8,6 +8,7 @@ import {
 import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 type Tab = 'company' | 'branches' | 'documents' | 'workflow' | 'security' | 'ai' | 'guide' | 'backup' | 'maintenance';
 
@@ -505,8 +506,8 @@ export default function SettingsPage() {
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className={labelClass}><span>Cabang yang akan dihapus *</span><select className={inputClass} value={maintenanceBranchId} onChange={event => { setMaintenanceBranchId(event.target.value); setMaintenancePreview(null); setMaintenanceResult(null); setMaintenanceConfirmation(''); }}><option value="">Pilih cabang...</option>{data.branches.filter(branch=>branch.isActive).map(branch=><option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>)}<option value="ALL">⚠ SEMUA CABANG</option></select></label>
-                <label className={labelClass}><span>Dari tanggal</span><input type="date" className={inputClass} value={maintenanceFrom} onChange={event => { setMaintenanceFrom(event.target.value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
-                <label className={labelClass}><span>Sampai tanggal</span><input type="date" className={inputClass} value={maintenanceTo} onChange={event => { setMaintenanceTo(event.target.value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
+                <label className={labelClass}><span>Dari tanggal</span><IndonesianDateInput className="h-10 w-full" value={maintenanceFrom} onChange={value => { setMaintenanceFrom(value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
+                <label className={labelClass}><span>Sampai tanggal</span><IndonesianDateInput className="h-10 w-full" value={maintenanceTo} onChange={value => { setMaintenanceTo(value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
               </div>
               {maintenanceBranchId === 'ALL' && <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800"><AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" /> Pilihan ini mencakup transaksi seluruh cabang dalam periode. Gunakan hanya jika benar-benar diperlukan.</div>}
               <button type="button" onClick={previewMaintenance} disabled={maintenanceLoading || !maintenanceBranchId} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">{maintenanceLoading ? 'Memeriksa...' : 'Periksa Data Periode'}</button>

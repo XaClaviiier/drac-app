@@ -29,6 +29,7 @@ import { api } from "../lib/apiClient";
 import { localDateKey } from "../lib/date";
 import ItemSearchOption from "../components/ItemSearchOption";
 import { childTabClass, ui } from "../components/ui/interfaceStandards";
+import IndonesianDateInput from "../components/IndonesianDateInput";
 
 type PreviewRow = {
   row: number;
@@ -600,12 +601,7 @@ export default function OpeningStockImport() {
             <div className="relative grid gap-x-12 gap-y-3 border-b border-slate-300 bg-[#eeeeee] px-16 py-5 pr-44 md:grid-cols-2">
               <label className="text-sm">
                 Tanggal <span className="text-red-600">*</span>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
-                  className="mt-1 h-10 w-full rounded border border-slate-300 px-3"
-                />
+                <IndonesianDateInput value={date} onChange={setDate} className="mt-1 h-10 w-full"/>
               </label>
               <label className="text-sm md:row-start-2">
                 File CSV/Excel
@@ -856,15 +852,7 @@ export default function OpeningStockImport() {
           {viewMode === "list" && (
             <div className="min-h-[calc(100vh-235px)] border border-slate-300 bg-[#eeeeee] p-4">
               <div className="mb-4 flex items-center gap-3">
-                <label className="flex h-11 items-center gap-2 rounded border border-slate-300 bg-white px-3 text-sm">
-                  Tanggal:
-                  <input
-                    type="date"
-                    value={documentDate}
-                    onChange={(event) => setDocumentDate(event.target.value)}
-                    className="bg-transparent outline-none"
-                  />
-                </label>
+                <label className="flex h-11 items-center gap-2 text-sm">Tanggal:<IndonesianDateInput value={documentDate} onChange={setDocumentDate} className="h-11 w-40"/></label>
                 <button className="flex h-11 w-14 items-center justify-center rounded border border-blue-600 bg-blue-50 text-blue-700">
                   <Filter className="h-5 w-5" />
                 </button>

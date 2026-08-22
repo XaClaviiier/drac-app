@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { useApp } from "../context/AppContext";
+import IndonesianDateInput from "../components/IndonesianDateInput";
 
 type PaymentRow = {
   id: string;
@@ -393,18 +394,8 @@ export default function CustomerPayments() {
         </select>
         {period === "custom" && (
           <>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-lg border px-2 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-lg border px-2 py-2 text-sm"
-            />
+            <IndonesianDateInput value={dateFrom} onChange={setDateFrom} className="h-10 w-36 text-sm"/>
+            <IndonesianDateInput value={dateTo} onChange={setDateTo} className="h-10 w-36 text-sm"/>
           </>
         )}
         <select
@@ -752,14 +743,7 @@ export default function CustomerPayments() {
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-sm">
                   Tanggal
-                  <input
-                    type="date"
-                    min={invoice?.date}
-                    max={today}
-                    value={form.date}
-                    onChange={(e) => setForm({ ...form, date: e.target.value })}
-                    className="mt-1 w-full rounded-lg border p-2.5"
-                  />
+                  <IndonesianDateInput min={invoice?.date} max={today} value={form.date} onChange={date=>setForm({...form,date})} className="mt-1 h-11 w-full"/>
                 </label>
                 <label className="text-sm">
                   Metode

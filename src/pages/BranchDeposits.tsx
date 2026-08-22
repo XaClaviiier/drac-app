@@ -3,6 +3,7 @@ import { Plus, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { localDateKey } from "../lib/date";
 import { useApp } from "../context/AppContext";
+import IndonesianDateInput from "../components/IndonesianDateInput";
 type Summary = {
   branchId: string;
   branchName: string;
@@ -203,13 +204,7 @@ export default function BranchDeposits() {
             <div className="space-y-3 p-5">
               <label className="block text-sm">
                 Tanggal
-                <input
-                  type="date"
-                  max={today}
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  className="mt-1 w-full rounded-lg border p-2.5"
-                />
+                <IndonesianDateInput max={today} value={form.date} onChange={date=>setForm({...form,date})} className="mt-1 h-11 w-full"/>
               </label>
               <label className="block text-sm">
                 Tujuan

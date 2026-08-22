@@ -6,6 +6,10 @@ type Props = {
  onChange:(value:string)=>void;
  disabled?:boolean;
  required?:boolean;
+ min?:string;
+ max?:string;
+ title?:string;
+ ariaLabel?:string;
  className?:string;
 };
 
@@ -23,7 +27,7 @@ const toStorage=(value:string)=>{
  return `${match[3]}-${match[2]}-${match[1]}`;
 };
 
-export default function IndonesianDateInput({value,onChange,disabled=false,required=false,className=''}:Props){
+export default function IndonesianDateInput({value,onChange,disabled=false,required=false,min,max,title,ariaLabel='Tanggal (DD/MM/YYYY)',className=''}:Props){
  const[display,setDisplay]=useState(()=>toDisplay(value));
  useEffect(()=>setDisplay(toDisplay(value)),[value]);
  const commit=()=>{const parsed=toStorage(display);if(parsed)onChange(parsed);else setDisplay(toDisplay(value))};
@@ -38,13 +42,16 @@ export default function IndonesianDateInput({value,onChange,disabled=false,requi
    onBlur={commit}
    onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();commit()}}}
    placeholder="DD/MM/YYYY"
-   aria-label="Tanggal (DD/MM/YYYY)"
+   aria-label={ariaLabel}
+   title={title}
    className="h-full w-full rounded border border-slate-300 bg-white px-3 pr-10 disabled:bg-slate-100 disabled:text-slate-600"
   />
   <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"/>
   {!disabled&&<input
    type="date"
    value={value}
+   min={min}
+   max={max}
    onChange={event=>onChange(event.target.value)}
    aria-label="Buka kalender"
    className="absolute inset-y-0 right-0 w-10 cursor-pointer opacity-0"

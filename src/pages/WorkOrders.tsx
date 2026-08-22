@@ -10,6 +10,7 @@ import { api } from '../lib/apiClient';
 import ItemSearchOption from '../components/ItemSearchOption';
 import { childTabClass, ui } from '../components/ui/interfaceStandards';
 import { DEFAULT_COMPLAINT_TEMPLATES, DEFAULT_LOST_SALES_REASONS } from '../lib/workOrderRules';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -2003,9 +2004,9 @@ export default function WorkOrders() {
           </div>
           {periodFilter === 'custom' && (
             <div className="order-1 flex items-center gap-1">
-              <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
+              <IndonesianDateInput value={dateFrom} max={dateTo||undefined} onChange={setDateFrom} className="h-10 w-36 text-xs" />
               <span className="text-gray-400">–</span>
-              <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs" />
+              <IndonesianDateInput value={dateTo} min={dateFrom||undefined} onChange={setDateTo} className="h-10 w-36 text-xs" />
             </div>
           )}
           <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="order-1 h-10 rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500">
@@ -2024,7 +2025,7 @@ export default function WorkOrders() {
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Order Kerja</strong><button type="button" onClick={resetWorkOrderFilters} className="text-xs font-semibold text-blue-700 hover:underline">Reset</button></div>
               <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal text-gray-800"><option value="">Semua Status</option><option value="Register">Register</option><option value="Proses">Dikerjakan</option><option value="Selesai">Selesai</option><option value="Closed">Lost Sales</option></select></label>
               <label className="mt-3 block text-xs font-semibold text-gray-600">Tanggal<select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal text-gray-800"><option value="all">Semua Tanggal</option><option value="today">Hari Ini</option><option value="7days">7 Hari Terakhir</option><option value="thisMonth">Bulan Ini</option><option value="lastMonth">Bulan Lalu</option><option value="custom">Pilih Tanggal</option></select></label>
-              {periodFilter === 'custom' && <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs text-gray-600">Dari<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-2 text-xs" /></label><label className="text-xs text-gray-600">Sampai<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-2 text-xs" /></label></div>}
+              {periodFilter === 'custom' && <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs text-gray-600">Dari<IndonesianDateInput value={dateFrom} max={dateTo||undefined} onChange={setDateFrom} className="mt-1 h-10 w-full text-xs" /></label><label className="text-xs text-gray-600">Sampai<IndonesianDateInput value={dateTo} min={dateFrom||undefined} onChange={setDateTo} className="mt-1 h-10 w-full text-xs" /></label></div>}
               <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
             </div>}
           </div>
@@ -2183,23 +2184,11 @@ export default function WorkOrders() {
                 <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-indigo-800">Dari Tanggal</label>
-                    <input
-                      type="date"
-                      value={dateFrom}
-                      max={dateTo || undefined}
-                      onChange={(event) => setDateFrom(event.target.value)}
-                      className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                    />
+                    <IndonesianDateInput value={dateFrom} max={dateTo||undefined} onChange={setDateFrom} className="h-10 w-full text-sm"/>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-indigo-800">Sampai Tanggal</label>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      min={dateFrom || undefined}
-                      onChange={(event) => setDateTo(event.target.value)}
-                      className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                    />
+                    <IndonesianDateInput value={dateTo} min={dateFrom||undefined} onChange={setDateTo} className="h-10 w-full text-sm"/>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -2987,15 +2976,7 @@ export default function WorkOrders() {
                     Tanggal & Waktu <span className="text-red-500">*</span>
                   </label>
                   <div className="grid grid-cols-[minmax(150px,1fr)_92px_40px] gap-2">
-                    <input
-                      type="date"
-                      required
-                      max={localDateKey()}
-                      disabled={!woDateUnlocked}
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                    />
+                    <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-11 w-full text-sm"/>
                     <input
                       type="time"
                       required
@@ -4356,13 +4337,13 @@ export default function WorkOrders() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">Tanggal Faktur</label>
-                    <input type="date" max={localDateKey()} disabled={!invoiceDateUnlocked} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                    <IndonesianDateInput max={localDateKey()} disabled={!invoiceDateUnlocked} value={invoiceDate} onChange={setInvoiceDate} className="h-10 w-full" />
                     <p className="mt-1 text-xs font-medium text-gray-600">{formatBusinessDate(invoiceDate)}</p>
                     <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
                   </div>
                   {invoicePayment > 0 && <div>
                     <label className="block text-sm font-medium mb-1">Tanggal Pembayaran</label>
-                    <input type="date" min={invoiceDate} max={localDateKey()} disabled={!invoicePaymentDateUnlocked} value={invoicePaymentDate} onChange={(e) => setInvoicePaymentDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100" />
+                    <IndonesianDateInput min={invoiceDate} max={localDateKey()} disabled={!invoicePaymentDateUnlocked} value={invoicePaymentDate} onChange={setInvoicePaymentDate} className="h-10 w-full" />
                     <p className="mt-1 text-xs font-medium text-gray-600">{formatBusinessDate(invoicePaymentDate)}</p>
                     <button type="button" onClick={() => hasPermission('payment:backdate') ? setInvoicePaymentDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal pembayaran.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
                   </div>}

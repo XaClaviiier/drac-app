@@ -9,6 +9,7 @@ import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import { childTabClass, ui } from '../components/ui/interfaceStandards';
 import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -1511,9 +1512,9 @@ export default function ItemsAndServices() {
                     <option value="">Semua Gudang yang Diakses</option>
                     {data.warehouses.filter(warehouse => warehouse.isActive && !warehouse.isSystem).map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.branchName} · {warehouse.name}</option>)}
                   </select>
-                  <input type="date" value={movementDateFrom} onChange={event => setMovementDateFrom(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
+                  <IndonesianDateInput value={movementDateFrom} onChange={setMovementDateFrom} className="h-10 w-36 text-sm" />
                   <span className="text-sm font-medium text-slate-600">s/d</span>
-                  <input type="date" value={movementDateTo} onChange={event => setMovementDateTo(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm" />
+                  <IndonesianDateInput value={movementDateTo} onChange={setMovementDateTo} className="h-10 w-36 text-sm" />
                   <button type="button" onClick={loadItemMovements} disabled={movementLoading} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 disabled:opacity-50" title="Terapkan filter dan refresh mutasi"><RefreshCw className={`h-5 w-5 ${movementLoading ? 'animate-spin' : ''}`} /></button>
                   <div className="relative ml-auto w-80 max-w-full"><input value={movementSearch} onChange={event => setMovementSearch(event.target.value)} placeholder="Cari/Pilih..." className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-sm"/><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2"/></div>
                 </div>
@@ -1526,7 +1527,7 @@ export default function ItemsAndServices() {
                 </div>
               </div>}
               {itemFormTab === 'warehouse' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
-                <div className="mb-3 flex items-center gap-3"><input type="date" value={movementDateTo} onChange={event => setMovementDateTo(event.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-sm"/><button type="button" onClick={() => refreshData()} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5"/></button></div>
+                <div className="mb-3 flex items-center gap-3"><IndonesianDateInput value={movementDateTo} onChange={setMovementDateTo} className="h-10 w-36 text-sm"/><button type="button" onClick={() => refreshData()} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5"/></button></div>
                 <div className="overflow-hidden rounded-t-lg border border-slate-300"><table className="w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-4 py-2.5 text-left">Gudang</th><th className="px-4 py-2.5 text-left">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead><tbody>{itemWarehouseRows.map(({ warehouse, quantity, reserved, available }, index) => <tr key={warehouse.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-4 py-2.5 font-medium">{warehouse.name}</td><td className="px-4 py-2.5">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right">{quantity}</td><td className="px-4 py-2.5 text-right">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>)}</tbody></table>{!itemWarehouseRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada gudang aktif.</div>}</div>
               </div>}
               {itemFormTab === 'account' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Akun Barang &amp; Jasa</h4><p className="text-sm text-slate-600">Pemetaan akun mengikuti kategori barang dan pengaturan akun perkiraan perusahaan.</p></div>}

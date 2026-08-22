@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, CalendarDays, Filter, Printer, RefreshCw, Settings2, List } from 'lucide-react';
+import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, Filter, Printer, RefreshCw, Settings2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { GoodsReceipt, GoodsReceiptItem, PurchaseInvoice, PurchaseInvoiceItem } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { addLocalDays, localDateKey } from '../lib/date';
+import IndonesianDateInput from '../components/IndonesianDateInput';
 
 export default function GoodsReceiptPage() {
   const navigate = useNavigate();
@@ -295,7 +296,7 @@ export default function GoodsReceiptPage() {
         <div className="mt-0.5 flex items-end border-b border-[#b8b8b8] bg-[#fafafa] pl-1.5"><div className="flex h-11 w-14 items-center justify-center rounded-t-lg border border-b-0 border-[#b8b8b8] bg-[#f2f2f2] text-blue-700" title="Daftar Penerimaan"><List className="h-5 w-5"/></div></div>
         <div className="space-y-3 bg-[#ededed] p-3">
           <div className="flex flex-wrap items-center gap-3">
-            <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input type="date" value={filterFromDate} onChange={e=>setFilterFromDate(e.target.value)} className="rounded border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm" title="Tampilkan mulai tanggal"/></label>
+            <IndonesianDateInput value={filterFromDate} onChange={setFilterFromDate} title="Tampilkan mulai tanggal" className="h-10 w-40 text-sm"/>
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Status: Semua</option><option value="Draft">Draft</option><option value="Diterima">Diterima</option><option value="Batal">Batal</option></select>
             <button onClick={()=>{setFilterFromDate('');setFilterStatus('');setFilterInvoice('')}} className="rounded border border-blue-600 bg-blue-50 px-3 py-2 text-blue-700" title="Bersihkan filter"><Filter className="h-5 w-5"/></button>
           </div>
@@ -590,7 +591,7 @@ export default function GoodsReceiptPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal *</label>
-                  <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <IndonesianDateInput required value={form.date} onChange={date=>setForm({...form,date})} className="h-11 w-full" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
@@ -839,11 +840,11 @@ export default function GoodsReceiptPage() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal Faktur *</label>
-                  <input type="date" required value={invoiceForm.date} onChange={(e) => setInvoiceForm({ ...invoiceForm, date: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <IndonesianDateInput required value={invoiceForm.date} onChange={date=>setInvoiceForm({...invoiceForm,date})} className="h-10 w-full" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Jatuh Tempo *</label>
-                  <input type="date" required value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                  <IndonesianDateInput required value={invoiceForm.dueDate} onChange={dueDate=>setInvoiceForm({...invoiceForm,dueDate})} className="h-10 w-full" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">No. Inv Supplier</label>
