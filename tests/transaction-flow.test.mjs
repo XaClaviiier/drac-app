@@ -362,3 +362,18 @@ test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak 
   assert.match(acknowledgement, /Diserahkan oleh/);
   assert.match(help, /Tanda terima digital/);
 });
+
+test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', () => {
+  const layout = source('src/components/Layout.tsx');
+  const page = source('src/pages/WorkOrders.tsx');
+  const styles = source('src/index.css');
+  assert.match(layout, /lg:h-12 lg:py-1/);
+  assert.match(layout, /h-\[34px\]/);
+  assert.match(styles, /\.app-workspace-bar[\s\S]*height: 34px/);
+  assert.match(styles, /\.app-child-tab[\s\S]*height: 40px/);
+  assert.match(styles, /\.app-control,[\s\S]*height: 36px/);
+  assert.match(styles, /\.app-table-shell table thead th[\s\S]*height: 32px/);
+  assert.match(page, /className=\{`\$\{ui\.search\} w-full pl-9 pr-3`\}/);
+  assert.match(page, /className=\{`\$\{ui\.field\} order-1 px-3`\}/);
+  assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
+});
