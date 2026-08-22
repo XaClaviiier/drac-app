@@ -11,6 +11,8 @@ import ItemSearchOption from '../components/ItemSearchOption';
 import { childTabClass, ui } from '../components/ui/interfaceStandards';
 import { DEFAULT_COMPLAINT_TEMPLATES, DEFAULT_LOST_SALES_REASONS } from '../lib/workOrderRules';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import ComplaintMultiSelect from '../components/ComplaintMultiSelect';
+import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -180,6 +182,7 @@ export default function WorkOrders() {
     return DEFAULT_COMPLAINT_TEMPLATES;
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
+  const [documentTab, setDocumentTab] = useState<AccurateDocumentTab>('details');
 
   const openDetailTab = (wo: WorkOrder) => {
     setDetailTabIds(previous => previous.includes(wo.id) ? previous : [...previous, wo.id]);
@@ -876,6 +879,7 @@ export default function WorkOrders() {
     setWoBackdateReason('');
     setCustomerVehicleCorrectionUnlocked(false);
     setCustomerVehicleCorrectionReason('');
+    setDocumentTab('details');
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false) => {
@@ -2944,38 +2948,41 @@ export default function WorkOrders() {
                   </div>
                 </div>
               ) : <>
-              {/* Pelanggan dan tanggal */}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(210px,1fr)_minmax(210px,1fr)_310px]">
-                <div>
-                  <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <User className="h-4 w-4 text-blue-600" />
-                    Data Pelanggan <span className="text-red-500">*</span>
-                  </label>
-                  <CustomerPicker
-                    value={formData.customerRefId}
-                    onChange={handleCustomerSelect}
-                    onNewCustomerCreated={handleNewCustomerCreated}
-                    disabled={customerVehicleLocked}
-                  />
+              {/* Header transaksi padat: pelanggan/kendaraan bertumpuk, tanggal di kanan. */}
+              <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(440px,660px)_minmax(340px,1fr)] lg:gap-8">
+                <div className="space-y-2">
+                  <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-center">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <User className="h-4 w-4 text-blue-600 lg:hidden" />
+                      Pelanggan <span className="text-red-500">*</span>
+                    </label>
+                    <CustomerPicker
+                      value={formData.customerRefId}
+                      onChange={handleCustomerSelect}
+                      onNewCustomerCreated={handleNewCustomerCreated}
+                      disabled={customerVehicleLocked}
+                    />
+                  </div>
+                  <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-center">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <Car className="h-4 w-4 text-orange-600 lg:hidden" />
+                      Kendaraan <span className="text-red-500">*</span>
+                    </label>
+                    <VehiclePicker
+                      customer={selectedCustomer}
+                      value={formData.vehicleRefId}
+                      onChange={handleVehicleSelect}
+                      onNewVehicleCreated={handleNewVehicleCreated}
+                      locked={customerVehicleLocked}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <Car className="h-4 w-4 text-orange-600" />
-                    Data Kendaraan <span className="text-red-500">*</span>
-                  </label>
-                  <VehiclePicker
-                    customer={selectedCustomer}
-                    value={formData.vehicleRefId}
-                    onChange={handleVehicleSelect}
-                    onNewVehicleCreated={handleNewVehicleCreated}
-                    locked={customerVehicleLocked}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tanggal & Waktu <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-[minmax(150px,1fr)_92px_40px] gap-2">
+                <div className="lg:ml-auto lg:w-full lg:max-w-[440px]">
+                  <div className="grid gap-1 lg:grid-cols-[130px_minmax(0,1fr)] lg:items-center">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Tanggal &amp; Waktu <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-[minmax(145px,1fr)_88px_40px] gap-2">
                     <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-11 w-full text-sm"/>
                     <input
                       type="time"
@@ -2999,6 +3006,7 @@ export default function WorkOrders() {
                     >
                       {woDateUnlocked ? <LockKeyhole className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
                     </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3067,79 +3075,24 @@ export default function WorkOrders() {
                 <div className="grid grid-cols-1 md:grid-cols-2"><span /><input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" /></div>
               )}
 
-              {/* Kendaraan mengikuti pelanggan yang dipilih */}
-              <div className="space-y-4">
-                <div className="hidden">
-                  <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                    <Car className="w-4 h-4 text-orange-600" />
-                    Data Kendaraan <span className="text-red-500">*</span>
+              {!isAutoRegisteredDraft && (
+                <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-start">
+                  <label className="pt-2 text-sm font-medium text-gray-700">
+                    Keluhan <span className="text-red-500">*</span>
                   </label>
-                  <VehiclePicker
-                    customer={selectedCustomer}
-                    value={formData.vehicleRefId}
-                    onChange={handleVehicleSelect}
-                    onNewVehicleCreated={handleNewVehicleCreated}
-                  />
-                </div>
-
-                <div className={!isAutoRegisteredDraft ? '' : 'hidden'}>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Keterangan / Keluhan
-                      <span className="ml-1 text-xs font-normal text-gray-400">(pilih template atau ketik langsung)</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={openComplaintEditor}
-                      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
-                      title="Edit daftar template keluhan"
-                    >
-                      <Edit className="h-3 w-3" /> Edit List
-                    </button>
-                  </div>
-                  {/* Template keluhan cepat */}
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {complaintTemplates.map((template) => (
-                      <button
-                        key={template}
-                        type="button"
-                        onClick={() => setFormData(prev => ({
-                          ...prev,
-                          description: prev.description
-                            ? prev.description + ', ' + template
-                            : template
-                        }))}
-                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          formData.description.includes(template)
-                            ? 'border-blue-400 bg-blue-100 text-blue-700'
-                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'
-                        }`}
-                      >
-                        {template}
-                      </button>
-                    ))}
-                    {formData.description && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, description: '' }))}
-                        className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-500 hover:bg-red-100"
-                      >
-                        × Hapus
-                      </button>
-                    )}
-                  </div>
-                  <textarea
+                  <ComplaintMultiSelect
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Pilih template di atas atau ketik keluhan langsung..."
-                    rows={2}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-sm"
+                    options={complaintTemplates}
+                    onChange={description => setFormData(previous => ({ ...previous, description }))}
+                    onEditOptions={openComplaintEditor}
                   />
                 </div>
-              </div>
+              )}
               </>}
 
-              {(diagnosisMode || serviceEditMode || editingWO) && <>
+              <div className="relative min-h-[320px] border border-gray-300 bg-white lg:ml-10">
+              <AccurateDocumentSideTabs active={documentTab} onChange={setDocumentTab} />
+              {documentTab === 'details' && <div className="p-3">
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
               <div>
                 <div className={editingWO && !isAutoRegisteredDraft ? 'mb-3' : 'hidden'}>
@@ -3152,7 +3105,7 @@ export default function WorkOrders() {
                       <button
                         type="button"
                         onClick={toggleQuickServices}
-                        disabled={!customerVehicleReady || isAutoRegistering}
+                        disabled={!editingWO || !customerVehicleReady || isAutoRegistering}
                         className={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border transition-colors ${showQuickServices ? 'border-amber-400 bg-amber-100 text-amber-600' : 'border-gray-300 bg-white text-gray-500 hover:border-amber-300 hover:text-amber-500'}`}
                         title={showQuickServices ? 'Sembunyikan Quick Select' : 'Tampilkan Quick Select'}
                       >
@@ -3188,8 +3141,8 @@ export default function WorkOrders() {
                           }
                         }}
                         autoFocus
-                        disabled={!customerVehicleReady || isAutoRegistering}
-                        placeholder={customerVehicleReady ? (isAutoRegistering ? 'Meregistrasikan WO...' : 'Cari/Pilih Barang dan Jasa') : 'Pilih pelanggan dan kendaraan terlebih dahulu'}
+                        disabled={!editingWO || !customerVehicleReady || isAutoRegistering}
+                        placeholder={!editingWO ? 'Register WO terlebih dahulu untuk menambah barang/jasa' : customerVehicleReady ? (isAutoRegistering ? 'Meregistrasikan WO...' : 'Cari/Pilih Barang dan Jasa') : 'Pilih pelanggan dan kendaraan terlebih dahulu'}
                         className="w-full rounded-lg border border-blue-400 py-2.5 pl-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-100 disabled:text-gray-500"
                       />
                       {isServiceSearching ? (
@@ -3226,7 +3179,7 @@ export default function WorkOrders() {
                       )}
                       </div>
                       {hasPermission('item:create') && (
-                        <button type="button" disabled={!customerVehicleReady || isAutoRegistering} onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center gap-1 rounded-lg border border-green-300 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 sm:w-auto sm:px-3">
+                        <button type="button" disabled={!editingWO || !customerVehicleReady || isAutoRegistering} onClick={() => setShowQuickAddItem(true)} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center gap-1 rounded-lg border border-green-300 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 sm:w-auto sm:px-3">
                           <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Baru</span>
                         </button>
                       )}
@@ -3605,7 +3558,50 @@ export default function WorkOrders() {
                   <strong className="text-right text-xl font-bold tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong>
                 </div>
               </div>
-              </>}
+              </div>}
+
+              {documentTab === 'info' && (
+                <div className="grid gap-4 p-4 text-sm lg:grid-cols-2">
+                  <section>
+                    <h4 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Info lainnya</h4>
+                    <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+                      <span className="text-gray-600">No. WO</span><strong>{editingWO?.woNumber || 'Otomatis saat Register'}</strong>
+                      <span className="text-gray-600">Cabang</span><strong>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || '-'}</strong>
+                      <span className="text-gray-600">Pelanggan</span><span>{formData.customerName || '-'}</span>
+                      <span className="text-gray-600">Kendaraan</span><span>{formData.vehicleInfo || '-'}</span>
+                    </div>
+                  </section>
+                  <section>
+                    <h4 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keterangan tambahan</h4>
+                    <textarea value={formData.notes} onChange={event => setFormData(previous => ({ ...previous, notes: event.target.value }))} rows={5} placeholder="Keterangan internal Work Order..." className="w-full resize-none border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                  </section>
+                </div>
+              )}
+
+              {documentTab === 'estimate' && (
+                <div className="p-4">
+                  <h4 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Biaya / Estimasi</h4>
+                  <div className="overflow-hidden border border-gray-300">
+                    {formData.services.filter(service => !isPackageMemberService(service)).map(service => (
+                      <div key={service.id} className="grid grid-cols-[minmax(0,1fr)_80px_150px] border-b border-gray-200 px-3 py-2 text-sm last:border-b-0">
+                        <span>{serviceReceiptName(service)}</span><span className="text-center">{service.qty}</span><strong className="text-right">Rp {(service.price * service.qty).toLocaleString('id-ID')}</strong>
+                      </div>
+                    ))}
+                    {formData.services.filter(service => !isPackageMemberService(service)).length === 0 && <p className="px-4 py-12 text-center text-sm text-gray-400">Belum ada layanan atau barang.</p>}
+                  </div>
+                  <div className="ml-auto mt-3 flex max-w-sm items-center justify-between border border-gray-300 bg-gray-50 px-4 py-3"><span>Total Estimasi</span><strong className="text-lg text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong></div>
+                </div>
+              )}
+
+              {documentTab === 'payment' && (
+                <div className="p-4">
+                  <h4 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Pembayaran</h4>
+                  <div className="border border-dashed border-gray-300 bg-gray-50 px-4 py-12 text-center text-sm text-gray-500">
+                    {editingWO?.invoiceId ? 'Pembayaran dikelola melalui faktur penjualan terkait.' : 'Pembayaran tersedia setelah pekerjaan selesai dan faktur dibuat.'}
+                  </div>
+                </div>
+              )}
+              </div>
 
               {/* Actions */}
               <div className="sticky bottom-0 z-30 -mx-4 flex items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] sm:-mx-6 sm:gap-3 sm:px-6 sm:pb-0 sm:pt-4 sm:shadow-none lg:hidden">
