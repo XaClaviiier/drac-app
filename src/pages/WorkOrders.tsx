@@ -2853,7 +2853,7 @@ export default function WorkOrders() {
             </div>
 
             <form onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[82px]">
-              <aside className="absolute bottom-2 right-2 top-2 z-50 hidden w-[66px] flex-col items-stretch gap-2 border-l border-gray-300 bg-gray-50 pl-2 lg:flex" aria-label="Aksi Work Order">
+              <aside className="absolute bottom-2 right-2 top-[48px] z-50 hidden w-[66px] flex-col items-stretch gap-2 border-l border-gray-300 bg-gray-50 pl-2 lg:flex" aria-label="Aksi Work Order">
                 <button
                   type="submit"
                   onClick={() => { diagnosisSubmitAction.current = 'save'; }}
@@ -2890,32 +2890,6 @@ export default function WorkOrders() {
                   <span>Cabang: <strong className="text-gray-900">{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || 'Pilih cabang'}</strong></span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <label className="mr-1 text-xs font-medium text-gray-700">
-                    Tanggal &amp; Waktu <span className="text-red-500">*</span>
-                  </label>
-                  <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-8 w-[150px] text-xs"/>
-                  <input
-                    type="time"
-                    required
-                    disabled={!woDateUnlocked}
-                    value={formData.transactionTime}
-                    onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
-                    className="h-8 w-[82px] rounded border border-gray-300 px-2 text-xs outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                    aria-label="Waktu WO desktop"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(value => {
-                      const next = !value;
-                      if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
-                      return next;
-                    }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
-                    className={`inline-flex h-8 w-8 items-center justify-center rounded border transition-colors ${woDateUnlocked ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}
-                    title={woDateUnlocked ? 'Kunci ke tanggal dan waktu sekarang' : 'Buka tanggal dan waktu mundur'}
-                    aria-label={woDateUnlocked ? 'Kunci tanggal dan waktu WO' : 'Buka tanggal dan waktu mundur'}
-                  >
-                    {woDateUnlocked ? <LockKeyhole className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
-                  </button>
                   {editingWO && <details data-wo-action-menu className={`group relative ${statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
                     <summary aria-disabled={statusLabel(editingWO.status) === 'Lost Sales' || Boolean(editingWO.invoiceId)} tabIndex={statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? -1 : 0} className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
                       Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
@@ -2999,8 +2973,8 @@ export default function WorkOrders() {
                   </div>
                 </div>
               ) : <>
-              {/* Satu grid rapat: kendaraan langsung di samping pelanggan tanpa label desktop terpisah. */}
-              <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[155px_minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-2">
+              {/* Baris utama Accurate: pelanggan + kendaraan, lalu tanggal/waktu; keluhan selebar kedua isian. */}
+              <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[155px_minmax(0,1fr)_minmax(0,.85fr)_92px_150px_132px] lg:gap-x-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:self-center">
                   <User className="h-4 w-4 text-blue-600 lg:hidden" />
                   Pelanggan <span className="text-red-500">*</span>
@@ -3022,6 +2996,36 @@ export default function WorkOrders() {
                   onNewVehicleCreated={handleNewVehicleCreated}
                   locked={customerVehicleLocked}
                 />
+                <label className="hidden self-center text-right text-sm font-medium text-gray-700 lg:block">
+                  Tanggal <span className="text-red-500">*</span>
+                </label>
+                <div className="hidden lg:block">
+                  <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-[42px] w-full text-sm"/>
+                </div>
+                <div className="hidden grid-cols-[82px_42px] gap-2 lg:grid">
+                  <input
+                    type="time"
+                    required
+                    disabled={!woDateUnlocked}
+                    value={formData.transactionTime}
+                    onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
+                    className="h-[42px] w-full rounded-lg border border-gray-300 px-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                    aria-label="Waktu WO desktop"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(value => {
+                      const next = !value;
+                      if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
+                      return next;
+                    }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
+                    className={`inline-flex h-[42px] w-[42px] items-center justify-center rounded-lg border transition-colors ${woDateUnlocked ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}
+                    title={woDateUnlocked ? 'Kunci ke tanggal dan waktu sekarang' : 'Buka tanggal dan waktu mundur'}
+                    aria-label={woDateUnlocked ? 'Kunci tanggal dan waktu WO' : 'Buka tanggal dan waktu mundur'}
+                  >
+                    {woDateUnlocked ? <LockKeyhole className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
+                  </button>
+                </div>
                 {!isAutoRegisteredDraft && (
                   <>
                     <label className="pt-2 text-sm font-medium text-gray-700">
