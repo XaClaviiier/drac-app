@@ -2974,7 +2974,7 @@ export default function WorkOrders() {
                 </div>
               ) : <>
               {/* Baris utama Accurate: pelanggan + kendaraan, lalu tanggal/waktu; keluhan selebar kedua isian. */}
-              <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[155px_minmax(0,1fr)_minmax(0,.85fr)_92px_150px_132px] lg:gap-x-2">
+              <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.85fr)_92px_150px_132px] lg:gap-x-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:self-center">
                   <User className="h-4 w-4 text-blue-600 lg:hidden" />
                   Pelanggan <span className="text-red-500">*</span>
@@ -2982,6 +2982,7 @@ export default function WorkOrders() {
                 <CustomerPicker
                   value={formData.customerRefId}
                   onChange={handleCustomerSelect}
+                  onVehicleSelect={handleVehicleSelect}
                   onNewCustomerCreated={handleNewCustomerCreated}
                   disabled={customerVehicleLocked}
                   selectedAction={!customerVehicleLocked && !showQuickContact ? (
@@ -3119,7 +3120,7 @@ export default function WorkOrders() {
                 </div>
               )}
               {customerVehicleReady && !customerVehicleLocked && (selectedCustomerPeople.length > 1 || showQuickContact) && (
-                <div className="space-y-2 lg:ml-[155px] lg:max-w-[calc(100%-155px)]">
+                <div className="space-y-2 lg:ml-[120px] lg:max-w-[calc(100%-120px)]">
                   {selectedCustomerPeople.length > 1 && <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => selectVisitContact('')} className={`rounded-lg border px-3 py-2 text-xs ${!formData.driverContactId ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}>Kontak utama</button>
                     {selectedCustomerPeople.filter(person => person.id !== selectedCustomer?.primaryContactId).map(person => <div key={person.id} className={`relative rounded-lg border ${formData.driverContactId === person.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}><button type="button" onClick={() => selectVisitContact(person.id)} className="min-w-24 px-3 py-2 pr-8 text-left text-xs"><strong className="block">{person.name}</strong><span>{person.relationshipLabel || person.phone || 'Kontak tambahan'}</span></button><button type="button" onClick={() => void deleteQuickContact(person.id)} disabled={quickContactDeletingId === person.id} title={`Hapus kontak ${person.name}`} aria-label={`Hapus kontak ${person.name}`} className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full text-red-500 hover:bg-red-50 hover:text-red-700 disabled:text-gray-300"><X className="h-3.5 w-3.5" /></button></div>)}

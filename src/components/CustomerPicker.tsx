@@ -1,18 +1,19 @@
 import { useState, useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react';
-import { Search, Plus, User, Phone, Check, X, MapPin } from 'lucide-react';
+import { Search, Plus, User, Check, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { Customer } from '../types';
+import type { Customer, Vehicle } from '../types';
 import { localDateKey } from '../lib/date';
 
 interface CustomerPickerProps {
   value: string;
   onChange: (customerId: string) => void;
+  onVehicleSelect?: (vehicleId: string) => void;
   onNewCustomerCreated?: (customer: Customer) => void;
   disabled?: boolean;
   selectedAction?: ReactNode;
 }
 
-export default function CustomerPicker({ value, onChange, onNewCustomerCreated, disabled = false, selectedAction }: CustomerPickerProps) {
+export default function CustomerPicker({ value, onChange, onVehicleSelect, onNewCustomerCreated, disabled = false, selectedAction }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
   const [open, setOpen] = useState(false);
@@ -47,14 +48,23 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
 
   const filtered = useMemo(() => {
     const q = inputText.trim().toLowerCase();
-    if (!q) return data.customers.slice(0, 15);
-    return data.customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.phone.includes(q) ||
-        c.customerCode.toLowerCase().includes(q)
-    ).slice(0, 15);
-  }, [data.customers, inputText]);
+    return data.customers.flatMap((customer) => {
+      const vehicles = data.vehicles.filter((vehicle) =>
+        vehicle.customerRefId === customer.id ||
+        (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
+      );
+      const rows: Array<{ customer: Customer; vehicle: Vehicle | null }> = vehicles.length
+        ? vehicles.map((vehicle) => ({ customer, vehicle }))
+        : [{ customer, vehicle: null }];
+      if (!q) return rows;
+      return rows.filter(({ customer: rowCustomer, vehicle }) =>
+        rowCustomer.name.toLowerCase().includes(q) ||
+        rowCustomer.phone.toLowerCase().includes(q) ||
+        rowCustomer.customerCode.toLowerCase().includes(q) ||
+        vehicle?.plateNumber.toLowerCase().includes(q)
+      );
+    }).slice(0, 20);
+  }, [data.customers, data.vehicles, inputText]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (disabled) return;
@@ -66,12 +76,13 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
     if (value) onChange('');
   };
 
-  const handleSelect = useCallback((customer: Customer) => {
+  const handleSelect = useCallback((customer: Customer, vehicle: Vehicle | null = null) => {
     onChange(customer.id);
+    if (vehicle) onVehicleSelect?.(vehicle.id);
     setInputText(customer.name);
     setOpen(false);
     setShowNewForm(false);
-  }, [onChange]);
+  }, [onChange, onVehicleSelect]);
 
   const handleFocus = () => {
     if (disabled) return;
@@ -86,7 +97,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
     }
     if (e.key === 'Enter' && filtered.length === 1) {
       e.preventDefault();
-      handleSelect(filtered[0]);
+      handleSelect(filtered[0].customer, filtered[0].vehicle);
     }
   };
 
@@ -152,7 +163,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder="Ketik nama, HP, atau kode pelanggan..."
+          placeholder="Ketik nama, HP, atau nopol..."
           autoComplete="off"
           className={`w-full pl-9 pr-10 py-2.5 border rounded-lg outline-none transition-colors text-sm ${
             disabled
@@ -182,12 +193,9 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
       {/* Badge pelanggan terpilih */}
       {selectedCustomer && !open && (
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 px-1">
-          <span className="font-mono text-blue-600 font-semibold">{selectedCustomer.customerCode}</span>
-          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{selectedCustomer.phone}</span>
+          <span>{selectedCustomer.phone}</span>
           {selectedCustomer.address && (
-            <span className="flex items-center gap-1 truncate max-w-xs">
-              <MapPin className="w-3 h-3 flex-shrink-0" />{selectedCustomer.address}
-            </span>
+            <span className="max-w-xs truncate">{selectedCustomer.address}</span>
           )}
           {selectedAction}
         </div>
@@ -199,45 +207,28 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
           {!showNewForm ? (
             <>
               {/* Daftar hasil pencarian */}
-              <div className="max-h-60 overflow-y-auto">
+              <div className="max-h-60 overflow-x-hidden overflow-y-auto">
                 {filtered.length === 0 ? (
                   <div className="py-6 text-center text-sm text-gray-500">
                     <User className="w-8 h-8 mx-auto mb-1.5 text-gray-300" />
                     Tidak ditemukan data yang cocok
                   </div>
                 ) : (
-                  filtered.map((customer) => {
-                    const vehs = data.vehicles.filter(v =>
-                      v.customerRefId === customer.id ||
-                      (!v.customerRefId && v.customerId === customer.customerCode)
-                    );
+                  filtered.map(({ customer, vehicle }) => {
                     return (
                       <button
-                        key={customer.id}
+                        key={`${customer.id}:${vehicle?.id || 'tanpa-kendaraan'}`}
                         type="button"
-                        onClick={() => handleSelect(customer)}
-                        className={`w-full px-4 py-2.5 flex items-center gap-3 hover:bg-blue-50 transition-colors text-left border-b border-gray-100 last:border-0 ${
+                        onClick={() => handleSelect(customer, vehicle)}
+                        className={`grid h-11 w-full grid-cols-[minmax(0,1fr)_auto_minmax(112px,.65fr)] items-center gap-3 border-b border-gray-100 px-3 text-left text-sm transition-colors last:border-0 hover:bg-blue-50 ${
                           value === customer.id ? 'bg-blue-50' : ''
                         }`}
                       >
-                        <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                          {customer.name.charAt(0)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900 truncate">{customer.name}</span>
-                            <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">
-                              {customer.customerCode}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
-                            <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{customer.phone}</span>
-                            {vehs.length > 0 && (
-                              <span className="text-orange-600">{vehs.length} kendaraan</span>
-                            )}
-                          </div>
-                        </div>
-                        {value === customer.id && <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />}
+                        <span className="min-w-0 truncate font-medium text-gray-900">{customer.name}</span>
+                        <span className="whitespace-nowrap text-gray-600">{customer.phone || '-'}</span>
+                        <span className={`min-w-0 truncate text-right font-mono text-xs ${vehicle ? 'font-semibold text-blue-700' : 'text-gray-400'}`}>
+                          {vehicle?.plateNumber || 'Belum ada kendaraan'}
+                        </span>
                       </button>
                     );
                   })
@@ -252,7 +243,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
                     setShowNewForm(true);
                     setNewCustomer({ name: inputText.trim().toUpperCase(), phone: '', address: '' });
                   }}
-                  className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm flex items-center justify-center gap-2 border-t border-gray-200 transition-colors"
+                  className="flex h-10 w-full items-center justify-center gap-2 border-t border-gray-200 bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4" />
                   Simpan &ldquo;{inputText.trim()}&rdquo; sebagai data baru?
@@ -264,7 +255,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
                 <button
                   type="button"
                   onClick={() => { setShowNewForm(true); setNewCustomer({ name: '', phone: '', address: '' }); }}
-                  className="w-full px-4 py-3 bg-green-50 hover:bg-green-100 text-green-700 font-medium text-sm flex items-center justify-center gap-2 border-t border-gray-200 transition-colors"
+                  className="flex h-10 w-full items-center justify-center gap-2 border-t border-gray-200 bg-green-50 px-3 text-sm font-medium text-green-700 transition-colors hover:bg-green-100"
                 >
                   <Plus className="w-4 h-4" />
                   Tambah Pelanggan Baru
