@@ -1,7 +1,7 @@
 <?php
 $sanitizeCustomerName = static function ($value): string {
     $name = trim((string)$value);
-    $name = preg_replace('/^(?:(?:reginv|reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', $name);
+    $name = preg_replace('/^(?:(?:reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', $name);
     $name = preg_replace('/^[,;:\-\s]+|[,;:\-\s]+$/u', '', (string)$name);
     $name = preg_replace('/\s+/u', ' ', (string)$name);
     $name = trim((string)$name);

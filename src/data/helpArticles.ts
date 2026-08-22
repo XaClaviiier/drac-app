@@ -264,11 +264,11 @@ export const helpArticles: HelpArticle[] = [
     category: "Administrasi",
     title: "Menggunakan Asisten AI dengan Aman",
     summary: "Asisten membantu pencarian dan input, tetapi konfirmasi pengguna tetap menjadi kontrol akhir.",
-    keywords: ["ai", "reg", "cek", "list", "reginv", "konfirmasi"],
+    keywords: ["ai", "reg", "cek", "list", "konfirmasi"],
     route: "/ai",
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Perintah utama", steps: ["Gunakan reg untuk memulai registrasi WO.", "Gunakan cek untuk mencari pelanggan, kendaraan, atau histori.", "Gunakan list untuk menampilkan daftar master.", "Gunakan reginv hanya bila mempunyai izin transaksi historis."] },
+      { title: "Perintah utama", steps: ["Gunakan reg untuk memulai registrasi WO.", "Gunakan cek untuk mencari pelanggan, kendaraan, atau histori.", "Gunakan list untuk menampilkan daftar master."] },
       { title: "Aturan", rules: ["Periksa kembali nama, telepon, kendaraan, cabang, dan keluhan sebelum konfirmasi.", "Pelanggan yang mirip harus dipilih secara eksplisit; sistem tidak boleh mengganti identitas diam-diam.", "Asisten mengikuti hak akses pengguna yang sedang login."] },
     ],
   },

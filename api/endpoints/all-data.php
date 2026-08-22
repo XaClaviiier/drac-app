@@ -79,13 +79,13 @@ try {
     // Bersihkan nama pelanggan yang pernah ikut menyimpan kata perintah AI.
     // customer_ref_id dipakai agar seluruh salinan nama pada kendaraan dan
     // transaksi lama tetap konsisten tanpa mengubah relasi atau nomor dokumen.
-    $badCustomerRows = $pdo->query("SELECT id,name FROM customers WHERE UPPER(name) REGEXP '^(REGINV|REG[[:space:]]+WO|REG|WO)[[:space:],;:-]'")->fetchAll();
+    $badCustomerRows = $pdo->query("SELECT id,name FROM customers WHERE UPPER(name) REGEXP '^(REG|WO)[[:space:],;:-]'")->fetchAll();
     $updateCustomerName = $pdo->prepare("UPDATE customers SET name=? WHERE id=?");
     $updateVehicleCustomerName = $pdo->prepare("UPDATE vehicles SET customer_name=? WHERE customer_id=?");
     $updateWorkOrderCustomerName = $pdo->prepare("UPDATE work_orders SET customer_name=? WHERE customer_ref_id=?");
     $updateInvoiceCustomerName = $pdo->prepare("UPDATE sales_invoices SET customer_name=? WHERE customer_ref_id=?");
     foreach ($badCustomerRows as $badCustomerRow) {
-        $cleanName = preg_replace('/^(?:(?:reginv|reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', trim((string)$badCustomerRow['name']));
+        $cleanName = preg_replace('/^(?:(?:reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', trim((string)$badCustomerRow['name']));
         $cleanName = trim((string)$cleanName, " \t\n\r\0\x0B,;:-");
         $cleanName = function_exists('mb_strtoupper') ? mb_strtoupper($cleanName, 'UTF-8') : strtoupper($cleanName);
         if ($cleanName === '') continue;

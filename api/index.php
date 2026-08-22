@@ -77,9 +77,6 @@ if ($requestUser && $resource === 'ai-settings') {
 if ($requestUser && $resource === 'ai-chat') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'ai:view');
 }
-if ($requestUser && $resource === 'quick-invoices') {
-    requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
-}
 if ($requestUser && $resource === 'receipt-ai-settings') {
     requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'invoice:view' : 'settings:edit');
 }
@@ -193,9 +190,6 @@ try {
             break;
         case 'customer-payments':
             require 'endpoints/customer-payments.php';
-            break;
-        case 'quick-invoices':
-            require 'endpoints/quick-invoices.php';
             break;
         case 'historical-entries':
             require 'endpoints/historical-entries.php';

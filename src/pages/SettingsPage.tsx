@@ -642,7 +642,7 @@ function SystemGuide() {
         </div>
       </section>
       <section className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><h3 className="font-bold text-cyan-900">Perintah Asisten AI</h3><p className="mt-2 text-sm leading-6 text-cyan-800"><b>reg</b> untuk registrasi WO, <b>cek</b> untuk mencari pelanggan/kendaraan dan histori, <b>list</b> untuk menampilkan daftar, serta <b>reginv</b> untuk transaksi cepat bagi pengguna yang memiliki izin khusus tanggal mundur.</p></div>
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><h3 className="font-bold text-cyan-900">Perintah Asisten AI</h3><p className="mt-2 text-sm leading-6 text-cyan-800"><b>reg</b> untuk registrasi WO, <b>cek</b> untuk mencari pelanggan/kendaraan dan histori, <b>list</b> untuk menampilkan daftar.</p></div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h3 className="font-bold text-amber-900">Catatan Kontrol</h3><p className="mt-2 text-sm leading-6 text-amber-800">Tanggal masa depan dilarang. Input tanggal mundur memerlukan izin akun dan alasan bila pengaturannya aktif. Semua perubahan status, invoice, dan pembayaran dicatat dalam timeline/audit.</p></div>
       </section>
     </div>
