@@ -1,19 +1,22 @@
 <?php
-$pdo->exec("ALTER TABLE vehicle_brands ADD COLUMN IF NOT EXISTS item_code CHAR(2) NULL AFTER name");
+function safeItemSchemaExec(PDO $pdo, string $sql, string $label): void {
+    try {$pdo->exec($sql);} catch (Throwable $e) {error_log("items schema {$label} failed: ".$e->getMessage());}
+}
+safeItemSchemaExec($pdo,"ALTER TABLE vehicle_brands ADD COLUMN IF NOT EXISTS item_code CHAR(2) NULL AFTER name",'vehicle brand code');
 $brandCodeMap=['UNIVERSAL'=>'01','TOYOTA'=>'02','DAIHATSU'=>'03','HONDA'=>'04','MITSUBISHI'=>'05','SUZUKI'=>'06','WULING'=>'07','NISSAN'=>'08','DATSUN'=>'09','ISUZU'=>'10','MAZDA'=>'11','FORD'=>'12','CHEVROLET'=>'13','KIA'=>'14','HYUNDAI'=>'15'];
-$brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPER(name)=?");foreach($brandCodeMap as $brandName=>$brandCode){$brandCodeUpdate->execute([$brandCode,$brandName]);}
-$universalId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
-$pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-$pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS merged_into_item_id VARCHAR(64) NULL AFTER verified_by");
-$pdo->exec("CREATE TABLE IF NOT EXISTS item_verification_audit(id BIGINT AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,action VARCHAR(30) NOT NULL,target_item_id VARCHAR(64) NULL,user_id VARCHAR(64) NULL,user_name VARCHAR(150) NULL,detail TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_item_verify(item_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+try{$brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPER(name)=?");foreach($brandCodeMap as $brandName=>$brandCode){$brandCodeUpdate->execute([$brandCode,$brandName]);}}catch(Throwable$e){error_log('items vehicle brand mapping failed: '.$e->getMessage());}
+$universalId='VB-'.substr(sha1('universal'),0,16);try{$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);}catch(Throwable$e){error_log('items universal brand failed: '.$e->getMessage());}
+safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand",'vehicle_brand_id');
+safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id",'vehicle_brand_name');
+safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand",'item_brand_id');
+safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_vehicle_brands');
+safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_vehicle_compatibilities');
+safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc",'engine_type');
+safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active",'verification_status');
+safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status",'created_by');
+safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by",'verified_by');
+safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS merged_into_item_id VARCHAR(64) NULL AFTER verified_by",'merged_into_item_id');
+safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_verification_audit(id BIGINT AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,action VARCHAR(30) NOT NULL,target_item_id VARCHAR(64) NULL,user_id VARCHAR(64) NULL,user_name VARCHAR(150) NULL,detail TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_item_verify(item_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_verification_audit');
 function itemCodeSegment(string $value, string $fallback): string {
     $normalized = strtoupper(trim((string)preg_replace('/[^A-Z0-9]+/i', ' ', $value)));
     $digits = preg_replace('/\D/', '', $normalized);
