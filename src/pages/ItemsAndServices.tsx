@@ -140,6 +140,7 @@ export default function ItemsAndServices() {
   const [movementWarehouseId, setMovementWarehouseId] = useState('');
   const [itemMovementRows, setItemMovementRows] = useState<StockMovement[]>([]);
   const [movementLoading, setMovementLoading] = useState(false);
+  const [warehouseBalanceById, setWarehouseBalanceById] = useState<Record<string, number>>({});
   const [movementError, setMovementError] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showBrandModal, setShowBrandModal] = useState(false);
@@ -1163,6 +1164,21 @@ export default function ItemsAndServices() {
     else { setItemMovementRows([]); setMovementError(response.message || 'Data mutasi gagal dimuat.'); }
     setMovementLoading(false);
   };
+  const loadWarehouseBalances = async () => {
+    if (!editingItem) return;
+    setMovementLoading(true);setMovementError('');setWarehouseBalanceById({});
+    try {
+      const pairs = await Promise.all(itemWarehouseRows.map(async ({ warehouse }) => {
+        const query = new URLSearchParams({ itemId: editingItem.id, warehouseId: warehouse.id, dateTo: movementDateTo });
+        const response = await api.get<StockMovement[]>(`stock-movements?${query.toString()}`);
+        if (!response.success) throw new Error(response.message || 'Saldo gudang gagal dimuat.');
+        return [warehouse.id, Number(response.data?.[0]?.balance || 0)] as const;
+      }));
+      setWarehouseBalanceById(Object.fromEntries(pairs));
+    } catch (error: any) {
+      setWarehouseBalanceById({});setMovementError(error?.message || 'Saldo gudang gagal dimuat.');
+    } finally { setMovementLoading(false); }
+  };
 
   const saveItemBrand=async(e:React.FormEvent)=>{e.preventDefault();const payload={...brandForm,code:brandForm.code.trim().toUpperCase(),name:brandForm.name.trim().toUpperCase()};if(!payload.code||!payload.name)return;const result=payload.id?await api.update('item-brands',payload.id,payload):await api.create('item-brands',{...payload,id:`IB-${Date.now()}`});if(!result.success)return window.alert(result.message||'Merek gagal disimpan');setBrandForm({id:'',code:'',name:'',description:'',isActive:true});await loadItemBrands();};
   const removeItemBrand=async(brand:ItemBrandMaster)=>{if(!window.confirm(`Hapus merek ${brand.name}?`))return;const result=await api.remove('item-brands',brand.id);if(!result.success)return window.alert(result.message||'Merek gagal dihapus');await loadItemBrands();};
@@ -1173,6 +1189,7 @@ export default function ItemsAndServices() {
 
   useEffect(() => {
     if (showItemModal && itemFormTab === 'movement' && editingItem) void loadItemMovements();
+    if (showItemModal && itemFormTab === 'warehouse' && editingItem) void loadWarehouseBalances();
     // Filter diterapkan hanya ketika tab dibuka atau tombol Refresh ditekan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showItemModal, itemFormTab, editingItem?.id]);
@@ -1527,8 +1544,8 @@ export default function ItemsAndServices() {
                 </div>
               </div>}
               {itemFormTab === 'warehouse' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
-                <div className="mb-3 flex items-center gap-3"><IndonesianDateInput value={movementDateTo} onChange={setMovementDateTo} className="h-10 w-36 text-sm"/><button type="button" onClick={() => refreshData()} className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5"/></button></div>
-                <div className="overflow-hidden rounded-t-lg border border-slate-300"><table className="w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-4 py-2.5 text-left">Gudang</th><th className="px-4 py-2.5 text-left">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead><tbody>{itemWarehouseRows.map(({ warehouse, quantity, reserved, available }, index) => <tr key={warehouse.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-4 py-2.5 font-medium">{warehouse.name}</td><td className="px-4 py-2.5">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right">{quantity}</td><td className="px-4 py-2.5 text-right">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>)}</tbody></table>{!itemWarehouseRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada gudang aktif.</div>}</div>
+                <div className="mb-3 flex items-end gap-3"><label className="block w-[180px] text-xs font-medium text-slate-600"><span className="mb-1 block">Saldo per Tanggal</span><IndonesianDateInput value={movementDateTo} onChange={setMovementDateTo} className="h-10 w-full text-sm"/></label><button type="button" onClick={loadWarehouseBalances} disabled={movementLoading} title="Tampilkan saldo" aria-label="Tampilkan saldo" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 disabled:opacity-50"><RefreshCw className={`h-5 w-5 ${movementLoading?'animate-spin':''}`}/></button></div>
+                <div className="overflow-hidden rounded-t-lg border border-slate-300"><table className="w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-4 py-2.5 text-left">Gudang</th><th className="px-4 py-2.5 text-left">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead><tbody>{itemWarehouseRows.map(({ warehouse, reserved }, index) => {const quantity=warehouseBalanceById[warehouse.id]??0,available=quantity-reserved;return <tr key={warehouse.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-4 py-2.5 font-medium">{warehouse.name}</td><td className="px-4 py-2.5">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right">{quantity}</td><td className="px-4 py-2.5 text-right">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>})}</tbody></table>{movementError&&<div className="bg-red-50 py-3 text-center text-sm text-red-700">{movementError}</div>}{!itemWarehouseRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada gudang aktif.</div>}</div>
               </div>}
               {itemFormTab === 'account' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Akun Barang &amp; Jasa</h4><p className="text-sm text-slate-600">Pemetaan akun mengikuti kategori barang dan pengaturan akun perkiraan perusahaan.</p></div>}
               {itemFormTab === 'image' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Gambar Barang</h4><div className="flex h-56 max-w-lg items-center justify-center rounded border-2 border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">Fitur gambar barang akan ditambahkan pada penyimpanan media.</div></div>}
