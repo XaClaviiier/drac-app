@@ -15,7 +15,7 @@ if($method==='GET'){
         $warehouseMap=[];foreach($warehouseRows as $warehouse)if(isset($allowed[(string)$warehouse['branch_id']]))$warehouseMap[(string)$warehouse['id']]=$warehouse;
         $actual=[];$stockRows=$pdo->query("SELECT warehouse_id,item_id,quantity FROM warehouse_stocks")->fetchAll();
         foreach($stockRows as $stock)if(isset($warehouseMap[(string)$stock['warehouse_id']]))$actual[(string)$stock['warehouse_id'].'|'.(string)$stock['item_id']]=(int)$stock['quantity'];
-        $ledger=[];$movementRows=$pdo->query("SELECT item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type FROM stock_movements ORDER BY movement_sequence")->fetchAll();
+        $ledger=[];$movementRows=$pdo->query("SELECT item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type FROM stock_movements WHERE is_voided=0 ORDER BY movement_sequence")->fetchAll();
         foreach($movementRows as $movement){$qty=(int)$movement['quantity'];$type=(string)$movement['movement_type'];$source=(string)($movement['source_warehouse_id']??'');$destination=(string)($movement['destination_warehouse_id']??'');$item=(string)$movement['item_id'];
             if($destination!==''&&isset($warehouseMap[$destination])&&$type!=='transfer_send'){$key=$destination.'|'.$item;$ledger[$key]=($ledger[$key]??0)+$qty;}
             if($source!==''&&isset($warehouseMap[$source])&&$type!=='transfer_receive'){$key=$source.'|'.$item;$ledger[$key]=($ledger[$key]??0)-$qty;}
@@ -30,9 +30,10 @@ if($method==='GET'){
           FROM stock_movements m
           JOIN items i ON i.id=m.item_id COLLATE utf8mb4_unicode_ci
           LEFT JOIN warehouses sw ON sw.id=m.source_warehouse_id
-          LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id";
+          LEFT JOIN warehouses dw ON dw.id=m.destination_warehouse_id
+          WHERE m.is_voided=0";
     $params=[];
-    if($itemId!==''){$sql.=" WHERE m.item_id=?";$params[]=$itemId;}
+    if($itemId!==''){$sql.=" AND m.item_id=?";$params[]=$itemId;}
     else{$sql.=" ORDER BY COALESCE(m.occurred_at,m.created_at) DESC,m.movement_sequence DESC LIMIT 200";}
     if($itemId!=='')$sql.=" ORDER BY COALESCE(m.occurred_at,m.created_at) DESC,m.movement_sequence DESC";
     $stmt=$pdo->prepare($sql);$stmt->execute($params);$allRows=$stmt->fetchAll();

@@ -188,6 +188,9 @@ try {
         case 'sales-invoices':
             require 'endpoints/sales-invoices.php';
             break;
+        case 'transaction-activity-logs':
+            require 'endpoints/transaction-activity-logs.php';
+            break;
         case 'customer-payments':
             require 'endpoints/customer-payments.php';
             break;

@@ -262,25 +262,26 @@ switch ($method) {
                     ||(string)$oldRow['date']!==(string)$d['date']
                 ));
             $correctionGroupId=$stockImpactChanged?'CORR-GR-'.date('YmdHis').'-'.substr(bin2hex(random_bytes(4)),0,8):null;
-            $activeMovementStmt=$pdo->prepare("SELECT id FROM stock_movements WHERE reference_type='goods_receipt' AND reference_id=? AND item_id=? AND movement_type IN('receipt','transfer') ORDER BY movement_sequence DESC LIMIT 1");
 
             // Edit header/rincian non-stok tidak menulis mutasi. Koreksi barang,
-            // kuantitas, gudang, tanggal, atau status memakai pembalik tertaut.
+            // kuantitas, gudang, tanggal, atau status mengganti mutasi aktif.
+            // Versi lama tetap tersedia hanya melalui Log Aktivitas.
             if ($stockImpactChanged && $wasReceived) {
                 foreach ($oldItemsList as $i) {
                     adjustWarehouseStock($pdo,$oldWarehouseId,$oldBranchId,$i['item_id'],-(int)$i['qty']);
                     if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStockAllowNegative($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['item_id'],(int)$i['qty']);
-                    $activeMovementStmt->execute([$id,(string)$i['item_id']]);$reversalOfId=$activeMovementStmt->fetchColumn()?:null;
-                    $journalReceipt($pdo,$oldRow,(string)$i['item_id'],(int)$i['qty'],true,$actor,$correctionGroupId,$reversalOfId,$correctionGroupId.':'.$i['item_id'].':reverse',max(0,(float)($i['unit_price']??0)));
                 }
             }
+            if($stockImpactChanged)$pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason='Penerimaan diedit' WHERE reference_type='goods_receipt' AND reference_id=? AND is_voided=0")->execute([$actor['id']??null,$id]);
             if ($stockImpactChanged && $isReceived) {
-                foreach ($d['items'] as $i) {
+                foreach ($d['items'] as $lineIndex=>$i) {
                     if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStock($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['itemId'],-(int)$i['qty']);
                     adjustWarehouseStockAllowNegative($pdo,$newWarehouseId,$newBranchId,$i['itemId'],(int)$i['qty']);
-                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],(int)$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':apply',max(0,(float)($i['unitPrice']??0)));
+                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],(int)$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':'.$lineIndex.':apply',max(0,(float)($i['unitPrice']??0)));
                 }
             }
+            $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('goods_receipt',?,?,'update',?,?,?,?)")
+                ->execute([$id,$d['receiptNumber'],$stockImpactChanged?'Perubahan berdampak stok':'Perubahan non-stok',json_encode(['before'=>['document'=>$oldRow,'items'=>$oldItemsList],'after'=>$d],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
 
             $pdo->commit();
             respondSuccess(null, 'Penerimaan diupdate');
@@ -295,30 +296,38 @@ switch ($method) {
 
     case 'DELETE':
         if (!$id) respondError('ID required');
+        $deleteInput=getInput();
+        $deleteReason=trim((string)($deleteInput['reason']??''))?:'Dihapus oleh pengguna';
         $pdo->beginTransaction();
         try {
             $rowStmt=$pdo->prepare("SELECT * FROM goods_receipts WHERE id=? FOR UPDATE");
             $rowStmt->execute([$id]);
             $row = $rowStmt->fetch();
             if (!$row) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
-            requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), (string)$row['branch_id']);
+            $deleteActor=$requestUser ?? requireAuthenticatedUser($pdo);
+            requireAccessibleBranch($pdo, $deleteActor, (string)$row['branch_id']);
             $linked = $pdo->prepare("SELECT COUNT(*) FROM purchase_invoice_items WHERE receipt_id=?");
             $linked->execute([$id]);
             if ((int)$linked->fetchColumn() > 0) throw new DomainException('Penerimaan sudah dipakai pada faktur pembelian dan tidak dapat dihapus');
+            $items = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
+            $items->execute([$id]);
+            $receiptItems=$items->fetchAll();
             if ($row && in_array($row['status'], ['Diterima', 'Difakturkan', 'Sebagian'])) {
-                $items = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
-                $items->execute([$id]);
-                foreach ($items->fetchAll() as $i) {
+                foreach ($receiptItems as $i) {
                     if (!empty($i['item_id'])) {
                         adjustWarehouseStock($pdo,(string)($row['warehouse_id']?:defaultWarehouseId($pdo,(string)$row['branch_id'])),(string)$row['branch_id'],$i['item_id'],-(int)$i['qty']);
                         if(($row['source_type']??'Supplier')==='Transfer Gudang'&&!empty($row['source_warehouse_id'])&&!empty($row['source_branch_id']))adjustWarehouseStockAllowNegative($pdo,(string)$row['source_warehouse_id'],(string)$row['source_branch_id'],$i['item_id'],(int)$i['qty']);
-                        $journalReceipt($pdo,$row,(string)$i['item_id'],(int)$i['qty'],true,$requestUser ?? requireAuthenticatedUser($pdo));
                     }
                 }
             }
+            $snapshot=['document'=>$row,'items'=>$receiptItems];
+            $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('goods_receipt',?,?,'delete',?,?,?,?)")
+                ->execute([$id,$row['receipt_number'],substr($deleteReason,0,255),json_encode($snapshot,JSON_UNESCAPED_UNICODE),$deleteActor['id']??null,$deleteActor['name']??$deleteActor['username']??null]);
+            $pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason=? WHERE reference_type='goods_receipt' AND reference_id=? AND is_voided=0")
+                ->execute([$deleteActor['id']??null,substr($deleteReason,0,255),$id]);
             $pdo->prepare("DELETE FROM goods_receipts WHERE id=?")->execute([$id]);
             $pdo->commit();
-            respondSuccess(null, 'Penerimaan dihapus');
+            respondSuccess(['status'=>'Deleted'], 'Penerimaan dihapus, stok dikembalikan, dan jejak tersimpan di Log Aktivitas');
         } catch (InvalidArgumentException | DomainException $e) {
             $pdo->rollBack();
             respondError($e->getMessage(), 409);

@@ -48,6 +48,27 @@ test('penghapusan faktur mengembalikan stok dan melepas relasi WO', () => {
   assert.match(php, /Hapus pembayaran terlebih dahulu sebelum menghapus faktur/);
 });
 
+test('aturan baku Accurate: faktur terhapus dari transaksi dan mutasi aktif tetapi tetap ada di log aktivitas', () => {
+  const helpers = source('api/helpers.php');
+  const invoices = source('api/endpoints/sales-invoices.php');
+  const receipts = source('api/endpoints/goods-receipts.php');
+  const movements = source('api/endpoints/stock-movements.php');
+  const allData = source('api/endpoints/all-data.php');
+  const help = source('src/data/helpArticles.ts');
+  assert.match(helpers, /transaction_activity_logs/);
+  assert.match(helpers, /is_voided TINYINT\(1\) NOT NULL DEFAULT 0/);
+  assert.match(invoices, /action_type,reason,snapshot_json/);
+  assert.match(invoices, /VALUES\('sales_invoice',\?,\?,'delete'/);
+  assert.match(invoices, /UPDATE stock_movements SET is_voided=1/);
+  assert.match(invoices, /DELETE FROM sales_invoices WHERE id=\?/);
+  assert.match(receipts, /VALUES\('goods_receipt',\?,\?,'delete'/);
+  assert.match(receipts, /DELETE FROM goods_receipts WHERE id=\?/);
+  assert.match(movements, /FROM stock_movements WHERE is_voided=0 ORDER BY movement_sequence/);
+  assert.match(allData, /WHERE m\.is_voided=0 ORDER BY/);
+  assert.match(help, /Aturan koreksi baku Accurate/);
+  assert.match(help, /mutasi aktifnya hilang/);
+});
+
 test('sesi login memakai cookie HttpOnly dan tidak membocorkan token ke JavaScript', () => {
   const auth = source('api/endpoints/auth.php');
   const helpers = source('api/helpers.php');
@@ -135,7 +156,7 @@ test('seluruh dokumen stok menulis jurnal bernomor dan transfer mendukung pembat
   assert.match(transfers, /Hanya transfer Draft yang dapat dikirim/);
 });
 
-test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat pembalik', () => {
+test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat mutasi', () => {
   const helpers = source('api/helpers.php');
   const receipts = source('api/endpoints/goods-receipts.php');
   const movements = source('api/endpoints/stock-movements.php');
@@ -148,8 +169,8 @@ test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat
   assert.match(helpers, /idempotency_key/);
   assert.match(receipts, /stockImpactChanged/);
   assert.match(receipts, /Edit header\/rincian non-stok tidak menulis mutasi/);
-  assert.match(receipts, /ORDER BY movement_sequence DESC/);
-  assert.match(receipts, /reversalOfId/);
+  assert.match(receipts, /UPDATE stock_movements SET is_voided=1/);
+  assert.match(receipts, /Penerimaan diedit/);
   assert.match(movements, /\(\$_GET\['reconcile'\]\?\?''\)==='1'/);
   assert.match(movements, /COALESCE\(m\.occurred_at,m\.created_at\) DESC,m\.movement_sequence DESC/);
   assert.match(allData, /m\.movement_sequence DESC/);

@@ -77,7 +77,7 @@ foreach ($stmt->fetchAll() as $row) $rollback((string)$row['item_id'], -(int)$ro
 
 // Mutasi manual/legacy yang tidak berasal dari dokumen di atas.
 $stmt = $pdo->prepare("SELECT item_id,source_warehouse_id,destination_warehouse_id,quantity
-    FROM stock_movements WHERE COALESCE(occurred_at,created_at)>CONCAT(?,' 23:59:59')
+    FROM stock_movements WHERE is_voided=0 AND COALESCE(occurred_at,created_at)>CONCAT(?,' 23:59:59')
       AND movement_type IN ('transfer','adjustment')
       AND notes NOT LIKE 'STOCK_ADJUSTMENT:%'
       AND notes NOT LIKE 'CANCEL_STOCK_ADJUSTMENT:%'");

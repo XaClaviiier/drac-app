@@ -48,8 +48,8 @@ $prepareSalesStockItems=static function(PDO $pdo,string $branchId,array $items)u
     unset($item);
     return $items;
 };
-$journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $warehouseId,string $itemId,int $qty,bool $reverse,array $actor):void{
-    recordStockMovement($pdo,$itemId,$reverse?null:$warehouseId,$reverse?$warehouseId:null,abs($qty),$reverse?'reversal':'sale','sales_invoice',$invoiceId,$invoiceNumber,($reverse?'Pembalik penjualan ':'Penjualan ').$invoiceNumber,(string)($actor['id']??''),$date.' 12:00:00');
+$journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $warehouseId,string $itemId,int $qty,bool $reverse,array $actor,?string $correctionGroupId=null,?string $reversalOfId=null,?string $idempotencyKey=null):string{
+    return recordStockMovement($pdo,$itemId,$reverse?null:$warehouseId,$reverse?$warehouseId:null,abs($qty),$reverse?'reversal':'sale','sales_invoice',$invoiceId,$invoiceNumber,($reverse?'Pembalik penjualan ':'Penjualan ').$invoiceNumber,(string)($actor['id']??''),$date.' 12:00:00',$reversalOfId,$correctionGroupId,$idempotencyKey);
 };
 
 switch ($method) {
@@ -322,15 +322,9 @@ switch ($method) {
             if ($paymentDate && $paymentDate < $invoiceDate) throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
             if (isBackdateReasonRequired($pdo) && ($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') throw new Exception('Alasan tanggal mundur wajib diisi');
 
-            $oldDetails = $pdo->prepare("SELECT d.item_id,d.warehouse_id,d.qty,i.type FROM sales_invoice_items d LEFT JOIN items i ON i.id=d.item_id WHERE d.invoice_id=?");
+            $oldDetails = $pdo->prepare("SELECT d.*,i.type FROM sales_invoice_items d LEFT JOIN items i ON i.id=d.item_id WHERE d.invoice_id=?");
             $oldDetails->execute([$id]);
-            foreach ($oldDetails->fetchAll() as $detail) {
-                if (!empty($detail['item_id']) && (string)$detail['type']==='Persediaan') {
-                    $oldWarehouseId=(string)($detail['warehouse_id']?:defaultWarehouseId($pdo,(string)$current['branch_id']));
-                    adjustWarehouseStockAllowNegative($pdo,$oldWarehouseId,(string)$current['branch_id'],(string)$detail['item_id'],(int)$detail['qty']);
-                    $journalSale($pdo,$id,(string)$current['invoice_number'],(string)$current['date'],$oldWarehouseId,(string)$detail['item_id'],(int)$detail['qty'],true,$actor);
-                }
-            }
+            $oldDetailsList=$oldDetails->fetchAll();
 
             $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,isset($d['items'])&&is_array($d['items'])?$d['items']:[]);
             $items=$normalizedInvoice['items'];$total=$normalizedInvoice['total'];
@@ -355,6 +349,30 @@ switch ($method) {
                 $customerId = $customer['customer_code'];
                 $customerName = $customer['name'];
             }
+            $items=$prepareSalesStockItems($pdo,(string)$branchId,$items);
+            $oldStockLines=[];
+            foreach($oldDetailsList as $detail){
+                if(empty($detail['item_id'])||(string)$detail['type']!=='Persediaan')continue;
+                $warehouse=(string)($detail['warehouse_id']?:defaultWarehouseId($pdo,(string)$current['branch_id']));
+                $key=$warehouse.'|'.(string)$detail['item_id'];$oldStockLines[$key]=($oldStockLines[$key]??0)+(int)$detail['qty'];
+            }
+            $newStockLines=[];
+            foreach($items as $item){
+                if(empty($item['itemId'])||empty($item['isStockItem']))continue;
+                $key=(string)$item['warehouseId'].'|'.(string)$item['itemId'];$newStockLines[$key]=($newStockLines[$key]??0)+(int)$item['qty'];
+            }
+            ksort($oldStockLines);ksort($newStockLines);
+            $stockImpactChanged=$oldStockLines!==$newStockLines||(string)$current['branch_id']!==(string)$branchId||(string)$current['date']!==$invoiceDate;
+            $correctionGroupId=$stockImpactChanged?'CORR-SI-'.date('YmdHis').'-'.substr(bin2hex(random_bytes(4)),0,8):null;
+            if($stockImpactChanged){
+                foreach($oldDetailsList as $detail){
+                    if(empty($detail['item_id'])||(string)$detail['type']!=='Persediaan')continue;
+                    $oldWarehouseId=(string)($detail['warehouse_id']?:defaultWarehouseId($pdo,(string)$current['branch_id']));
+                    adjustWarehouseStockAllowNegative($pdo,$oldWarehouseId,(string)$current['branch_id'],(string)$detail['item_id'],(int)$detail['qty']);
+                }
+                $pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason='Faktur diedit' WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
+                    ->execute([$actor['id']??null,$id]);
+            }
 
             $stmt = $pdo->prepare("UPDATE sales_invoices SET invoice_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_info=?, description=?, total=?, payment=?, payment_date=?, backdate_reason=?, payment_method=?, status=?, age=?, branch_id=? WHERE id=?");
             $stmt->execute([
@@ -365,14 +383,17 @@ switch ($method) {
 
             $pdo->prepare("DELETE FROM sales_invoice_items WHERE invoice_id=?")->execute([$id]);
             $insertItem = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id,item_id,warehouse_id,code,name,description,price,qty,subtotal) VALUES (?,?,?,?,?,?,?,?,?)");
-            foreach ($items as $item) {
+            foreach ($items as $lineIndex=>$item) {
                 $insertItem->execute([$id,$item['itemId'],$item['warehouseId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['subtotal']]);
-                if (!empty($item['itemId']) && $item['isStockItem']) {
-                    $salesWarehouseId=$resolveSalesWarehouse($pdo,(string)$branchId,$item['warehouseId']);
+                if ($stockImpactChanged && !empty($item['itemId']) && $item['isStockItem']) {
+                    $salesWarehouseId=(string)$item['warehouseId'];
                     adjustWarehouseStockAllowNegative($pdo,$salesWarehouseId,(string)$branchId,(string)$item['itemId'],-(int)$item['qty']);
-                    $journalSale($pdo,$id,(string)$current['invoice_number'],$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor);
+                    $journalSale($pdo,$id,(string)$current['invoice_number'],$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$item['itemId'].':'.$salesWarehouseId.':'.$lineIndex.':apply');
                 }
             }
+            $afterSnapshot=['document'=>array_merge($current,['date'=>$invoiceDate,'description'=>$d['description']??'','total'=>$total,'payment'=>$payment,'status'=>$status,'branch_id'=>$branchId]),'items'=>$items];
+            $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('sales_invoice',?,?,'update',?,?,?,?)")
+                ->execute([$id,$current['invoice_number'],$stockImpactChanged?'Perubahan berdampak stok':'Perubahan non-stok',json_encode(['before'=>['document'=>$current,'items'=>$oldDetailsList],'after'=>$afterSnapshot],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
             $pdo->commit();
             respondSuccess(null, 'Faktur dan stok berhasil diperbarui');
         } catch (Exception $e) {
@@ -383,32 +404,40 @@ switch ($method) {
 
     case 'DELETE':
         if (!$id) respondError('ID required');
+        $deleteInput=getInput();
+        $deleteReason=trim((string)($deleteInput['reason']??''))?:'Dihapus oleh pengguna';
         $pdo->beginTransaction();
         try {
-            $invoiceStmt = $pdo->prepare("SELECT wo_id,payment,branch_id,invoice_number,date FROM sales_invoices WHERE id=? FOR UPDATE");
+            $invoiceStmt = $pdo->prepare("SELECT * FROM sales_invoices WHERE id=? FOR UPDATE");
             $invoiceStmt->execute([$id]);
             $invoiceRow = $invoiceStmt->fetch();
             if (!$invoiceRow) throw new Exception('Faktur tidak ditemukan');
-            requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), (string)$invoiceRow['branch_id']);
+            $deleteActor=$requestUser ?? requireAuthenticatedUser($pdo);
+            requireAccessibleBranch($pdo, $deleteActor, (string)$invoiceRow['branch_id']);
             $paymentCount=$pdo->prepare("SELECT COUNT(*) FROM customer_payments WHERE invoice_id=?");$paymentCount->execute([$id]);
             if ((float)$invoiceRow['payment'] > 0 || (int)$paymentCount->fetchColumn()>0) throw new Exception('Hapus pembayaran terlebih dahulu sebelum menghapus faktur');
             $linkedWoId = $invoiceRow['wo_id'];
             // Kembalikan stok sebelum detail ikut terhapus oleh ON DELETE CASCADE.
             $details = $pdo->prepare("
-                SELECT d.item_id, d.warehouse_id, d.qty, i.branch_id, m.type
+                SELECT d.*, i.branch_id, m.type
                 FROM sales_invoice_items d
                 JOIN sales_invoices i ON i.id = d.invoice_id
                 LEFT JOIN items m ON m.id = d.item_id
                 WHERE d.invoice_id = ?
             ");
             $details->execute([$id]);
-            foreach ($details->fetchAll() as $detail) {
+            $invoiceDetails=$details->fetchAll();
+            foreach ($invoiceDetails as $detail) {
                 if (!empty($detail['item_id']) && (string)$detail['type']==='Persediaan') {
                     $oldWarehouseId=(string)($detail['warehouse_id']?:defaultWarehouseId($pdo,(string)$detail['branch_id']));
                     adjustWarehouseStockAllowNegative($pdo,$oldWarehouseId,(string)$detail['branch_id'],(string)$detail['item_id'],(int)$detail['qty']);
-                    $journalSale($pdo,$id,(string)$invoiceRow['invoice_number'],(string)$invoiceRow['date'],$oldWarehouseId,(string)$detail['item_id'],(int)$detail['qty'],true,$requestUser ?? requireAuthenticatedUser($pdo));
                 }
             }
+            $snapshot=['document'=>$invoiceRow,'items'=>$invoiceDetails];
+            $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('sales_invoice',?,?,'delete',?,?,?,?)")
+                ->execute([$id,$invoiceRow['invoice_number'],substr($deleteReason,0,255),json_encode($snapshot,JSON_UNESCAPED_UNICODE),$deleteActor['id']??null,$deleteActor['name']??$deleteActor['username']??null]);
+            $pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason=? WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
+                ->execute([$deleteActor['id']??null,substr($deleteReason,0,255),$id]);
             $pdo->prepare("DELETE FROM sales_invoices WHERE id=?")->execute([$id]);
             // Bersihkan juga relasi yang tersimpan hanya melalui invoice_id (data lama).
             $pdo->prepare("UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL WHERE invoice_id=?")->execute([$id]);
@@ -416,7 +445,7 @@ switch ($method) {
                 $pdo->prepare("UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL WHERE id=?")->execute([$linkedWoId]);
             }
             $pdo->commit();
-            respondSuccess(null, 'Faktur dihapus dan stok dikembalikan');
+            respondSuccess(null, 'Faktur dihapus, stok dikembalikan, dan jejak tersimpan di Log Aktivitas');
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError($e->getMessage(), 422);
