@@ -914,17 +914,17 @@ export default function Layout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header
-          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:h-12 lg:py-1`}
+          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} app-brand-header flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:h-12 lg:py-1`}
         >
           <div className="hidden items-center gap-2.5 lg:flex">
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
               <Wrench className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h1 className="text-[13px] font-bold leading-4 text-gray-900">
+              <h1 className="text-[13px] font-bold leading-4 text-white">
                 DOKTER AC MOBIL
               </h1>
-              <p className="text-[10px] leading-3 text-gray-500">Management System</p>
+              <p className="text-[10px] leading-3 text-blue-100">Management System</p>
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-2 sm:gap-4 lg:hidden">
@@ -937,11 +937,11 @@ export default function Layout() {
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold text-gray-800 sm:text-xl">
+              <h2 className="truncate text-base font-semibold text-white sm:text-xl">
                 {getPageTitle()}
               </h2>
               {location.pathname === "/" && (
-                <span className="hidden text-sm text-gray-500 md:inline">
+                <span className="hidden text-sm text-blue-100 md:inline">
                   {new Date().toLocaleDateString("id-ID", {
                     weekday: "long",
                     day: "numeric",
@@ -959,24 +959,24 @@ export default function Layout() {
               <div className="relative">
                 <button
                   onClick={() => setBranchMenuOpen(!branchMenuOpen)}
-                  className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm lg:h-8"
+                  className="flex h-9 items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/20 sm:px-3 sm:text-sm lg:h-8"
                 >
                   <Building2
-                    className={`h-4 w-4 ${isAll ? "text-blue-600" : "text-gray-600"}`}
+                    className={`h-4 w-4 ${isAll ? "text-cyan-200" : "text-blue-100"}`}
                   />
                   <span
-                    className={`hidden sm:inline ${isAll ? "font-semibold text-blue-700" : ""}`}
+                    className={`hidden sm:inline ${isAll ? "font-semibold text-white" : ""}`}
                   >
                     {isAll ? "Semua Cabang" : currentBranch?.name}
                   </span>
                   <span
-                    className={`max-w-24 truncate sm:hidden ${isAll ? "font-semibold text-blue-700" : ""}`}
+                    className={`max-w-24 truncate sm:hidden ${isAll ? "font-semibold text-white" : ""}`}
                   >
                     {isAll
                       ? "Semua Cabang"
                       : currentBranch?.name.replace("CABANG ", "")}
                   </span>
-                  <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                  <ChevronDown className="h-3.5 w-3.5 text-blue-100" />
                 </button>
                 {branchMenuOpen && (
                   <>
@@ -1019,7 +1019,7 @@ export default function Layout() {
                       ? "Data berhasil diperbarui"
                       : "Status proses sistem"
                 }
-                className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 lg:h-8 lg:w-8"
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg text-blue-100 transition-colors hover:bg-white/15 hover:text-white lg:h-8 lg:w-8"
               >
                 {refreshRunning ? (
                   <span className="h-3.5 w-3.5 animate-pulse rounded-full bg-green-500 shadow-[0_0_0_5px_rgba(34,197,94,0.18)]" />
@@ -1135,7 +1135,7 @@ export default function Layout() {
               )}
             </div>
 
-            <button className="relative hidden h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 sm:flex lg:h-8 lg:w-8">
+            <button className="relative hidden h-9 w-9 items-center justify-center rounded-lg text-blue-100 transition-colors hover:bg-white/15 hover:text-white sm:flex lg:h-8 lg:w-8">
               <Bell className="h-4 w-4" />
               <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
             </button>
@@ -1144,20 +1144,20 @@ export default function Layout() {
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-gray-100 lg:py-1"
+                className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-white/15 lg:py-1"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 lg:h-7 lg:w-7">
                   <User className="h-4 w-4 text-white" />
                 </div>
                 <div className="hidden text-left md:block">
-                  <p className="text-[13px] font-medium leading-4 text-gray-800">
+                  <p className="text-[13px] font-medium leading-4 text-white">
                     {currentUser?.name || "Guest"}
                   </p>
-                  <p className="text-[10px] leading-3 text-gray-500">
+                  <p className="text-[10px] leading-3 text-blue-100">
                     {currentUser?.roleName}
                   </p>
                 </div>
-                <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:block" />
+                <ChevronDown className="hidden h-4 w-4 text-blue-100 sm:block" />
               </button>
               {userMenuOpen && (
                 <>

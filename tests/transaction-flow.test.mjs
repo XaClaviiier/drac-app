@@ -378,6 +378,9 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(page, /className=\{`\$\{ui\.field\} order-1 px-3`\}/);
   assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
   assert.match(page, /space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
+  assert.match(layout, /app-brand-header/);
+  assert.match(styles, /\.app-brand-header::before[\s\S]*radial-gradient/);
+  assert.match(styles, /\.app-brand-header::after[\s\S]*linear-gradient/);
 });
 
 test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {
