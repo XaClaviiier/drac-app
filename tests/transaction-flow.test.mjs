@@ -305,6 +305,19 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(allData, /engineType/);
 });
 
+test('rail aksi penerimaan baru mengikuti ukuran dan split button Accurate', () => {
+  const page = source('src/pages/GoodsReceiptEntry.tsx');
+  const railButton = source('src/components/AccurateActionRailButton.tsx');
+  assert.match(railButton, /h-14 w-\[72px\]/);
+  assert.match(railButton, /grid-cols-\[1fr_20px\]/);
+  assert.match(railButton, /border-l border-black\/10 bg-black\/5/);
+  assert.match(page, /AccurateActionRailButton/);
+  assert.match(page, /CircleEllipsis className="h-8 w-8"/);
+  assert.match(page, /disabled=\{saving\} onClick=\{\(\)=>void submit\('Diterima'\)\}/);
+  assert.doesNotMatch(page, /disabled=\{saving\|\|!form\.items\.length\}/);
+  assert.doesNotMatch(page, /Hapus tersedia setelah data disimpan/);
+});
+
 test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan keterangan', () => {
   const detail = source('src/pages/GoodsReceiptDetail.tsx');
   const list = source('src/pages/GoodsReceipt.tsx');

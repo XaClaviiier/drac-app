@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, FileText, Lightbulb, List, MoreHorizontal, Paperclip, PencilLine, Save, Search, Settings, Trash2, X } from 'lucide-react';
+import { CircleEllipsis, FileText, Lightbulb, List, Paperclip, PencilLine, Save, Search, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import type { GoodsReceiptItem, ItemVehicleCompatibility } from '../types';
@@ -9,6 +9,7 @@ import { vehicleBrands as fallbackVehicleBrandNames, vehicleModels as fallbackVe
 import ItemSearchOption from '../components/ItemSearchOption';
 import VehicleCompatibilityPicker, { formatVehicleCompatibility } from '../components/VehicleCompatibilityPicker';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import AccurateActionRailButton from '../components/AccurateActionRailButton';
 
 const deliveryOptions=['Diantar Langsung','Grab','Gojek','Ekspedisi','Diambil Sendiri','Lainnya'];
 const unitOptions=['PCS','SET','CAN','BOTOL','LITER','JASA','UNIT','PAKET'];
@@ -73,11 +74,10 @@ export default function GoodsReceiptEntry(){
     <label className={`min-w-0 lg:col-start-1 lg:grid lg:grid-cols-[128px_312px] lg:items-start lg:gap-2 ${form.deliveryMethod==='Lainnya'?'lg:row-start-4':'lg:row-start-3'}`}><span className="mb-1 block font-medium lg:mt-2 lg:mb-0 lg:flex lg:items-center lg:justify-end lg:gap-1"><span>Keterangan</span><span className="hidden lg:inline">:</span></span><textarea value={form.notes} onChange={event=>setForm({...form,notes:event.target.value})} rows={2} maxLength={500} placeholder="Keterangan penerimaan (opsional)" className="min-h-[72px] w-full resize-none rounded border border-slate-300 bg-white px-3 py-2"/></label>
    </div>
    <div className="absolute right-4 top-3 z-20 flex w-[72px] flex-col items-stretch gap-3">
-    <button disabled={saving||!form.items.length} onClick={()=>submit('Diterima')} title="Simpan penerimaan" className="flex h-16 items-center justify-center rounded border border-blue-700 bg-[#0874c9] text-white shadow-md disabled:border-gray-300 disabled:bg-gray-200 disabled:text-gray-400"><Save className="h-8 w-8"/><ChevronDown className="h-4 w-4"/></button>
-    <div className="relative"><button onClick={()=>setOpenRailMenu(openRailMenu==='document'?'':'document')} title="Dokumen" className="flex h-16 w-full items-center justify-center rounded border border-blue-500 bg-blue-200 text-[#00518b]"><FileText className="h-8 w-8"/><ChevronDown className="h-4 w-4"/></button>{openRailMenu==='document'&&<div className="absolute right-full top-0 z-40 mr-2 w-44 rounded border bg-white py-1 text-sm shadow-xl"><button onClick={()=>window.print()} className="w-full px-3 py-2 text-left hover:bg-blue-50">Cetak formulir</button><button onClick={()=>alert('Faktur pembelian dapat dibuat setelah penerimaan disimpan.')} className="w-full px-3 py-2 text-left hover:bg-blue-50">Buat faktur</button></div>}</div>
-    <input ref={attachmentRef} type="file" className="hidden" onChange={event=>event.target.files?.[0]&&alert(`Lampiran dipilih: ${event.target.files[0].name}`)}/><button onClick={()=>attachmentRef.current?.click()} title="Lampiran" className="flex h-16 items-center justify-center rounded border border-blue-500 bg-blue-200 text-[#00518b]"><Paperclip className="h-8 w-8"/><ChevronDown className="h-4 w-4"/></button>
-    <div className="relative"><button onClick={()=>setOpenRailMenu(openRailMenu==='more'?'':'more')} title="Pilihan lainnya" className="flex h-16 w-full items-center justify-center rounded border border-green-500 bg-green-300 text-green-800 shadow"><MoreHorizontal className="h-8 w-8"/><ChevronDown className="h-4 w-4"/></button>{openRailMenu==='more'&&<div className="absolute right-full top-0 z-40 mr-2 w-48 rounded border bg-white py-1 text-sm shadow-xl"><button onClick={()=>submit('Draft')} className="w-full px-3 py-2 text-left hover:bg-green-50">Simpan sebagai draft</button></div>}</div>
-    <button disabled title="Hapus tersedia setelah data disimpan" className="mt-4 flex h-16 items-center justify-center rounded border border-red-300 bg-red-200 text-red-400 disabled:opacity-60"><Trash2 className="h-8 w-8"/></button>
+    <AccurateActionRailButton disabled={saving} onClick={()=>void submit('Diterima')} title="Simpan penerimaan" tone="primary" icon={<Save className="h-7 w-7"/>}/>
+    <div className="relative"><AccurateActionRailButton onClick={()=>setOpenRailMenu(openRailMenu==='document'?'':'document')} title="Dokumen" icon={<FileText className="h-7 w-7"/>}/>{openRailMenu==='document'&&<div className="absolute right-full top-0 z-40 mr-2 w-44 rounded border bg-white py-1 text-sm shadow-xl"><button onClick={()=>window.print()} className="w-full px-3 py-2 text-left hover:bg-blue-50">Cetak formulir</button><button onClick={()=>alert('Faktur pembelian dapat dibuat setelah penerimaan disimpan.')} className="w-full px-3 py-2 text-left hover:bg-blue-50">Buat faktur</button></div>}</div>
+    <input ref={attachmentRef} type="file" className="hidden" onChange={event=>event.target.files?.[0]&&alert(`Lampiran dipilih: ${event.target.files[0].name}`)}/><AccurateActionRailButton onClick={()=>attachmentRef.current?.click()} title="Lampiran" icon={<Paperclip className="h-7 w-7"/>}/>
+    <div className="relative"><AccurateActionRailButton onClick={()=>setOpenRailMenu(openRailMenu==='more'?'':'more')} title="Pilihan lainnya" tone="success" icon={<CircleEllipsis className="h-8 w-8"/>}/>{openRailMenu==='more'&&<div className="absolute right-full top-0 z-40 mr-2 w-48 rounded border bg-white py-1 text-sm shadow-xl"><button onClick={()=>submit('Draft')} className="w-full px-3 py-2 text-left hover:bg-green-50">Simpan sebagai draft</button></div>}</div>
    </div>
   </div>
   <div className="ml-2 mr-[92px] mt-1 overflow-hidden rounded-t-lg border border-slate-300 bg-white">
