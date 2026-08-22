@@ -379,3 +379,21 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
   assert.match(page, /space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
 });
+
+test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const complaints = source('src/components/ComplaintMultiSelect.tsx');
+  const tabs = source('src/components/AccurateDocumentSideTabs.tsx');
+  assert.match(page, /Pelanggan <span className="text-red-500">\*<\/span>/);
+  assert.match(page, /Kendaraan <span className="text-red-500">\*<\/span>/);
+  assert.match(page, /ComplaintMultiSelect/);
+  assert.match(page, /AccurateDocumentSideTabs active=\{documentTab\}/);
+  assert.match(page, /Register WO terlebih dahulu untuk menambah barang\/jasa/);
+  assert.match(complaints, /Ketik bebas lalu tekan Enter/);
+  assert.match(complaints, /aria-label="Buka pilihan keluhan"/);
+  assert.match(complaints, /Hapus keluhan \$\{entry\}/);
+  assert.match(complaints, /entries\.join\(', '\)/);
+  assert.match(tabs, /lg:absolute lg:right-full lg:top-0/);
+  assert.match(tabs, /border-r-white bg-white text-rose-500/);
+  assert.match(tabs, /before:w-0\.5 before:bg-rose-500/);
+});
