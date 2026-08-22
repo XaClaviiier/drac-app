@@ -399,7 +399,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /Pelanggan <span className="text-red-500">\*<\/span>/);
   assert.match(page, /Kendaraan <span className="text-red-500">\*<\/span>/);
   assert.match(page, /Baris utama Accurate: pelanggan \+ kendaraan, lalu tanggal\/waktu; keluhan selebar kedua isian/);
-  assert.match(page, /lg:grid-cols-\[155px_minmax\(0,1fr\)_minmax\(0,\.85fr\)_92px_150px_132px\]/);
+  assert.match(page, /lg:grid-cols-\[120px_minmax\(0,1fr\)_minmax\(0,\.85fr\)_92px_150px_132px\]/);
   assert.match(page, /aria-label="Aksi Work Order"/);
   assert.match(page, /top-\[48px\]/);
   assert.match(page, /Hapus barang atau jasa terpilih/);
@@ -415,6 +415,12 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /Register WO terlebih dahulu untuk menambah barang\/jasa/);
   assert.match(complaints, /Ketik bebas lalu tekan Enter/);
   assert.match(complaints, /aria-label="Buka pilihan keluhan"/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(112px,.65fr\)\]/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /vehicle\?\.plateNumber \|\| 'Belum ada kendaraan'/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /placeholder="Ketik nama, HP, atau nopol\.\.\."/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /onVehicleSelect\?\.\(vehicle\.id\)/);
+  assert.match(source('src/pages/WorkOrders.tsx'), /onVehicleSelect=\{handleVehicleSelect\}/);
+  assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), />\{customer\.customerCode\}<\/span>/);
   assert.match(complaints, /Hapus keluhan \$\{entry\}/);
   assert.match(complaints, /entries\.join\(', '\)/);
   assert.match(tabs, /lg:absolute lg:right-full lg:top-0/);
