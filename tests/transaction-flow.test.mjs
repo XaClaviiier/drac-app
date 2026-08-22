@@ -289,7 +289,9 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /Kategori \/ Merek/);
   assert.match(page, /lg:grid-cols-\[448px_minmax\(24px,1fr\)_300px\]/);
   assert.match(page, /lg:grid-cols-\[112px_170px\]/);
-  assert.match(page, /Keterangan penerimaan \(opsional\)/);
+  assert.match(page, /receipt-notes-inline/);
+  assert.match(page, /placeholder="Keterangan \(opsional\)"/);
+  assert.match(page, /ActiveWarehouseHeader/);
   assert.match(page, /value=\{form\.notes\}/);
   assert.match(page, /lg:grid-cols-\[128px_312px\]/);
   assert.match(page, /hidden lg:inline">:<\/span>/);
@@ -321,12 +323,16 @@ test('rail aksi penerimaan baru mengikuti ukuran dan split button Accurate', () 
 test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan keterangan', () => {
   const detail = source('src/pages/GoodsReceiptDetail.tsx');
   const list = source('src/pages/GoodsReceipt.tsx');
+  const warehouseHeader = source('src/components/ActiveWarehouseHeader.tsx');
   assert.match(detail, /lg:grid-cols-\[448px_minmax\(24px,1fr\)_300px\]/);
-  assert.match(detail, /Keterangan penerimaan \(opsional\)/);
-  assert.match(detail, /disabled=\{!editing\} value=\{form\.notes\}/);
+  assert.match(detail, /receipt-notes-inline/);
+  assert.match(detail, /disabled=\{!editing\} value=\{form\.notes\}.*placeholder="Keterangan \(opsional\)"/);
   assert.match(detail, /Edit Penerimaan/);
   assert.match(detail, /Simpan perubahan/);
-  assert.match(detail, /Gudang Aktif/);
+  assert.match(detail, /ActiveWarehouseHeader/);
+  assert.match(warehouseHeader, /receipt-active-warehouse/);
+  assert.match(warehouseHeader, /Gudang Aktif/);
+  assert.match(warehouseHeader, /hidden whitespace-nowrap font-medium sm:inline/);
   assert.match(list, /'Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'/);
   assert.match(list, /\{r\.notes\|\|'-'\}/);
   assert.match(list, /\{r\.items\.length\} item \(\{r\.items\.reduce/);
