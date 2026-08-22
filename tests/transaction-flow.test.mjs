@@ -331,6 +331,9 @@ test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak 
   assert.match(detail, /Simpan Gambar/);
   assert.match(detail, /Bagikan Gambar/);
   assert.match(detail, /Print Bluetooth 80 mm/);
+  assert.match(detail, /documentMenuOpen/);
+  assert.match(detail, /actionMenuOpen/);
+  assert.match(detail, /Simpan, bagikan, atau print tanda terima/);
   assert.match(detail, /receipt\.status!==['"]Draft['"]&&receipt\.status!==['"]Batal['"]/);
   assert.match(acknowledgement, /renderGoodsReceiptImage/);
   assert.match(acknowledgement, /navigator\.share/);
