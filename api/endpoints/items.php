@@ -37,6 +37,32 @@ function nextAutomaticItemCode(PDO $pdo, string $categoryCode, string $categoryN
     if ($max >= 9999) throw new InvalidArgumentException("Urutan kode {$prefix} sudah mencapai batas 9999");
     return $prefix.'-'.str_pad((string)($max+1),4,'0',STR_PAD_LEFT);
 }
+function resolveUniversalVehicleBrand(PDO $pdo, string $requestedVehicleBrandId = ''): array {
+    $requestedVehicleBrandId = trim((string)$requestedVehicleBrandId);
+    if ($requestedVehicleBrandId !== '') {
+        $vehicleBrandStmt = $pdo->prepare("SELECT id,name,item_code FROM vehicle_brands WHERE id=?");
+        $vehicleBrandStmt->execute([$requestedVehicleBrandId]);
+        $vehicleBrand = $vehicleBrandStmt->fetch();
+        if (!$vehicleBrand) throw new InvalidArgumentException('Merek kendaraan untuk kode barang tidak ditemukan');
+        return $vehicleBrand;
+    }
+
+    $vehicleBrand = $pdo->query("SELECT id,name,item_code FROM vehicle_brands WHERE UPPER(name)='UNIVERSAL' LIMIT 1")->fetch();
+    if (!$vehicleBrand) {
+        $universalId = 'VB-'.substr(sha1('universal'),0,16);
+        $pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);
+        $vehicleBrandById = $pdo->prepare("SELECT id,name,item_code FROM vehicle_brands WHERE id=?");
+        $vehicleBrandById->execute([$universalId]);
+        $vehicleBrand = $vehicleBrandById->fetch();
+    }
+
+    if (!$vehicleBrand) {
+        $vehicleBrand = $pdo->query("SELECT id,name,item_code FROM vehicle_brands WHERE is_active=1 ORDER BY sort_order,name LIMIT 1")->fetch();
+    }
+
+    if (!$vehicleBrand) throw new InvalidArgumentException('Merek kendaraan untuk kode barang wajib dipilih');
+    return $vehicleBrand;
+}
 
 function replaceItemVehicleCompatibilities(PDO $pdo, string $itemId, array $rawRows, string $fallbackBrandId): void {
     $rows = $rawRows ?: [['brandId' => $fallbackBrandId]];
@@ -161,17 +187,28 @@ switch ($method) {
             $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=? FOR UPDATE");
             $categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
-            $name=strtoupper(trim((string)$d['name']));$brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
-            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[])))));$vehicleBrandId=(string)($vehicleBrandIds[0]??($d['vehicleBrandId']??''));
-            $vehicleBrandStmt=$pdo->prepare("SELECT id,name,item_code FROM vehicle_brands WHERE id=? AND is_active=1");
-            if($vehicleBrandId!==''){$vehicleBrandStmt->execute([$vehicleBrandId]);$vehicleBrand=$vehicleBrandStmt->fetch();}else{$vehicleBrand=$pdo->query("SELECT id,name,item_code FROM vehicle_brands WHERE UPPER(name)='UNIVERSAL' AND is_active=1 LIMIT 1")->fetch();}
-            if(!$vehicleBrand)throw new InvalidArgumentException('Merek kendaraan untuk kode barang wajib dipilih');
+            $name=strtoupper(trim((string)$d['name']));
+            $brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
+            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[]))));
+            if(!$vehicleBrandIds&&!in_array($type,['Jasa','Group'],true)){
+                $universalVehicleBrand=resolveUniversalVehicleBrand($pdo);
+                $vehicleBrandIds=[(string)$universalVehicleBrand['id']];
+            }
+            $vehicleBrandId=(string)($vehicleBrandIds[0]??($d['vehicleBrandId']??''));
+            $primaryVehicleBrand=null;
+            if($vehicleBrandId!==''){
+                $vehicleBrandStmt=$pdo->prepare("SELECT id,name,item_code FROM vehicle_brands WHERE id=?");
+                $vehicleBrandStmt->execute([$vehicleBrandId]);
+                $primaryVehicleBrand=$vehicleBrandStmt->fetch();
+                if(!$primaryVehicleBrand) throw new InvalidArgumentException('Merek kendaraan tidak valid');
+            }
+            $vehicleBrandStmt=$pdo->prepare("SELECT id,name,item_code FROM vehicle_brands WHERE id=?");
             $unit=$type==='Jasa'?'JASA':($type==='Group'?'PAKET':strtoupper(trim((string)($d['unit']??'PCS'))));
             $quickService=in_array($type,['Jasa','Group'],true)?(int)!empty($d['isQuickService']):0;
             $normalizedBarcode=in_array($type,['Jasa','Group'],true)?null:($barcode!==''?$barcode:null);
             $nameCheck=$pdo->prepare("SELECT id FROM items WHERE UPPER(TRIM(name))=? LIMIT 1");$nameCheck->execute([$name]);
             if($nameCheck->fetch())throw new InvalidArgumentException("Nama {$name} sudah digunakan");
-            $code=!empty($d['autoCode'])?nextAutomaticItemCode($pdo,(string)$category['code'],(string)$category['name'],(string)($vehicleBrand['item_code']??'01'),$type):strtoupper(trim((string)($d['code']??'')));
+            $code=!empty($d['autoCode'])?nextAutomaticItemCode($pdo,(string)$category['code'],(string)$category['name'],(string)($primaryVehicleBrand['item_code']??'01'),$type):strtoupper(trim((string)($d['code']??'')));
             if($code==='')throw new InvalidArgumentException('Kode barang/jasa wajib diisi');
             $codeCheck=$pdo->prepare("SELECT id FROM items WHERE code=? LIMIT 1");$codeCheck->execute([$code]);
             if($codeCheck->fetch())throw new InvalidArgumentException("Kode {$code} sudah digunakan");
@@ -182,7 +219,7 @@ switch ($method) {
             $stmt->execute([
                 $itemId, $code, $name,
                 $category['id'], $category['name'],
-                $type, $brand, $d['itemBrandId']??null, $vehicleBrand['id'], $vehicleBrand['name'], $unit,
+                $type, $brand, $d['itemBrandId']??null, $primaryVehicleBrand['id'] ?? null, $primaryVehicleBrand['name'] ?? null, $unit,
                 0, 0,
                 0, max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $isProvisional?'Pending':'Verified', $actor['id']??null, $isProvisional?null:($actor['id']??null), $quickService,
@@ -190,8 +227,15 @@ switch ($method) {
                 $normalizedBarcode,
                 $branchId
             ]);
-            if(!$vehicleBrandIds)$vehicleBrandIds=[$vehicleBrand['id']];$link=$pdo->prepare("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");foreach($vehicleBrandIds as $position=>$linkedBrandId){$vehicleBrandStmt->execute([$linkedBrandId]);if(!$vehicleBrandStmt->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');$link->execute([$itemId,$linkedBrandId,$position]);}
-            replaceItemVehicleCompatibilities($pdo,$itemId,(array)($d['vehicleCompatibilities']??[]),(string)$vehicleBrand['id']);
+            if($vehicleBrandIds){
+                $link=$pdo->prepare("INSERT IGNORE INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");
+                foreach($vehicleBrandIds as $position=>$linkedBrandId){
+                    $vehicleBrandStmt->execute([$linkedBrandId]);
+                    if(!$vehicleBrandStmt->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');
+                    $link->execute([$itemId,$linkedBrandId,$position]);
+                }
+            }
+            if($primaryVehicleBrand)replaceItemVehicleCompatibilities($pdo,$itemId,(array)($d['vehicleCompatibilities']??[]),(string)$primaryVehicleBrand['id']);
 
             $stockStmt = $pdo->prepare("
                 INSERT INTO branch_item_stocks (branch_id, item_id, stock, sellable_stock)
@@ -287,8 +331,21 @@ switch ($method) {
             if(!$current)throw new InvalidArgumentException('Barang/Jasa tidak ditemukan');
             $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=?");$categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
-            $name=strtoupper(trim((string)$d['name']));$brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
-            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[])))));$primaryBrandId=(string)($vehicleBrandIds[0]??($d['vehicleBrandId']??$current['vehicle_brand_id']??''));$primaryBrand=$pdo->prepare("SELECT id,name FROM vehicle_brands WHERE id=? AND is_active=1");$primaryBrand->execute([$primaryBrandId]);$primaryBrandRow=$primaryBrand->fetch();if(!$primaryBrandRow)throw new InvalidArgumentException('Minimal satu merek kendaraan wajib dipilih');
+            $name=strtoupper(trim((string)$d['name']));
+            $brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
+            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[]))));
+            if(!$vehicleBrandIds&&!in_array($type,['Jasa','Group'],true)){
+                $universalVehicleBrand=resolveUniversalVehicleBrand($pdo);
+                $vehicleBrandIds=[(string)$universalVehicleBrand['id']];
+            }
+            $primaryBrandId=(string)($vehicleBrandIds[0]??($d['vehicleBrandId']??''));
+            $primaryBrand=$pdo->prepare("SELECT id,name FROM vehicle_brands WHERE id=? AND is_active=1");
+            $primaryBrandRow=null;
+            if($primaryBrandId!==''){
+                $primaryBrand->execute([$primaryBrandId]);
+                $primaryBrandRow=$primaryBrand->fetch();
+                if(!$primaryBrandRow)throw new InvalidArgumentException('Merek kendaraan tidak valid');
+            }
             $unit=$type==='Jasa'?'JASA':($type==='Group'?'PAKET':strtoupper(trim((string)($d['unit']??'PCS'))));
             $quickService=in_array($type,['Jasa','Group'],true)?(int)!empty($d['isQuickService']):0;
             $normalizedBarcode=in_array($type,['Jasa','Group'],true)?null:($barcode!==''?$barcode:null);
@@ -306,15 +363,23 @@ switch ($method) {
             $stmt->execute([
                 $current['code'], $name,
                 $category['id'], $category['name'],
-                $type, $brand, $d['itemBrandId']??null,$primaryBrandRow['id'],$primaryBrandRow['name'],$unit,
+                $type, $brand, $d['itemBrandId']??null,$primaryBrandRow['id']??null,$primaryBrandRow['name']??null,$unit,
                 max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $quickService,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
                 $normalizedBarcode,
                 $id
             ]);
-            $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);if(!$vehicleBrandIds)$vehicleBrandIds=[$primaryBrandId];$link=$pdo->prepare("INSERT INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");foreach($vehicleBrandIds as $position=>$linkedBrandId){$primaryBrand->execute([$linkedBrandId]);if(!$primaryBrand->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');$link->execute([$id,$linkedBrandId,$position]);}
-            if(array_key_exists('vehicleCompatibilities',$d))replaceItemVehicleCompatibilities($pdo,$id,(array)$d['vehicleCompatibilities'],(string)$primaryBrandRow['id']);
+            $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);
+            if($vehicleBrandIds){
+                $link=$pdo->prepare("INSERT INTO item_vehicle_brands(item_id,vehicle_brand_id,sort_order) VALUES(?,?,?)");
+                foreach($vehicleBrandIds as $position=>$linkedBrandId){
+                    $primaryBrand->execute([$linkedBrandId]);
+                    if(!$primaryBrand->fetch())throw new InvalidArgumentException('Merek kendaraan tidak valid');
+                    $link->execute([$id,$linkedBrandId,$position]);
+                }
+            }
+            if($primaryBrandRow&&array_key_exists('vehicleCompatibilities',$d))replaceItemVehicleCompatibilities($pdo,$id,(array)$d['vehicleCompatibilities'],(string)$primaryBrandRow['id']);
 
             // Refresh group members
             $pdo->prepare("DELETE FROM item_group_members WHERE group_item_id = ?")->execute([$id]);

@@ -375,8 +375,8 @@ export default function ItemsAndServices() {
         categoryId: item.categoryId,
         type: item.type,
         brand: item.brand,
-        vehicleBrandId: item.vehicleBrandId || vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id || '',
-        vehicleBrandIds: item.vehicleBrandIds?.length ? [...item.vehicleBrandIds] : [item.vehicleBrandId || vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id || ''].filter(Boolean),
+        vehicleBrandId: item.vehicleBrandId || '',
+        vehicleBrandIds: item.vehicleBrandIds?.length ? [...item.vehicleBrandIds] : (item.vehicleBrandId ? [item.vehicleBrandId] : []),
         itemBrandId: item.itemBrandId || '',
         unit: item.unit,
         stock: item.stock,
@@ -392,8 +392,8 @@ export default function ItemsAndServices() {
     } else {
       setEditingItem(null);
       const defaultCategory = data.itemCategories.find(category => category.isActive);
-      const universalId=vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id||'';
-      setItemForm({ ...emptyItem, categoryId: defaultCategory?.id || '', vehicleBrandId:universalId, vehicleBrandIds:universalId?[universalId]:[], code: '', groupMembers: [] });
+      const universalId = vehicleBrands.find(brand=>brand.name.toLowerCase()==='universal')?.id || '';
+      setItemForm({ ...emptyItem, categoryId: defaultCategory?.id || '', vehicleBrandId: universalId, vehicleBrandIds: universalId?[universalId]:[], code: '', groupMembers: [] });
     }
     setMemberSearch('');
     setShowItemModal(true);
@@ -513,15 +513,15 @@ export default function ItemsAndServices() {
     }
 
     const category = data.itemCategories.find((cat) => cat.id === itemForm.categoryId);
-    if (itemForm.vehicleBrandIds.length === 0) {
-      window.alert('Pilih minimal satu merek kendaraan. Pilihan pertama menjadi dasar kode barang.');
-      return;
-    }
     const isGroup = itemForm.type === 'Group';
     if (isGroup && itemForm.groupMembers.length === 0) {
       window.alert('Group/Paket wajib memiliki minimal satu barang atau jasa.');
       return;
     }
+    const universalVehicleBrandId = vehicleBrands.find(brand => brand.name.trim().toLowerCase() === 'universal')?.id || '';
+    const effectiveVehicleBrandIds = itemForm.vehicleBrandIds.length
+      ? itemForm.vehicleBrandIds
+      : (itemForm.type !== 'Jasa' && !isGroup && universalVehicleBrandId ? [universalVehicleBrandId] : []);
     const payload: Item = {
       id: editingItem?.id || Date.now().toString(),
       code,
@@ -530,8 +530,8 @@ export default function ItemsAndServices() {
       categoryName: category?.name || '-',
       type: itemForm.type,
       brand: itemForm.brand,
-      vehicleBrandId: itemForm.vehicleBrandId || undefined,
-      vehicleBrandIds: itemForm.vehicleBrandIds,
+      vehicleBrandId: effectiveVehicleBrandIds[0] || undefined,
+      vehicleBrandIds: effectiveVehicleBrandIds,
       itemBrandId: itemForm.itemBrandId || undefined,
       unit: itemForm.unit,
       // Saldo stok dan harga beli dikelola oleh transaksi persediaan/pembelian,
@@ -1474,7 +1474,7 @@ export default function ItemsAndServices() {
                   <section>
                     <h4 className="mb-3 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Lainnya</h4>
                     <div className="grid grid-cols-[170px_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-sm">
-                      <label>Merek Kendaraan <span className="text-red-600">*</span><small className="block font-normal text-slate-500">Bisa pilih lebih dari satu</small></label>
+                      <label>Merek Kendaraan <small className="block font-normal text-slate-500">Opsional, bisa pilih lebih dari satu</small></label>
                       <div className="flex gap-2"><div className="relative min-w-0 flex-1"><div className="flex min-h-9 flex-wrap items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 pr-10">{itemForm.vehicleBrandIds.map((brandId,index)=>{const selected=vehicleBrands.find(row=>row.id===brandId);return selected?<span key={brandId} title={index===0?'Merek utama untuk kode barang':'Merek kendaraan tambahan'} className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${index===0?'border-blue-300 bg-blue-50 text-blue-800':'border-slate-300 bg-slate-50 text-slate-700'}`}><span>{selected.name}</span><button type="button" aria-label={`Hapus ${selected.name}`} onClick={()=>setItemForm(current=>{const ids=current.vehicleBrandIds.filter(id=>id!==brandId);return {...current,vehicleBrandIds:ids,vehicleBrandId:ids[0]||''};})} className="font-bold text-slate-500 hover:text-red-600">×</button></span>:null;})}{!itemForm.vehicleBrandIds.length&&<span className="text-xs text-slate-400">Cari/Pilih Merek Kendaraan...</span>}<button type="button" onClick={()=>setVehicleBrandPickerOpen(open=>!open)} title="Cari merek kendaraan" className="absolute right-1 top-1 flex h-7 w-8 items-center justify-center text-slate-700"><Search className="h-4 w-4"/></button></div>{vehicleBrandPickerOpen&&<div className="absolute left-0 right-0 top-full z-40 mt-1 rounded border border-slate-300 bg-white p-2 shadow-xl"><input autoFocus value={vehicleBrandQuery} onChange={event=>setVehicleBrandQuery(event.target.value)} placeholder="Ketik nama merek..." className="mb-2 h-8 w-full rounded border border-slate-300 px-2 text-sm"/><div className="max-h-44 overflow-y-auto">{vehicleBrands.filter(row=>row.isActive&&!itemForm.vehicleBrandIds.includes(row.id)&&row.name.toLowerCase().includes(vehicleBrandQuery.trim().toLowerCase())).map(row=><button key={row.id} type="button" onClick={()=>{setItemForm(current=>{const ids=[...current.vehicleBrandIds,row.id];return {...current,vehicleBrandIds:ids,vehicleBrandId:ids[0]||''};});setVehicleBrandQuery('');}} className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-blue-50">{row.name}</button>)}{!vehicleBrands.some(row=>row.isActive&&!itemForm.vehicleBrandIds.includes(row.id)&&row.name.toLowerCase().includes(vehicleBrandQuery.trim().toLowerCase()))&&<p className="px-3 py-4 text-center text-xs text-slate-400">Tidak ada merek lain.</p>}</div><button type="button" onClick={()=>{setVehicleBrandPickerOpen(false);setVehicleBrandQuery('');}} className="mt-2 w-full border-t pt-2 text-xs text-slate-600">Tutup</button></div>}</div><button type="button" onClick={()=>setShowVehicleBrandModal(true)} title="Kelola merek kendaraan" aria-label="Kelola merek kendaraan" className="flex h-9 w-10 items-center justify-center rounded border border-blue-500 text-blue-700"><Edit className="h-4 w-4"/></button></div>
                       <label>Merek Barang</label>
                       <div className="flex gap-2"><select disabled={itemForm.type==='Jasa'||itemForm.type==='Group'} value={itemForm.itemBrandId} onChange={e=>{const selected=itemBrands.find(row=>row.id===e.target.value);setItemForm({...itemForm,itemBrandId:e.target.value,brand:selected?.name||''});}} className="h-9 min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 disabled:bg-slate-100"><option value="">Tanpa merek</option>{itemBrands.filter(row=>row.isActive||row.id===itemForm.itemBrandId).map(row=><option key={row.id} value={row.id}>{row.code} - {row.name} ({row.usageCount||0})</option>)}</select><button type="button" onClick={()=>setShowBrandModal(true)} title="Kelola merek barang" aria-label="Kelola merek barang" className="flex h-9 w-10 items-center justify-center rounded border border-blue-500 text-blue-700"><Edit className="h-4 w-4"/></button></div>
@@ -1571,8 +1571,8 @@ export default function ItemsAndServices() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Merek Kendaraan untuk Kode *</label>
-                  <select required value={itemForm.vehicleBrandId} onChange={e=>setItemForm({...itemForm,vehicleBrandId:e.target.value})} className="w-full rounded-lg border border-gray-300 px-4 py-2.5"><option value="">Pilih merek kendaraan</option>{vehicleBrands.filter(b=>b.isActive).map(b=><option key={b.id} value={b.id}>{b.itemCode||'--'} - {b.name}</option>)}</select>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Merek Kendaraan untuk Kode</label>
+                  <select value={itemForm.vehicleBrandId} onChange={e=>setItemForm({...itemForm,vehicleBrandId:e.target.value})} className="w-full rounded-lg border border-gray-300 px-4 py-2.5"><option value="">Pilih merek kendaraan</option>{vehicleBrands.filter(b=>b.isActive).map(b=><option key={b.id} value={b.id}>{b.itemCode||'--'} - {b.name}</option>)}</select>
                   <p className="mt-1 text-xs text-gray-500">Pilih Universal untuk barang yang cocok ke semua mobil.</p>
                 </div>
                 {itemForm.type !== 'Jasa' && itemForm.type !== 'Group' && <div>
