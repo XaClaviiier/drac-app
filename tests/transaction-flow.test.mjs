@@ -379,6 +379,8 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
   assert.match(page, /space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
   assert.match(layout, /app-brand-header/);
+  assert.match(layout, /app-brand-header absolute left-0 top-0 flex h-12 w-\[320px\]/);
+  assert.match(layout, /bg-\[#061a3a\] pt-12/);
   assert.match(styles, /\.app-brand-header::before[\s\S]*data:image\/svg\+xml/);
   assert.match(styles, /\.app-brand-header::after[\s\S]*linear-gradient/);
 });
@@ -389,7 +391,11 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   const tabs = source('src/components/AccurateDocumentSideTabs.tsx');
   assert.match(page, /Pelanggan <span className="text-red-500">\*<\/span>/);
   assert.match(page, /Kendaraan <span className="text-red-500">\*<\/span>/);
-  assert.match(page, /Pelanggan dan kendaraan sejajar; keluhan langsung di bawah pelanggan/);
+  assert.match(page, /Satu grid rapat: kendaraan langsung di samping pelanggan tanpa label desktop terpisah/);
+  assert.match(page, /aria-label="Aksi Work Order"/);
+  assert.match(page, /Hapus barang atau jasa terpilih/);
+  assert.match(page, /<td colSpan=\{6\} className="h-48/);
+  assert.match(page, /setSelectedServiceId\(service\.id\)/);
   assert.match(page, /Waktu WO desktop/);
   assert.match(page, /\{editingWO && <div className=\{`flex items-center gap-2/);
   assert.match(page, /ComplaintMultiSelect/);
