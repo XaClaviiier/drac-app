@@ -6,6 +6,12 @@ import { useNavigate } from 'react-router-dom';
 import { addLocalDays, localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 
+type ReceiptColumn = 'number' | 'date' | 'notes' | 'receivedBy' | 'itemCount' | 'warehouse' | 'status';
+const defaultReceiptColumns: ReceiptColumn[] = ['number','date','notes','receivedBy','itemCount','warehouse','status'];
+const receiptColumnLabelList = ['Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'] as const;
+const receiptColumnLabels: Record<ReceiptColumn,string> = {number:receiptColumnLabelList[0],date:receiptColumnLabelList[1],notes:receiptColumnLabelList[2],receivedBy:receiptColumnLabelList[3],itemCount:receiptColumnLabelList[4],warehouse:receiptColumnLabelList[5],status:receiptColumnLabelList[6]};
+const receiptColumnStorageKey = 'drac.receipts.columnOrder.v1';
+
 export default function GoodsReceiptPage() {
   const navigate = useNavigate();
   const {
@@ -19,6 +25,14 @@ export default function GoodsReceiptPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterInvoice, setFilterInvoice] = useState('');
   const [filterFromDate, setFilterFromDate] = useState('');
+  const [receiptColumns, setReceiptColumns] = useState<ReceiptColumn[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(receiptColumnStorageKey) || '[]') as ReceiptColumn[];
+      return saved.length === defaultReceiptColumns.length && defaultReceiptColumns.every(column => saved.includes(column)) ? saved : defaultReceiptColumns;
+    } catch { return defaultReceiptColumns; }
+  });
+  const [draggedReceiptColumn, setDraggedReceiptColumn] = useState<ReceiptColumn | null>(null);
+  const [receiptSort, setReceiptSort] = useState<{column:ReceiptColumn;direction:'asc'|'desc'}>({column:'date',direction:'desc'});
 
   // Receipt modal
   const [showModal, setShowModal] = useState(false);
@@ -158,10 +172,31 @@ export default function GoodsReceiptPage() {
         return searchMatch && statusMatch && dateMatch && invMatch;
       })
       .sort((a, b) => {
-        const dc = b.date.localeCompare(a.date);
-        return dc !== 0 ? dc : b.receiptNumber.localeCompare(a.receiptNumber);
+        const documentNumber=(r:GoodsReceipt)=>r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber;
+        const value=(r:GoodsReceipt):string|number=>{
+          if(receiptSort.column==='number')return documentNumber(r);
+          if(receiptSort.column==='date')return r.date;
+          if(receiptSort.column==='notes')return r.notes||'';
+          if(receiptSort.column==='receivedBy')return r.receivedBy||'';
+          if(receiptSort.column==='itemCount')return r.items.reduce((sum,item)=>sum+item.qty,0);
+          if(receiptSort.column==='warehouse')return data.warehouses.find(w=>w.id===r.warehouseId)?.name||'';
+          return r.status;
+        };
+        const av=value(a),bv=value(b);
+        const comparison=typeof av==='number'&&typeof bv==='number'?av-bv:String(av).localeCompare(String(bv),'id',{numeric:true,sensitivity:'base'});
+        if(comparison!==0)return receiptSort.direction==='asc'?comparison:-comparison;
+        return documentNumber(b).localeCompare(documentNumber(a),'id',{numeric:true});
       });
-  }, [data.goodsReceipts, search, filterStatus, filterFromDate, filterInvoice, currentBranchId]);
+  }, [data.goodsReceipts, data.warehouses, search, filterStatus, filterFromDate, filterInvoice, currentBranchId, receiptSort]);
+
+  const moveReceiptColumn=(source:ReceiptColumn,target:ReceiptColumn)=>{
+    if(source===target)return;
+    setReceiptColumns(current=>{
+      const next=[...current];const from=next.indexOf(source);const to=next.indexOf(target);
+      if(from<0||to<0)return current;
+      next.splice(from,1);next.splice(to,0,source);localStorage.setItem(receiptColumnStorageKey,JSON.stringify(next));return next;
+    });
+  };
 
   const pickableItems = useMemo(() => {
     const q = itemSearch.toLowerCase();
@@ -321,7 +356,16 @@ export default function GoodsReceiptPage() {
           {!filtered.length&&<div className="rounded border border-slate-200 bg-white py-14 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-10 w-10"/>Belum ada penerimaan barang.</div>}
         </div>
         <div className="hidden lg:block">
-        <div className="mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{['Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'].map(label=><th key={label} className="border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0">{label}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]"><td className="border-r border-[#d8d8d8] p-3 font-normal text-blue-700 underline-offset-2 hover:underline">{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td><td className="whitespace-nowrap border-r border-[#d8d8d8] p-3">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td><td className="max-w-[280px] truncate border-r border-[#d8d8d8] p-3" title={r.notes||''}>{r.notes||'-'}</td><td className="border-r border-[#d8d8d8] p-3">{r.receivedBy||'-'}</td><td className="whitespace-nowrap border-r border-[#d8d8d8] p-3">{r.items.length} item ({r.items.reduce((sum,item)=>sum+item.qty,0)} pcs)</td><td className="border-r border-[#d8d8d8] p-3">{data.warehouses.find(w=>w.id===r.warehouseId)?.name||'-'}</td><td className="p-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${r.status==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span></td></tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
+        <div className="mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{receiptColumns.map(column=><th key={column} draggable onDragStart={()=>setDraggedReceiptColumn(column)} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedReceiptColumn)moveReceiptColumn(draggedReceiptColumn,column);setDraggedReceiptColumn(null)}} onDragEnd={()=>setDraggedReceiptColumn(null)} onClick={()=>setReceiptSort(current=>({column,direction:current.column===column&&current.direction==='asc'?'desc':'asc'}))} title="Klik untuk mengurutkan. Tarik untuk memindahkan kolom." className={`cursor-grab select-none whitespace-nowrap border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0 ${draggedReceiptColumn===column?'opacity-50':''}`}>{receiptColumnLabels[column]} {receiptSort.column===column&&<span className="text-[10px]">{receiptSort.direction==='asc'?'▲':'▼'}</span>}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{receiptColumns.map(column=>{
+          const base='border-r border-[#d8d8d8] p-3 last:border-r-0';
+          if(column==='number')return <td key={column} className={`${base} font-normal text-blue-700 underline-offset-2 hover:underline`}>{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td>;
+          if(column==='date')return <td key={column} className={`${base} whitespace-nowrap`}>{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td>;
+          if(column==='notes')return <td key={column} className={`${base} max-w-[280px] truncate`} title={r.notes||''}>{r.notes||'-'}</td>;
+          if(column==='receivedBy')return <td key={column} className={base}>{r.receivedBy||'-'}</td>;
+          if(column==='itemCount')return <td key={column} className={`${base} whitespace-nowrap`}>{r.items.length} item ({r.items.reduce((sum,item)=>sum+item.qty,0)} pcs)</td>;
+          if(column==='warehouse')return <td key={column} className={base}>{data.warehouses.find(w=>w.id===r.warehouseId)?.name||'-'}</td>;
+          return <td key={column} className={base}><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${r.status==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span></td>;
+        })}</tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
         </div>
       </section>
       <div className="hidden">
