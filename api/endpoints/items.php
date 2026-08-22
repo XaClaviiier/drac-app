@@ -284,8 +284,11 @@ switch ($method) {
         $d = getInput();
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         if (in_array((string)($d['action']??''), ['verify','merge'], true)) {
-            $roleStmt=$pdo->prepare("SELECT code,name FROM roles WHERE id=? LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$role=$roleStmt->fetch() ?: [];
-            $isAdmin=!empty($actor['is_owner'])||strtoupper(trim((string)($role['code']??'')))==='ADM'||strtolower(trim((string)($role['name']??'')))==='administrator';
+            $isAdmin=!empty($actor['is_owner']);
+            if(!$isAdmin){
+                $roleStmt=$pdo->prepare("SELECT name FROM roles WHERE id=? LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$roleName=(string)($roleStmt->fetchColumn()?:'');
+                $isAdmin=strtolower(trim($roleName))==='administrator';
+            }
             if(!$isAdmin)respondError('Verifikasi barang hanya untuk Owner atau Administrator',403);
             if($d['action']==='verify'){
                 $pdo->beginTransaction();
