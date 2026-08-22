@@ -431,6 +431,28 @@ function ensureApiSupportTables(PDO $pdo): void {
             $pdo->prepare("INSERT INTO app_schema_migrations(migration_key) VALUES(?)")->execute([$ledgerV2Migration]);
         }catch(Throwable $e){throw $e;}
     }
+    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS is_voided TINYINT(1) NOT NULL DEFAULT 0 AFTER idempotency_key");
+    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS voided_at DATETIME NULL AFTER is_voided");
+    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS voided_by VARCHAR(20) NULL AFTER voided_at");
+    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS void_reason VARCHAR(255) NULL AFTER voided_by");
+    $voidIndex=$pdo->query("SHOW INDEX FROM stock_movements WHERE Key_name='idx_stock_movements_active'")->fetch();
+    if(!$voidIndex)$pdo->exec("CREATE INDEX idx_stock_movements_active ON stock_movements(is_voided,reference_type,reference_id)");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS transaction_activity_logs (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            entity_type VARCHAR(40) NOT NULL,
+            entity_id VARCHAR(64) NOT NULL,
+            entity_number VARCHAR(80) NULL,
+            action_type VARCHAR(20) NOT NULL,
+            reason VARCHAR(255) NULL,
+            snapshot_json LONGTEXT NULL,
+            user_id VARCHAR(20) NULL,
+            user_name VARCHAR(150) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_transaction_activity_entity (entity_type,entity_id,created_at),
+            INDEX idx_transaction_activity_action (action_type,created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_adjustments (
             id VARCHAR(30) NOT NULL PRIMARY KEY,

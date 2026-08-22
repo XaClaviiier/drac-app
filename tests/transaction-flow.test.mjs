@@ -6,6 +6,8 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'u
 
 test('pembuatan faktur berjalan atomik, memilih gudang, dan mengizinkan stok minus', () => {
   const php = source('api/endpoints/sales-invoices.php');
+  const page = source('src/pages/SalesInvoice.tsx');
+  const help = source('src/data/helpArticles.ts');
   assert.match(php, /beginTransaction\s*\(/);
   assert.match(php, /adjustWarehouseStockAllowNegative\s*\(/);
   assert.match(php, /warehouse_id/);
@@ -13,6 +15,11 @@ test('pembuatan faktur berjalan atomik, memilih gudang, dan mengizinkan stok min
   assert.match(php, /->commit\s*\(/);
   assert.match(php, /->rollBack\s*\(/);
   assert.match(php, /invoice_id\s*=\s*\?/);
+  assert.doesNotMatch(page, /if \(detailQty > detailWarehouseStock\).*return window\.alert/);
+  assert.doesNotMatch(page, /max=\{detailItem\.type === 'Persediaan'/);
+  assert.match(page, /Barang tetap dapat disimpan/);
+  assert.match(help, /Aturan stok negatif baku/);
+  assert.match(help, /peringatan, bukan sebagai pemblokir transaksi/);
 });
 
 test('faktur dari WO memilih gudang per barang dan memperingatkan stok negatif', () => {
@@ -46,6 +53,27 @@ test('penghapusan faktur mengembalikan stok dan melepas relasi WO', () => {
   assert.match(php, /Pembalik penjualan/);
   assert.match(php, /UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL/);
   assert.match(php, /Hapus pembayaran terlebih dahulu sebelum menghapus faktur/);
+});
+
+test('aturan baku Accurate: faktur terhapus dari transaksi dan mutasi aktif tetapi tetap ada di log aktivitas', () => {
+  const helpers = source('api/helpers.php');
+  const invoices = source('api/endpoints/sales-invoices.php');
+  const receipts = source('api/endpoints/goods-receipts.php');
+  const movements = source('api/endpoints/stock-movements.php');
+  const allData = source('api/endpoints/all-data.php');
+  const help = source('src/data/helpArticles.ts');
+  assert.match(helpers, /transaction_activity_logs/);
+  assert.match(helpers, /is_voided TINYINT\(1\) NOT NULL DEFAULT 0/);
+  assert.match(invoices, /action_type,reason,snapshot_json/);
+  assert.match(invoices, /VALUES\('sales_invoice',\?,\?,'delete'/);
+  assert.match(invoices, /UPDATE stock_movements SET is_voided=1/);
+  assert.match(invoices, /DELETE FROM sales_invoices WHERE id=\?/);
+  assert.match(receipts, /VALUES\('goods_receipt',\?,\?,'delete'/);
+  assert.match(receipts, /DELETE FROM goods_receipts WHERE id=\?/);
+  assert.match(movements, /FROM stock_movements WHERE is_voided=0 ORDER BY movement_sequence/);
+  assert.match(allData, /WHERE m\.is_voided=0 ORDER BY/);
+  assert.match(help, /Aturan koreksi baku Accurate/);
+  assert.match(help, /mutasi aktifnya hilang/);
 });
 
 test('sesi login memakai cookie HttpOnly dan tidak membocorkan token ke JavaScript', () => {
@@ -135,7 +163,7 @@ test('seluruh dokumen stok menulis jurnal bernomor dan transfer mendukung pembat
   assert.match(transfers, /Hanya transfer Draft yang dapat dikirim/);
 });
 
-test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat pembalik', () => {
+test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat mutasi', () => {
   const helpers = source('api/helpers.php');
   const receipts = source('api/endpoints/goods-receipts.php');
   const movements = source('api/endpoints/stock-movements.php');
@@ -147,9 +175,15 @@ test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat
   assert.match(helpers, /correction_group_id/);
   assert.match(helpers, /idempotency_key/);
   assert.match(receipts, /stockImpactChanged/);
-  assert.match(receipts, /Edit header\/rincian non-stok tidak menulis mutasi/);
-  assert.match(receipts, /ORDER BY movement_sequence DESC/);
-  assert.match(receipts, /reversalOfId/);
+  const receiptImpactRule = receipts.match(/\$stockImpactChanged=([\s\S]*?);/)?.[0] || '';
+  const invoiceImpactRule = source('api/endpoints/sales-invoices.php').match(/\$stockImpactChanged=([\s\S]*?);/)?.[0] || '';
+  assert.doesNotMatch(receiptImpactRule, /\['date'\]/);
+  assert.doesNotMatch(invoiceImpactRule, /\['date'\]/);
+  assert.match(receipts, /Tanggal, keterangan, petugas, dan header lain tidak mengubah saldo/);
+  assert.match(receipts, /Perubahan tanggal\/referensi tanpa perubahan saldo/);
+  assert.match(source('api/endpoints/sales-invoices.php'), /Perubahan tanggal tanpa perubahan saldo/);
+  assert.match(receipts, /UPDATE stock_movements SET is_voided=1/);
+  assert.match(receipts, /Penerimaan diedit/);
   assert.match(movements, /\(\$_GET\['reconcile'\]\?\?''\)==='1'/);
   assert.match(movements, /COALESCE\(m\.occurred_at,m\.created_at\) DESC,m\.movement_sequence DESC/);
   assert.match(allData, /m\.movement_sequence DESC/);
