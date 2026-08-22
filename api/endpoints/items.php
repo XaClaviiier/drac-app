@@ -192,7 +192,7 @@ switch ($method) {
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
             $name=strtoupper(trim((string)$d['name']));
             $brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
-            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[]))));
+            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[])))));
             if(!$vehicleBrandIds&&!in_array($type,['Jasa','Group'],true)){
                 $universalVehicleBrand=resolveUniversalVehicleBrand($pdo);
                 $vehicleBrandIds=[(string)$universalVehicleBrand['id']];
@@ -287,15 +287,18 @@ switch ($method) {
         $d = getInput();
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         if (in_array((string)($d['action']??''), ['verify','merge'], true)) {
-            $isAdmin=!empty($actor['is_owner']);
-            if(!$isAdmin){
-                $roleStmt=$pdo->prepare("SELECT name FROM roles WHERE id=? LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$roleName=(string)($roleStmt->fetchColumn()?:'');
-                $isAdmin=strtolower(trim($roleName))==='administrator';
-            }
-            if(!$isAdmin)respondError('Verifikasi barang hanya untuk Owner atau Administrator',403);
             if($d['action']==='verify'){
-                $pdo->beginTransaction();
                 try {
+                    $isAdmin=!empty($actor['is_owner']);
+                    if(!$isAdmin){
+                        $roleStmt=$pdo->prepare("SELECT name FROM roles WHERE id=? LIMIT 1");
+                        $roleStmt->execute([$actor['role_id']??'']);
+                        $roleName=(string)($roleStmt->fetchColumn()?:'');
+                        $isAdmin=strtolower(trim($roleName))==='administrator';
+                    }
+                    if(!$isAdmin)throw new DomainException('Verifikasi barang hanya untuk Owner atau Administrator',403);
+                    if($pdo->inTransaction())$pdo->rollBack();
+                    $pdo->beginTransaction();
                     $pendingStmt=$pdo->prepare("SELECT id FROM items WHERE id=? AND verification_status='Pending' FOR UPDATE");$pendingStmt->execute([$id]);
                     if(!$pendingStmt->fetchColumn())throw new InvalidArgumentException('Barang tidak ditemukan atau sudah tidak menunggu verifikasi');
                     $pdo->prepare("UPDATE items SET verification_status='Verified',verified_by=? WHERE id=?")->execute([$actor['id']??null,$id]);
@@ -305,12 +308,20 @@ switch ($method) {
                         error_log('item verification audit failed: '.$auditError->getMessage());
                     }
                     $pdo->commit();respondSuccess(null,'Barang berhasil diverifikasi');
+                } catch (DomainException $e) {
+                    if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),$e->getCode()?:403);
                 } catch (InvalidArgumentException $e) {
                     if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);
                 } catch (Throwable $e) {
-                    if($pdo->inTransaction())$pdo->rollBack();error_log('item verification failed: '.$e->getMessage());respondError('Verifikasi barang gagal disimpan. Silakan muat ulang dan coba lagi.',500);
+                    if($pdo->inTransaction())$pdo->rollBack();error_log('item verification failed: '.$e->getMessage());respondError('Verifikasi barang gagal: '.$e->getMessage(),500);
                 }
             }
+            $isAdmin=!empty($actor['is_owner']);
+            if(!$isAdmin){
+                $roleStmt=$pdo->prepare("SELECT name FROM roles WHERE id=? LIMIT 1");$roleStmt->execute([$actor['role_id']??'']);$roleName=(string)($roleStmt->fetchColumn()?:'');
+                $isAdmin=strtolower(trim($roleName))==='administrator';
+            }
+            if(!$isAdmin)respondError('Verifikasi barang hanya untuk Owner atau Administrator',403);
             $targetId=(string)($d['targetItemId']??'');
             if($targetId===''||$targetId===$id)respondError('Barang tujuan penggabungan tidak valid',422);
             $pdo->beginTransaction();
@@ -352,7 +363,7 @@ switch ($method) {
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
             $name=strtoupper(trim((string)$d['name']));
             $brand=in_array($type,['Jasa','Group'],true)?'':strtoupper(trim((string)($d['brand']??'')));
-            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[]))));
+            $vehicleBrandIds=array_values(array_unique(array_filter(array_map('strval',(array)($d['vehicleBrandIds']??[])))));
             if(!$vehicleBrandIds&&!in_array($type,['Jasa','Group'],true)){
                 $universalVehicleBrand=resolveUniversalVehicleBrand($pdo);
                 $vehicleBrandIds=[(string)$universalVehicleBrand['id']];
