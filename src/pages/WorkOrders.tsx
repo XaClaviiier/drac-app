@@ -2984,6 +2984,11 @@ export default function WorkOrders() {
                   onChange={handleCustomerSelect}
                   onNewCustomerCreated={handleNewCustomerCreated}
                   disabled={customerVehicleLocked}
+                  selectedAction={!customerVehicleLocked && !showQuickContact ? (
+                    <button type="button" onClick={() => setShowQuickContact(true)} className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:text-blue-900">
+                      <Plus className="h-3.5 w-3.5" /> Tambah Kontak
+                    </button>
+                  ) : undefined}
                 />
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:hidden">
                   <Car className="h-4 w-4 text-orange-600" />
@@ -3113,20 +3118,13 @@ export default function WorkOrders() {
                   }} className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-600 hover:bg-gray-50">Batal</button>
                 </div>
               )}
-              {customerVehicleReady && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-700">Kontak kunjungan</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Kontak utama otomatis digunakan. Tambahkan kontak hanya jika diperlukan.</p>
-                    </div>
-                    {!customerVehicleLocked && !showQuickContact && <button type="button" onClick={() => setShowQuickContact(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Plus className="h-4 w-4" /> Tambah Kontak</button>}
-                  </div>
-                  {selectedCustomerPeople.length > 1 && !customerVehicleLocked && <div className="mt-3 flex flex-wrap gap-2">
+              {customerVehicleReady && !customerVehicleLocked && (selectedCustomerPeople.length > 1 || showQuickContact) && (
+                <div className="space-y-2 lg:ml-[155px] lg:max-w-[calc(100%-155px)]">
+                  {selectedCustomerPeople.length > 1 && <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => selectVisitContact('')} className={`rounded-lg border px-3 py-2 text-xs ${!formData.driverContactId ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}>Kontak utama</button>
                     {selectedCustomerPeople.filter(person => person.id !== selectedCustomer?.primaryContactId).map(person => <div key={person.id} className={`relative rounded-lg border ${formData.driverContactId === person.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600'}`}><button type="button" onClick={() => selectVisitContact(person.id)} className="min-w-24 px-3 py-2 pr-8 text-left text-xs"><strong className="block">{person.name}</strong><span>{person.relationshipLabel || person.phone || 'Kontak tambahan'}</span></button><button type="button" onClick={() => void deleteQuickContact(person.id)} disabled={quickContactDeletingId === person.id} title={`Hapus kontak ${person.name}`} aria-label={`Hapus kontak ${person.name}`} className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full text-red-500 hover:bg-red-50 hover:text-red-700 disabled:text-gray-300"><X className="h-3.5 w-3.5" /></button></div>)}
                   </div>}
-                  {showQuickContact && !customerVehicleLocked && <div className="mt-3 grid gap-2 rounded-lg border border-blue-100 bg-white p-3 md:grid-cols-[1fr_1fr_1.4fr_auto_auto]">
+                  {showQuickContact && <div className="grid gap-2 rounded-lg border border-blue-100 bg-blue-50/40 p-2 md:grid-cols-[1fr_1fr_1.4fr_auto_auto]">
                     <input autoFocus value={quickContact.name} onChange={event => setQuickContact(previous => ({ ...previous, name: event.target.value }))} placeholder="Nama kontak *" className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
                     <input value={quickContact.phone} onChange={event => setQuickContact(previous => ({ ...previous, phone: event.target.value }))} placeholder="Nomor telepon" className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
                     <input value={quickContact.description} onChange={event => setQuickContact(previous => ({ ...previous, description: event.target.value }))} placeholder="Keterangan: supir, owner, keuangan..." className="h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500" />
