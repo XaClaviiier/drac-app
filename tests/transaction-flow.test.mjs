@@ -175,7 +175,13 @@ test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat
   assert.match(helpers, /correction_group_id/);
   assert.match(helpers, /idempotency_key/);
   assert.match(receipts, /stockImpactChanged/);
-  assert.match(receipts, /Edit header\/rincian non-stok tidak menulis mutasi/);
+  const receiptImpactRule = receipts.match(/\$stockImpactChanged=([\s\S]*?);/)?.[0] || '';
+  const invoiceImpactRule = source('api/endpoints/sales-invoices.php').match(/\$stockImpactChanged=([\s\S]*?);/)?.[0] || '';
+  assert.doesNotMatch(receiptImpactRule, /\['date'\]/);
+  assert.doesNotMatch(invoiceImpactRule, /\['date'\]/);
+  assert.match(receipts, /Tanggal, keterangan, petugas, dan header lain tidak mengubah saldo/);
+  assert.match(receipts, /Perubahan tanggal\/referensi tanpa perubahan saldo/);
+  assert.match(source('api/endpoints/sales-invoices.php'), /Perubahan tanggal tanpa perubahan saldo/);
   assert.match(receipts, /UPDATE stock_movements SET is_voided=1/);
   assert.match(receipts, /Penerimaan diedit/);
   assert.match(movements, /\(\$_GET\['reconcile'\]\?\?''\)==='1'/);

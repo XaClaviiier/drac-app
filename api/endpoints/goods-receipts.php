@@ -259,12 +259,14 @@ switch ($method) {
                     $oldStockLines!==$newStockLines
                     ||$oldWarehouseId!==$newWarehouseId
                     ||(string)$oldBranchId!==$newBranchId
-                    ||(string)$oldRow['date']!==(string)$d['date']
                 ));
+            $movementMetadataChanged=(string)$oldRow['date']!==(string)$d['date']
+                ||(string)$oldRow['receipt_number']!==(string)$d['receiptNumber'];
             $correctionGroupId=$stockImpactChanged?'CORR-GR-'.date('YmdHis').'-'.substr(bin2hex(random_bytes(4)),0,8):null;
 
-            // Edit header/rincian non-stok tidak menulis mutasi. Koreksi barang,
-            // kuantitas, gudang, tanggal, atau status mengganti mutasi aktif.
+            // Tanggal, keterangan, petugas, dan header lain tidak mengubah saldo.
+            // Tanggal/nomor hanya memperbarui referensi mutasi aktif yang sama.
+            // Koreksi barang, kuantitas, gudang, cabang, atau status mengganti mutasi aktif.
             // Versi lama tetap tersedia hanya melalui Log Aktivitas.
             if ($stockImpactChanged && $wasReceived) {
                 foreach ($oldItemsList as $i) {
@@ -280,11 +282,13 @@ switch ($method) {
                     $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],(int)$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':'.$lineIndex.':apply',max(0,(float)($i['unitPrice']??0)));
                 }
             }
+            if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET reference_number=?,occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='goods_receipt' AND reference_id=? AND is_voided=0")
+                ->execute([$d['receiptNumber'],$d['date'],$id]);
             $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('goods_receipt',?,?,'update',?,?,?,?)")
-                ->execute([$id,$d['receiptNumber'],$stockImpactChanged?'Perubahan berdampak stok':'Perubahan non-stok',json_encode(['before'=>['document'=>$oldRow,'items'=>$oldItemsList],'after'=>$d],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
+                ->execute([$id,$d['receiptNumber'],$stockImpactChanged?'Perubahan berdampak stok':($movementMetadataChanged?'Perubahan tanggal/referensi tanpa perubahan saldo':'Perubahan non-stok'),json_encode(['before'=>['document'=>$oldRow,'items'=>$oldItemsList],'after'=>$d],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
 
             $pdo->commit();
-            respondSuccess(null, 'Penerimaan diupdate');
+            respondSuccess(null, $stockImpactChanged?'Penerimaan dan stok berhasil diperbarui':'Penerimaan berhasil diperbarui tanpa mengubah saldo stok');
         } catch (InvalidArgumentException | DomainException $e) {
             $pdo->rollBack();
             respondError($e->getMessage(), 422);

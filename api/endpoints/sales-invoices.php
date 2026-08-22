@@ -362,7 +362,8 @@ switch ($method) {
                 $key=(string)$item['warehouseId'].'|'.(string)$item['itemId'];$newStockLines[$key]=($newStockLines[$key]??0)+(int)$item['qty'];
             }
             ksort($oldStockLines);ksort($newStockLines);
-            $stockImpactChanged=$oldStockLines!==$newStockLines||(string)$current['branch_id']!==(string)$branchId||(string)$current['date']!==$invoiceDate;
+            $stockImpactChanged=$oldStockLines!==$newStockLines||(string)$current['branch_id']!==(string)$branchId;
+            $movementMetadataChanged=(string)$current['date']!==$invoiceDate;
             $correctionGroupId=$stockImpactChanged?'CORR-SI-'.date('YmdHis').'-'.substr(bin2hex(random_bytes(4)),0,8):null;
             if($stockImpactChanged){
                 foreach($oldDetailsList as $detail){
@@ -391,11 +392,13 @@ switch ($method) {
                     $journalSale($pdo,$id,(string)$current['invoice_number'],$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$item['itemId'].':'.$salesWarehouseId.':'.$lineIndex.':apply');
                 }
             }
+            if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
+                ->execute([$invoiceDate,$id]);
             $afterSnapshot=['document'=>array_merge($current,['date'=>$invoiceDate,'description'=>$d['description']??'','total'=>$total,'payment'=>$payment,'status'=>$status,'branch_id'=>$branchId]),'items'=>$items];
             $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('sales_invoice',?,?,'update',?,?,?,?)")
-                ->execute([$id,$current['invoice_number'],$stockImpactChanged?'Perubahan berdampak stok':'Perubahan non-stok',json_encode(['before'=>['document'=>$current,'items'=>$oldDetailsList],'after'=>$afterSnapshot],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
+                ->execute([$id,$current['invoice_number'],$stockImpactChanged?'Perubahan berdampak stok':($movementMetadataChanged?'Perubahan tanggal tanpa perubahan saldo':'Perubahan non-stok'),json_encode(['before'=>['document'=>$current,'items'=>$oldDetailsList],'after'=>$afterSnapshot],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
             $pdo->commit();
-            respondSuccess(null, 'Faktur dan stok berhasil diperbarui');
+            respondSuccess(null, $stockImpactChanged?'Faktur dan stok berhasil diperbarui':'Faktur berhasil diperbarui tanpa mengubah saldo stok');
         } catch (Exception $e) {
             $pdo->rollBack();
             respondError($e->getMessage(), 422);
