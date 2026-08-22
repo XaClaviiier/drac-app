@@ -44,6 +44,39 @@ body { margin: 0; background: #f3f4f6; }
   --app-row-alt: #f5f5f5;
 }
 
+/* Header pita biru: mengikuti ritme visual Accurate tanpa menyalin asetnya. */
+.app-brand-header {
+  position: relative;
+  background:
+    linear-gradient(100deg, #071a43 0%, #0a2c68 34%, #104b9c 67%, #082657 100%);
+  color: #fff;
+}
+.app-brand-header::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 48' preserveAspectRatio='none'%3E%3Cpath d='M-80 45 C 130 -8 315 2 505 31 S 850 55 1060 17 S 1390 -2 1680 34' fill='none' stroke='%2322d3ee' stroke-opacity='.52' stroke-width='9'/%3E%3Cpath d='M-60 18 C 170 62 330 51 535 15 S 895 -2 1115 31 S 1430 51 1660 8' fill='none' stroke='%2360a5fa' stroke-opacity='.46' stroke-width='12'/%3E%3Cpath d='M0 43 C 260 8 420 10 660 37 S 1040 47 1260 12 S 1500 8 1650 26' fill='none' stroke='%231d4ed8' stroke-opacity='.72' stroke-width='15'/%3E%3C/svg%3E") center / 100% 100% no-repeat,
+    linear-gradient(118deg, transparent 8%, rgba(125, 211, 252, .18) 25%, transparent 42%, rgba(59, 130, 246, .22) 64%, transparent 82%);
+}
+.app-brand-header::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  z-index: 2;
+  height: 2px;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, #22d3ee, #60a5fa 50%, #2563eb);
+}
+.app-brand-header > * {
+  position: relative;
+  z-index: 1;
+}
+
 .app-workspace-bar {
   position: relative;
   display: none !important;
