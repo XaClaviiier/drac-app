@@ -323,3 +323,18 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   assert.match(list, /\{r\.receivedBy\|\|'-'\}/);
   assert.match(list, /\{r\.items\.length\} item \(\{totalQuantity\} pcs\)/);
 });
+
+test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak thermal', () => {
+  const detail = source('src/pages/GoodsReceiptDetail.tsx');
+  const acknowledgement = source('src/lib/goodsReceiptAcknowledgement.ts');
+  const help = source('src/data/helpArticles.ts');
+  assert.match(detail, /Simpan Gambar/);
+  assert.match(detail, /Bagikan Gambar/);
+  assert.match(detail, /Print Bluetooth 80 mm/);
+  assert.match(detail, /receipt\.status!==['"]Draft['"]&&receipt\.status!==['"]Batal['"]/);
+  assert.match(acknowledgement, /renderGoodsReceiptImage/);
+  assert.match(acknowledgement, /navigator\.share/);
+  assert.match(acknowledgement, /@page\{size:80mm auto/);
+  assert.match(acknowledgement, /Diserahkan oleh/);
+  assert.match(help, /Tanda terima digital/);
+});
