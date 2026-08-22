@@ -183,6 +183,7 @@ export default function WorkOrders() {
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
   const [documentTab, setDocumentTab] = useState<AccurateDocumentTab>('details');
+  const [selectedServiceId, setSelectedServiceId] = useState('');
 
   const openDetailTab = (wo: WorkOrder) => {
     setDetailTabIds(previous => previous.includes(wo.id) ? previous : [...previous, wo.id]);
@@ -880,6 +881,7 @@ export default function WorkOrders() {
     setCustomerVehicleCorrectionUnlocked(false);
     setCustomerVehicleCorrectionReason('');
     setDocumentTab('details');
+    setSelectedServiceId('');
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false) => {
@@ -995,6 +997,7 @@ export default function WorkOrders() {
   };
 
   const handleRemoveService = (id: string) => {
+    setSelectedServiceId(current => current === id ? '' : current);
     setFormData(prev => {
       const targetIndex = prev.services.findIndex(service => service.id === id);
       if (targetIndex < 0) return prev;
@@ -2832,7 +2835,7 @@ export default function WorkOrders() {
       )}
       {/* Data Baru / Edit: subtab penuh pada desktop, modal pada mobile */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-0 sm:items-center sm:p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-3 lg:pb-3 lg:pt-0">
+        <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-0 sm:items-center sm:p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-0 lg:pb-3 lg:pt-0">
           <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl lg:block lg:h-auto lg:max-h-none lg:max-w-none lg:overflow-visible lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
             <div className="z-30 flex flex-shrink-0 items-start justify-between border-b border-gray-200 bg-white px-4 py-3 sm:rounded-t-xl sm:px-6 sm:py-4 lg:hidden">
               <div className="min-w-0 pr-3">
@@ -2849,7 +2852,38 @@ export default function WorkOrders() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-3">
+            <form onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[82px]">
+              <aside className="absolute bottom-2 right-2 top-2 z-50 hidden w-[66px] flex-col items-stretch gap-2 border-l border-gray-300 bg-gray-50 pl-2 lg:flex" aria-label="Aksi Work Order">
+                <button
+                  type="submit"
+                  onClick={() => { diagnosisSubmitAction.current = 'save'; }}
+                  disabled={editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : (!newWOReadyForRegister || isAutoRegistering)}
+                  className="grid h-14 w-14 place-items-center rounded border border-blue-700 bg-blue-700 text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-300"
+                  title={editingWO ? 'Simpan Work Order' : 'Register Work Order'}
+                  aria-label={editingWO ? 'Simpan Work Order' : 'Register Work Order'}
+                >
+                  {editingWO ? <Save className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocumentTab(documentTab === 'info' ? 'details' : 'info')}
+                  className={`grid h-14 w-14 place-items-center rounded border text-blue-700 ${documentTab === 'info' ? 'border-blue-600 bg-blue-100' : 'border-blue-400 bg-white hover:bg-blue-50'}`}
+                  title="Info lainnya"
+                  aria-label="Info lainnya"
+                >
+                  <Settings2 className="h-6 w-6" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectedServiceId && handleRemoveService(selectedServiceId)}
+                  disabled={!selectedServiceId}
+                  className="grid h-14 w-14 place-items-center rounded border border-red-300 bg-white text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-300"
+                  title={selectedServiceId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu'}
+                  aria-label="Hapus barang atau jasa terpilih"
+                >
+                  <Trash2 className="h-6 w-6" />
+                </button>
+              </aside>
               <div className="hidden items-center justify-between gap-4 border-b border-gray-200 bg-white pb-2 lg:sticky lg:top-0 lg:z-40 lg:flex">
                 <div className="flex min-w-0 items-center gap-5 text-xs text-gray-500">
                   <span>Nomor: <strong className="text-gray-900">{editingWO?.woNumber || 'Otomatis saat Register'}</strong></span>
@@ -2935,15 +2969,6 @@ export default function WorkOrders() {
                     </div>
                   </details>}
 
-                  <button
-                    type="submit"
-                    onClick={() => { diagnosisSubmitAction.current = 'save'; }}
-                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                    disabled={editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : (!newWOReadyForRegister || isAutoRegistering)}
-                  >
-                    {editingWO ? <Save className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-                    {editingWO ? 'Simpan' : isAutoRegistering ? 'Meregister...' : 'Register'}
-                  </button>
                 </div>
               </div>
               {/* Blok simpan jika masih Semua Cabang */}
@@ -2974,26 +2999,35 @@ export default function WorkOrders() {
                   </div>
                 </div>
               ) : <>
-              {/* Pelanggan dan kendaraan sejajar; keluhan langsung di bawah pelanggan. */}
-              <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-2 lg:gap-x-8">
-                <div className="space-y-2">
-                  <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-center">
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                      <User className="h-4 w-4 text-blue-600 lg:hidden" />
-                      Pelanggan <span className="text-red-500">*</span>
+              {/* Satu grid rapat: kendaraan langsung di samping pelanggan tanpa label desktop terpisah. */}
+              <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[155px_minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:self-center">
+                  <User className="h-4 w-4 text-blue-600 lg:hidden" />
+                  Pelanggan <span className="text-red-500">*</span>
+                </label>
+                <CustomerPicker
+                  value={formData.customerRefId}
+                  onChange={handleCustomerSelect}
+                  onNewCustomerCreated={handleNewCustomerCreated}
+                  disabled={customerVehicleLocked}
+                />
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:hidden">
+                  <Car className="h-4 w-4 text-orange-600" />
+                  Kendaraan <span className="text-red-500">*</span>
+                </label>
+                <VehiclePicker
+                  customer={selectedCustomer}
+                  value={formData.vehicleRefId}
+                  onChange={handleVehicleSelect}
+                  onNewVehicleCreated={handleNewVehicleCreated}
+                  locked={customerVehicleLocked}
+                />
+                {!isAutoRegisteredDraft && (
+                  <>
+                    <label className="pt-2 text-sm font-medium text-gray-700">
+                      Keluhan <span className="text-red-500">*</span>
                     </label>
-                    <CustomerPicker
-                      value={formData.customerRefId}
-                      onChange={handleCustomerSelect}
-                      onNewCustomerCreated={handleNewCustomerCreated}
-                      disabled={customerVehicleLocked}
-                    />
-                  </div>
-                  {!isAutoRegisteredDraft && (
-                    <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-start">
-                      <label className="pt-2 text-sm font-medium text-gray-700">
-                        Keluhan <span className="text-red-500">*</span>
-                      </label>
+                    <div className="lg:col-span-2">
                       <ComplaintMultiSelect
                         value={formData.description}
                         options={complaintTemplates}
@@ -3001,23 +3035,8 @@ export default function WorkOrders() {
                         onEditOptions={openComplaintEditor}
                       />
                     </div>
-                  )}
-                </div>
-                <div>
-                  <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-center">
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                      <Car className="h-4 w-4 text-orange-600 lg:hidden" />
-                      Kendaraan <span className="text-red-500">*</span>
-                    </label>
-                    <VehiclePicker
-                      customer={selectedCustomer}
-                      value={formData.vehicleRefId}
-                      onChange={handleVehicleSelect}
-                      onNewVehicleCreated={handleNewVehicleCreated}
-                      locked={customerVehicleLocked}
-                    />
-                  </div>
-                </div>
+                  </>
+                )}
                 <div className="lg:hidden">
                   <div className="grid gap-1 lg:grid-cols-[130px_minmax(0,1fr)] lg:items-center">
                     <label className="block text-sm font-medium text-gray-700">
@@ -3461,7 +3480,6 @@ export default function WorkOrders() {
                           <th className="w-24 px-3 py-2.5 text-center font-medium">Qty</th>
                           <th className="w-40 px-3 py-2.5 text-right font-medium">Harga Satuan</th>
                           <th className="w-36 px-3 py-2.5 text-right font-medium">Subtotal</th>
-                          <th className="w-14 px-3 py-2.5 text-center font-medium">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -3477,7 +3495,11 @@ export default function WorkOrders() {
                             : [];
                           const visibleIndex = formData.services.slice(0, index).filter(candidate => !isPackageMemberService(candidate)).length + 1;
                           return (
-                            <tr key={service.id} className={isGroupHeader ? 'bg-purple-50' : 'hover:bg-blue-50/40'}>
+                            <tr
+                              key={service.id}
+                              onClick={() => setSelectedServiceId(service.id)}
+                              className={`cursor-pointer ${selectedServiceId === service.id ? 'bg-blue-100 outline outline-1 outline-blue-400' : isGroupHeader ? 'bg-purple-50' : 'hover:bg-blue-50/40'}`}
+                            >
                               <td className="px-3 py-2 text-center text-xs text-gray-400">{visibleIndex}</td>
                               <td className="px-3 py-2">
                                 <div className="flex items-start gap-2">
@@ -3523,17 +3545,12 @@ export default function WorkOrders() {
                               <td className={`px-3 py-2 text-right font-bold whitespace-nowrap ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>
                                 Rp {(service.price * service.qty).toLocaleString('id-ID')}
                               </td>
-                              <td className="px-3 py-2 text-center">
-                                <button type="button" onClick={() => handleRemoveService(service.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-100" title="Hapus">
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
                             </tr>
                           );
                         })}
                         {formData.services.filter(service => !isPackageMemberService(service)).length === 0 && (
                           <tr>
-                            <td colSpan={7} className="h-48 px-4 text-center text-sm text-gray-400">
+                            <td colSpan={6} className="h-48 px-4 text-center text-sm text-gray-400">
                               Belum ada layanan atau barang.
                             </td>
                           </tr>
