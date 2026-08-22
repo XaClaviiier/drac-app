@@ -6,6 +6,8 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'u
 
 test('pembuatan faktur berjalan atomik, memilih gudang, dan mengizinkan stok minus', () => {
   const php = source('api/endpoints/sales-invoices.php');
+  const page = source('src/pages/SalesInvoice.tsx');
+  const help = source('src/data/helpArticles.ts');
   assert.match(php, /beginTransaction\s*\(/);
   assert.match(php, /adjustWarehouseStockAllowNegative\s*\(/);
   assert.match(php, /warehouse_id/);
@@ -13,6 +15,11 @@ test('pembuatan faktur berjalan atomik, memilih gudang, dan mengizinkan stok min
   assert.match(php, /->commit\s*\(/);
   assert.match(php, /->rollBack\s*\(/);
   assert.match(php, /invoice_id\s*=\s*\?/);
+  assert.doesNotMatch(page, /if \(detailQty > detailWarehouseStock\).*return window\.alert/);
+  assert.doesNotMatch(page, /max=\{detailItem\.type === 'Persediaan'/);
+  assert.match(page, /Barang tetap dapat disimpan/);
+  assert.match(help, /Aturan stok negatif baku/);
+  assert.match(help, /peringatan, bukan sebagai pemblokir transaksi/);
 });
 
 test('faktur dari WO memilih gudang per barang dan memperingatkan stok negatif', () => {
