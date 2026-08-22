@@ -2856,6 +2856,32 @@ export default function WorkOrders() {
                   <span>Cabang: <strong className="text-gray-900">{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || 'Pilih cabang'}</strong></span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  <label className="mr-1 text-xs font-medium text-gray-700">
+                    Tanggal &amp; Waktu <span className="text-red-500">*</span>
+                  </label>
+                  <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-8 w-[150px] text-xs"/>
+                  <input
+                    type="time"
+                    required
+                    disabled={!woDateUnlocked}
+                    value={formData.transactionTime}
+                    onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
+                    className="h-8 w-[82px] rounded border border-gray-300 px-2 text-xs outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                    aria-label="Waktu WO desktop"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(value => {
+                      const next = !value;
+                      if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
+                      return next;
+                    }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded border transition-colors ${woDateUnlocked ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}
+                    title={woDateUnlocked ? 'Kunci ke tanggal dan waktu sekarang' : 'Buka tanggal dan waktu mundur'}
+                    aria-label={woDateUnlocked ? 'Kunci tanggal dan waktu WO' : 'Buka tanggal dan waktu mundur'}
+                  >
+                    {woDateUnlocked ? <LockKeyhole className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
+                  </button>
                   {editingWO && <details data-wo-action-menu className={`group relative ${statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
                     <summary aria-disabled={statusLabel(editingWO.status) === 'Lost Sales' || Boolean(editingWO.invoiceId)} tabIndex={statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? -1 : 0} className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
                       Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
@@ -2948,8 +2974,8 @@ export default function WorkOrders() {
                   </div>
                 </div>
               ) : <>
-              {/* Header transaksi padat: pelanggan/kendaraan bertumpuk, tanggal di kanan. */}
-              <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(440px,660px)_minmax(340px,1fr)] lg:gap-8">
+              {/* Pelanggan dan kendaraan sejajar; keluhan langsung di bawah pelanggan. */}
+              <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-2 lg:gap-x-8">
                 <div className="space-y-2">
                   <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-center">
                     <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -2963,6 +2989,21 @@ export default function WorkOrders() {
                       disabled={customerVehicleLocked}
                     />
                   </div>
+                  {!isAutoRegisteredDraft && (
+                    <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-start">
+                      <label className="pt-2 text-sm font-medium text-gray-700">
+                        Keluhan <span className="text-red-500">*</span>
+                      </label>
+                      <ComplaintMultiSelect
+                        value={formData.description}
+                        options={complaintTemplates}
+                        onChange={description => setFormData(previous => ({ ...previous, description }))}
+                        onEditOptions={openComplaintEditor}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div>
                   <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-center">
                     <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                       <Car className="h-4 w-4 text-orange-600 lg:hidden" />
@@ -2977,7 +3018,7 @@ export default function WorkOrders() {
                     />
                   </div>
                 </div>
-                <div className="lg:ml-auto lg:w-full lg:max-w-[440px]">
+                <div className="lg:hidden">
                   <div className="grid gap-1 lg:grid-cols-[130px_minmax(0,1fr)] lg:items-center">
                     <label className="block text-sm font-medium text-gray-700">
                       Tanggal &amp; Waktu <span className="text-red-500">*</span>
@@ -3010,7 +3051,7 @@ export default function WorkOrders() {
                   </div>
                 </div>
               </div>
-              <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              {editingWO && <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
                 customerVehicleLocked
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                   : customerVehicleReady
@@ -3027,7 +3068,7 @@ export default function WorkOrders() {
                     : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum Register.'}
                 {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => setShowCustomerVehicleCorrectionForm(true)} className="ml-auto flex-shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Ubah Customer/Kendaraan</button>}
                 {customerVehicleCorrectionUnlocked && <span className="ml-auto flex-shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-amber-800">Mode koreksi aktif</span>}
-              </div>
+              </div>}
               {showCustomerVehicleCorrectionForm && !customerVehicleCorrectionUnlocked && (
                 <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:flex-row md:items-center">
                   <input
@@ -3075,19 +3116,6 @@ export default function WorkOrders() {
                 <div className="grid grid-cols-1 md:grid-cols-2"><span /><input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" /></div>
               )}
 
-              {!isAutoRegisteredDraft && (
-                <div className="grid gap-1 lg:grid-cols-[145px_minmax(0,1fr)] lg:items-start">
-                  <label className="pt-2 text-sm font-medium text-gray-700">
-                    Keluhan <span className="text-red-500">*</span>
-                  </label>
-                  <ComplaintMultiSelect
-                    value={formData.description}
-                    options={complaintTemplates}
-                    onChange={description => setFormData(previous => ({ ...previous, description }))}
-                    onEditOptions={openComplaintEditor}
-                  />
-                </div>
-              )}
               </>}
 
               <div className="relative min-h-[320px] border border-gray-300 bg-white lg:ml-10">
