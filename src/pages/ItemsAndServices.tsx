@@ -129,6 +129,7 @@ export default function ItemsAndServices() {
   const [itemListTab, setItemListTab] = useState<'list' | 'verification'>('list');
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [verifyingItemId, setVerifyingItemId] = useState('');
+  const [verificationFeedback, setVerificationFeedback] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
   const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'account' | 'image' | 'other' | 'movement' | 'warehouse'>('general');
   const [movementDateFrom, setMovementDateFrom] = useState(() => {
@@ -1194,13 +1195,19 @@ export default function ItemsAndServices() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showItemModal, itemFormTab, editingItem?.id]);
   const verifyPendingItem = async (itemId: string, targetItemId?: string) => {
+    const item = pendingItems.find(row => row.id === itemId);
+    const target = targetItemId ? data.items.find(row => row.id === targetItemId) : undefined;
+    if (targetItemId && !window.confirm(`Gabungkan ${item?.code || 'barang ini'} ke ${target?.code || 'master tujuan'}? Stok dan referensi transaksi akan dipindahkan ke master tujuan.`)) return;
     setVerifyingItemId(itemId);
+    setVerificationFeedback({ type: 'info', message: targetItemId ? 'Sedang menggabungkan barang dan memindahkan stok…' : 'Sedang memverifikasi barang…' });
     try {
-      await api.update('items', itemId, targetItemId ? { action: 'merge', targetItemId } : { action: 'verify' });
+      const response = await api.update('items', itemId, targetItemId ? { action: 'merge', targetItemId } : { action: 'verify' });
+      if (!response.success) throw new Error(response.message || (targetItemId ? 'Barang gagal digabungkan.' : 'Barang gagal diverifikasi.'));
       await refreshData();
       setMergeTargets(current => { const next = { ...current }; delete next[itemId]; return next; });
+      setVerificationFeedback({ type: 'success', message: response.message || (targetItemId ? 'Barang berhasil digabungkan.' : 'Barang berhasil diverifikasi.') });
     } catch (error: any) {
-      window.alert(error?.message || 'Verifikasi barang gagal.');
+      setVerificationFeedback({ type: 'error', message: error?.message || 'Verifikasi barang gagal.' });
     } finally {
       setVerifyingItemId('');
     }
@@ -1223,12 +1230,13 @@ export default function ItemsAndServices() {
       {!showItemModal && <div className="space-y-3 px-1 lg:space-y-0 lg:px-0">
       {itemListTab === 'verification' && <section className="min-h-[560px] border border-slate-300 bg-[#eeeeee] p-4">
         <div className="mb-4"><h3 className="text-lg font-semibold text-slate-900">Verifikasi Barang Baru</h3><p className="text-sm text-slate-600">Sahkan jika data benar, atau gabungkan ke master lama jika barang ternyata duplikat.</p></div>
+        {verificationFeedback && <div role="status" aria-live="polite" className={`mb-3 flex items-center gap-2 rounded border px-3 py-2 text-sm font-medium ${verificationFeedback.type === 'success' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : verificationFeedback.type === 'error' ? 'border-red-300 bg-red-50 text-red-800' : 'border-blue-300 bg-blue-50 text-blue-800'}`}>{verificationFeedback.type === 'success' ? <CheckCircle2 className="h-5 w-5 shrink-0"/> : <AlertCircle className="h-5 w-5 shrink-0"/>}<span>{verificationFeedback.message}</span><button type="button" onClick={() => setVerificationFeedback(null)} className="ml-auto rounded p-1 hover:bg-black/5" aria-label="Tutup pemberitahuan"><X className="h-4 w-4"/></button></div>}
         <div className="overflow-x-auto rounded-t-lg border border-slate-300 bg-white">
           <div className="grid min-w-[1050px] grid-cols-[160px_minmax(240px,1fr)_170px_minmax(280px,1fr)_210px] bg-[#637c93] px-3 py-2.5 text-sm font-semibold text-white"><span>Kode Barang</span><span>Nama Barang</span><span>Kategori / Stok</span><span>Master Tujuan</span><span>Aksi</span></div>
           {pendingItems.map(item => <div key={item.id} className="grid min-w-[1050px] grid-cols-[160px_minmax(240px,1fr)_170px_minmax(280px,1fr)_210px] items-center border-b border-slate-300 px-3 py-2 text-sm odd:bg-white even:bg-slate-50">
             <span className="font-mono text-blue-700">{item.code}</span><span className="font-medium">{item.name}</span><span className="text-xs text-slate-600">{item.categoryName}<br/>{item.stock} {item.unit}</span>
             <select value={mergeTargets[item.id] || ''} onChange={event => setMergeTargets(current => ({ ...current, [item.id]: event.target.value }))} className="mr-3 h-9 rounded border border-slate-300 bg-white px-2"><option value="">Pilih jika barang duplikat...</option>{data.items.filter(target => target.id !== item.id && target.isActive && target.verificationStatus !== 'Pending' && target.verificationStatus !== 'Merged' && target.type === 'Persediaan').map(target => <option key={target.id} value={target.id}>{target.code} — {target.name}</option>)}</select>
-            <div className="flex gap-2"><button disabled={verifyingItemId === item.id} onClick={() => verifyPendingItem(item.id)} className="rounded bg-emerald-600 px-3 py-2 font-semibold text-white disabled:opacity-50">Verifikasi</button><button disabled={!mergeTargets[item.id] || verifyingItemId === item.id} onClick={() => verifyPendingItem(item.id, mergeTargets[item.id])} className="rounded bg-amber-600 px-3 py-2 font-semibold text-white disabled:opacity-40">Gabungkan</button></div>
+            <div className="flex gap-2"><button disabled={Boolean(verifyingItemId)} onClick={() => verifyPendingItem(item.id)} className="rounded bg-emerald-600 px-3 py-2 font-semibold text-white disabled:cursor-wait disabled:opacity-50">{verifyingItemId === item.id ? 'Memproses…' : 'Verifikasi'}</button><button disabled={!mergeTargets[item.id] || Boolean(verifyingItemId)} onClick={() => verifyPendingItem(item.id, mergeTargets[item.id])} className="rounded bg-amber-600 px-3 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{verifyingItemId === item.id && mergeTargets[item.id] ? 'Memproses…' : 'Gabungkan'}</button></div>
           </div>)}
           {!pendingItems.length && <div className="py-24 text-center text-slate-500"><CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-400"/>Tidak ada barang yang menunggu verifikasi.</div>}
         </div>
