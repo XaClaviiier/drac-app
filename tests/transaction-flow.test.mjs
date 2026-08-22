@@ -386,6 +386,9 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   const tabs = source('src/components/AccurateDocumentSideTabs.tsx');
   assert.match(page, /Pelanggan <span className="text-red-500">\*<\/span>/);
   assert.match(page, /Kendaraan <span className="text-red-500">\*<\/span>/);
+  assert.match(page, /Pelanggan dan kendaraan sejajar; keluhan langsung di bawah pelanggan/);
+  assert.match(page, /Waktu WO desktop/);
+  assert.match(page, /\{editingWO && <div className=\{`flex items-center gap-2/);
   assert.match(page, /ComplaintMultiSelect/);
   assert.match(page, /AccurateDocumentSideTabs active=\{documentTab\}/);
   assert.match(page, /Register WO terlebih dahulu untuk menambah barang\/jasa/);
