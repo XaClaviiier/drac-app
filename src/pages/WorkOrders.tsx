@@ -1923,7 +1923,7 @@ export default function WorkOrders() {
   };
 
   return (
-    <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
+    <div className="space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0">
       <div className={ui.childBar}>
         <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />

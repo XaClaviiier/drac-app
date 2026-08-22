@@ -1202,7 +1202,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <div className={`${ui.workspaceBar} mb-0.5 hidden lg:flex`}>
+        <div className={`${ui.workspaceBar} hidden lg:flex`}>
           <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start overflow-x-auto overflow-y-hidden">
             <button
               type="button"

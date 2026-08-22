@@ -369,6 +369,7 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   const styles = source('src/index.css');
   assert.match(layout, /lg:h-12 lg:py-1/);
   assert.match(layout, /h-\[34px\]/);
+  assert.match(layout, /className=\{`\$\{ui\.workspaceBar\} hidden lg:flex`\}/);
   assert.match(styles, /\.app-workspace-bar[\s\S]*height: 34px/);
   assert.match(styles, /\.app-child-tab[\s\S]*height: 40px/);
   assert.match(styles, /\.app-control,[\s\S]*height: 36px/);
@@ -376,4 +377,5 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(page, /className=\{`\$\{ui\.search\} w-full pl-9 pr-3`\}/);
   assert.match(page, /className=\{`\$\{ui\.field\} order-1 px-3`\}/);
   assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
+  assert.match(page, /space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
 });
