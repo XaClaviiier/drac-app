@@ -1974,9 +1974,9 @@ export default function WorkOrders() {
             })}
           </div>
         )}
-        <div className="ml-auto flex h-11 items-center gap-2 border-b-0 px-2">
-          <button type="button" onClick={() => setShowColumnPicker(value => !value)} className="flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50" title="Pengaturan tampilan"><Settings2 className="h-5 w-5" /></button>
-          <button type="button" onClick={() => window.open('/help?article=alur-order-kerja', '_blank')} className="flex h-9 w-11 items-center justify-center rounded bg-amber-500 text-white" title="Panduan Work Order"><Lightbulb className="h-5 w-5" /></button>
+        <div className="ml-auto flex h-10 items-center gap-2 border-b-0 px-2">
+          <button type="button" onClick={() => setShowColumnPicker(value => !value)} className="flex h-8 w-10 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50" title="Pengaturan tampilan"><Settings2 className="h-4 w-4" /></button>
+          <button type="button" onClick={() => window.open('/help?article=alur-order-kerja', '_blank')} className="flex h-8 w-10 items-center justify-center rounded bg-amber-500 text-white" title="Panduan Work Order"><Lightbulb className="h-4 w-4" /></button>
         </div>
       </div>
 
@@ -1990,8 +1990,8 @@ export default function WorkOrders() {
       )}
 
       {/* Filters */}
-      <div className="border-y border-gray-300 bg-[#eeeeee] px-3 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="border-y border-gray-300 bg-[#eeeeee] px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <div className="order-5 relative ml-auto min-w-[260px] flex-[0_1_360px] xl:min-w-[300px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -1999,28 +1999,28 @@ export default function WorkOrders() {
               placeholder="Cari WO, perusahaan, PIC, supir, telepon, atau plat..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              className={`${ui.search} w-full pl-9 pr-3`}
             />
           </div>
           {periodFilter === 'custom' && (
             <div className="order-1 flex items-center gap-1">
-              <IndonesianDateInput value={dateFrom} max={dateTo||undefined} onChange={setDateFrom} className="h-10 w-36 text-xs" />
+              <IndonesianDateInput value={dateFrom} max={dateTo||undefined} onChange={setDateFrom} className="h-9 w-36 text-xs" />
               <span className="text-gray-400">–</span>
-              <IndonesianDateInput value={dateTo} min={dateFrom||undefined} onChange={setDateTo} className="h-10 w-36 text-xs" />
+              <IndonesianDateInput value={dateTo} min={dateFrom||undefined} onChange={setDateTo} className="h-9 w-36 text-xs" />
             </div>
           )}
-          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className="order-1 h-10 rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500">
+          <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as WorkOrderPeriod)} className={`${ui.field} order-1 px-3`}>
             <option value="all">Tanggal: Semua</option><option value="today">Tanggal: Hari Ini</option><option value="7days">Tanggal: 7 Hari</option><option value="thisMonth">Tanggal: Bulan Ini</option><option value="lastMonth">Tanggal: Bulan Lalu</option><option value="custom">Tanggal: Pilih Rentang</option>
           </select>
-          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="order-1 h-10 rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500">
+          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${ui.field} order-1 px-3`}>
             <option value="">Status: Semua</option><option value="Register">Status: Register</option><option value="Proses">Status: Dikerjakan</option><option value="Selesai">Status: Selesai</option><option value="Closed">Status: Lost Sales</option>
           </select>
-          {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="order-3 inline-flex h-10 w-16 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700"><Plus className="h-5 w-5" /></button>}
-          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="order-4 inline-flex h-10 w-12 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
+          {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="order-3 inline-flex h-9 w-14 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700"><Plus className="h-5 w-5" /></button>}
+          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="order-4 inline-flex h-9 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
           <div className="order-1 relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
-            <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-10 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
+            <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
             {showFilterPanel && <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Order Kerja</strong><button type="button" onClick={resetWorkOrderFilters} className="text-xs font-semibold text-blue-700 hover:underline">Reset</button></div>
               <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal text-gray-800"><option value="">Semua Status</option><option value="Register">Register</option><option value="Proses">Dikerjakan</option><option value="Selesai">Selesai</option><option value="Closed">Lost Sales</option></select></label>
@@ -2031,10 +2031,10 @@ export default function WorkOrders() {
           </div>
           <div className="order-2 h-0 basis-full" />
           <div className="order-6 flex flex-wrap items-center gap-2 xl:flex-nowrap">
-          <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download"><Download className="h-4 w-4" /></button>
-          <button type="button" className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Print"><Printer className="h-4 w-4" /></button>
+          <button type="button" className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download"><Download className="h-4 w-4" /></button>
+          <button type="button" className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Print"><Printer className="h-4 w-4" /></button>
           <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnPicker(false); }}>
-            <button type="button" onClick={() => setShowColumnPicker(value => !value)} className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Pilih kolom">
+            <button type="button" onClick={() => setShowColumnPicker(value => !value)} className={`inline-flex h-9 w-9 items-center justify-center rounded border ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Pilih kolom">
               <Settings2 className="h-4 w-4" />
             </button>
             {showColumnPicker && (
@@ -2052,7 +2052,7 @@ export default function WorkOrders() {
             )}
           </div>
           </div>
-          <span className="order-6 flex h-10 min-w-16 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredWOs.length}</span>
+          <span className="order-6 flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredWOs.length}</span>
         </div>
       </div>
       <div className="hidden px-3 py-0.5">
@@ -2221,19 +2221,19 @@ export default function WorkOrders() {
 
       {/* Desktop Work Order List */}
       {filteredWOs.length > 0 && (
-        <div className="mx-3 mt-0.5 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
-          <div className="max-h-[calc(100vh-285px)] overflow-auto">
+        <div className={`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`}>
+          <div className="max-h-[calc(100vh-238px)] overflow-auto">
             <table className="w-full min-w-[1100px] text-left">
               <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
-                  {isColumnVisible('number') && <th className="px-4 py-3 font-semibold">No. WO / Tanggal</th>}
-                  {isColumnVisible('customer') && <th className="px-4 py-3 font-semibold">Pelanggan</th>}
-                  {isColumnVisible('vehicle') && <th className="px-4 py-3 font-semibold">Kendaraan</th>}
-                  {isColumnVisible('services') && <th className="px-4 py-3 font-semibold">Layanan</th>}
-                  {isColumnVisible('total') && <th className="px-4 py-3 text-right font-semibold">Total</th>}
-                  {isColumnVisible('status') && <th className="px-4 py-3 text-center font-semibold">Status</th>}
-                  {isColumnVisible('createdBy') && <th className="px-4 py-3 font-semibold">Dibuat Oleh</th>}
-                  {isColumnVisible('actions') && <th className="px-4 py-3 text-right font-semibold">Aksi</th>}
+                  {isColumnVisible('number') && <th className="font-semibold">No. WO / Tanggal</th>}
+                  {isColumnVisible('customer') && <th className="font-semibold">Pelanggan</th>}
+                  {isColumnVisible('vehicle') && <th className="font-semibold">Kendaraan</th>}
+                  {isColumnVisible('services') && <th className="font-semibold">Layanan</th>}
+                  {isColumnVisible('total') && <th className="text-right font-semibold">Total</th>}
+                  {isColumnVisible('status') && <th className="text-center font-semibold">Status</th>}
+                  {isColumnVisible('createdBy') && <th className="font-semibold">Dibuat Oleh</th>}
+                  {isColumnVisible('actions') && <th className="text-right font-semibold">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

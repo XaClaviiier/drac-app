@@ -47,7 +47,7 @@ body { margin: 0; background: #f3f4f6; }
 .app-workspace-bar {
   position: relative;
   display: none !important;
-  height: 40px;
+  height: 34px;
   flex-shrink: 0;
   align-items: flex-start;
   gap: 4px;
@@ -75,13 +75,13 @@ body { margin: 0; background: #f3f4f6; }
   position: relative;
   z-index: 2;
   display: flex;
-  height: 40px;
+  height: 34px;
   min-width: 128px;
   flex-shrink: 0;
   align-items: center;
   border: 1px solid #d1d5db;
   border-bottom: 0;
-  border-radius: 8px 8px 0 0;
+  border-radius: 6px 6px 0 0;
   background: var(--app-tab-idle);
   color: #4b5563;
   transition: background-color .15s, color .15s;
@@ -96,7 +96,7 @@ body { margin: 0; background: #f3f4f6; }
 
 .app-child-bar {
   display: flex;
-  min-height: 46px;
+  min-height: 42px;
   align-items: flex-end;
   gap: 4px;
   border-bottom: 1px solid var(--app-border);
@@ -104,7 +104,7 @@ body { margin: 0; background: #f3f4f6; }
 }
 .app-child-tab {
   display: flex;
-  height: 44px;
+  height: 40px;
   min-width: 176px;
   align-items: center;
   border: 1px solid #aeb5be;
@@ -123,8 +123,8 @@ body { margin: 0; background: #f3f4f6; }
 }
 .app-child-list-tab {
   display: flex;
-  height: 44px;
-  width: 64px;
+  height: 40px;
+  width: 60px;
   align-items: center;
   justify-content: center;
   border: 1px solid #45a90f;
@@ -139,7 +139,7 @@ body { margin: 0; background: #f3f4f6; }
 }
 .app-control,
 .app-search-control {
-  height: 40px;
+  height: 36px;
   border: 1px solid var(--app-border);
   border-radius: 5px;
   background: #fff;
@@ -159,6 +159,12 @@ body { margin: 0; background: #f3f4f6; }
   background: #fff;
 }
 .app-table-shell table thead { background: var(--app-table-head); color: #fff; }
+.app-table-shell table thead th {
+  height: 32px;
+  padding: 6px 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
 
 /* Standar tipografi tabel aplikasi, mengikuti hierarki visual Accurate. */
 #root table {

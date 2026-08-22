@@ -914,17 +914,17 @@ export default function Layout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header
-          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-6 sm:py-3`}
+          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:h-12 lg:py-1`}
         >
-          <div className="hidden items-center gap-3 lg:flex">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
-              <Wrench className="h-5 w-5 text-white" />
+          <div className="hidden items-center gap-2.5 lg:flex">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
+              <Wrench className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h1 className="text-sm font-bold text-gray-900">
+              <h1 className="text-[13px] font-bold leading-4 text-gray-900">
                 DOKTER AC MOBIL
               </h1>
-              <p className="text-xs text-gray-500">Management System</p>
+              <p className="text-[10px] leading-3 text-gray-500">Management System</p>
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-2 sm:gap-4 lg:hidden">
@@ -959,7 +959,7 @@ export default function Layout() {
               <div className="relative">
                 <button
                   onClick={() => setBranchMenuOpen(!branchMenuOpen)}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+                  className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm lg:h-8"
                 >
                   <Building2
                     className={`h-4 w-4 ${isAll ? "text-blue-600" : "text-gray-600"}`}
@@ -1019,7 +1019,7 @@ export default function Layout() {
                       ? "Data berhasil diperbarui"
                       : "Status proses sistem"
                 }
-                className="relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-gray-100"
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 lg:h-8 lg:w-8"
               >
                 {refreshRunning ? (
                   <span className="h-3.5 w-3.5 animate-pulse rounded-full bg-green-500 shadow-[0_0_0_5px_rgba(34,197,94,0.18)]" />
@@ -1135,8 +1135,8 @@ export default function Layout() {
               )}
             </div>
 
-            <button className="relative hidden rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 sm:block">
-              <Bell className="h-5 w-5" />
+            <button className="relative hidden h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 sm:flex lg:h-8 lg:w-8">
+              <Bell className="h-4 w-4" />
               <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
             </button>
 
@@ -1144,16 +1144,16 @@ export default function Layout() {
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-gray-100 sm:p-2"
+                className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-gray-100 lg:py-1"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 lg:h-7 lg:w-7">
                   <User className="h-4 w-4 text-white" />
                 </div>
                 <div className="hidden text-left md:block">
-                  <p className="text-sm font-medium text-gray-800">
+                  <p className="text-[13px] font-medium leading-4 text-gray-800">
                     {currentUser?.name || "Guest"}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-[10px] leading-3 text-gray-500">
                     {currentUser?.roleName}
                   </p>
                 </div>
@@ -1203,7 +1203,7 @@ export default function Layout() {
         </header>
 
         <div className={`${ui.workspaceBar} mb-0.5 hidden lg:flex`}>
-          <div className="relative z-10 flex h-10 min-w-0 flex-1 items-start overflow-x-auto overflow-y-hidden">
+          <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start overflow-x-auto overflow-y-hidden">
             <button
               type="button"
               onClick={() => navigate("/")}
@@ -1246,7 +1246,7 @@ export default function Layout() {
               onChange={(event) =>
                 event.target.value && navigate(event.target.value)
               }
-              className="relative z-10 ml-1 h-10 w-16 flex-shrink-0 rounded-t-lg border border-b-0 border-gray-300 bg-gray-200 px-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
+              className="relative z-10 ml-1 h-[34px] w-16 flex-shrink-0 rounded-t-md border border-b-0 border-gray-300 bg-gray-200 px-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
             >
               <option value="">{workspaceTabs.length + 1}</option>
               <option value="/">Dashboard</option>
