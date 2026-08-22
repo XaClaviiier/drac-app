@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { Search, Plus, User, Phone, Check, X, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer } from '../types';
@@ -9,9 +9,10 @@ interface CustomerPickerProps {
   onChange: (customerId: string) => void;
   onNewCustomerCreated?: (customer: Customer) => void;
   disabled?: boolean;
+  selectedAction?: ReactNode;
 }
 
-export default function CustomerPicker({ value, onChange, onNewCustomerCreated, disabled = false }: CustomerPickerProps) {
+export default function CustomerPicker({ value, onChange, onNewCustomerCreated, disabled = false, selectedAction }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
   const [open, setOpen] = useState(false);
@@ -188,6 +189,7 @@ export default function CustomerPicker({ value, onChange, onNewCustomerCreated, 
               <MapPin className="w-3 h-3 flex-shrink-0" />{selectedCustomer.address}
             </span>
           )}
+          {selectedAction}
         </div>
       )}
 

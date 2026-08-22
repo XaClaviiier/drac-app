@@ -747,22 +747,8 @@ export default function Layout() {
         className={`${sidebarOpen ? "w-64" : "w-[84px]"} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] pt-12 text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
       >
         <nav className="flex-1 overflow-visible py-4">
-          {hasPermission("dashboard:view") && (
-            <NavLink
-              to="/"
-              className={`group relative mx-2 flex items-center gap-3 rounded-lg py-3 transition-all ${sidebarOpen ? "px-4" : "justify-center px-0"} ${location.pathname === "/" && !desktopMenuOpen ? "bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]" : "text-white/80 hover:bg-blue-600 hover:text-white"}`}
-            >
-              <LayoutDashboard className="h-6 w-6 flex-shrink-0" />
-              {sidebarOpen && (
-                <span className="text-sm font-medium">Dashboard</span>
-              )}
-              {!sidebarOpen && (
-                <span className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-[80] -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-gray-800 opacity-0 shadow-lg transition-all group-hover:translate-x-0 group-hover:opacity-100 before:absolute before:-left-1.5 before:top-1/2 before:h-3 before:w-3 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:border-amber-300 before:bg-amber-50">
-                  Dashboard
-                </span>
-              )}
-            </NavLink>
-          )}
+          {/* Dashboard tetap tersedia di tab atas; spacer menjaga posisi menu desktop lain. */}
+          <div className="h-12" aria-hidden="true" />
           {desktopGroups.map((group) => {
             const Icon = group.icon;
             const accessibleItems = group.items.filter(canAccessDesktopItem);
@@ -782,7 +768,7 @@ export default function Layout() {
                     current === group.id ? null : group.id,
                   )
                 }
-                className={`group relative mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg py-3 text-left transition-all ${sidebarOpen ? "px-4" : "justify-center px-0"} ${isActive ? "bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]" : "text-white/80 hover:bg-[#12356b] hover:text-white"}`}
+                className={`group relative flex h-12 items-center gap-3 rounded-md text-left transition-all ${sidebarOpen ? "mx-2 w-[calc(100%-1rem)] px-4" : "mx-auto w-12 justify-center p-0"} ${isActive ? "bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]" : "text-white/80 hover:bg-[#12356b] hover:text-white"}`}
               >
                 <Icon className="h-6 w-6 flex-shrink-0" />
                 {sidebarOpen && (
@@ -857,12 +843,8 @@ export default function Layout() {
                 className="fixed inset-0 z-30 hidden bg-transparent lg:block"
               />
               <section
-                className={`fixed top-14 z-[60] hidden max-h-[calc(100vh-4rem)] w-[min(520px,calc(100vw-18rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.28)] lg:block ${sidebarOpen ? "left-[16.5rem]" : "left-[5.75rem]"}`}
+                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] w-[min(520px,calc(100vw-18rem))] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${sidebarOpen ? "left-64" : "left-[84px]"}`}
               >
-                <span
-                  className="absolute -left-2 top-24 h-4 w-4 rotate-45 border-b border-l border-gray-200 bg-white"
-                  aria-hidden="true"
-                />
                 <div className="px-4 pb-0 pt-4">
                   <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-normal text-gray-600">
