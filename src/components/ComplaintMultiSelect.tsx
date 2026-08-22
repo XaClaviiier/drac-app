@@ -60,12 +60,19 @@ export default function ComplaintMultiSelect({
   };
 
   return (
-    <div ref={rootRef} className="relative min-w-0 flex-1">
+    <div
+      ref={rootRef}
+      className="relative min-w-0 flex-1"
+      tabIndex={-1}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       <div
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`flex min-h-9 w-full items-center gap-1 border bg-white px-1.5 py-1 text-sm outline-none transition-colors ${
+        className={`app-combobox-field flex w-full items-center gap-1 bg-white px-1.5 py-1 text-sm outline-none transition-colors ${
           open ? 'border-blue-500 ring-1 ring-blue-200' : 'border-gray-300'
         } ${disabled ? 'cursor-not-allowed bg-gray-100 text-gray-400' : ''}`}
         onClick={() => {
@@ -107,7 +114,7 @@ export default function ComplaintMultiSelect({
               }
             }}
             placeholder={selected.length ? 'Cari atau ketik keluhan...' : 'Cari atau ketik keluhan...'}
-            className="h-7 min-w-[180px] flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-gray-400 disabled:cursor-not-allowed"
+            className="app-field-unstyled h-7 min-w-[180px] flex-1 border-0 bg-transparent px-1 text-sm outline-none placeholder:text-gray-400 disabled:cursor-not-allowed"
             aria-label="Cari atau ketik keluhan"
           />
         </div>

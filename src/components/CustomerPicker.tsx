@@ -151,7 +151,18 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
     );
 
   return (
-    <div className="relative" ref={wrapperRef}>
+    <div
+      className="relative"
+      ref={wrapperRef}
+      tabIndex={-1}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false);
+          setShowNewForm(false);
+          setInputText(selectedCustomer?.name || '');
+        }
+      }}
+    >
       {/* Input utama */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
