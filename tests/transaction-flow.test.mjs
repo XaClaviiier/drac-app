@@ -408,6 +408,21 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.doesNotMatch(styles, /\.app-brand-header\s*\{[^}]*position:\s*relative/);
 });
 
+test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  const items = source('src/pages/ItemsAndServices.tsx');
+  assert.match(workOrders, /className="order-3 inline-flex h-9 w-14/);
+  assert.match(workOrders, /className="order-4 inline-flex h-9 w-11/);
+  assert.match(items, /title="Data Baru" className="flex h-9 w-14/);
+  assert.match(items, /title="Refresh" className="flex h-9 w-11/);
+  assert.match(items, /title="Download \/ Export" className="flex h-9 w-9/);
+  assert.match(items, /title="Cetak \/ Simpan PDF sesuai filter" className="flex h-9 w-9/);
+  assert.match(items, /title="Pengaturan Kolom" className="flex h-9 w-9/);
+  assert.match(items, /className="relative w-\[360px\]"/);
+  assert.match(items, /<th colSpan=\{9\} className="!h-8 !p-0">/);
+  assert.match(items, /className="flex h-8 items-center text-xs font-semibold uppercase"/);
+});
+
 test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const complaints = source('src/components/ComplaintMultiSelect.tsx');

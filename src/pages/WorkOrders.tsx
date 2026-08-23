@@ -1982,7 +1982,6 @@ export default function WorkOrders() {
           </div>
         )}
         <div className="ml-auto flex h-10 items-center gap-2 border-b-0 px-2">
-          <button type="button" onClick={() => setShowColumnPicker(value => !value)} className="flex h-8 w-10 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50" title="Pengaturan tampilan"><Settings2 className="h-4 w-4" /></button>
           <button type="button" onClick={() => window.open('/help?article=alur-order-kerja', '_blank')} className="flex h-8 w-10 items-center justify-center rounded bg-amber-500 text-white" title="Panduan Work Order"><Lightbulb className="h-4 w-4" /></button>
         </div>
       </div>

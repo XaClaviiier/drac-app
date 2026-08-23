@@ -269,7 +269,7 @@ export default function ItemsAndServices() {
         setSortConfig(current => ({ column, direction: current.column === column && current.direction === 'asc' ? 'desc' : 'asc' }));
       }}
       title={`${column === 'code' || column === 'name' || column === 'category' ? 'Klik untuk urutkan. ' : ''}Tarik untuk memindahkan kolom.`}
-      className={`relative flex flex-shrink-0 cursor-grab select-none items-center gap-1 px-3 py-2.5 text-[13px] font-semibold ${draggedColumn === column ? 'opacity-50' : ''} ${align === 'right' ? 'justify-end text-right' : align === 'center' ? 'justify-center text-center' : 'justify-start text-left'}`}
+      className={`relative flex h-8 flex-shrink-0 cursor-grab select-none items-center gap-1 px-3 text-xs font-semibold uppercase ${draggedColumn === column ? 'opacity-50' : ''} ${align === 'right' ? 'justify-end text-right' : align === 'center' ? 'justify-center text-center' : 'justify-start text-left'}`}
     >
       <span className="block truncate">{label}</span>
       {sortConfig.column === column && <span className="text-[10px]">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>}
@@ -1268,7 +1268,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Filters */}
-      <div className={`${ui.toolbar} border p-3 shadow-sm lg:border-x-0 lg:border-t-0 lg:shadow-none`}>
+      <div className={`${ui.toolbar} border p-3 shadow-sm lg:border-x-0 lg:border-y lg:border-gray-300 lg:px-3 lg:py-2 lg:shadow-sm`}>
         <div className="space-y-2 lg:hidden">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari barang, kode, atau stok..." className={`${ui.search} w-full px-3 pr-9`} /><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" /></div>
@@ -1287,27 +1287,27 @@ export default function ItemsAndServices() {
             <button type="button" onClick={() => { setFilterActive('all'); setFilterType(''); setFilterCategory(''); setFilterBrand(''); setFilterStock(''); setSearch(''); }} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
           </div>}
         </div>
-        <div className="hidden flex-wrap items-center gap-3 lg:flex">
-          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500">
+        <div className="hidden flex-wrap items-center gap-2 lg:flex">
+          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className={`${ui.field} px-3`}>
             <option value="all">Non Aktif: Semua</option><option value="active">Non Aktif: Tidak</option><option value="inactive">Non Aktif: Ya</option>
           </select>
-          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500"><option value="">Merek Barang: Semua</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500"><option value="">Kategori Barang: Semua</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-500"><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
-          <button type="button" className="flex h-10 w-12 items-center justify-center rounded border border-blue-500 bg-blue-50 text-blue-700" title="Filter lanjutan"><Filter className="h-5 w-5" /></button>
+          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className={`${ui.field} px-3`}><option value="">Merek Barang: Semua</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className={`${ui.field} px-3`}><option value="">Kategori Barang: Semua</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={`${ui.field} px-3`}><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+          <button type="button" className="inline-flex h-9 items-center gap-2 rounded border border-blue-600 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50" title="Filter lanjutan"><Filter className="h-4 w-4" /> Filter</button>
         </div>
-        <div className="mt-3 hidden flex-wrap items-center justify-between gap-3 lg:flex">
+        <div className="mt-2 hidden flex-wrap items-center justify-between gap-2 lg:flex">
           <div className="flex gap-2">
-            {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Data Baru" className="flex h-11 w-16 items-center justify-center rounded bg-blue-800 text-white hover:bg-blue-900"><Plus className="h-6 w-6" /></button>}
-            <button type="button" onClick={() => refreshData()} title="Refresh" className="flex h-11 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"><RefreshCw className="h-5 w-5" /></button>
+            {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Data Baru" className="flex h-9 w-14 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700"><Plus className="h-5 w-5" /></button>}
+            <button type="button" onClick={() => refreshData()} title="Refresh" className="flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"><RefreshCw className="h-4 w-4" /></button>
           </div>
           <div className="relative flex items-center gap-2">
-            <button type="button" onClick={exportCurrentData} title="Download / Export" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Download className="h-5 w-5" /></button>
-            {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Share2 className="h-5 w-5" /></button>}
-            <button type="button" onClick={() => setShowPrintOptions(true)} title="Cetak / Simpan PDF sesuai filter" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Printer className="h-5 w-5" /></button>
-            <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><Settings2 className="h-5 w-5" /></button>
-            <div className="relative w-80"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari atau ketik stok=0, stok!=0, stok>0" title="Filter stok: stok=0, stok!=0 atau stok<>0, stok>=1 atau stok=>1. Pisahkan koma untuk kombinasi OR." className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
-            <span className="flex h-10 min-w-16 items-center justify-center rounded border border-slate-300 bg-white px-3 text-sm text-slate-600">{filteredItems.length}</span>
+            <div className="relative w-[360px]"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari atau ketik stok=0, stok!=0, stok>0" title="Filter stok: stok=0, stok!=0 atau stok<>0, stok>=1 atau stok=>1. Pisahkan koma untuk kombinasi OR." className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
+            <button type="button" onClick={exportCurrentData} title="Download / Export" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Download className="h-4 w-4" /></button>
+            {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Share2 className="h-4 w-4" /></button>}
+            <button type="button" onClick={() => setShowPrintOptions(true)} title="Cetak / Simpan PDF sesuai filter" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Printer className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Settings2 className="h-4 w-4" /></button>
+            <span className="flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredItems.length}</span>
             {showColumnSettings && (
               <div className="absolute right-0 top-12 z-30 w-72 rounded border border-slate-300 bg-white p-4 shadow-xl">
                 <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-bold">Kolom Ditampilkan</p><p className="text-[10px] text-slate-500">Tersimpan untuk pengguna ini</p></div><button type="button" onClick={() => setShowColumnSettings(false)}><X className="h-4 w-4" /></button></div>
@@ -1367,9 +1367,9 @@ export default function ItemsAndServices() {
           <table className="w-full table-fixed" style={{ minWidth: tableMinWidth }}>
             <thead className="sticky top-0 z-10 bg-[#637c93] text-white">
               <tr>
-                <th colSpan={9} className="p-0">
-                  <div className="flex items-center text-sm font-medium" style={{ minWidth: tableMinWidth }}>
-                    <div className="w-10 flex-shrink-0 px-2 py-3"></div>
+                <th colSpan={9} className="!h-8 !p-0">
+                  <div className="flex h-8 items-center text-xs font-semibold uppercase" style={{ minWidth: tableMinWidth }}>
+                    <div className="h-8 w-10 flex-shrink-0 px-2"></div>
                     {itemTableColumns.map(column => resizableHeader(
                       column,
                       column === 'code' ? 'Kode Barang' : column === 'name' ? 'Nama Barang' : itemColumnLabels[column],
