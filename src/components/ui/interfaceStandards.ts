@@ -15,6 +15,7 @@ export const ui = {
   field: 'app-control',
   search: 'app-search-control',
   tableShell: 'app-table-shell',
+  documentAction: 'inline-flex h-9 w-[104px] items-center justify-center gap-1 rounded border border-blue-500 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-100 disabled:text-gray-400',
 } as const;
 
 export function workspaceTabClass(active: boolean) {

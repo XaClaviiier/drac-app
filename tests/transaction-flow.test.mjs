@@ -491,7 +491,8 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
   assert.match(page, /setSelectedServiceId\(service\.id\)/);
   assert.match(page, /Waktu WO desktop/);
-  assert.match(page, /\{editingWO && <div className=\{`flex items-center gap-2/);
+  assert.match(page, /className="hidden items-center justify-end border-b border-gray-200 bg-white pb-2 lg:sticky lg:top-0 lg:z-40 lg:flex"/);
+  assert.match(page, /Register WO terlebih dahulu/);
   assert.match(page, /ComplaintMultiSelect/);
   assert.match(page, /selectedAction=\{!customerVehicleLocked/);
   assert.doesNotMatch(page, />Kontak kunjungan</);
@@ -523,4 +524,16 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(complaints, /app-field-unstyled/);
   assert.match(tabs, /border-r-white bg-white text-rose-500/);
   assert.match(tabs, /before:w-0\.5 before:bg-rose-500/);
+});
+
+test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yang sama', () => {
+  const standards = source('src/components/ui/interfaceStandards.ts');
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  const invoices = source('src/pages/SalesInvoice.tsx');
+  assert.match(standards, /documentAction: 'inline-flex h-9 w-\[104px\]/);
+  assert.match(workOrders, /Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄<\/span>/);
+  assert.match(workOrders, /disabled title="Register WO terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
+  assert.match(invoices, /disabled title="Simpan faktur terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
+  assert.ok((workOrders.match(/ui\.documentAction/g) || []).length >= 4);
+  assert.ok((invoices.match(/ui\.documentAction/g) || []).length >= 4);
 });

@@ -2655,14 +2655,14 @@ export default function WorkOrders() {
               </div>
               <div className="hidden shrink-0 items-center gap-2 lg:flex">
                 <details data-wo-action-menu className={`group relative ${statusLabel(detailWO.status) === 'Lost Sales' || detailWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                  <summary aria-disabled={statusLabel(detailWO.status) === 'Lost Sales' || Boolean(detailWO.invoiceId)} tabIndex={statusLabel(detailWO.status) === 'Lost Sales' || detailWO.invoiceId ? -1 : 0} className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Ambil <span className="text-xs">⌄</span></summary>
+                  <summary aria-disabled={statusLabel(detailWO.status) === 'Lost Sales' || Boolean(detailWO.invoiceId)} tabIndex={statusLabel(detailWO.status) === 'Lost Sales' || detailWO.invoiceId ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>Ambil <span className="text-xs">⌄</span></summary>
                   <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
                     <button type="button" onClick={() => takeServicesFromPreviousWO(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Layanan WO Sebelumnya</strong><span className="text-xs text-gray-500">Salin layanan kendaraan ini</span></button>
                     <button type="button" onClick={() => openFavoriteServicesForWO(detailWO)} className="block w-full border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Paket / Layanan Favorit</strong><span className="text-xs text-gray-500">Pilih dari quick service</span></button>
                   </div>
                 </details>
                 <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                  <summary className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md border border-blue-500 bg-white px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">Proses <span className="text-xs">⌄</span></summary>
+                  <summary className={`${ui.documentAction} cursor-pointer list-none`}>Proses <span className="text-xs">⌄</span></summary>
                   <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
                     {detailWO.status === 'Register' && <><button type="button" disabled={!detailWO.services.length || detailWO.total <= 0} onClick={() => requestStatusChange(detailWO, 'Proses')} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 disabled:text-gray-300">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
                     {detailWO.status === 'Proses' && <><button type="button" onClick={() => openCompletionModal(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Tandai Selesai</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button></>}
@@ -2885,24 +2885,25 @@ export default function WorkOrders() {
                   <Trash2 className="h-6 w-6" />
                 </button>
               </aside>
-              {editingWO && <div className="hidden items-center justify-end border-b border-gray-200 bg-white pb-2 lg:sticky lg:top-0 lg:z-40 lg:flex">
-                <div className="flex shrink-0 items-center gap-2">
-                  {editingWO && <details data-wo-action-menu className={`group relative ${statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                    <summary aria-disabled={statusLabel(editingWO.status) === 'Lost Sales' || Boolean(editingWO.invoiceId)} tabIndex={statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? -1 : 0} className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+              <div className="hidden items-center justify-end border-b border-gray-200 bg-white pb-2 lg:sticky lg:top-0 lg:z-40 lg:flex">
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <details data-wo-action-menu className={`group relative ${editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                    <summary aria-disabled={Boolean(editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId))} tabIndex={editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>
                       Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
                     </summary>
                     <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                      <button type="button" onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                      <button type="button" disabled={!editingWO} onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">
                         Layanan WO Sebelumnya
                       </button>
-                      <button type="button" onClick={() => setShowQuickServices(true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">
+                      <button type="button" disabled={!editingWO} onClick={() => setShowQuickServices(true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">
                         Paket/Layanan Favorit
                       </button>
+                      {!editingWO && <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-400">Register WO terlebih dahulu.</p>}
                     </div>
-                  </details>}
+                  </details>
 
-                  {editingWO && <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                  {editingWO ? <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                    <summary className={`${ui.documentAction} cursor-pointer list-none`}>
                       Proses <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
                     </summary>
                     <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
@@ -2938,10 +2939,10 @@ export default function WorkOrders() {
                         </>
                       )}
                     </div>
-                  </details>}
+                  </details> : <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button>}
 
                 </div>
-              </div>}
+              </div>
               {/* Blok simpan jika masih Semua Cabang */}
               {currentBranchId === 'ALL' && !editingWO && (
                 <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 flex items-start gap-3">
