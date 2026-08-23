@@ -357,6 +357,7 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   assert.match(list, /const totalQuantity=/);
   assert.match(list, /\{r\.receivedBy\|\|'-'\}/);
   assert.match(list, /\{r\.items\.length\} item \(\{totalQuantity\} pcs\)/);
+  assert.match(list, /Status: Semua[\s\S]*className="w-40 flex-shrink-0"[\s\S]*title="Tampilkan mulai tanggal"[\s\S]*title="Bersihkan filter"/);
 });
 
 test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak thermal', () => {

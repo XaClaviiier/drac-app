@@ -339,9 +339,9 @@ export default function GoodsReceiptPage() {
         <div className="mt-0.5 flex items-end border-b border-[#b8b8b8] bg-[#fafafa] pl-1.5"><div className="flex h-11 w-14 items-center justify-center rounded-t-lg border border-b-0 border-[#b8b8b8] bg-[#f2f2f2] text-blue-700" title="Daftar Penerimaan"><List className="h-5 w-5"/></div></div>
         <div className="space-y-3 bg-[#ededed] p-3">
           <div className="flex flex-wrap items-center gap-3">
-            <IndonesianDateInput value={filterFromDate} onChange={setFilterFromDate} title="Tampilkan mulai tanggal" className="h-10 w-40 text-sm"/>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Status: Semua</option><option value="Draft">Draft</option><option value="Diterima">Diterima</option><option value="Batal">Batal</option></select>
-            <button onClick={()=>{setFilterFromDate('');setFilterStatus('');setFilterInvoice('')}} className="rounded border border-blue-600 bg-blue-50 px-3 py-2 text-blue-700" title="Bersihkan filter"><Filter className="h-5 w-5"/></button>
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="h-9 rounded border border-slate-300 bg-white px-3 text-sm"><option value="">Status: Semua</option><option value="Draft">Draft</option><option value="Diterima">Diterima</option><option value="Batal">Batal</option></select>
+            <div className="w-40 flex-shrink-0"><IndonesianDateInput value={filterFromDate} onChange={setFilterFromDate} title="Tampilkan mulai tanggal" className="h-9 w-full text-sm"/></div>
+            <button onClick={()=>{setFilterFromDate('');setFilterStatus('');setFilterInvoice('')}} className="flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50" title="Bersihkan filter"><Filter className="h-4 w-4"/></button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={openNewReceipt} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
