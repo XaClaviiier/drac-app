@@ -20,14 +20,14 @@ export default function MobileDashboard(){
   const menus=[
     ['Order','Buat & Kelola',Wrench,'/workorders','from-orange-400 to-orange-600','wo:view'],
     ['Faktur','Invoice & Bayar',FileText,'/invoices','from-emerald-400 to-green-600','invoice:view'],
-    ['Pembayaran','Terima & Riwayat Bayar',Banknote,'/customer-payments','from-green-400 to-emerald-600','invoice:view'],
+    ['Terima Barang','Penerimaan & Riwayat',PackagePlus,'/receipts','from-green-400 to-emerald-600','receipt:view'],
     ['Pelanggan','Data Pelanggan',Users,'/customers','from-violet-400 to-purple-600','customer:view'],
     ['Kendaraan','Data Kendaraan',Car,'/vehicles','from-blue-400 to-indigo-600','vehicle:view'],
     ['Barang','Data Barang',Boxes,'/items','from-cyan-400 to-teal-600','item:view'],
     ['Lainnya','Menu Lengkap',Grid2X2,'#more','from-slate-400 to-slate-600','dashboard:view'],
   ] as const;
   const more=[
-    ['Kategori',FolderTree,'/categories','item:view'],['Terima Barang',PackagePlus,'/receipts','receipt:view'],
+    ['Kategori',FolderTree,'/categories','item:view'],['Pembayaran',Banknote,'/customer-payments','payment:view'],
     ['Faktur Pembelian',ReceiptText,'/purchase-invoices','purchase:view'],['Pengguna & Akses',Shield,'/users','user:view'],['Pengaturan',Settings,'/settings','settings:view'],
   ] as const;
   return <div className="min-h-screen bg-[#031a35] pb-24 text-white lg:hidden">

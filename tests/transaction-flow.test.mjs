@@ -457,6 +457,13 @@ test('daftar Pembayaran Pelanggan mengikuti kepadatan dan perataan Order Kerja',
   assert.doesNotMatch(page, /label="Tunai Belum Disetor"/);
 });
 
+test('dashboard HP menukar posisi Pembayaran dengan Terima Barang', () => {
+  const page = source('src/components/MobileDashboard.tsx');
+  assert.match(page, /\['Terima Barang','Penerimaan & Riwayat',PackagePlus,'\/receipts','from-green-400 to-emerald-600','receipt:view'\]/);
+  assert.match(page, /\['Pembayaran',Banknote,'\/customer-payments','payment:view'\]/);
+  assert.doesNotMatch(page, /\['Pembayaran','Terima & Riwayat Bayar',Banknote,'\/customer-payments'/);
+});
+
 test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const complaints = source('src/components/ComplaintMultiSelect.tsx');
