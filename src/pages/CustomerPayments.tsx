@@ -6,6 +6,7 @@ import {
   Edit3,
   Landmark,
   LockKeyhole,
+  List,
   MessageCircle,
   Plus,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
 import { api } from "../lib/apiClient";
 import { useApp } from "../context/AppContext";
 import IndonesianDateInput from "../components/IndonesianDateInput";
+import { ui } from "../components/ui/interfaceStandards";
 
 type PaymentRow = {
   id: string;
@@ -343,8 +345,14 @@ export default function CustomerPayments() {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+    <div className="space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0">
+      <div className={`${ui.childBar} hidden lg:flex`}>
+        <button type="button" className={ui.childListTab} title="Daftar Pembayaran Pelanggan" aria-label="Daftar Pembayaran Pelanggan">
+          <List className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 lg:mx-3 lg:mt-2 lg:grid-cols-4">
         <Summary
           icon={Banknote}
           label="Total Diterima"
@@ -371,20 +379,12 @@ export default function CustomerPayments() {
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-blue-200 pb-2">
-        <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari pembayaran, faktur, pelanggan, plat..."
-            className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm"
-          />
-        </div>
+      <div className={`${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:mt-2 lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
+        <div className="flex flex-wrap items-center gap-2">
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value as Period)}
-          className="rounded-lg border px-3 py-2 text-sm"
+          className={`${ui.field} px-3`}
         >
           <option value="today">Hari Ini</option>
           <option value="this_month">Bulan Ini</option>
@@ -394,14 +394,14 @@ export default function CustomerPayments() {
         </select>
         {period === "custom" && (
           <>
-            <IndonesianDateInput value={dateFrom} onChange={setDateFrom} className="h-10 w-36 text-sm"/>
-            <IndonesianDateInput value={dateTo} onChange={setDateTo} className="h-10 w-36 text-sm"/>
+            <IndonesianDateInput value={dateFrom} onChange={setDateFrom} className="h-9 w-36 text-sm"/>
+            <IndonesianDateInput value={dateTo} onChange={setDateTo} className="h-9 w-36 text-sm"/>
           </>
         )}
         <select
           value={methodFilter}
           onChange={(e) => setMethodFilter(e.target.value)}
-          className="rounded-lg border px-3 py-2 text-sm"
+          className={`${ui.field} px-3`}
         >
           <option value="ALL">Semua Metode</option>
           <option>Tunai</option>
@@ -410,7 +410,7 @@ export default function CustomerPayments() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border px-3 py-2 text-sm"
+          className={`${ui.field} px-3`}
         >
           <option value="ALL">Semua Status</option>
           <option>Lunas</option>
@@ -419,7 +419,7 @@ export default function CustomerPayments() {
         <select
           value={accountFilter}
           onChange={(e) => setAccountFilter(e.target.value)}
-          className="max-w-[190px] rounded-lg border px-3 py-2 text-sm"
+          className={`${ui.field} max-w-[190px] px-3`}
         >
           <option value="ALL">Semua Akun</option>
           {visibleAccounts.map((a) => (
@@ -431,34 +431,38 @@ export default function CustomerPayments() {
         <select
           value={userFilter}
           onChange={(e) => setUserFilter(e.target.value)}
-          className="max-w-[170px] rounded-lg border px-3 py-2 text-sm"
+          className={`${ui.field} max-w-[170px] px-3`}
         >
           <option value="ALL">Semua Input</option>
           {inputUsers.map((name) => (
             <option key={name}>{name}</option>
           ))}
         </select>
-        <button
-          onClick={() => void load()}
-          title="Muat ulang"
-          className="rounded-lg border p-2 text-blue-700"
-        >
-          <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
-        </button>
-        {hasPermission("payment:create") && (
-          <button
-            onClick={openForm}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-          >
-            <Plus className="h-4 w-4" />
-            Pembayaran Baru
-          </button>
-        )}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {hasPermission("payment:create") && (
+              <button onClick={openForm} title="Pembayaran Baru" aria-label="Pembayaran Baru" className="flex h-9 w-14 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700">
+                <Plus className="h-5 w-5" />
+              </button>
+            )}
+            <button onClick={() => void load()} title="Muat ulang" className="flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50">
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="relative w-full min-w-[240px] sm:w-[360px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari pembayaran, faktur, pelanggan, plat..." className={`${ui.search} w-full pl-9 pr-3`} />
+            </div>
+            <span className="flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filtered.length}</span>
+          </div>
+        </div>
       </div>
 
-      <div className="hidden overflow-x-auto rounded-xl border bg-white md:block">
+      <div className={`${ui.tableShell} mx-1 hidden overflow-x-auto shadow-sm md:block lg:mx-3 lg:mt-0.5`}>
         <table className="w-full text-sm">
-          <thead className="bg-blue-900 text-white">
+          <thead className="bg-blue-800 text-white">
             <tr>
               {[
                 "Tanggal",
@@ -473,7 +477,7 @@ export default function CustomerPayments() {
               ].map((x) => (
                 <th
                   key={x}
-                  className="whitespace-nowrap px-3 py-2.5 text-left text-xs uppercase"
+                  className="whitespace-nowrap px-3 text-left text-xs font-semibold uppercase tracking-wide"
                 >
                   {x}
                 </th>
