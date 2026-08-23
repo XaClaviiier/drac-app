@@ -1961,7 +1961,7 @@ export default function WorkOrders() {
           </button>
         ) : null}
         {!showModal && (
-          <div className="hidden min-w-0 items-end gap-0 overflow-x-auto lg:flex">
+          <div className="hidden min-w-0 items-end gap-0.5 overflow-x-auto lg:flex">
             {detailTabIds.map(tabId => {
               const tabWO = data.workOrders.find(wo => wo.id === tabId);
               if (!tabWO) return null;

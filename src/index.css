@@ -204,7 +204,7 @@ body { margin: 0; background: #f3f4f6; }
   display: flex;
   min-height: 42px;
   align-items: flex-end;
-  gap: 4px;
+  gap: 2px;
   border-bottom: 1px solid var(--app-border);
   background: var(--app-canvas);
 }

@@ -1185,7 +1185,7 @@ export default function Layout() {
         </header>
 
         <div className={`${ui.workspaceBar} hidden lg:flex`}>
-          <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-px overflow-x-auto overflow-y-hidden">
+          <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-0.5 overflow-x-auto overflow-y-hidden">
             <button
               type="button"
               onClick={() => navigate("/")}
