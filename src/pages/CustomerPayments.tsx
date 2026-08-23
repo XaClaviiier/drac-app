@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Banknote,
   Edit3,
+  Filter,
   LockKeyhole,
   List,
   MessageCircle,
@@ -71,6 +72,7 @@ export default function CustomerPayments() {
     [invoiceSearch, setInvoiceSearch] = useState("");
   const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
   const [viewingPayment, setViewingPayment] = useState<PaymentRow | null>(null);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [period, setPeriod] = useState<Period>("this_month"),
     [dateFrom, setDateFrom] = useState(""),
     [dateTo, setDateTo] = useState("");
@@ -235,6 +237,16 @@ export default function CustomerPayments() {
       ),
     [accounts, currentBranchId],
   );
+  const activeFilterCount = [period !== "this_month", methodFilter !== "ALL", statusFilter !== "ALL", accountFilter !== "ALL", userFilter !== "ALL"].filter(Boolean).length;
+  const resetPaymentFilters = () => {
+    setPeriod("this_month");
+    setDateFrom("");
+    setDateTo("");
+    setMethodFilter("ALL");
+    setStatusFilter("ALL");
+    setAccountFilter("ALL");
+    setUserFilter("ALL");
+  };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const maximum = editingPayment ? maximumEditableAmount : outstanding;
@@ -395,6 +407,25 @@ export default function CustomerPayments() {
             <option key={name}>{name}</option>
           ))}
         </select>
+        <div className="relative" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
+          <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? "border-blue-600 bg-blue-50 text-blue-700" : "border-blue-600 bg-white text-blue-700 hover:bg-blue-50"}`} title="Filter daftar pembayaran">
+            <Filter className="h-4 w-4" /> Filter
+            {activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}
+          </button>
+          {showFilterPanel && (
+            <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+              <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Pembayaran</strong><button type="button" onClick={resetPaymentFilters} className="text-xs font-semibold text-blue-700 hover:underline">Reset</button></div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs font-semibold text-gray-600">Periode<select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="today">Hari Ini</option><option value="this_month">Bulan Ini</option><option value="last_month">Bulan Lalu</option><option value="custom">Pilih Tanggal</option><option value="all">Semua Tanggal</option></select></label>
+                <label className="text-xs font-semibold text-gray-600">Metode<select value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Metode</option><option>Tunai</option><option>Transfer</option></select></label>
+                <label className="text-xs font-semibold text-gray-600">Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Status</option><option>Lunas</option><option>Cicilan</option></select></label>
+                <label className="text-xs font-semibold text-gray-600">Akun<select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Akun</option>{visibleAccounts.map(account => <option value={account.id} key={account.id}>{account.name}</option>)}</select></label>
+                <label className="col-span-2 text-xs font-semibold text-gray-600">Diinput Oleh<select value={userFilter} onChange={(event) => setUserFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Input</option>{inputUsers.map(name => <option key={name}>{name}</option>)}</select></label>
+              </div>
+              <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700">Terapkan Filter</button>
+            </div>
+          )}
+        </div>
         </div>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">

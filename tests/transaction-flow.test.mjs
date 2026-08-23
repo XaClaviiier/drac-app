@@ -445,6 +445,10 @@ test('daftar Pembayaran Pelanggan mengikuti kepadatan dan perataan Order Kerja',
   assert.match(page, /\$\{ui\.toolbar\} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2/);
   assert.match(page, /title="Pembayaran Baru" aria-label="Pembayaran Baru" className="flex h-9 w-14/);
   assert.match(page, /title="Muat ulang" className="flex h-9 w-11/);
+  assert.match(page, /title="Filter daftar pembayaran"/);
+  assert.match(page, /Filter Pembayaran/);
+  assert.match(page, /activeFilterCount/);
+  assert.match(page, /setShowFilterPanel\(false\)/);
   assert.match(page, /className="relative w-full min-w-\[240px\] sm:w-\[360px\]"/);
   assert.match(page, /\$\{ui\.tableShell\} mx-1 hidden overflow-x-auto shadow-sm md:block lg:mx-3 lg:mt-0\.5/);
   assert.match(page, /<thead className="bg-blue-800 text-white">/);
