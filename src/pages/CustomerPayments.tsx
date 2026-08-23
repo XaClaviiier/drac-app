@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Banknote,
-  CalendarDays,
   Edit3,
-  Landmark,
   LockKeyhole,
   List,
   MessageCircle,
@@ -12,7 +10,6 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  WalletCards,
   X,
 } from "lucide-react";
 import { api } from "../lib/apiClient";
@@ -48,7 +45,6 @@ type CashAccount = {
   accountType: "cash" | "bank";
   branchId?: string;
 };
-type DepositSummary = { branchId: string; unsubmitted: number };
 type Period = "today" | "this_month" | "last_month" | "custom" | "all";
 
 const rupiah = (value: number) =>
@@ -68,8 +64,7 @@ export default function CustomerPayments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, currentBranchId, hasPermission, refreshData } = useApp();
   const [rows, setRows] = useState<PaymentRow[]>([]),
-    [accounts, setAccounts] = useState<CashAccount[]>([]),
-    [depositSummary, setDepositSummary] = useState<DepositSummary[]>([]);
+    [accounts, setAccounts] = useState<CashAccount[]>([]);
   const [loading, setLoading] = useState(false),
     [search, setSearch] = useState(""),
     [showForm, setShowForm] = useState(false),
@@ -97,15 +92,13 @@ export default function CustomerPayments() {
 
   const load = async () => {
     setLoading(true);
-    const [p, a, d] = await Promise.all([
+    const [p, a] = await Promise.all([
       api.get("customer-payments"),
       api.get("cash-accounts"),
-      api.get("branch-deposits"),
     ]);
     if (p.success) setRows(p.data || []);
     else window.alert(p.message);
     if (a.success) setAccounts(a.data || []);
-    if (d.success) setDepositSummary(d.data?.summary || []);
     setLoading(false);
   };
   useEffect(() => {
@@ -242,15 +235,6 @@ export default function CustomerPayments() {
       ),
     [accounts, currentBranchId],
   );
-  const totalReceived = filtered.reduce((sum, r) => sum + r.amount, 0),
-    cashReceived = filtered
-      .filter((r) => r.paymentMethod === "Tunai")
-      .reduce((sum, r) => sum + r.amount, 0),
-    digitalReceived = totalReceived - cashReceived;
-  const unsubmitted = depositSummary
-    .filter((s) => currentBranchId === "ALL" || s.branchId === currentBranchId)
-    .reduce((sum, s) => sum + Number(s.unsubmitted || 0), 0);
-
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const maximum = editingPayment ? maximumEditableAmount : outstanding;
@@ -352,34 +336,7 @@ export default function CustomerPayments() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 lg:mx-3 lg:mt-2 lg:grid-cols-4">
-        <Summary
-          icon={Banknote}
-          label="Total Diterima"
-          value={rupiah(totalReceived)}
-          tone="blue"
-        />
-        <Summary
-          icon={WalletCards}
-          label="Tunai"
-          value={rupiah(cashReceived)}
-          tone="green"
-        />
-        <Summary
-          icon={Landmark}
-          label="Transfer"
-          value={rupiah(digitalReceived)}
-          tone="violet"
-        />
-        <Summary
-          icon={CalendarDays}
-          label="Tunai Belum Disetor"
-          value={rupiah(unsubmitted)}
-          tone="amber"
-        />
-      </div>
-
-      <div className={`${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:mt-2 lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
+      <div className={`${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
         <div className="flex flex-wrap items-center gap-2">
         <select
           value={period}
@@ -837,36 +794,6 @@ export default function CustomerPayments() {
           </form>
         </div>
       )}
-    </div>
-  );
-}
-
-function Summary({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: typeof Banknote;
-  label: string;
-  value: string;
-  tone: "blue" | "green" | "violet" | "amber";
-}) {
-  const colors = {
-    blue: "bg-blue-50 text-blue-700",
-    green: "bg-emerald-50 text-emerald-700",
-    violet: "bg-violet-50 text-violet-700",
-    amber: "bg-amber-50 text-amber-700",
-  };
-  return (
-    <div className="flex items-center gap-3 rounded-xl border bg-white p-3">
-      <span className={`rounded-lg p-2 ${colors[tone]}`}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-xs text-gray-500">{label}</p>
-        <b className="block truncate text-base">{value}</b>
-      </div>
     </div>
   );
 }
