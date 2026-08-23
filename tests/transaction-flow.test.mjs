@@ -394,7 +394,7 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(styles, /\.app-control,[\s\S]*height: 36px/);
   assert.match(styles, /\.app-table-shell table thead th[\s\S]*height: 32px/);
   assert.match(page, /className=\{`\$\{ui\.search\} w-full pl-9 pr-3`\}/);
-  assert.match(page, /className=\{`\$\{ui\.field\} order-1 px-3`\}/);
+  assert.match(page, /className="h-9 w-40 text-sm"/);
   assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
   assert.match(page, /space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
   assert.match(layout, /app-brand-header/);
@@ -409,6 +409,17 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(styles, /\.app-brand-header::before[\s\S]*data:image\/svg\+xml/);
   assert.match(styles, /\.app-brand-header::after[\s\S]*linear-gradient/);
   assert.doesNotMatch(styles, /\.app-brand-header\s*\{[^}]*position:\s*relative/);
+});
+
+test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua tanggal', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  assert.match(page, /selectedWorkOrderDate/);
+  assert.match(page, /Filter satu tanggal WO/);
+  assert.match(page, /Bersihkan tanggal — tampilkan semua tanggal/);
+  assert.match(page, /Kosongkan tanggal untuk menampilkan semua tanggal/);
+  const toolbar = page.slice(page.indexOf('{\/\* Filters \*\/}'), page.indexOf('<div className="hidden px-3 py-0.5">'));
+  assert.doesNotMatch(toolbar, /Status: Semua/);
+  assert.doesNotMatch(toolbar, /Tanggal: Semua/);
 });
 
 test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
