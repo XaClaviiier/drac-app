@@ -1320,7 +1320,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Table */}
-      <div className={`${ui.tableShell} mx-1`}>
+      <div className={`${ui.tableShell} mx-1 lg:mx-3 lg:mt-0.5`}>
         <div className="lg:hidden">
           <div className="grid grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 bg-[#2442a8] px-2 py-2 text-[10px] font-semibold uppercase text-white">
             <span>Barang/Jasa</span><span className="text-center">Stok</span><span>Kategori</span><span className="text-center">Aksi</span>

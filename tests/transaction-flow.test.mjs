@@ -421,6 +421,7 @@ test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
   assert.match(items, /title="Cetak \/ Simpan PDF sesuai filter" className="flex h-9 w-9/);
   assert.match(items, /title="Pengaturan Kolom" className="flex h-9 w-9/);
   assert.match(items, /className="relative w-\[360px\]"/);
+  assert.match(items, /className=\{`\$\{ui\.tableShell\} mx-1 lg:mx-3 lg:mt-0\.5`\}/);
   assert.match(items, /<th colSpan=\{9\} className="!h-8 !p-0">/);
   assert.match(items, /className="flex h-8 items-center text-xs font-semibold uppercase"/);
 });
