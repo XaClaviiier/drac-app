@@ -426,6 +426,18 @@ test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
   assert.match(items, /className="flex h-8 items-center text-xs font-semibold uppercase"/);
 });
 
+test('daftar Faktur Penjualan mengikuti kepadatan dan perataan Order Kerja', () => {
+  const page = source('src/pages/SalesInvoice.tsx');
+  assert.match(page, /space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
+  assert.match(page, /\$\{ui\.toolbar\} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2/);
+  assert.match(page, /className="mt-2 flex flex-wrap items-center justify-between gap-2"/);
+  assert.match(page, /className="inline-flex h-9 w-11 items-center justify-center rounded border border-blue-600/);
+  assert.match(page, /className="relative w-full min-w-\[240px\] sm:w-\[360px\]"/);
+  assert.match(page, /\$\{ui\.tableShell\} mx-1 shadow-sm lg:mx-3 lg:mt-0\.5/);
+  assert.match(page, /<thead className="sticky top-0 z-20 bg-blue-800 text-white">/);
+  assert.doesNotMatch(page, /<th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Tanggal<\/th>/);
+});
+
 test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const complaints = source('src/components/ComplaintMultiSelect.tsx');

@@ -741,7 +741,7 @@ export default function SalesInvoice() {
   };
 
   return (
-    <div className="space-y-3 lg:-mx-5 lg:-mt-5 lg:space-y-1">
+    <div className="space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0">
       {/* Subtab Faktur Penjualan: daftar, data baru/edit, dan detail faktur. */}
       <div className={`${ui.childBar} hidden lg:flex`}>
         <button
@@ -774,22 +774,12 @@ export default function SalesInvoice() {
       )}
 
       {/* Filters */}
-      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} border border-gray-300 bg-gray-50 p-3 shadow-sm`}>
-        <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
-          <div className="relative min-w-[260px] flex-[1_1_360px] xl:min-w-[300px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari nomor faktur, pelanggan, kendaraan..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-10 w-full rounded border border-gray-300 bg-white pl-10 pr-4 text-sm outline-none focus:border-blue-500"
-            />
-          </div>
+      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={filterCustomer}
             onChange={(e) => setFilterCustomer(e.target.value)}
-            className="h-10 min-w-[175px] flex-1 rounded border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[190px]"
+            className={`${ui.field} min-w-[175px] flex-1 px-3 sm:flex-none lg:w-[190px]`}
           >
             <option value="">Pelanggan: Semua</option>
             {invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}
@@ -797,21 +787,23 @@ export default function SalesInvoice() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="h-10 min-w-[145px] flex-1 rounded border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:flex-none xl:w-[155px]"
+            className={`${ui.field} min-w-[145px] flex-1 px-3 sm:flex-none lg:w-[155px]`}
           >
             <option value="">Status: Semua</option>
             <option value="Lunas">Status: Lunas</option>
             <option value="Belum Lunas">Status: Belum Lunas</option>
           </select>
-          <IndonesianDateInput value={filterDate} onChange={setFilterDate} className="h-10 min-w-[145px] flex-1 text-sm sm:flex-none xl:w-[150px]" title="Tanggal faktur"/>
-          <button type="button" onClick={() => { setFilterDate(''); setFilterCustomer(''); setFilterStatus(''); setSearchTerm(''); }} className="inline-flex h-10 flex-shrink-0 items-center gap-2 rounded border border-blue-500 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100" title="Kosongkan semua filter"><Filter className="h-4 w-4"/><span className="hidden 2xl:inline">Reset</span></button>
-          <div className="ml-auto flex flex-wrap items-center gap-2 xl:ml-0 xl:flex-nowrap">
+          <IndonesianDateInput value={filterDate} onChange={setFilterDate} className="h-9 min-w-[145px] flex-1 text-sm sm:flex-none lg:w-[150px]" title="Tanggal faktur"/>
+          <button type="button" onClick={() => { setFilterDate(''); setFilterCustomer(''); setFilterStatus(''); setSearchTerm(''); }} className="inline-flex h-9 flex-shrink-0 items-center gap-2 rounded border border-blue-600 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50" title="Kosongkan semua filter"><Filter className="h-4 w-4"/><span>Reset</span></button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {hasPermission('invoice:create') && (
               <>
                 <button
                   type="button"
                   onClick={handleOpenWOPicker}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded bg-emerald-700 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-800"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded bg-emerald-700 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-800"
                 >
                   <Wrench className="h-4 w-4" />
                   <span className="hidden xl:inline">Faktur dari WO</span>
@@ -820,7 +812,7 @@ export default function SalesInvoice() {
                 <button
                   type="button"
                   onClick={() => handleOpenModal()}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-800"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded bg-blue-800 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
                 >
                   <Plus className="h-4 w-4" />
                   <span className="hidden xl:inline">Buat Faktur</span>
@@ -831,21 +823,26 @@ export default function SalesInvoice() {
               type="button"
               onClick={() => void handleRefresh()}
               disabled={isLoading}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded border border-blue-500 bg-white px-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
               title="Ambil ulang data faktur dari server"
             >
-              <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span className="hidden lg:inline">{isLoading ? 'Memuat…' : 'Refresh'}</span>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-            <button className="h-10 rounded border border-blue-500 bg-white px-3 text-blue-700 hover:bg-blue-50" title="Download">
-              <Download className="w-5 h-5" />
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:flex-nowrap">
+            <div className="relative w-full min-w-[240px] sm:w-[360px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input type="text" placeholder="Cari nomor faktur, pelanggan, kendaraan..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${ui.search} w-full pl-9 pr-3`} />
+            </div>
+            <button className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download">
+              <Download className="h-4 w-4" />
             </button>
-            <button className="h-10 rounded border border-blue-500 bg-white px-3 text-blue-700 hover:bg-blue-50" title="Print">
-              <Printer className="w-5 h-5" />
+            <button className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Print">
+              <Printer className="h-4 w-4" />
             </button>
             <div className="relative" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnPicker(false); }}>
-              <button type="button" onClick={() => setShowColumnPicker(value => !value)} className={`inline-flex h-10 w-10 items-center justify-center rounded border ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Pilih kolom tabel">
-                <Settings2 className="h-5 w-5" />
+              <button type="button" onClick={() => setShowColumnPicker(value => !value)} className={`inline-flex h-9 w-9 items-center justify-center rounded border ${showColumnPicker ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`} title="Pilih kolom tabel">
+                <Settings2 className="h-4 w-4" />
               </button>
               {showColumnPicker && (
                 <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
@@ -864,23 +861,24 @@ export default function SalesInvoice() {
                 </div>
               )}
             </div>
+            <span className="flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredInvoices.length}</span>
           </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} overflow-hidden border border-gray-300 bg-white shadow-sm`}>
+      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
         <div className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
           <table className="w-full min-w-[1160px] border-collapse">
-            <thead className="sticky top-0 z-20 bg-slate-600 text-white">
+            <thead className="sticky top-0 z-20 bg-blue-800 text-white">
               <tr>
-                {isInvoiceColumnVisible('date') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Tanggal</th>}
-                {isInvoiceColumnVisible('number') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Nomor #</th>}
-                {isInvoiceColumnVisible('customer') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Pelanggan</th>}
-                {isInvoiceColumnVisible('vehicle') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Data Kendaraan</th>}
-                {isInvoiceColumnVisible('total') && <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">Total</th>}
-                {currentBranchId === 'ALL' && isInvoiceColumnVisible('branch') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Cabang</th>}
-                {isInvoiceColumnVisible('actions') && <th className="sticky right-0 bg-blue-900 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Aksi</th>}
+                {isInvoiceColumnVisible('date') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Tanggal</th>}
+                {isInvoiceColumnVisible('number') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Nomor #</th>}
+                {isInvoiceColumnVisible('customer') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Pelanggan</th>}
+                {isInvoiceColumnVisible('vehicle') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Data Kendaraan</th>}
+                {isInvoiceColumnVisible('total') && <th className="px-4 text-right text-xs font-semibold uppercase tracking-wide">Total</th>}
+                {currentBranchId === 'ALL' && isInvoiceColumnVisible('branch') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Cabang</th>}
+                {isInvoiceColumnVisible('actions') && <th className="sticky right-0 bg-blue-800 px-4 text-center text-xs font-semibold uppercase tracking-wide">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
