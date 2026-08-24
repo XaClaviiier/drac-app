@@ -993,6 +993,25 @@ export default function WorkOrders() {
     handleOpenModal(targetWO, true);
   }, [requestedNewWO, requestedEditWO, requestedViewWO, isLoading, data.workOrders]);
 
+  // Form transaksi desktop memakai kanvas tetap seperti Accurate. Kunci scroll
+  // utama agar subtab serta header Pelanggan/Tanggal tidak ikut bergeser.
+  useEffect(() => {
+    const page = document.querySelector<HTMLElement>('main.app-page-scroll');
+    if (!page) return;
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const syncDocumentScroll = () => {
+      const shouldLock = showModal && desktop.matches;
+      page.classList.toggle('app-page-scroll--document-locked', shouldLock);
+      if (shouldLock) page.scrollTop = 0;
+    };
+    syncDocumentScroll();
+    desktop.addEventListener('change', syncDocumentScroll);
+    return () => {
+      desktop.removeEventListener('change', syncDocumentScroll);
+      page.classList.remove('app-page-scroll--document-locked');
+    };
+  }, [showModal]);
+
   const handleCloseModal = () => {
     setShowModal(false);
     setDiagnosisMode(false);

@@ -587,7 +587,10 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(source('src/components/Layout.tsx'), /app-page-scroll min-h-0 flex-1/);
   assert.match(source('src/components/Layout.tsx'), /app-page-scroll--padded overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6/);
   assert.match(styles, /\.app-page-scroll[\s\S]*?scrollbar-width: none;/);
+  assert.match(styles, /\.app-page-scroll--document-locked[\s\S]*?overflow-y: hidden !important;/);
   assert.match(styles, /\.app-page-scroll::\-webkit-scrollbar[\s\S]*?display: none;/);
+  assert.match(source('src/pages/WorkOrders.tsx'), /page\.classList\.toggle\('app-page-scroll--document-locked', shouldLock\)/);
+  assert.match(source('src/pages/WorkOrders.tsx'), /if \(shouldLock\) page\.scrollTop = 0/);
   assert.match(complaints, /app-combobox-field/);
   assert.match(complaints, /app-field-unstyled/);
   assert.match(tabs, /border-r-white bg-white text-rose-500/);

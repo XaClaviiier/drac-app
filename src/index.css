@@ -270,6 +270,9 @@ body { margin: 0; background: #f3f4f6; }
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+.app-page-scroll--document-locked {
+  overflow-y: hidden !important;
+}
 .app-page-scroll::-webkit-scrollbar {
   display: none;
   width: 0;
