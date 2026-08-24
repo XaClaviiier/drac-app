@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle, RefreshCw, ChevronDown, Eye, Settings2, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -65,6 +65,7 @@ export default function SalesInvoice() {
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [woManualReceiptNumber, setWoManualReceiptNumber] = useState('');
   const [isCreatingFromWO, setIsCreatingFromWO] = useState(false);
+  const woPickerPanelRef = useRef<HTMLDivElement>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [formItems, setFormItems] = useState<NonNullable<SalesInvoice['items']>>([]);
   const [formItemToAdd, setFormItemToAdd] = useState('');
@@ -579,6 +580,7 @@ export default function SalesInvoice() {
       setWoDraftItems(copiedItems);
       setWoPayment(copiedItems.reduce((sum, item) => sum + item.price * item.qty, 0));
     }
+    window.requestAnimationFrame(() => woPickerPanelRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
   };
 
   useEffect(() => {
@@ -1416,13 +1418,13 @@ export default function SalesInvoice() {
       {/* WO Picker Modal */}
       {showWOPicker && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div ref={woPickerPanelRef} className={`bg-white rounded-xl shadow-2xl w-full max-h-[90vh] overflow-y-auto ${selectedWO ? 'max-w-4xl' : 'max-w-2xl'}`}>
             <div className="sticky top-0 bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex items-center justify-between rounded-t-xl z-10">
               <div className="flex items-center gap-3 text-white">
                 <Wrench className="w-6 h-6" />
                 <div>
-                  <h3 className="text-lg font-semibold">Pilih Order Kerja untuk Difakturkan</h3>
-                  <p className="text-sm text-green-100">{unbilledWOs.length} order kerja belum difakturkan</p>
+                  <h3 className="text-lg font-semibold">{selectedWO ? 'Faktur Baru dari Order Kerja' : 'Pilih Order Kerja untuk Difakturkan'}</h3>
+                  <p className="text-sm text-green-100">{selectedWO ? `${selectedWO.woNumber} · ${selectedWO.customerName}` : `${unbilledWOs.length} order kerja belum difakturkan`}</p>
                 </div>
               </div>
               <button
@@ -1434,7 +1436,7 @@ export default function SalesInvoice() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div className="relative">
+              <div className={`relative ${selectedWO ? 'hidden' : ''}`}>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type="search"
@@ -1456,7 +1458,7 @@ export default function SalesInvoice() {
                 </div>
               ) : (
                 <>
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                  <div className={`space-y-2 max-h-72 overflow-y-auto ${selectedWO ? 'hidden' : ''}`}>
                     {visibleUnbilledWOs.map((wo) => (
                       <button
                         key={wo.id}
@@ -1585,10 +1587,10 @@ export default function SalesInvoice() {
             <div className="px-6 pb-6 flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowWOPicker(false)}
+                onClick={() => selectedWO ? setSelectedWOId('') : setShowWOPicker(false)}
                 className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
               >
-                Batal
+                {selectedWO ? 'Ganti WO' : 'Batal'}
               </button>
               <button
                 type="button"
