@@ -506,8 +506,11 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /Register WO terlebih dahulu untuk menambah barang\/jasa/);
   assert.match(complaints, /Ketik bebas lalu tekan Enter/);
   assert.match(complaints, /aria-label="Buka pilihan keluhan"/);
-  assert.match(source('src/components/CustomerPicker.tsx'), /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(112px,.65fr\)\]/);
-  assert.match(source('src/components/CustomerPicker.tsx'), /vehicle\?\.plateNumber \|\| 'Belum ada kendaraan'/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /formatPlateNumber\(vehicle\.plateNumber\)/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /const vehicleLabel = vehicle \? getVehicleLabel\(vehicle\) : ''/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /\[\{vehicleLabel\}\]/);
+  assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /Belum ada kendaraan/);
+  assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /NA#/);
   assert.match(source('src/components/CustomerPicker.tsx'), /placeholder="Ketik nama, HP, atau nopol\.\.\."/);
   assert.match(source('src/components/CustomerPicker.tsx'), /onVehicleSelect\?\.\(vehicle\.id\)/);
   assert.match(source('src/components/CustomerPicker.tsx'), /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);

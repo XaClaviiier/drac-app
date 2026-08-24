@@ -13,6 +13,22 @@ interface CustomerPickerProps {
   selectedAction?: ReactNode;
 }
 
+const formatPlateNumber = (value?: string) => {
+  const normalized = String(value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (!normalized) return '';
+  const match = normalized.match(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/);
+  if (!match) return String(value || '').trim().toUpperCase();
+  return [match[1], match[2], match[3]].filter(Boolean).join(' ');
+};
+
+const getVehicleLabel = (vehicle: Vehicle) => {
+  const brand = (vehicle.vehicleBrandName || vehicle.brand || '').trim();
+  const model = (vehicle.model || '').trim();
+  if (!brand) return model;
+  if (!model || model.toLowerCase().startsWith(brand.toLowerCase())) return model || brand;
+  return `${brand} ${model}`;
+};
+
 export default function CustomerPicker({ value, onChange, onVehicleSelect, onNewCustomerCreated, disabled = false, selectedAction }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
@@ -226,19 +242,29 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
                   </div>
                 ) : (
                   filtered.map(({ customer, vehicle }) => {
+                    const vehicleLabel = vehicle ? getVehicleLabel(vehicle) : '';
                     return (
                       <button
                         key={`${customer.id}:${vehicle?.id || 'tanpa-kendaraan'}`}
                         type="button"
                         onClick={() => handleSelect(customer, vehicle)}
-                        className={`grid h-11 w-full grid-cols-[minmax(0,1fr)_auto_minmax(112px,.65fr)] items-center gap-3 border-b border-gray-100 px-3 text-left text-sm transition-colors last:border-0 hover:bg-blue-50 ${
+                        className={`flex min-h-[52px] w-full flex-col justify-center border-b border-gray-100 px-3 py-2 text-left text-sm transition-colors last:border-0 hover:bg-blue-50 ${
                           value === customer.id ? 'bg-blue-50' : ''
                         }`}
                       >
-                        <span className="min-w-0 truncate font-medium text-gray-900">{customer.name}</span>
-                        <span className="whitespace-nowrap text-gray-600">{customer.phone || '-'}</span>
-                        <span className={`min-w-0 truncate text-right font-mono text-xs ${vehicle ? 'font-semibold text-blue-700' : 'text-gray-400'}`}>
-                          {vehicle?.plateNumber || 'Belum ada kendaraan'}
+                        <span className="flex min-w-0 items-baseline gap-1.5">
+                          <span className="min-w-0 truncate font-semibold text-gray-900">{customer.name}</span>
+                          {vehicle && (
+                            <span className="shrink-0 font-mono text-xs font-semibold text-blue-700">
+                              — {formatPlateNumber(vehicle.plateNumber)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs">
+                          <span className="shrink-0 text-gray-500">{customer.phone || '-'}</span>
+                          {vehicleLabel && (
+                            <span className="min-w-0 truncate text-gray-600">[{vehicleLabel}]</span>
+                          )}
                         </span>
                       </button>
                     );
