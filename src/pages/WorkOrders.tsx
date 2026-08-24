@@ -2864,7 +2864,7 @@ export default function WorkOrders() {
               </button>
             </div>
 
-            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[90px]">
+            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[88px]">
               <AccurateFormActionRail
                 ariaLabel="Aksi Work Order"
                 className="absolute bottom-2 right-2 top-2 z-50 hidden gap-1.5 lg:flex [&>div]:mt-1.5"
