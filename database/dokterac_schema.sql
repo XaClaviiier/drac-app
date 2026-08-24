@@ -300,6 +300,7 @@ CREATE TABLE IF NOT EXISTS `work_order_services` (
 CREATE TABLE IF NOT EXISTS `sales_invoices` (
   `id` VARCHAR(20) NOT NULL,
   `invoice_number` VARCHAR(30) NOT NULL,
+  `manual_receipt_number` VARCHAR(50) NULL,
   `date` DATE NOT NULL,
   `customer_ref_id` VARCHAR(20),
   `customer_id` VARCHAR(50),
@@ -320,6 +321,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoices` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `invoice_number` (`invoice_number`),
+  UNIQUE KEY `uniq_sales_manual_receipt_number` (`manual_receipt_number`),
   KEY `idx_status` (`status`),
   KEY `idx_branch` (`branch_id`),
   KEY `idx_date` (`date`),

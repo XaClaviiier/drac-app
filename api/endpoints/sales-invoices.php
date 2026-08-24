@@ -1,5 +1,23 @@
 <?php
 $pdo->exec("ALTER TABLE sales_invoice_items ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER item_id");
+$pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS manual_receipt_number VARCHAR(50) NULL AFTER invoice_number");
+$pdo->exec("UPDATE sales_invoices SET manual_receipt_number=NULL WHERE manual_receipt_number IS NOT NULL AND TRIM(manual_receipt_number)=''");
+$manualReceiptIndex = $pdo->query("SHOW INDEX FROM sales_invoices WHERE Key_name='uniq_sales_manual_receipt_number'")->fetch();
+if (!$manualReceiptIndex) $pdo->exec("CREATE UNIQUE INDEX uniq_sales_manual_receipt_number ON sales_invoices(manual_receipt_number)");
+$normalizeManualReceiptNumber = static function ($value): ?string {
+    $number = strtoupper(trim(preg_replace('/\s+/', ' ', (string)$value)));
+    if ($number === '') return null;
+    if (strlen($number) > 50) throw new InvalidArgumentException('No. Nota Fisik maksimal 50 karakter');
+    return $number;
+};
+$assertManualReceiptNumberUnique = static function (PDO $pdo, ?string $number, ?string $excludeId = null): void {
+    if ($number === null) return;
+    $sql = 'SELECT invoice_number FROM sales_invoices WHERE manual_receipt_number=?' . ($excludeId ? ' AND id<>?' : '') . ' LIMIT 1';
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($excludeId ? [$number, $excludeId] : [$number]);
+    $existing = $stmt->fetchColumn();
+    if ($existing) throw new InvalidArgumentException("No. Nota Fisik {$number} sudah dipakai pada Faktur {$existing}");
+};
 $salesJournalMigration='backfill_sales_stock_journal_20260820_v1';
 $migrationCheck=$pdo->prepare("SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?");$migrationCheck->execute([$salesJournalMigration]);
 if(!(int)$migrationCheck->fetchColumn()){$pdo->beginTransaction();try{
@@ -71,6 +89,7 @@ switch ($method) {
         }
         foreach ($rows as &$r) {
             $r['invoiceNumber'] = $r['invoice_number'];
+            $r['manualReceiptNumber'] = $r['manual_receipt_number'] ?? null;
             $r['customerRefId'] = $r['customer_ref_id'];
             $r['customerId'] = $r['customer_id'];
             $r['customerName'] = $r['customer_name'];
@@ -148,6 +167,8 @@ switch ($method) {
                 $status = $payment >= $total ? 'Lunas' : 'Belum Lunas';
                 $invoiceId = generateId();
                 $invoiceNumber = nextDocumentNumber($pdo, 'sales_invoice', $wo['branch_id'], $date);
+                $manualReceiptNumber = $normalizeManualReceiptNumber($d['manualReceiptNumber'] ?? null);
+                $assertManualReceiptNumberUnique($pdo, $manualReceiptNumber);
 
                 $description = implode(', ', array_map(function($service) {
                     return !empty($service['description']) ? $service['description'] : $service['name'];
@@ -155,13 +176,13 @@ switch ($method) {
 
                 $insertInvoice = $pdo->prepare("
                     INSERT INTO sales_invoices (
-                        id, invoice_number, date, customer_ref_id, customer_id, customer_name,
+                        id, invoice_number, manual_receipt_number, date, customer_ref_id, customer_id, customer_name,
                         vehicle_info, description, total, payment, payment_date, backdate_reason, payment_method, status, age,
                         wo_id, wo_number, branch_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
                 ");
                 $insertInvoice->execute([
-                    $invoiceId, $invoiceNumber, $date,
+                    $invoiceId, $invoiceNumber, $manualReceiptNumber, $date,
                     $wo['customer_ref_id'], $wo['customer_id'], $wo['customer_name'],
                     trim($wo['vehicle_info'] . ' ' . $wo['plate_number']),
                     $description, $total, $payment, $paymentDate, $backdateReason ?: null, $paymentMethod, $status,
@@ -210,6 +231,8 @@ switch ($method) {
             $customerStmt=$pdo->prepare("SELECT id,customer_code,name FROM customers WHERE id=?");$customerStmt->execute([(string)($d['customerRefId']??'')]);$customer=$customerStmt->fetch();
             if(!$customer)throw new InvalidArgumentException('Pelanggan wajib dipilih dari data master');
             $invoiceNumber = nextDocumentNumber($pdo, 'sales_invoice', $branchId, $d['date'] ?? null);
+            $manualReceiptNumber = $normalizeManualReceiptNumber($d['manualReceiptNumber'] ?? null);
+            $assertManualReceiptNumberUnique($pdo, $manualReceiptNumber);
             $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
             if (!in_array($paymentMethod, ['Tunai', 'Transfer'], true)) {
                 throw new Exception('Metode pembayaran tidak valid');
@@ -224,10 +247,10 @@ switch ($method) {
             if ($invoiceDate > date('Y-m-d') || ($paymentDate && $paymentDate > date('Y-m-d'))) throw new Exception('Tanggal transaksi tidak boleh melewati hari ini');
             if ($paymentDate && $paymentDate < $invoiceDate) throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
             if (isBackdateReasonRequired($pdo) && ($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') throw new Exception('Alasan tanggal mundur wajib diisi');
-            $stmt = $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, payment_date, backdate_reason, payment_method, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, manual_receipt_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, payment_date, backdate_reason, payment_method, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $invoiceId,
-                $invoiceNumber, $invoiceDate,
+                $invoiceNumber, $manualReceiptNumber, $invoiceDate,
                 $customer['id'], $customer['customer_code'], $customer['name'],
                 $d['vehicleInfo'] ?? '', $d['description'] ?? '',
                 $invoiceTotal, $initialPayment, $paymentDate, $backdateReason ?: null, $paymentMethod,
@@ -318,6 +341,8 @@ switch ($method) {
             $invoiceDate = (string)($d['date'] ?? date('Y-m-d'));
             $paymentDate = (float)($d['payment'] ?? 0) > 0 ? ($d['paymentDate'] ?? $invoiceDate) : null;
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
+            $manualReceiptNumber = $normalizeManualReceiptNumber($d['manualReceiptNumber'] ?? null);
+            $assertManualReceiptNumberUnique($pdo, $manualReceiptNumber, (string)$id);
             if ($invoiceDate > date('Y-m-d') || ($paymentDate && $paymentDate > date('Y-m-d'))) throw new Exception('Tanggal transaksi tidak boleh melewati hari ini');
             if ($paymentDate && $paymentDate < $invoiceDate) throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
             if (isBackdateReasonRequired($pdo) && ($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') throw new Exception('Alasan tanggal mundur wajib diisi');
@@ -375,9 +400,9 @@ switch ($method) {
                     ->execute([$actor['id']??null,$id]);
             }
 
-            $stmt = $pdo->prepare("UPDATE sales_invoices SET invoice_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_info=?, description=?, total=?, payment=?, payment_date=?, backdate_reason=?, payment_method=?, status=?, age=?, branch_id=? WHERE id=?");
+            $stmt = $pdo->prepare("UPDATE sales_invoices SET invoice_number=?, manual_receipt_number=?, date=?, customer_ref_id=?, customer_id=?, customer_name=?, vehicle_info=?, description=?, total=?, payment=?, payment_date=?, backdate_reason=?, payment_method=?, status=?, age=?, branch_id=? WHERE id=?");
             $stmt->execute([
-                $current['invoice_number'], $invoiceDate, $customerRefId, $customerId, $customerName, $vehicleInfo,
+                $current['invoice_number'], $manualReceiptNumber, $invoiceDate, $customerRefId, $customerId, $customerName, $vehicleInfo,
                 $d['description'] ?? '', $total, $payment, $paymentDate, $backdateReason ?: null, $paymentMethod,
                 $status, $d['age'] ?? 0, $branchId, $id
             ]);

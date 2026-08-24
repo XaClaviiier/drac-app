@@ -136,6 +136,7 @@ export default function WorkOrders() {
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
   const [invoicePaymentDateUnlocked, setInvoicePaymentDateUnlocked] = useState(false);
   const [invoiceBackdateReason, setInvoiceBackdateReason] = useState('');
+  const [invoiceManualReceiptNumber, setInvoiceManualReceiptNumber] = useState('');
   const [woDateUnlocked, setWoDateUnlocked] = useState(false);
   const [woBackdateReason, setWoBackdateReason] = useState('');
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
@@ -1610,6 +1611,7 @@ export default function WorkOrders() {
     setInvoiceDateUnlocked(false);
     setInvoicePaymentDateUnlocked(false);
     setInvoiceBackdateReason('');
+    setInvoiceManualReceiptNumber('');
   };
 
   const openActiveWorkOrder = async (wo: WorkOrder) => {
@@ -1664,6 +1666,12 @@ export default function WorkOrders() {
   const handleCreateInvoice = async () => {
     if (invoiceWO && !isCreatingInvoice) {
       setInvoiceStockError('');
+      const normalizedManualReceiptNumber = invoiceManualReceiptNumber.trim().toUpperCase();
+      const duplicateManualReceipt = normalizedManualReceiptNumber && data.invoices.find(invoice => invoice.manualReceiptNumber?.trim().toUpperCase() === normalizedManualReceiptNumber);
+      if (duplicateManualReceipt) {
+        setInvoiceStockError(`No. Nota Fisik ${normalizedManualReceiptNumber} sudah dipakai pada Faktur ${duplicateManualReceipt.invoiceNumber}.`);
+        return;
+      }
       const today = localDateKey();
       if (invoiceDate > today || (invoicePayment > 0 && invoicePaymentDate > today)) {
         window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
@@ -1689,7 +1697,7 @@ export default function WorkOrders() {
       setIsCreatingInvoice(true);
       try {
         const invoiceItems=invoiceWO.services.map(service=>{const item=data.items.find(candidate=>candidate.id===service.itemId);return item?.type==='Persediaan'?{...service,warehouseId:invoiceItemWarehouses[service.id]}:service});
-        const invoice = await createInvoiceFromWO(invoiceWO.id, invoiceCashPayment, invoiceTransferPayment, invoiceDate, invoicePayment > 0 ? invoicePaymentDate : undefined, invoiceBackdateReason, invoiceItems);
+        const invoice = await createInvoiceFromWO(invoiceWO.id, invoiceCashPayment, invoiceTransferPayment, invoiceDate, invoicePayment > 0 ? invoicePaymentDate : undefined, invoiceBackdateReason, invoiceItems, normalizedManualReceiptNumber);
       if (invoice) {
         setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${invoiceWO.woNumber}!`);
         setTimeout(() => setSuccessMsg(''), 4000);
@@ -4377,6 +4385,10 @@ export default function WorkOrders() {
 
               <div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">No. Nota Fisik <span className="text-xs font-normal text-gray-400">(opsional, unik)</span></label>
+                    <input value={invoiceManualReceiptNumber} onChange={(event) => setInvoiceManualReceiptNumber(event.target.value.toUpperCase())} maxLength={50} placeholder="Sesuai nota asli" className="app-field h-10 w-full px-3 text-sm font-semibold uppercase" />
+                  </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Tanggal Faktur</label>
                     <IndonesianDateInput max={localDateKey()} disabled={!invoiceDateUnlocked} value={invoiceDate} onChange={setInvoiceDate} className="h-10 w-full" />

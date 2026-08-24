@@ -66,6 +66,8 @@ export interface CustomerPerson {
 export interface SalesInvoice {
   id: string;
   invoiceNumber: string;
+  /** Nomor pada nota fisik asli. Opsional, tetapi unik jika diisi. */
+  manualReceiptNumber?: string;
   date: string;
   customerRefId?: string;
   customerId: string;

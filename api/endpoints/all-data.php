@@ -131,6 +131,10 @@ try {
     }
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_date DATE NULL AFTER payment");
     $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER payment_date");
+    $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS manual_receipt_number VARCHAR(50) NULL AFTER invoice_number");
+    $pdo->exec("UPDATE sales_invoices SET manual_receipt_number=NULL WHERE manual_receipt_number IS NOT NULL AND TRIM(manual_receipt_number)=''");
+    $manualReceiptIndex = $pdo->query("SHOW INDEX FROM sales_invoices WHERE Key_name='uniq_sales_manual_receipt_number'")->fetch();
+    if (!$manualReceiptIndex) $pdo->exec("CREATE UNIQUE INDEX uniq_sales_manual_receipt_number ON sales_invoices(manual_receipt_number)");
 
     // Branches
     $rows = $pdo->query("SELECT * FROM branches ORDER BY code")->fetchAll();
@@ -351,6 +355,7 @@ try {
         $r['backdateReason'] = $r['backdate_reason'] ?? null;
         $r['invoiceId'] = $r['invoice_id'];
         $r['invoiceNumber'] = $r['invoice_number'];
+        $r['manualReceiptNumber'] = $r['manual_receipt_number'] ?? null;
         $r['total'] = (float)$r['total'];
         $r['findings']                = $r['findings'] ?? null;
         $r['diagnosisTemperature']    = isset($r['diagnosis_temperature']) ? (float)$r['diagnosis_temperature'] : null;

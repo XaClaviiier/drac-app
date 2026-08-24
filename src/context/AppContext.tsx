@@ -44,7 +44,7 @@ interface AppContextType {
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
-  createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services']) => Promise<SalesInvoice | null>;
+  createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string) => Promise<SalesInvoice | null>;
   addItem: (item: Item & { autoCode?: boolean; provisional?: boolean }) => Promise<Item>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -740,7 +740,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     invoiceDate?: string,
     paymentDate?: string,
     backdateReason?: string,
-    invoiceItems?: WorkOrder['services']
+    invoiceItems?: WorkOrder['services'],
+    manualReceiptNumber?: string
   ): Promise<SalesInvoice | null> => {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
@@ -761,7 +762,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let invoiceId = Date.now().toString();
 
     if (!isDemoMode) {
-      const result = await api.createInvoiceFromWorkOrder(woId, cashPayment, transferPayment, today, paymentDate, backdateReason, finalItems);
+      const result = await api.createInvoiceFromWorkOrder(woId, cashPayment, transferPayment, today, paymentDate, backdateReason, finalItems, manualReceiptNumber);
       if (!result.success || !result.data) {
         throw new Error(result.message || 'Gagal membuat faktur dari WO');
       }
@@ -772,6 +773,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newInvoice: SalesInvoice = {
       id: invoiceId,
       invoiceNumber, date: today,
+      manualReceiptNumber: manualReceiptNumber?.trim().toUpperCase() || undefined,
       customerRefId: customer?.id || wo.customerRefId,
       customerId: wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
       customerName: wo.customerName,

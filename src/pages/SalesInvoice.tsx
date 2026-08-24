@@ -63,6 +63,7 @@ export default function SalesInvoice() {
   const [woInvoiceDate, setWoInvoiceDate] = useState(localDateKey());
   const [woPaymentDate, setWoPaymentDate] = useState(localDateKey());
   const [woBackdateReason, setWoBackdateReason] = useState('');
+  const [woManualReceiptNumber, setWoManualReceiptNumber] = useState('');
   const [isCreatingFromWO, setIsCreatingFromWO] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [formItems, setFormItems] = useState<NonNullable<SalesInvoice['items']>>([]);
@@ -143,6 +144,7 @@ export default function SalesInvoice() {
 
   const [formData, setFormData] = useState({
     date: localDateKey(),
+    manualReceiptNumber: '',
     customerRefId: '',
     customerId: '',
     customerName: '',
@@ -296,6 +298,7 @@ export default function SalesInvoice() {
 
         const matchesSearch =
           inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (inv.manualReceiptNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.vehicleInfo.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = !filterStatus || inv.status === filterStatus;
@@ -339,7 +342,7 @@ export default function SalesInvoice() {
     const itemLines = items.length
       ? compactLines.join('\n')
       : `1. ${invoice.description || 'Faktur penjualan'} — Rp ${invoice.total.toLocaleString('id-ID')}`;
-    return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoice.status}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
+    return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )${invoice.manualReceiptNumber ? `\nNO. NOTA FISIK: ${invoice.manualReceiptNumber}` : ''}\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoice.status}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
   };
 
   const copyInvoice = async (invoice: SalesInvoice) => {
@@ -363,6 +366,7 @@ export default function SalesInvoice() {
   const resetForm = () => {
     setFormData({
       date: localDateKey(),
+      manualReceiptNumber: '',
       customerRefId: '',
       customerId: '',
       customerName: '',
@@ -398,6 +402,7 @@ export default function SalesInvoice() {
       );
       setFormData({
         date: invoice.date,
+        manualReceiptNumber: invoice.manualReceiptNumber || '',
         customerRefId: invoice.customerRefId || '',
         customerId: invoice.customerId,
         customerName: invoice.customerName,
@@ -426,6 +431,14 @@ export default function SalesInvoice() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedManualReceiptNumber = formData.manualReceiptNumber.trim().toUpperCase();
+    const duplicateManualReceipt = normalizedManualReceiptNumber && data.invoices.find(invoice =>
+      invoice.id !== editingInvoice?.id && invoice.manualReceiptNumber?.trim().toUpperCase() === normalizedManualReceiptNumber
+    );
+    if (duplicateManualReceipt) {
+      window.alert(`No. Nota Fisik ${normalizedManualReceiptNumber} sudah dipakai pada Faktur ${duplicateManualReceipt.invoiceNumber}.`);
+      return;
+    }
     const today = localDateKey();
     if (formData.date > today || (formData.payment > 0 && formData.paymentDate > today)) {
       window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
@@ -461,6 +474,7 @@ export default function SalesInvoice() {
     )) return;
     const finalForm = {
       ...formData,
+      manualReceiptNumber: normalizedManualReceiptNumber || undefined,
       total: updatedInvoiceTotal,
       payment: existingPayment,
       status: computedStatus,
@@ -554,6 +568,7 @@ export default function SalesInvoice() {
     setWoInvoiceDate(today);
     setWoPaymentDate(today);
     setWoBackdateReason('');
+    setWoManualReceiptNumber('');
   };
 
   const handleSelectWO = (woId: string) => {
@@ -704,6 +719,12 @@ export default function SalesInvoice() {
 
   const handleCreateFromWO = async () => {
     if (selectedWO && !isCreatingFromWO) {
+      const normalizedManualReceiptNumber = woManualReceiptNumber.trim().toUpperCase();
+      const duplicateManualReceipt = normalizedManualReceiptNumber && data.invoices.find(invoice => invoice.manualReceiptNumber?.trim().toUpperCase() === normalizedManualReceiptNumber);
+      if (duplicateManualReceipt) {
+        window.alert(`No. Nota Fisik ${normalizedManualReceiptNumber} sudah dipakai pada Faktur ${duplicateManualReceipt.invoiceNumber}.`);
+        return;
+      }
       const today = localDateKey();
       if (woInvoiceDate > today || (woPayment > 0 && woPaymentDate > today)) {
         window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
@@ -730,7 +751,8 @@ export default function SalesInvoice() {
           woInvoiceDate,
           woPayment > 0 ? woPaymentDate : undefined,
           woBackdateReason,
-          woDraftItems
+          woDraftItems,
+          normalizedManualReceiptNumber
         );
         if (invoice) {
           setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
@@ -831,7 +853,7 @@ export default function SalesInvoice() {
           <div className="flex min-w-0 flex-wrap items-center gap-2 lg:flex-nowrap">
             <div className="relative w-full min-w-[240px] sm:w-[360px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input type="text" placeholder="Cari nomor faktur, pelanggan, kendaraan..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${ui.search} w-full pl-9 pr-3`} />
+              <input type="text" placeholder="Cari faktur, nota fisik, pelanggan, kendaraan..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${ui.search} w-full pl-9 pr-3`} />
             </div>
             <button className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download">
               <Download className="h-4 w-4" />
@@ -909,6 +931,9 @@ export default function SalesInvoice() {
                           </span>
                         )}
                       </div>
+                      {invoice.manualReceiptNumber && (
+                        <span className="mt-0.5 block text-[11px] font-medium text-gray-500">Nota fisik: {invoice.manualReceiptNumber}</span>
+                      )}
                       <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoice.status === 'Lunas' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                         {invoice.status === 'Lunas' ? 'Lunas' : `Belum Lunas (${invoice.age} hr)`}
                       </span>
@@ -1001,6 +1026,7 @@ export default function SalesInvoice() {
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
                   <div className="order-first mr-auto flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
                     <span>Nomor: <strong className="text-gray-800">{invoice.invoiceNumber}</strong></span>
+                    {invoice.manualReceiptNumber && <span>Nota fisik: <strong className="text-gray-800">{invoice.manualReceiptNumber}</strong></span>}
                     <span>Cabang: <strong className="text-gray-800">{branchName}</strong></span>
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${invoice.status === 'Lunas' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{invoice.status}</span>
                   </div>
@@ -1017,7 +1043,7 @@ export default function SalesInvoice() {
                   {hasPermission('invoice:edit') ? <button type="button" onClick={() => { setViewingInvoice(null); handleOpenModal(invoice); }} className="inline-flex h-9 items-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800"><Edit className="h-4 w-4"/>Edit</button> : <button type="button" disabled className="inline-flex h-9 items-center gap-2 rounded bg-gray-300 px-4 text-sm font-semibold text-gray-500"><Save className="h-4 w-4"/>Terkunci</button>}
                 </div>
 
-                <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_220px]">
+                <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_190px_190px]">
                   <div>
                     <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><User className="h-4 w-4 text-blue-600"/>Data Pelanggan</label>
                     <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm text-gray-700"><span className="truncate font-semibold">{invoice.customerName}</span><span className="ml-2 truncate text-xs text-gray-500">{customer?.phone || invoice.customerId}</span></div>
@@ -1029,6 +1055,10 @@ export default function SalesInvoice() {
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal</label>
                     <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm text-gray-600">{invoice.date}</div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">No. Nota Fisik</label>
+                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm font-semibold text-gray-700">{invoice.manualReceiptNumber || '-'}</div>
                   </div>
                 </section>
 
@@ -1150,7 +1180,7 @@ export default function SalesInvoice() {
                 </div>
                 <button type="submit" disabled={!manualInvoiceReady} title="Simpan Faktur" className="inline-flex h-9 items-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4"/>Simpan</button>
               </div>
-              <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_220px]">
+              <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_190px_190px]">
               {/* Tanggal */}
               <div className="lg:order-3">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1167,6 +1197,16 @@ export default function SalesInvoice() {
                     <Edit className="h-4 w-4" />
                   </button>
                 </div>
+              </div>
+              <div className="lg:order-4">
+                <label className="mb-1 block text-sm font-medium text-gray-700">No. Nota Fisik <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                <input
+                  value={formData.manualReceiptNumber}
+                  onChange={(event) => setFormData({ ...formData, manualReceiptNumber: event.target.value.toUpperCase() })}
+                  maxLength={50}
+                  placeholder="Sesuai nota asli"
+                  className="app-field h-10 w-full px-3 text-sm font-semibold uppercase"
+                />
               </div>
               {/* Pelanggan & Kendaraan Picker */}
               <div className="contents">
@@ -1455,6 +1495,10 @@ export default function SalesInvoice() {
                         <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{selectedWO.plateNumber}</strong><span className="block text-xs text-gray-500">{selectedWO.vehicleInfo}</span></div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold mb-1">No. Nota Fisik <span className="font-normal text-gray-400">(opsional, unik)</span></label>
+                          <input value={woManualReceiptNumber} onChange={(event) => setWoManualReceiptNumber(event.target.value.toUpperCase())} maxLength={50} placeholder="Sesuai nota asli" className="app-field h-10 w-full px-3 text-sm font-semibold uppercase" />
+                        </div>
                         <div>
                           <label className="block text-xs font-semibold mb-1">Tanggal Faktur</label>
                           <IndonesianDateInput max={localDateKey()} value={woInvoiceDate} onChange={setWoInvoiceDate} disabled={!hasPermission('invoice:backdate')} className="h-10 w-full" />
