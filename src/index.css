@@ -248,6 +248,18 @@ body { margin: 0; background: #f3f4f6; }
   background: #58c915;
   color: #fff;
 }
+
+/* Accurate mempertahankan kemampuan scroll halaman tanpa menampilkan rel
+   scrollbar browser yang mengurangi lebar kanvas dan menggeser posisi tab. */
+.app-page-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.app-page-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 .app-data-toolbar {
   border-color: var(--app-border);
   background: var(--app-canvas);
