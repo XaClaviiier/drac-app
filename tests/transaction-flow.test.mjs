@@ -606,3 +606,13 @@ test('Daftar Laporan memakai katalog kategori Accurate yang padat dan responsif'
   assert.match(page, /MEMORIZED_REPORTS_KEY = 'drac\.reports\.memorized\.v1'/);
   assert.match(page, /placeholder="Cari laporan\.\.\."/);
 });
+
+test('faktur baru dari WO dibuka sebagai subtab Data Baru tanpa modal melayang', () => {
+  const page = source('src/pages/SalesInvoice.tsx');
+
+  assert.match(page, /showWOPicker\s*&&\s*\([\s\S]*?ui\.childTabActive[\s\S]*?'Data Baru'/);
+  assert.match(page, /aria-label="Data Baru Faktur dari Order Kerja"/);
+  assert.match(page, /showWOPicker \? 'hidden' : showModal \|\| viewingInvoice \? 'lg:hidden'/);
+  assert.doesNotMatch(page, /showWOPicker\s*&&\s*\(\s*<div className="fixed inset-0 bg-black\/50/);
+  assert.match(page, /createInvoiceFromWO\([\s\S]*?woDraftItems[\s\S]*?normalizedManualReceiptNumber/);
+});

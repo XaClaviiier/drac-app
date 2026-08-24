@@ -558,6 +558,9 @@ export default function SalesInvoice() {
   const woDraftTotal = woDraftItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const handleOpenWOPicker = () => {
+    setShowModal(false);
+    setEditingInvoice(null);
+    setViewingInvoice(null);
     setShowWOPicker(true);
     setWoSearchTerm('');
     setSelectedWOId('');
@@ -777,7 +780,7 @@ export default function SalesInvoice() {
       <div className={`${ui.childBar} hidden lg:flex`}>
         <button
           type="button"
-          onClick={() => { if (showModal) handleCloseModal(); setViewingInvoice(null); }}
+          onClick={() => { if (showModal) handleCloseModal(); setViewingInvoice(null); setShowWOPicker(false); }}
           title="Daftar Faktur Penjualan"
           className={ui.childListTab}
         >
@@ -787,6 +790,14 @@ export default function SalesInvoice() {
           <div className={`${ui.childTabActive} min-w-48 max-w-80`}>
             <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">{editingInvoice ? editingInvoice.invoiceNumber : 'Data Baru'}</button>
             <button type="button" onClick={handleCloseModal} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+        {showWOPicker && (
+          <div className={`${ui.childTabActive} min-w-48 max-w-80`}>
+            <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">
+              {selectedWO ? `Data Baru · ${selectedWO.woNumber}` : 'Data Baru'}
+            </button>
+            <button type="button" onClick={() => setShowWOPicker(false)} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
         )}
         {viewingInvoice && (
@@ -805,7 +816,7 @@ export default function SalesInvoice() {
       )}
 
       {/* Filters */}
-      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
+      <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <div className="order-1 flex flex-shrink-0 items-center gap-1">
               <IndonesianDateInput value={filterDate} onChange={setFilterDate} ariaLabel="Filter satu tanggal faktur" title="Pilih satu tanggal faktur" className="h-9 w-40 text-sm" />
@@ -895,7 +906,7 @@ export default function SalesInvoice() {
       </div>
 
       {/* Table */}
-      <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
+      <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
         <div className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
           <table className="w-full min-w-[1160px] border-collapse">
             <thead className="sticky top-0 z-20 bg-blue-800 text-white">
@@ -1415,15 +1426,15 @@ export default function SalesInvoice() {
         </div>
       )}
 
-      {/* WO Picker Modal */}
+      {/* Faktur dari WO: layar penuh di HP dan subtab dokumen di desktop. */}
       {showWOPicker && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div ref={woPickerPanelRef} className={`bg-white rounded-xl shadow-2xl w-full max-h-[90vh] overflow-y-auto ${selectedWO ? 'max-w-4xl' : 'max-w-2xl'}`}>
-            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex items-center justify-between rounded-t-xl z-10">
+        <section className="mx-1 border border-gray-300 bg-white shadow-sm lg:mx-3 lg:mt-0.5" aria-label="Data Baru Faktur dari Order Kerja">
+          <div ref={woPickerPanelRef} className="w-full overflow-y-auto">
+            <div className="flex items-center justify-between bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-3 lg:hidden">
               <div className="flex items-center gap-3 text-white">
                 <Wrench className="w-6 h-6" />
                 <div>
-                  <h3 className="text-lg font-semibold">{selectedWO ? 'Faktur Baru dari Order Kerja' : 'Pilih Order Kerja untuk Difakturkan'}</h3>
+                  <h3 className="text-base font-semibold">{selectedWO ? 'Faktur Baru dari Order Kerja' : 'Pilih Order Kerja untuk Difakturkan'}</h3>
                   <p className="text-sm text-green-100">{selectedWO ? `${selectedWO.woNumber} · ${selectedWO.customerName}` : `${unbilledWOs.length} order kerja belum difakturkan`}</p>
                 </div>
               </div>
@@ -1435,7 +1446,7 @@ export default function SalesInvoice() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="space-y-4 p-3 lg:p-4">
               <div className={`relative ${selectedWO ? 'hidden' : ''}`}>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
@@ -1584,7 +1595,7 @@ export default function SalesInvoice() {
               )}
             </div>
 
-            <div className="px-6 pb-6 flex items-center justify-end gap-3">
+            <div className="flex items-center justify-end gap-3 border-t border-gray-300 bg-gray-50 px-4 py-3">
               <button
                 type="button"
                 onClick={() => selectedWO ? setSelectedWOId('') : setShowWOPicker(false)}
@@ -1603,7 +1614,7 @@ export default function SalesInvoice() {
               </button>
             </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
