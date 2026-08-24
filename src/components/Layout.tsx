@@ -220,6 +220,7 @@ const pageTitles: Record<string, string> = {
   "/reports/purchases": "Laporan Pembelian",
   "/reports/inventory": "Laporan Persediaan",
   "/reports/stock-count-sheet": "Stok Opname",
+  "/reports/stock-count-sheet-print": "Lembar Penghitungan Stok",
   "/opening-stock": "Penyesuaian Stok",
   "/help": "Dokumentasi Online",
   "/reports/cash-bank": "Laporan Kas & Bank",

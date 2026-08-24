@@ -20,7 +20,7 @@ const reports: ReportDefinition[] = [
   { id: 'sales', label: 'Laporan Penjualan', description: 'Faktur, pembayaran, pendapatan, dan piutang pelanggan.', category: 'penjualan', icon: BarChart3, path: '/reports/sales' },
   { id: 'purchases', label: 'Laporan Pembelian', description: 'Pembelian, pembayaran pemasok, dan utang usaha.', category: 'pembelian', icon: ShoppingCart, path: '/reports/purchases' },
   { id: 'inventory', label: 'Stok per Gudang', description: 'Posisi dan nilai persediaan untuk setiap gudang aktif.', category: 'gudang', icon: Boxes, path: '/reports/inventory' },
-  { id: 'stock-count-sheet', label: 'Lembar Penghitungan Stok', description: 'Lembar stok opname fisik yang dapat difilter dan dicetak.', category: 'gudang', icon: ClipboardList, path: '/reports/stock-count-sheet' },
+  { id: 'stock-count-sheet', label: 'Lembar Penghitungan Stok', description: 'Lembar stok opname fisik yang dapat difilter dan dicetak.', category: 'gudang', icon: ClipboardList, path: '/reports/stock-count-sheet-print' },
   { id: 'cash-bank', label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, transfer, serta saldo setiap akun.', category: 'keuangan', icon: Landmark, path: '/reports/cash-bank' },
   { id: 'performance-bonus', label: 'Kinerja & Bonus', description: 'Kehadiran, produktivitas teknisi, aturan, dan pembayaran bonus.', category: 'operasional', icon: Coins, path: '/performance-bonus' },
   { id: 'audit-log', label: 'Audit Log', description: 'Riwayat aktivitas dan perubahan data oleh pengguna.', category: 'audit', icon: History },

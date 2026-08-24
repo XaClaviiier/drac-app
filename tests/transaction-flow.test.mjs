@@ -135,6 +135,27 @@ test('stok opname mengikuti Perintah, Hasil, lalu Penyesuaian otomatis', () => {
   assert.match(page, /Setujui & Posting/);
 });
 
+test('lembar penghitungan stok terpisah dari transaksi opname dan memakai saldo per tanggal', () => {
+  const app = source('src/App.tsx');
+  const catalog = source('src/pages/ReportsIndex.tsx');
+  const page = source('src/pages/StockCountSheetPrintReport.tsx');
+  const endpoint = source('api/endpoints/stock-count-report.php');
+  assert.match(app, /reports\/stock-count-sheet-print/);
+  assert.match(catalog, /path: '\/reports\/stock-count-sheet-print'/);
+  assert.match(page, /Parameter Laporan/);
+  assert.match(page, />Umum<\/button>/);
+  assert.match(page, />Kolom<\/button>/);
+  assert.match(page, /Penyaringan Data/);
+  assert.match(page, /stock-count-report\?date=/);
+  assert.match(page, /Lembar Penghitungan Stok/);
+  assert.match(page, /Hitung #1/);
+  assert.match(page, /Hitung #2/);
+  assert.match(endpoint, /Tanggal laporan tidak boleh melewati hari ini/);
+  assert.match(endpoint, /warehouse_stocks/);
+  assert.match(endpoint, /COALESCE\(occurred_at,created_at\)>CONCAT/);
+  assert.doesNotMatch(page, /api\.create\(|api\.update\(|api\.remove/);
+});
+
 test('refresh mutasi barang meminta histori per item dan menerima penyesuaian satu sisi', () => {
   const endpoint = source('api/endpoints/stock-movements.php');
   const page = source('src/pages/ItemsAndServices.tsx');
