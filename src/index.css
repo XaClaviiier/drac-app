@@ -204,6 +204,9 @@ body { margin: 0; background: #f3f4f6; }
 }
 
 .app-child-bar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
   display: flex;
   min-height: 42px;
   flex-shrink: 0;
@@ -212,6 +215,7 @@ body { margin: 0; background: #f3f4f6; }
   overflow-anchor: none;
   border-bottom: 1px solid var(--app-border);
   background: var(--app-canvas);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, .08);
 }
 .app-child-tab {
   display: flex;
