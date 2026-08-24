@@ -580,10 +580,12 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(styles, /\.app-combobox-field:focus-within/);
   assert.match(styles, /\.app-workspace-tab[\s\S]*?flex: 0 0 auto;/);
   assert.match(styles, /\.app-workspace-bar[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
-  assert.match(styles, /\.app-child-bar[\s\S]*?position: sticky;[\s\S]*?top: 0;[\s\S]*?z-index: 60;[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
+  assert.match(styles, /\.app-child-bar[\s\S]*?position: sticky;[\s\S]*?top: var\(--app-child-sticky-top, 0px\);[\s\S]*?z-index: 60;[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
+  assert.match(styles, /\.app-page-scroll--padded[\s\S]*?--app-child-sticky-top: -0\.75rem;[\s\S]*?@media \(min-width: 640px\)[\s\S]*?--app-child-sticky-top: -1\.5rem;/);
   assert.match(styles, /\.app-child-tab[\s\S]*?flex: 0 0 auto;/);
   assert.match(styles, /\.app-child-list-tab[\s\S]*?flex: 0 0 60px;/);
   assert.match(source('src/components/Layout.tsx'), /app-page-scroll min-h-0 flex-1/);
+  assert.match(source('src/components/Layout.tsx'), /app-page-scroll--padded overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6/);
   assert.match(styles, /\.app-page-scroll[\s\S]*?scrollbar-width: none;/);
   assert.match(styles, /\.app-page-scroll::\-webkit-scrollbar[\s\S]*?display: none;/);
   assert.match(complaints, /app-combobox-field/);

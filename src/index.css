@@ -205,7 +205,7 @@ body { margin: 0; background: #f3f4f6; }
 
 .app-child-bar {
   position: sticky;
-  top: 0;
+  top: var(--app-child-sticky-top, 0px);
   z-index: 60;
   display: flex;
   min-height: 42px;
@@ -216,6 +216,17 @@ body { margin: 0; background: #f3f4f6; }
   border-bottom: 1px solid var(--app-border);
   background: var(--app-canvas);
   box-shadow: 0 1px 0 rgba(15, 23, 42, .08);
+}
+
+/* Halaman administrasi biasa memiliki padding kanvas. Offset sticky harus
+   mengimbangi padding tersebut agar subtab tetap rapat di bawah tab modul. */
+.app-page-scroll--padded {
+  --app-child-sticky-top: -0.75rem;
+}
+@media (min-width: 640px) {
+  .app-page-scroll--padded {
+    --app-child-sticky-top: -1.5rem;
+  }
 }
 .app-child-tab {
   display: flex;
