@@ -675,7 +675,7 @@ test('form Faktur Penjualan mengikuti kerangka padat Data Baru Order Kerja', () 
   assert.doesNotMatch(page, /order-first mr-auto flex flex-wrap gap-x-5/);
 });
 
-test('lonceng dan tab Perlu Tindakan memakai aturan tindak lanjut WO yang sama', () => {
+test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang sama', () => {
   const rules = source('src/lib/workOrderAttention.ts');
   const layout = source('src/components/Layout.tsx');
   const workOrders = source('src/pages/WorkOrders.tsx');
@@ -690,8 +690,17 @@ test('lonceng dan tab Perlu Tindakan memakai aturan tindak lanjut WO yang sama',
   assert.match(layout, /buildWorkOrderAttentionItems/);
   assert.match(layout, /aria-label=\{`Notifikasi, \$\{workOrderAttentionItems\.length\} perlu tindakan`\}/);
   assert.match(layout, /navigate\('\/workorders\?attention=1'\)/);
-  assert.match(workOrders, />Perlu Tindakan</);
-  assert.match(workOrders, /attentionFilter === 'all'/);
-  assert.match(workOrders, /Proses Bayar/);
+  assert.match(workOrders, /Aktif — Register &amp; Dikerjakan/);
+  assert.match(workOrders, /Nonaktif — Selesai &amp; Lost Sales/);
+  assert.match(workOrders, /<option value="attention">Butuh Tindakan<\/option>/);
+  assert.match(workOrders, /<option value="overdue">Terlambat \/ Kritis<\/option>/);
+  assert.match(workOrders, /key: 'attention', label: 'Perhatian', locked: true/);
+  assert.doesNotMatch(workOrders, /key: 'status', label: 'Status'/);
+  assert.match(workOrders, />No\. WO \/ Status \/ Tanggal</);
+  assert.match(workOrders, /CircleAlert className="h-5 w-5"/);
+  assert.match(workOrders, /AlertTriangle className="h-5 w-5"/);
+  assert.match(workOrders, />Pelanggan \/ Kendaraan</);
+  assert.match(workOrders, /customerIdentityForWO\(wo\)\.title[\s\S]*?formatPlateNumber\(wo\.plateNumber\)/);
+  assert.doesNotMatch(workOrders, /listMode === 'attention'/);
   assert.match(help, /Register hanya antrean sementara pada hari transaksi/);
 });

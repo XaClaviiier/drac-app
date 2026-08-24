@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, Undo2, LockKeyhole, Download, Printer, Filter } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, CircleAlert, Undo2, LockKeyhole, Download, Printer, Filter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, LegacyWOStatus, Vehicle, WorkOrder, WorkOrderService, WOStatus } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -15,7 +15,7 @@ import ComplaintMultiSelect from '../components/ComplaintMultiSelect';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
-import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind, type WorkOrderAttentionKind } from '../lib/workOrderAttention';
+import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -56,14 +56,13 @@ const formatPlateNumber = (value?: string) => {
   return [match[1], match[2], match[3]].filter(Boolean).join(' ');
 };
 
-type WorkOrderColumnKey = 'number' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'createdBy' | 'actions';
+type WorkOrderColumnKey = 'number' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'attention' | 'createdBy' | 'actions';
 const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
   { key: 'number', label: 'No. WO / Tanggal', locked: true },
-  { key: 'customer', label: 'Pelanggan' },
-  { key: 'vehicle', label: 'Kendaraan' },
+  { key: 'customer', label: 'Pelanggan / Kendaraan' },
   { key: 'services', label: 'Layanan' },
   { key: 'total', label: 'Total' },
-  { key: 'status', label: 'Status' },
+  { key: 'attention', label: 'Perhatian', locked: true },
   { key: 'createdBy', label: 'Dibuat Oleh' },
   { key: 'actions', label: 'Aksi', locked: true },
 ];
@@ -88,8 +87,6 @@ export default function WorkOrders() {
     currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings, refreshData, isLoading,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
-  const [listMode, setListMode] = useState<'list' | 'attention'>(() => searchParams.get('attention') === '1' ? 'attention' : 'list');
-  const [attentionFilter, setAttentionFilter] = useState<'all' | WorkOrderAttentionKind>('all');
   useAccurateDocumentCanvas(showModal);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [serviceEditMode, setServiceEditMode] = useState(false);
@@ -122,6 +119,7 @@ export default function WorkOrders() {
   const [savingPendingTemplates, setSavingPendingTemplates] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterAttention, setFilterAttention] = useState<'all' | 'attention' | 'overdue'>('all');
   const [periodFilter, setPeriodFilter] = useState<WorkOrderPeriod>('all');
   // State lama dipertahankan sementara agar tampilan mobile lama tetap kompatibel.
   const [todayOnly, setTodayOnly] = useState(false);
@@ -324,7 +322,7 @@ export default function WorkOrders() {
       }
       const parsed = JSON.parse(saved) as WorkOrderColumnKey[];
       const valid = parsed.filter(key => WORK_ORDER_COLUMNS.some(column => column.key === key));
-      setVisibleColumns(Array.from(new Set<WorkOrderColumnKey>(['number', ...valid, 'actions'])));
+      setVisibleColumns(Array.from(new Set<WorkOrderColumnKey>(['number', ...valid, 'attention', 'actions'])));
     } catch {
       setVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS);
     }
@@ -332,7 +330,7 @@ export default function WorkOrders() {
 
   const isColumnVisible = (key: WorkOrderColumnKey) => visibleColumns.includes(key);
   const updateVisibleColumns = (columns: WorkOrderColumnKey[]) => {
-    const next = Array.from(new Set<WorkOrderColumnKey>(['number', ...columns, 'actions']));
+    const next = Array.from(new Set<WorkOrderColumnKey>(['number', ...columns, 'attention', 'actions']));
     setVisibleColumns(next);
     localStorage.setItem(workOrderColumnStorageKey, JSON.stringify(next));
   };
@@ -782,6 +780,18 @@ export default function WorkOrders() {
     return { from: '', to: '' };
   }, [periodFilter, todayDate, dateFrom, dateTo]);
 
+  const attentionItems = useMemo(() => buildWorkOrderAttentionItems(
+    data.workOrders.filter(workOrder => isAllBranchDropdown
+      ? activeBranchIds.includes(workOrder.branchId)
+      : workOrder.branchId === selectedBranchId),
+    data.invoices,
+    todayDate,
+  ), [data.workOrders, data.invoices, isAllBranchDropdown, activeBranchIds, selectedBranchId, todayDate]);
+  const attentionByWorkOrderId = useMemo(
+    () => new Map(attentionItems.map(item => [item.workOrder.id, item])),
+    [attentionItems],
+  );
+
   const filteredWOs = useMemo(() => {
     return data.workOrders
       .filter((wo) => {
@@ -816,8 +826,15 @@ export default function WorkOrders() {
           wo.vehicleInfo,
         ];
         const matchesSearch = !query || searchValues.some(value => normalizeSearch(String(value || '')).includes(query));
-        const matchesStatus = !filterStatus || wo.status === filterStatus;
-        return matchesSearch && matchesStatus;
+        const matchesStatus = !filterStatus
+          || (filterStatus === 'active' && ['Register', 'Proses'].includes(wo.status))
+          || (filterStatus === 'inactive' && ['Selesai', 'Closed'].includes(wo.status))
+          || wo.status === filterStatus;
+        const attention = attentionByWorkOrderId.get(wo.id);
+        const matchesAttention = filterAttention === 'all'
+          || (filterAttention === 'attention' && Boolean(attention))
+          || (filterAttention === 'overdue' && (attention?.kind === 'register' || attention?.kind === 'process'));
+        return matchesSearch && matchesStatus && matchesAttention;
       })
       .sort((a, b) => {
         // Newest first: compare by date desc, then by WO number desc (for same-day records)
@@ -830,23 +847,13 @@ export default function WorkOrders() {
     data.customers,
     searchTerm,
     filterStatus,
+    filterAttention,
+    attentionByWorkOrderId,
     isAllBranchDropdown,
     activeBranchIds,
     selectedBranchId,
     periodRange,
   ]);
-
-  const attentionItems = useMemo(() => buildWorkOrderAttentionItems(
-    data.workOrders.filter(workOrder => isAllBranchDropdown
-      ? activeBranchIds.includes(workOrder.branchId)
-      : workOrder.branchId === selectedBranchId),
-    data.invoices,
-    todayDate,
-  ), [data.workOrders, data.invoices, isAllBranchDropdown, activeBranchIds, selectedBranchId, todayDate]);
-  const attentionCounts = useMemo(() => countWorkOrderAttentionByKind(attentionItems), [attentionItems]);
-  const visibleAttentionItems = attentionFilter === 'all'
-    ? attentionItems
-    : attentionItems.filter(item => item.kind === attentionFilter);
 
   const selectedWorkOrderDate = periodFilter === 'custom' && dateFrom === dateTo ? dateFrom : '';
   const setSelectedWorkOrderDate = (value: string) => {
@@ -860,9 +867,10 @@ export default function WorkOrders() {
     setDateFrom(value);
     setDateTo(value);
   };
-  const activeFilterCount = selectedWorkOrderDate ? 1 : 0;
+  const activeFilterCount = Number(Boolean(selectedWorkOrderDate)) + Number(Boolean(filterStatus)) + Number(filterAttention !== 'all');
   const resetWorkOrderFilters = () => {
     setFilterStatus('');
+    setFilterAttention('all');
     setPeriodFilter('all');
     setDateFrom('');
     setDateTo('');
@@ -965,7 +973,7 @@ export default function WorkOrders() {
 
   useEffect(() => {
     if (searchParams.get('attention') !== '1') return;
-    setListMode('attention');
+    setFilterAttention('attention');
     setDetailWO(null);
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -1959,21 +1967,9 @@ export default function WorkOrders() {
   return (
     <div className="space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0">
       <div className={ui.childBar}>
-        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); setListMode('list'); }} className={ui.childListTab} title="Daftar Order Kerja">
+        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
-        {!showModal && (
-          <button
-            type="button"
-            onClick={() => { setDetailWO(null); setListMode('attention'); }}
-            className={`${childTabClass(listMode === 'attention' && !detailWO)} gap-2 px-4 text-sm`}
-            title="WO dan tagihan yang perlu ditindaklanjuti"
-          >
-            <AlertTriangle className="h-4 w-4" />
-            <span>Perlu Tindakan</span>
-            {attentionItems.length > 0 && <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{attentionItems.length}</span>}
-          </button>
-        )}
         {showModal && diagnosisMode && editingWO ? (
           <button
             type="button"
@@ -2025,7 +2021,7 @@ export default function WorkOrders() {
         </div>
       </div>
 
-      {!showModal && !detailWO && listMode === 'list' && <>
+      {!showModal && !detailWO && <>
       {/* Success Message */}
       {successMsg && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 animate-pulse">
@@ -2061,6 +2057,20 @@ export default function WorkOrders() {
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Order Kerja</strong><button type="button" onClick={resetWorkOrderFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button></div>
               <label className="block text-xs font-semibold text-gray-600">Tanggal<IndonesianDateInput value={selectedWorkOrderDate} onChange={setSelectedWorkOrderDate} ariaLabel="Filter satu tanggal WO" className="mt-1 h-10 w-full text-sm font-normal" /></label>
               <p className="mt-2 text-xs text-gray-500">Kosongkan tanggal untuk menampilkan semua tanggal.</p>
+              <label className="mt-3 block text-xs font-semibold text-gray-600">Status WO
+                <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-400 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
+                  <option value="">Semua</option>
+                  <option value="active">Aktif — Register &amp; Dikerjakan</option>
+                  <option value="inactive">Nonaktif — Selesai &amp; Lost Sales</option>
+                </select>
+              </label>
+              <label className="mt-3 block text-xs font-semibold text-gray-600">Perhatian
+                <select value={filterAttention} onChange={(event) => setFilterAttention(event.target.value as 'all' | 'attention' | 'overdue')} className="mt-1 h-10 w-full rounded border border-gray-400 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
+                  <option value="all">Semua</option>
+                  <option value="attention">Butuh Tindakan</option>
+                  <option value="overdue">Terlambat / Kritis</option>
+                </select>
+              </label>
               <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
             </div>}
           </div>
@@ -2082,7 +2092,7 @@ export default function WorkOrders() {
                     {column.locked && <span className="ml-auto text-[10px] font-semibold uppercase text-gray-400">Wajib</span>}
                   </label>
                 ))}
-                <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3"><button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button><button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'vehicle', 'status', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button></div>
+                <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3"><button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button><button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'attention', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button></div>
               </div>
             )}
           </div>
@@ -2204,7 +2214,7 @@ export default function WorkOrders() {
                   </div>
                   <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3">
                     <button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Tampilkan Semua</button>
-                    <button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'vehicle', 'createdBy', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
+                    <button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'attention', 'createdBy', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
                   </div>
                 </div>
               )}
@@ -2261,12 +2271,11 @@ export default function WorkOrders() {
             <table className="w-full min-w-[1100px] text-left">
               <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
-                  {isColumnVisible('number') && <th className="font-semibold">No. WO / Tanggal</th>}
-                  {isColumnVisible('customer') && <th className="font-semibold">Pelanggan</th>}
-                  {isColumnVisible('vehicle') && <th className="font-semibold">Kendaraan</th>}
+                  {isColumnVisible('number') && <th className="font-semibold">No. WO / Status / Tanggal</th>}
+                  {isColumnVisible('attention') && <th className="w-12 text-center font-semibold" title="Butuh tindakan">!</th>}
+                  {isColumnVisible('customer') && <th className="font-semibold">Pelanggan / Kendaraan</th>}
                   {isColumnVisible('services') && <th className="font-semibold">Layanan</th>}
                   {isColumnVisible('total') && <th className="text-right font-semibold">Total</th>}
-                  {isColumnVisible('status') && <th className="text-center font-semibold">Status</th>}
                   {isColumnVisible('createdBy') && <th className="font-semibold">Dibuat Oleh</th>}
                   {isColumnVisible('actions') && <th className="text-right font-semibold">Aksi</th>}
                 </tr>
@@ -2276,7 +2285,7 @@ export default function WorkOrders() {
                   <tr key={wo.id} className="transition-colors hover:bg-blue-50/50">
                     {isColumnVisible('number') && <td className="px-4 py-3">
                       <button type="button" onClick={() => openDetailTab(wo)} className="text-left">
-                        <span className="block font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span>
+                        <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
                         <span className="mt-0.5 block text-xs text-gray-500">
                           {wo.date}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
                           {canViewAllBranches && (isAllBranchDropdown || !activeBranchOnly) && (
@@ -2285,14 +2294,28 @@ export default function WorkOrders() {
                         </span>
                       </button>
                     </td>}
-                    {isColumnVisible('customer') && <td className="px-4 py-3">
-                      <span className="block max-w-[210px] truncate text-sm font-bold text-gray-900">{customerIdentityForWO(wo).title}</span>
-                      <span className="mt-0.5 block max-w-[210px] truncate text-xs text-gray-600">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone}</span>
-                      {customerIdentityForWO(wo).driverName && <span className="mt-0.5 block max-w-[210px] truncate text-xs font-medium text-amber-700">Dibawa oleh: {customerIdentityForWO(wo).driverName}{customerIdentityForWO(wo).driverPhone ? ` · ${customerIdentityForWO(wo).driverPhone}` : ''}</span>}
+                    {isColumnVisible('attention') && <td className="w-12 px-2 py-3 text-center">
+                      {attentionByWorkOrderId.has(wo.id) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const attention = attentionByWorkOrderId.get(wo.id);
+                            if (attention?.kind === 'payment' && attention.invoice) window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(attention.invoice.id)}`);
+                            else if (attention?.kind === 'invoice' && hasPermission('invoice:create')) handleOpenInvoiceModal(wo);
+                            else openDetailTab(wo);
+                          }}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded ${['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
+                          title={`${attentionByWorkOrderId.get(wo.id)?.label}: ${attentionByWorkOrderId.get(wo.id)?.description}`}
+                          aria-label={attentionByWorkOrderId.get(wo.id)?.label}
+                        >
+                          {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                        </button>
+                      )}
                     </td>}
-                    {isColumnVisible('vehicle') && <td className="px-4 py-3">
-                      <span className="block font-mono text-sm font-bold text-gray-900">{formatPlateNumber(wo.plateNumber)}</span>
-                      <span className="mt-0.5 block max-w-[210px] truncate text-xs text-gray-500">{wo.vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span>
+                    {isColumnVisible('customer') && <td className="px-4 py-3">
+                      <span className="flex max-w-[320px] items-center justify-between gap-4 text-sm font-bold text-gray-900"><span className="truncate">{customerIdentityForWO(wo).title}</span><span className="flex-shrink-0 font-mono">{formatPlateNumber(wo.plateNumber)}</span></span>
+                      <span className="mt-0.5 flex max-w-[320px] items-center justify-between gap-4 text-xs text-gray-600"><span className="truncate">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone}</span><span className="truncate text-right text-gray-500">{wo.vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span></span>
+                      {customerIdentityForWO(wo).driverName && <span className="mt-0.5 block max-w-[210px] truncate text-xs font-medium text-amber-700">Dibawa oleh: {customerIdentityForWO(wo).driverName}{customerIdentityForWO(wo).driverPhone ? ` · ${customerIdentityForWO(wo).driverPhone}` : ''}</span>}
                     </td>}
                     {isColumnVisible('services') && <td className="px-4 py-3">
                       <span className="block max-w-[230px] truncate text-sm text-gray-800">
@@ -2302,11 +2325,6 @@ export default function WorkOrders() {
                     </td>}
                     {isColumnVisible('total') && <td className={`whitespace-nowrap px-4 py-3 text-right text-sm font-bold ${statusLabel(wo.status) === 'Lost Sales' ? 'text-gray-400' : 'text-gray-900'}`}>
                       Rp {wo.total.toLocaleString('id-ID')}
-                    </td>}
-                    {isColumnVisible('status') && <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>
-                        {statusLabel(wo.status)}
-                      </span>
                     </td>}
                     {isColumnVisible('createdBy') && <td className="px-4 py-3">
                       <span className="block max-w-[170px] truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
@@ -2377,14 +2395,13 @@ export default function WorkOrders() {
             <article key={`compact-${wo.id}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
               <button type="button" onClick={() => openDetailTab(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span>
+                  <span className="flex min-w-0 items-center gap-2"><span className="truncate font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span><span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
                   <span className="whitespace-nowrap text-[11px] text-gray-500">
                     {formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
                   </span>
                 </div>
-                <p className="mt-1 truncate text-sm font-semibold text-gray-900">{formatPlateNumber(wo.plateNumber)} — {wo.vehicleInfo}</p>
-                <p className="mt-0.5 truncate text-xs font-semibold text-gray-700">{customerIdentityForWO(wo).title}</p>
-                <p className="truncate text-xs text-gray-600">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone || '-'}</p>
+                <p className="mt-1 flex items-center justify-between gap-3 text-sm font-semibold text-gray-900"><span className="truncate">{customerIdentityForWO(wo).title}</span><span className="flex-shrink-0 font-mono">{formatPlateNumber(wo.plateNumber)}</span></p>
+                <p className="mt-0.5 flex items-center justify-between gap-3 text-xs text-gray-600"><span className="truncate">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone || '-'}</span><span className="truncate text-right">{wo.vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span></p>
                 {customerIdentityForWO(wo).driverName && <p className="truncate text-xs text-amber-700">Dibawa oleh: {customerIdentityForWO(wo).driverName}{customerIdentityForWO(wo).driverPhone ? ` · ${customerIdentityForWO(wo).driverPhone}` : ''}</p>}
                 {wo.description && <p className="mt-1 line-clamp-2 text-xs text-gray-600"><span className="font-semibold text-gray-700">Keluhan:</span> {wo.description}</p>}
                 <p className="mt-1 truncate text-xs text-gray-500">
@@ -2393,7 +2410,12 @@ export default function WorkOrders() {
                 </p>
               </button>
               <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span>
+                {attentionByWorkOrderId.has(wo.id) && (
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`} title={attentionByWorkOrderId.get(wo.id)?.description}>
+                    {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                    {attentionByWorkOrderId.get(wo.id)?.label}
+                  </span>
+                )}
                 {canViewAllBranches && <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>}
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
@@ -2664,80 +2686,6 @@ export default function WorkOrders() {
       </div>
 
       </>}
-
-      {!showModal && !detailWO && listMode === 'attention' && (
-        <section className="px-3 pb-3">
-          <div className="border border-gray-300 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center gap-2 border-b border-gray-300 bg-[#eeeeee] p-2">
-              {([
-                ['all', 'Semua', attentionItems.length],
-                ['register', 'Register Mengambang', attentionCounts.register],
-                ['process', 'Dikerjakan Terlambat', attentionCounts.process],
-                ['invoice', 'Selesai Belum Faktur', attentionCounts.invoice],
-                ['payment', 'Faktur Belum Lunas', attentionCounts.payment],
-              ] as const).map(([kind, label, count]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setAttentionFilter(kind)}
-                  className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${attentionFilter === kind ? 'border-blue-700 bg-blue-700 text-white' : 'border-gray-300 bg-white text-gray-700 hover:border-blue-500 hover:text-blue-700'}`}
-                >
-                  {label}<span className={`rounded-full px-1.5 py-0.5 text-[10px] ${attentionFilter === kind ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>{count}</span>
-                </button>
-              ))}
-              <button type="button" onClick={() => void handleRefresh()} className="ml-auto inline-flex h-9 w-10 items-center justify-center rounded border border-blue-600 bg-white text-blue-700" title="Refresh notifikasi"><RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /></button>
-            </div>
-
-            <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full min-w-[1050px] border-collapse text-sm">
-                <thead className="bg-[#465a75] text-left text-xs font-semibold uppercase text-white">
-                  <tr>
-                    <th className="px-3 py-2">Tanggal / No. WO</th>
-                    <th className="px-3 py-2">Pelanggan / Kendaraan</th>
-                    <th className="px-3 py-2">Perlu Tindakan</th>
-                    <th className="px-3 py-2">Keterangan</th>
-                    <th className="px-3 py-2 text-right">Nilai</th>
-                    <th className="px-3 py-2 text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleAttentionItems.map(item => (
-                    <tr key={`${item.kind}-${item.workOrder.id}`} className="border-b border-gray-200 odd:bg-white even:bg-gray-50">
-                      <td className="px-3 py-2 align-top"><span className="block text-xs text-gray-500">{formatBusinessDate(item.workOrder.date)}</span><button type="button" onClick={() => openDetailTab(item.workOrder)} className="font-mono font-semibold text-blue-700 hover:underline">{item.workOrder.woNumber}</button></td>
-                      <td className="px-3 py-2 align-top"><strong className="block text-gray-900">{item.workOrder.customerName}</strong><span className="text-xs text-gray-500">{formatPlateNumber(item.workOrder.plateNumber)} · {item.workOrder.vehicleInfo}</span></td>
-                      <td className="px-3 py-2 align-top"><span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${item.kind === 'register' ? 'bg-amber-100 text-amber-800' : item.kind === 'process' ? 'bg-orange-100 text-orange-800' : item.kind === 'invoice' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'}`}>{item.label}</span></td>
-                      <td className="max-w-md px-3 py-2 align-top text-xs text-gray-600">{item.description}</td>
-                      <td className="px-3 py-2 text-right align-top font-semibold text-gray-800">Rp {(item.invoice?.total ?? item.workOrder.total).toLocaleString('id-ID')}</td>
-                      <td className="px-3 py-2 text-center align-top">
-                        {item.kind === 'invoice' && hasPermission('invoice:create') ? (
-                          <button type="button" onClick={() => handleOpenInvoiceModal(item.workOrder)} className="h-8 rounded border border-emerald-600 bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700">Buat Faktur</button>
-                        ) : item.kind === 'payment' && item.invoice ? (
-                          <button type="button" onClick={() => window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(item.invoice?.id || '')}`)} className="h-8 rounded border border-blue-700 bg-blue-700 px-3 text-xs font-semibold text-white hover:bg-blue-800">Proses Bayar</button>
-                        ) : (
-                          <button type="button" onClick={() => openDetailTab(item.workOrder)} className="h-8 rounded border border-blue-600 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50">Buka WO</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {visibleAttentionItems.length === 0 && <tr><td colSpan={6} className="px-4 py-16 text-center text-sm text-gray-500">Tidak ada pekerjaan pada kelompok ini.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="divide-y divide-gray-200 lg:hidden">
-              {visibleAttentionItems.map(item => (
-                <button key={`${item.kind}-${item.workOrder.id}-mobile`} type="button" onClick={() => item.kind === 'payment' && item.invoice ? window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(item.invoice.id)}`) : openDetailTab(item.workOrder)} className="block w-full p-3 text-left">
-                  <div className="flex items-start justify-between gap-2"><strong className="font-mono text-sm text-blue-700">{item.workOrder.woNumber}</strong><span className="text-xs text-gray-500">{formatBusinessDate(item.workOrder.date)}</span></div>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">{item.workOrder.customerName} · {formatPlateNumber(item.workOrder.plateNumber)}</p>
-                  <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{item.label}</span>
-                  <p className="mt-1 text-xs text-gray-500">{item.description}</p>
-                </button>
-              ))}
-              {visibleAttentionItems.length === 0 && <p className="px-4 py-12 text-center text-sm text-gray-500">Tidak ada pekerjaan pada kelompok ini.</p>}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Detail WO: layar penuh di HP, subtab penuh di desktop. */}
       {detailWO && (
