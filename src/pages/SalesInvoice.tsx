@@ -1199,7 +1199,11 @@ export default function SalesInvoice() {
                         <User className="w-4 h-4 text-blue-600" />
                         Data Pelanggan <span className="text-red-500">*</span>
                       </label>
-                      <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} />
+                      <CustomerPicker
+                        value={formData.customerRefId}
+                        onChange={handleCustomerSelect}
+                        onVehicleSelect={handleVehicleSelect}
+                      />
                     </div>
                     <div className="lg:order-2">
                       <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
