@@ -540,7 +540,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       woNumber: result.data?.woNumber || createdWorkOrder.woNumber,
       status: 'Register',
     };
-    await refreshData();
+    // Aktifkan WO yang baru diregister seketika. Jangan menahan editor sampai
+    // pemuatan ulang seluruh data selesai karena kolom layanan bergantung pada
+    // objek WO hasil simpan ini.
+    setData(prev => ({
+      ...prev,
+      workOrders: prev.workOrders.some(item => item.id === savedWorkOrder.id)
+        ? prev.workOrders.map(item => item.id === savedWorkOrder.id ? savedWorkOrder : item)
+        : [...prev.workOrders, savedWorkOrder],
+    }));
+    void refreshData();
     return savedWorkOrder;
   };
   const updateWorkOrder = async (id: string, wo: WorkOrder) => {

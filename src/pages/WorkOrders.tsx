@@ -1127,11 +1127,11 @@ export default function WorkOrders() {
     await persistServicesAfterAdd([...formData.services, service]);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
     // Pengaman untuk komponen tambah pelanggan/kendaraan yang berada di dalam
     // form WO. Submit dari kontrol anak tidak boleh menutup/menyimpan form induk.
-    if (e.target !== e.currentTarget) return;
+    if (e && e.target !== e.currentTarget) return;
     const shouldCreateInvoice = diagnosisMode && diagnosisSubmitAction.current === 'invoice';
     const shouldMarkLostSales = diagnosisSubmitAction.current === 'lost';
     const shouldProcessNew = !editingWO && diagnosisSubmitAction.current === 'process';
@@ -1353,6 +1353,10 @@ export default function WorkOrders() {
         const bName = data.branches.find(b => b.id === targetBranch)?.name || targetBranch;
         setEditingWO(created);
         setIsAutoRegisteredDraft(true);
+        setShowServiceForm(true);
+        setServiceSearch('');
+        setDocumentTab('details');
+        setProcessingIssues([]);
         setSuccessMsg(`${created.woNumber} berhasil diregistrasikan di ${bName}. Tambahkan layanan lalu simpan.`);
         setTimeout(() => setSuccessMsg(''), 4000);
         return;
@@ -2869,7 +2873,7 @@ export default function WorkOrders() {
                   form: 'work-order-entry-form',
                   onClick: () => {
                     diagnosisSubmitAction.current = 'save';
-                    document.querySelector<HTMLFormElement>('#work-order-entry-form')?.requestSubmit();
+                    void handleSubmit();
                   },
                   disabled: editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : isAutoRegistering,
                   title: editingWO ? 'Simpan Work Order' : 'Register Work Order',

@@ -16,3 +16,13 @@ test('pencarian pelanggan baku mengikat kendaraan pada WO dan Faktur Penjualan',
   assert.match(workOrders, /<CustomerPicker[\s\S]*?onVehicleSelect=\{handleVehicleSelect\}/);
   assert.match(invoices, /<CustomerPicker[\s\S]*?onVehicleSelect=\{handleVehicleSelect\}/);
 });
+
+test('WO baru langsung aktif untuk penambahan layanan setelah register', () => {
+  const context = source('src/context/AppContext.tsx');
+  const workOrders = source('src/pages/WorkOrders.tsx');
+
+  assert.match(context, /setData\(prev => \(\{[\s\S]*?workOrders: prev\.workOrders\.some/);
+  assert.match(context, /void refreshData\(\);[\s\S]*?return savedWorkOrder/);
+  assert.doesNotMatch(context, /await refreshData\(\);\s*return savedWorkOrder/);
+  assert.match(workOrders, /setEditingWO\(created\);[\s\S]*?Tambahkan layanan lalu simpan/);
+});
