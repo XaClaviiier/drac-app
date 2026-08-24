@@ -5,6 +5,8 @@ type RailAction = {
   onClick?: () => void;
   disabled?: boolean;
   title?: string;
+  type?: 'button' | 'submit';
+  form?: string;
 };
 
 type AccurateFormActionRailProps = {
@@ -14,6 +16,7 @@ type AccurateFormActionRailProps = {
   more?: RailAction;
   remove?: RailAction;
   className?: string;
+  ariaLabel?: string;
 };
 
 /**
@@ -28,14 +31,17 @@ export default function AccurateFormActionRail({
   more,
   remove,
   className = '',
+  ariaLabel = 'Aksi formulir',
 }: AccurateFormActionRailProps) {
   const action = (value?: RailAction) => value?.onClick || (() => undefined);
   return (
-    <aside aria-label="Aksi formulir" className={`flex w-[72px] flex-col items-stretch gap-3 ${className}`}>
+    <aside aria-label={ariaLabel} className={`flex w-[72px] flex-col items-stretch gap-3 ${className}`}>
       <AccurateActionRailButton
         title={save.title || 'Simpan'}
         disabled={save.disabled}
         onClick={action(save)}
+        type={save.type}
+        form={save.form}
         tone="primary"
         icon={<Save className="h-7 w-7" />}
       />

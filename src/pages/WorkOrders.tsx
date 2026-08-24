@@ -13,6 +13,7 @@ import { DEFAULT_COMPLAINT_TEMPLATES, DEFAULT_LOST_SALES_REASONS } from '../lib/
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import ComplaintMultiSelect from '../components/ComplaintMultiSelect';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
+import AccurateFormActionRail from '../components/AccurateFormActionRail';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -2861,38 +2862,35 @@ export default function WorkOrders() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[82px]">
-              <aside className="absolute bottom-2 right-2 top-[48px] z-50 hidden w-[66px] flex-col items-stretch gap-2 border-l border-gray-300 bg-gray-50 pl-2 lg:flex" aria-label="Aksi Work Order">
-                <button
-                  type="submit"
-                  onClick={() => { diagnosisSubmitAction.current = 'save'; }}
-                  disabled={editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : (!newWOReadyForRegister || isAutoRegistering)}
-                  className="grid h-14 w-14 place-items-center rounded border border-blue-700 bg-blue-700 text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-300"
-                  title={editingWO ? 'Simpan Work Order' : 'Register Work Order'}
-                  aria-label={editingWO ? 'Simpan Work Order' : 'Register Work Order'}
-                >
-                  {editingWO ? <Save className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDocumentTab(documentTab === 'info' ? 'details' : 'info')}
-                  className={`grid h-14 w-14 place-items-center rounded border text-blue-700 ${documentTab === 'info' ? 'border-blue-600 bg-blue-100' : 'border-blue-400 bg-white hover:bg-blue-50'}`}
-                  title="Info lainnya"
-                  aria-label="Info lainnya"
-                >
-                  <Settings2 className="h-6 w-6" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectedServiceId && handleRemoveService(selectedServiceId)}
-                  disabled={!selectedServiceId}
-                  className="grid h-14 w-14 place-items-center rounded border border-red-300 bg-white text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-300"
-                  title={selectedServiceId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu'}
-                  aria-label="Hapus barang atau jasa terpilih"
-                >
-                  <Trash2 className="h-6 w-6" />
-                </button>
-              </aside>
+            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[90px]">
+              <AccurateFormActionRail
+                ariaLabel="Aksi Work Order"
+                className="absolute bottom-2 right-2 top-[48px] z-50 hidden lg:flex"
+                save={{
+                  type: 'submit',
+                  form: 'work-order-entry-form',
+                  onClick: () => { diagnosisSubmitAction.current = 'save'; },
+                  disabled: editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : (!newWOReadyForRegister || isAutoRegistering),
+                  title: editingWO ? 'Simpan Work Order' : 'Register Work Order',
+                }}
+                document={{
+                  onClick: () => setDocumentTab(documentTab === 'info' ? 'details' : 'info'),
+                  title: 'Info lainnya',
+                }}
+                attachment={{
+                  disabled: true,
+                  title: 'Lampiran belum tersedia untuk Work Order',
+                }}
+                more={{
+                  onClick: () => setDocumentTab(documentTab === 'payment' ? 'details' : 'payment'),
+                  title: 'Pembayaran dan pilihan lainnya',
+                }}
+                remove={{
+                  onClick: selectedServiceId ? () => handleRemoveService(selectedServiceId) : undefined,
+                  disabled: !selectedServiceId,
+                  title: selectedServiceId ? 'Hapus barang atau jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu',
+                }}
+              />
               {/* Blok simpan jika masih Semua Cabang */}
               {currentBranchId === 'ALL' && !editingWO && (
                 <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 flex items-start gap-3">

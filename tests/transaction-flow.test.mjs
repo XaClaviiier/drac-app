@@ -349,7 +349,7 @@ test('rail aksi form baru dipakai bersama oleh penerimaan dan penyesuaian stok',
   const rail = source('src/components/AccurateFormActionRail.tsx');
   assert.match(receipt, /AccurateFormActionRail/);
   assert.match(adjustment, /AccurateFormActionRail/);
-  assert.match(rail, /aria-label="Aksi formulir"/);
+  assert.match(rail, /ariaLabel = 'Aksi formulir'/);
   assert.match(rail, /title=\{remove\?\.title \|\| 'Hapus'\}/);
 });
 
@@ -537,8 +537,11 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /lg:max-w-\[980px\] lg:grid-cols-\[85px_minmax\(0,1fr\)_minmax\(0,\.8fr\)_64px_130px_112px\] lg:gap-x-1/);
   assert.doesNotMatch(page, /<span>Nomor: <strong className="text-gray-900">\{editingWO\?\.woNumber/);
   assert.doesNotMatch(page, /<span>Cabang: <strong className="text-gray-900">\{data\.branches\.find\(branch/);
-  assert.match(page, /aria-label="Aksi Work Order"/);
+  assert.match(page, /ariaLabel="Aksi Work Order"/);
   assert.match(page, /top-\[48px\]/);
+  assert.match(page, /AccurateFormActionRail/);
+  assert.match(page, /lg:pr-\[90px\]/);
+  assert.match(page, /form: 'work-order-entry-form'/);
   assert.match(page, /Hapus barang atau jasa terpilih/);
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
   assert.match(page, /setSelectedServiceId\(service\.id\)/);
