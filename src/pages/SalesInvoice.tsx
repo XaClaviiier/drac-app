@@ -47,6 +47,7 @@ export default function SalesInvoice() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<InvoiceColumnKey[]>(DEFAULT_SALES_INVOICE_COLUMNS);
   const [invoicePaymentHistory, setInvoicePaymentHistory] = useState<InvoicePaymentHistory[]>([]);
@@ -79,6 +80,12 @@ export default function SalesInvoice() {
   const [detailWarehouseId, setDetailWarehouseId] = useState('');
   const [detailActiveTab, setDetailActiveTab] = useState<'detail' | 'info' | 'image'>('detail');
   const [detailFormRowId, setDetailFormRowId] = useState('');
+  const activeFilterCount = [filterCustomer, filterStatus, filterDate].filter(Boolean).length;
+  const resetInvoiceFilters = () => {
+    setFilterCustomer('');
+    setFilterStatus('');
+    setFilterDate('');
+  };
 
   const invoiceColumnStorageKey = `dokterac_invoice_columns_${currentUser?.id || currentUser?.username || 'default'}`;
   useEffect(() => {
@@ -775,29 +782,21 @@ export default function SalesInvoice() {
 
       {/* Filters */}
       <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={filterCustomer}
-            onChange={(e) => setFilterCustomer(e.target.value)}
-            className={`${ui.field} min-w-[175px] flex-1 px-3 sm:flex-none lg:w-[190px]`}
-          >
-            <option value="">Pelanggan: Semua</option>
-            {invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}
-          </select>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className={`${ui.field} min-w-[145px] flex-1 px-3 sm:flex-none lg:w-[155px]`}
-          >
-            <option value="">Status: Semua</option>
-            <option value="Lunas">Status: Lunas</option>
-            <option value="Belum Lunas">Status: Belum Lunas</option>
-          </select>
-          <IndonesianDateInput value={filterDate} onChange={setFilterDate} className="h-9 min-w-[145px] flex-1 text-sm sm:flex-none lg:w-[150px]" title="Tanggal faktur"/>
-          <button type="button" onClick={() => { setFilterDate(''); setFilterCustomer(''); setFilterStatus(''); setSearchTerm(''); }} className="inline-flex h-9 flex-shrink-0 items-center gap-2 rounded border border-blue-600 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50" title="Kosongkan semua filter"><Filter className="h-4 w-4"/><span>Reset</span></button>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
+              <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar faktur"><Filter className="h-4 w-4"/> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
+              {showFilterPanel && <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+                <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Faktur Penjualan</strong><button type="button" onClick={resetInvoiceFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button></div>
+                <div className="space-y-3">
+                  <label className="block text-xs font-semibold text-gray-600">Pelanggan<select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua pelanggan</option>{invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}</select></label>
+                  <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua status</option><option value="Lunas">Lunas</option><option value="Belum Lunas">Belum Lunas</option></select></label>
+                  <label className="block text-xs font-semibold text-gray-600">Tanggal Faktur<IndonesianDateInput value={filterDate} onChange={setFilterDate} className="mt-1 h-10 w-full text-sm font-normal" title="Tanggal faktur"/></label>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">Kosongkan pilihan untuk menampilkan semua faktur.</p>
+                <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
+              </div>}
+            </div>
             {hasPermission('invoice:create') && (
               <>
                 <button

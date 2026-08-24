@@ -442,7 +442,12 @@ test('daftar Faktur Penjualan mengikuti kepadatan dan perataan Order Kerja', () 
   const page = source('src/pages/SalesInvoice.tsx');
   assert.match(page, /space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
   assert.match(page, /\$\{ui\.toolbar\} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2/);
-  assert.match(page, /className="mt-2 flex flex-wrap items-center justify-between gap-2"/);
+  assert.match(page, /className="flex flex-wrap items-center justify-between gap-2"/);
+  assert.match(page, /title="Filter daftar faktur"/);
+  assert.match(page, /Filter Faktur Penjualan/);
+  assert.match(page, /activeFilterCount/);
+  assert.match(page, /resetInvoiceFilters/);
+  assert.doesNotMatch(page, /<option value="">Pelanggan: Semua<\/option>/);
   assert.match(page, /className="inline-flex h-9 w-11 items-center justify-center rounded border border-blue-600/);
   assert.match(page, /className="relative w-full min-w-\[240px\] sm:w-\[360px\]"/);
   assert.match(page, /\$\{ui\.tableShell\} mx-1 shadow-sm lg:mx-3 lg:mt-0\.5/);
