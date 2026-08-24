@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CalendarDays } from 'lucide-react';
 
 type Props = {
@@ -29,8 +29,17 @@ const toStorage=(value:string)=>{
 
 export default function IndonesianDateInput({value,onChange,disabled=false,required=false,min,max,title,ariaLabel='Tanggal (DD/MM/YYYY)',className=''}:Props){
  const[display,setDisplay]=useState(()=>toDisplay(value));
+ const pickerRef=useRef<HTMLInputElement>(null);
  useEffect(()=>setDisplay(toDisplay(value)),[value]);
  const commit=()=>{const parsed=toStorage(display);if(parsed)onChange(parsed);else setDisplay(toDisplay(value))};
+ const openPicker=()=>{
+  const picker=pickerRef.current;
+  if(!picker)return;
+  // showPicker harus dipanggil langsung dari klik pengguna. Overlay input transparan
+  // tidak konsisten di Chrome lama dan dapat menampilkan kursor tangan tanpa membuka kalender.
+  if(typeof picker.showPicker==='function')picker.showPicker();
+  else{picker.focus();picker.click()}
+ };
  return <span className={`relative block w-full ${className}`}>
   <input
    type="text"
@@ -46,15 +55,24 @@ export default function IndonesianDateInput({value,onChange,disabled=false,requi
    title={title}
    className="h-full w-full rounded border border-slate-300 bg-white px-3 pr-10 disabled:bg-slate-100 disabled:text-slate-600"
   />
-  <CalendarDays className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"/>
   {!disabled&&<input
+   ref={pickerRef}
    type="date"
    value={value}
    min={min}
    max={max}
    onChange={event=>onChange(event.target.value)}
    aria-label="Buka kalender"
-   className="absolute inset-y-0 right-0 w-10 cursor-pointer opacity-0"
+   tabIndex={-1}
+   className="pointer-events-none absolute bottom-0 right-0 h-px w-px opacity-0"
   />}
+  <button
+   type="button"
+   disabled={disabled}
+   onClick={openPicker}
+   aria-label="Buka kalender"
+   title="Pilih tanggal"
+   className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+  ><CalendarDays className="h-4 w-4"/></button>
  </span>;
 }

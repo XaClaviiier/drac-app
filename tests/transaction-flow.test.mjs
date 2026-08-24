@@ -332,6 +332,15 @@ test('rail aksi form baru dipakai bersama oleh penerimaan dan penyesuaian stok',
   assert.match(rail, /title=\{remove\?\.title \|\| 'Hapus'\}/);
 });
 
+test('ikon kalender tanggal Indonesia membuka native date picker secara eksplisit', () => {
+  const input = source('src/components/IndonesianDateInput.tsx');
+  assert.match(input, /pickerRef=useRef<HTMLInputElement>/);
+  assert.match(input, /typeof picker\.showPicker==='function'/);
+  assert.match(input, /onClick=\{openPicker\}/);
+  assert.match(input, /title="Pilih tanggal"/);
+  assert.doesNotMatch(input, /inset-y-0 right-0 w-10 cursor-pointer opacity-0/);
+});
+
 test('penerimaan mewajibkan satu cabang dan gudang yang sesuai', () => {
   const entry = source('src/pages/GoodsReceiptEntry.tsx');
   const list = source('src/pages/GoodsReceipt.tsx');
