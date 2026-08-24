@@ -578,6 +578,11 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(styles, /height: 36px !important/);
   assert.match(styles, /box-shadow: 0 0 0 1px rgba\(22, 131, 255, \.28\) !important/);
   assert.match(styles, /\.app-combobox-field:focus-within/);
+  assert.match(styles, /\.app-workspace-tab[\s\S]*?flex: 0 0 auto;/);
+  assert.match(styles, /\.app-workspace-bar[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
+  assert.match(styles, /\.app-child-bar[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
+  assert.match(styles, /\.app-child-tab[\s\S]*?flex: 0 0 auto;/);
+  assert.match(styles, /\.app-child-list-tab[\s\S]*?flex: 0 0 60px;/);
   assert.match(complaints, /app-combobox-field/);
   assert.match(complaints, /app-field-unstyled/);
   assert.match(tabs, /border-r-white bg-white text-rose-500/);
