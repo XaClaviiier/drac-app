@@ -538,7 +538,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.doesNotMatch(page, /<span>Nomor: <strong className="text-gray-900">\{editingWO\?\.woNumber/);
   assert.doesNotMatch(page, /<span>Cabang: <strong className="text-gray-900">\{data\.branches\.find\(branch/);
   assert.match(page, /ariaLabel="Aksi Work Order"/);
-  assert.match(page, /top-\[48px\]/);
+  assert.match(page, /top-2 z-50 hidden gap-1\.5 lg:flex \[&>div\]:mt-1\.5/);
   assert.match(page, /AccurateFormActionRail/);
   assert.match(page, /lg:pr-\[90px\]/);
   assert.match(page, /form: 'work-order-entry-form'/);
