@@ -245,7 +245,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
             disabled
               ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
               : selectedVehicle
-              ? 'border-orange-400 bg-orange-50 font-bold text-orange-900'
+              ? 'border-orange-400 bg-orange-50 font-normal text-orange-900'
               : 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 uppercase'
           }`}
         />

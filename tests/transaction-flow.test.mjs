@@ -541,7 +541,8 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /top-2 z-50 hidden gap-1\.5 lg:flex \[&>div\]:mt-1\.5/);
   assert.match(page, /Terjadi Permasalahan pada Pemrosesan/);
   assert.match(page, /id="active-wo-conflict-title"/);
-  assert.match(page, /max-w-\[780px\]/);
+  assert.match(page, /max-w-\[520px\]/);
+  assert.match(page, /grid-cols-\[76px_minmax\(0,1fr\)\]/);
   assert.match(page, /bg-\[#0b3265\]/);
   assert.match(page, /navigator\.clipboard\.writeText\(conflictSummary\)/);
   assert.match(page, /Lanjutkan di Cabang Ini/);
@@ -579,10 +580,12 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(source('src/components/CustomerPicker.tsx'), /onVehicleSelect\?\.\(vehicle\.id\)/);
   assert.match(source('src/components/CustomerPicker.tsx'), /getSelectedCustomerLabel/);
   assert.match(source('src/components/CustomerPicker.tsx'), /customer\.phone\.trim\(\)/);
+  assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /border-blue-400 bg-blue-50 font-medium/);
   assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /Badge pelanggan terpilih/);
   assert.match(source('src/components/CustomerPicker.tsx'), /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
   assert.match(source('src/components/VehiclePicker.tsx'), /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
   assert.match(source('src/components/VehiclePicker.tsx'), /getSelectedVehicleLabel/);
+  assert.doesNotMatch(source('src/components/VehiclePicker.tsx'), /border-orange-400 bg-orange-50 font-bold/);
   assert.match(source('src/components/VehiclePicker.tsx'), /\.filter\(Boolean\)\.join\(' '\)/);
   assert.doesNotMatch(source('src/components/VehiclePicker.tsx'), /Badge kendaraan terpilih/);
   assert.match(complaints, /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);

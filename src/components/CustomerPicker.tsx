@@ -197,9 +197,9 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
           autoComplete="off"
           className={`h-[42px] w-full border rounded-lg py-0 pl-9 ${selectedCustomer && selectedAction && !disabled ? 'pr-[4.5rem]' : 'pr-10'} outline-none transition-colors text-sm ${
             disabled
-              ? 'cursor-not-allowed border-gray-200 bg-gray-100 font-medium text-gray-600'
+              ? 'cursor-not-allowed border-gray-200 bg-gray-100 font-normal text-gray-600'
               : selectedCustomer
-              ? 'border-blue-400 bg-blue-50 font-medium text-blue-900'
+              ? 'border-blue-400 bg-blue-50 font-normal text-blue-900'
               : 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
           }`}
         />

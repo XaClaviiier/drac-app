@@ -3706,49 +3706,49 @@ export default function WorkOrders() {
         ].join('\n');
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="active-wo-conflict-title">
-            <div className="w-full max-w-[780px] overflow-hidden rounded-md bg-white shadow-2xl">
-              <header className="flex h-14 items-center justify-between bg-[#0b3265] px-4 text-white sm:px-5">
-                <div className="flex min-w-0 items-center gap-3">
-                  <AlertTriangle className="h-6 w-6 shrink-0 fill-white text-white" />
-                  <h3 id="active-wo-conflict-title" className="truncate text-base font-semibold sm:text-lg">Mobil sudah memiliki WO aktif</h3>
+            <div className="w-full max-w-[520px] overflow-hidden rounded-md bg-white shadow-2xl">
+              <header className="flex h-10 items-center justify-between bg-[#0b3265] px-3 text-white">
+                <div className="flex min-w-0 items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 shrink-0 fill-white text-white" />
+                  <h3 id="active-wo-conflict-title" className="truncate text-sm font-medium">Mobil sudah memiliki WO aktif</h3>
                 </div>
-                <button type="button" onClick={() => setActiveWoConflict(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-white/10" aria-label="Tutup peringatan WO aktif"><X className="h-6 w-6" /></button>
+                <button type="button" onClick={() => setActiveWoConflict(null)} className="grid h-8 w-8 shrink-0 place-items-center rounded hover:bg-white/10" aria-label="Tutup peringatan WO aktif"><X className="h-5 w-5" /></button>
               </header>
 
-              <div className="px-4 pb-4 pt-5 sm:px-5 sm:pb-5">
-                <div className="grid gap-4 sm:grid-cols-[104px_minmax(0,1fr)] sm:items-start">
-                  <div className="relative mx-auto h-[88px] w-[96px] sm:mt-1">
-                    <AlertTriangle className="h-[88px] w-[96px] fill-[#ff4d4f] stroke-[#0b3265] stroke-[1.5]" />
-                    <X className="pointer-events-none absolute left-1/2 top-[35px] h-9 w-9 -translate-x-1/2 stroke-[4] text-white" />
+              <div className="px-3 pb-3 pt-4">
+                <div className="grid gap-3 sm:grid-cols-[76px_minmax(0,1fr)] sm:items-start">
+                  <div className="relative mx-auto h-16 w-[70px]">
+                    <AlertTriangle className="h-16 w-[70px] fill-[#ff4d4f] stroke-[#0b3265] stroke-[1.5]" />
+                    <X className="pointer-events-none absolute left-1/2 top-[25px] h-7 w-7 -translate-x-1/2 stroke-[4] text-white" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg text-gray-900 sm:text-xl">
-                      Kendaraan <strong>{conflict.plateNumber}</strong> masih memiliki WO aktif:
+                    <p className="text-base font-normal text-gray-900">
+                      Kendaraan <strong className="font-medium">{conflict.plateNumber}</strong> masih memiliki WO aktif:
                     </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-6 text-sm text-[#bd1230] sm:text-base">
-                      <li><strong className="font-mono">{conflict.woNumber}</strong> · {conflictBranchName}</li>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm font-normal text-[#bd1230]">
+                      <li><strong className="font-mono font-medium">{conflict.woNumber}</strong> · {conflictBranchName}</li>
                       <li>{conflict.date} · {statusLabel(conflict.status)} · Rp {conflict.total.toLocaleString('id-ID')}</li>
                     </ul>
-                    <p className="mt-3 text-sm text-gray-600">
+                    <p className="mt-2 text-xs font-normal leading-5 text-gray-600">
                       Satu mobil hanya boleh memiliki satu WO aktif. Buka WO tersebut untuk melanjutkan pekerjaan
                       {sameBranch ? '.' : ', atau lanjutkan di cabang ini untuk membuat WO baru dan menandai WO lama selesai.'}
                     </p>
                   </div>
                 </div>
 
-                <footer className="mt-5 flex flex-col-reverse gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <footer className="mt-3 flex flex-col-reverse gap-2 border-t border-gray-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
                     onClick={() => void navigator.clipboard.writeText(conflictSummary).catch(() => window.alert('Informasi WO gagal disalin.'))}
-                    className="h-11 rounded-sm border border-blue-300 bg-white px-6 text-base font-medium text-blue-700 hover:bg-blue-50"
+                    className="h-10 rounded-sm border border-blue-300 bg-white px-4 text-sm font-normal text-blue-700 hover:bg-blue-50"
                   >
                     Salin
                   </button>
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <div className="flex flex-col-reverse gap-1.5 sm:flex-row sm:justify-end">
                     <button
                       type="button"
                       onClick={() => setActiveWoConflict(null)}
-                      className="h-11 rounded-sm border border-gray-300 bg-white px-5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      className="h-10 rounded-sm border border-gray-300 bg-white px-4 text-sm font-normal text-gray-700 hover:bg-gray-50"
                     >
                       Batal
                     </button>
@@ -3756,7 +3756,7 @@ export default function WorkOrders() {
                       <button
                         type="button"
                         onClick={() => { const target = conflict; setActiveWoConflict(null); setContinueWO(target); }}
-                        className="h-11 rounded-sm bg-cyan-600 px-5 text-sm font-semibold text-white hover:bg-cyan-700"
+                        className="h-10 rounded-sm bg-cyan-600 px-4 text-sm font-medium text-white hover:bg-cyan-700"
                       >
                         Lanjutkan di Cabang Ini
                       </button>
@@ -3764,7 +3764,7 @@ export default function WorkOrders() {
                     <button
                       type="button"
                       onClick={() => void openActiveWorkOrder(conflict)}
-                      className="h-11 rounded-sm bg-[#1f4fa3] px-6 text-sm font-semibold text-white hover:bg-blue-800"
+                      className="h-10 rounded-sm bg-[#1f4fa3] px-4 text-sm font-medium text-white hover:bg-blue-800"
                     >
                       {activeWorkOrderActionLabel(conflict, sameBranch)}
                     </button>
