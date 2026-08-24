@@ -310,14 +310,26 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
 test('rail aksi penerimaan baru mengikuti ukuran dan split button Accurate', () => {
   const page = source('src/pages/GoodsReceiptEntry.tsx');
   const railButton = source('src/components/AccurateActionRailButton.tsx');
+  const rail = source('src/components/AccurateFormActionRail.tsx');
   assert.match(railButton, /h-14 w-\[72px\]/);
   assert.match(railButton, /grid-cols-\[1fr_20px\]/);
   assert.match(railButton, /border-l border-black\/10 bg-black\/5/);
-  assert.match(page, /AccurateActionRailButton/);
-  assert.match(page, /CircleEllipsis className="h-8 w-8"/);
-  assert.match(page, /disabled=\{saving\} onClick=\{\(\)=>void submit\('Diterima'\)\}/);
+  assert.match(page, /AccurateFormActionRail/);
+  assert.match(rail, /Simpan, Dokumen, Lampiran/);
+  assert.match(rail, /tone="danger"/);
+  assert.match(page, /disabled:saving,onClick:\(\)=>void submit\('Diterima'\)/);
   assert.doesNotMatch(page, /disabled=\{saving\|\|!form\.items\.length\}/);
-  assert.doesNotMatch(page, /Hapus tersedia setelah data disimpan/);
+  assert.match(page, /Hapus tersedia setelah data disimpan/);
+});
+
+test('rail aksi form baru dipakai bersama oleh penerimaan dan penyesuaian stok', () => {
+  const receipt = source('src/pages/GoodsReceiptEntry.tsx');
+  const adjustment = source('src/pages/OpeningStockImport.tsx');
+  const rail = source('src/components/AccurateFormActionRail.tsx');
+  assert.match(receipt, /AccurateFormActionRail/);
+  assert.match(adjustment, /AccurateFormActionRail/);
+  assert.match(rail, /aria-label="Aksi formulir"/);
+  assert.match(rail, /title=\{remove\?\.title \|\| 'Hapus'\}/);
 });
 
 test('penerimaan mewajibkan satu cabang dan gudang yang sesuai', () => {

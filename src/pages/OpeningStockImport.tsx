@@ -10,13 +10,10 @@ import {
   Filter,
   List,
   Lightbulb,
-  MoreHorizontal,
-  Paperclip,
   Pencil,
   Plus,
   Printer,
   RefreshCw,
-  Save,
   Search,
   Settings,
   Send,
@@ -30,6 +27,7 @@ import { localDateKey } from "../lib/date";
 import ItemSearchOption from "../components/ItemSearchOption";
 import { childTabClass, ui } from "../components/ui/interfaceStandards";
 import IndonesianDateInput from "../components/IndonesianDateInput";
+import AccurateFormActionRail from "../components/AccurateFormActionRail";
 
 type PreviewRow = {
   row: number;
@@ -638,7 +636,7 @@ export default function OpeningStockImport() {
                   className="hidden"
                 />
               </label>
-              <div className="absolute right-5 top-5 flex w-24 flex-col items-stretch gap-2">
+              <div className="absolute right-5 top-5 flex w-[72px] flex-col items-stretch gap-3">
                 <div className="text-center text-xs text-slate-500">
                   No Penyesuaian #
                   <b className="block font-mono text-blue-700">
@@ -648,48 +646,21 @@ export default function OpeningStockImport() {
                       : "OTOMATIS"}
                   </b>
                 </div>
-                <button
-                  disabled={
-                    !isAdmin ||
-                    loading ||
-                    !validRows.length ||
-                    !!errorRows.length
-                  }
-                  onClick={() => submit(false)}
-                  title="Simpan Draft"
-                  className="flex h-16 items-center justify-center rounded border border-blue-700 bg-blue-700 text-white shadow disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400"
-                >
-                  <Save className="h-8 w-8" />
-                </button>
-                <button
-                  type="button"
-                  onClick={downloadTemplate}
-                  title="Dokumen / Unduh Template"
-                  className="flex h-14 items-center justify-center rounded border border-blue-500 bg-blue-200 text-[#00518b]"
-                >
-                  <FileText className="h-7 w-7" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                  title="Lampiran File"
-                  className="flex h-14 items-center justify-center rounded border border-blue-500 bg-blue-200 text-[#00518b]"
-                >
-                  <Paperclip className="h-7 w-7" />
-                </button>
-                <button
-                  disabled={
-                    !isAdmin ||
-                    loading ||
-                    !validRows.length ||
-                    !!errorRows.length
-                  }
-                  onClick={() => submit(true)}
-                  title="Simpan dan Posting"
-                  className="flex h-14 items-center justify-center rounded border border-green-600 bg-green-300 text-green-800 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400"
-                >
-                  <MoreHorizontal className="h-7 w-7" />
-                </button>
+                <AccurateFormActionRail
+                  save={{
+                    disabled: !isAdmin || loading || !validRows.length || !!errorRows.length,
+                    onClick: () => void submit(false),
+                    title: "Simpan Draft",
+                  }}
+                  document={{ onClick: downloadTemplate, title: "Dokumen / Unduh Template" }}
+                  attachment={{ onClick: () => inputRef.current?.click(), title: "Lampiran File" }}
+                  more={{
+                    disabled: !isAdmin || loading || !validRows.length || !!errorRows.length,
+                    onClick: () => void submit(true),
+                    title: "Simpan dan Posting",
+                  }}
+                  remove={{ disabled: !editingId, title: editingId ? "Hapus penyesuaian" : "Hapus tersedia setelah data disimpan" }}
+                />
               </div>
             </div>
           )}

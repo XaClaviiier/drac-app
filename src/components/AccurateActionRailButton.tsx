@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-type AccurateActionRailTone='primary'|'document'|'success';
+type AccurateActionRailTone='primary'|'document'|'success'|'danger';
 
 const toneClass:Record<AccurateActionRailTone,string>={
  primary:'border-[#06457f] bg-[#07579f] text-white hover:bg-[#064b8b]',
  document:'border-[#1680e5] bg-[#abd3f7] text-[#00518b] hover:bg-[#9bcaf4]',
  success:'border-[#21a642] bg-[#8be4a0] text-[#08752a] hover:bg-[#7cdb92]',
+ danger:'border-[#ff6b72] bg-[#ffb8bc] text-[#f12d59] hover:bg-[#ffa8ad]',
 };
 
 export default function AccurateActionRailButton({title,icon,tone='document',disabled=false,showChevron=true,onClick}:{title:string;icon:ReactNode;tone?:AccurateActionRailTone;disabled?:boolean;showChevron?:boolean;onClick:()=>void}){
