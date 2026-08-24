@@ -540,6 +540,12 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /ariaLabel="Aksi Work Order"/);
   assert.match(page, /top-2 z-50 hidden gap-1\.5 lg:flex \[&>div\]:mt-1\.5/);
   assert.match(page, /Terjadi Permasalahan pada Pemrosesan/);
+  assert.match(page, /id="active-wo-conflict-title"/);
+  assert.match(page, /max-w-\[780px\]/);
+  assert.match(page, /bg-\[#0b3265\]/);
+  assert.match(page, /navigator\.clipboard\.writeText\(conflictSummary\)/);
+  assert.match(page, /Lanjutkan di Cabang Ini/);
+  assert.match(page, /activeWorkOrderActionLabel\(conflict, sameBranch\)/);
   assert.match(page, /Pelanggan harus diisi/);
   assert.match(page, /disabled: editingWO \? \(statusLabel\(editingWO\.status\) === 'Lost Sales' && !customerVehicleCorrectionUnlocked\) : isAutoRegistering/);
   assert.match(page, /AccurateFormActionRail/);

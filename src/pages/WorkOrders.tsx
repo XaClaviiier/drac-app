@@ -3696,52 +3696,80 @@ export default function WorkOrders() {
         const conflict = activeWoConflict;
         const sameBranch = conflict.branchId === resolveBranchId();
         const conflictBranchName = data.branches.find(b => b.id === conflict.branchId)?.name || conflict.branchId;
+        const conflictSummary = [
+          `Mobil ${conflict.plateNumber} sudah memiliki WO aktif`,
+          `Nomor WO: ${conflict.woNumber}`,
+          `Cabang: ${conflictBranchName}`,
+          `Tanggal: ${conflict.date}`,
+          `Status: ${statusLabel(conflict.status)}`,
+          `Total sementara: Rp ${conflict.total.toLocaleString('id-ID')}`,
+        ].join('\n');
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between rounded-t-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-4 text-white">
-                <div className="flex items-center gap-2">
-                  <CalendarClock className="h-5 w-5" />
-                  <h3 className="text-lg font-bold">Mobil sudah memiliki WO aktif</h3>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="active-wo-conflict-title">
+            <div className="w-full max-w-[780px] overflow-hidden rounded-md bg-white shadow-2xl">
+              <header className="flex h-14 items-center justify-between bg-[#0b3265] px-4 text-white sm:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <AlertTriangle className="h-6 w-6 shrink-0 fill-white text-white" />
+                  <h3 id="active-wo-conflict-title" className="truncate text-base font-semibold sm:text-lg">Mobil sudah memiliki WO aktif</h3>
                 </div>
-                <button onClick={() => setActiveWoConflict(null)} className="rounded-lg p-2 hover:bg-white/20"><X className="h-5 w-5" /></button>
-              </div>
-              <div className="space-y-4 p-6 text-sm">
-                <p className="text-gray-700">
-                  Plat <strong>{conflict.plateNumber}</strong> masih memiliki WO aktif:
-                </p>
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1">
-                  <div className="flex justify-between"><span className="text-gray-500">Nomor WO</span><span className="font-mono font-semibold">{conflict.woNumber}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Cabang</span><span className="font-medium">{conflictBranchName}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Tanggal</span><span>{conflict.date}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Status</span><span className="font-semibold">{conflict.status}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Total sementara</span><span className="font-semibold">Rp {conflict.total.toLocaleString('id-ID')}</span></div>
+                <button type="button" onClick={() => setActiveWoConflict(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-white/10" aria-label="Tutup peringatan WO aktif"><X className="h-6 w-6" /></button>
+              </header>
+
+              <div className="px-4 pb-4 pt-5 sm:px-5 sm:pb-5">
+                <div className="grid gap-4 sm:grid-cols-[104px_minmax(0,1fr)] sm:items-start">
+                  <div className="relative mx-auto h-[88px] w-[96px] sm:mt-1">
+                    <AlertTriangle className="h-[88px] w-[96px] fill-[#ff4d4f] stroke-[#0b3265] stroke-[1.5]" />
+                    <X className="pointer-events-none absolute left-1/2 top-[35px] h-9 w-9 -translate-x-1/2 stroke-[4] text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-lg text-gray-900 sm:text-xl">
+                      Kendaraan <strong>{conflict.plateNumber}</strong> masih memiliki WO aktif:
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-6 text-sm text-[#bd1230] sm:text-base">
+                      <li><strong className="font-mono">{conflict.woNumber}</strong> · {conflictBranchName}</li>
+                      <li>{conflict.date} · {statusLabel(conflict.status)} · Rp {conflict.total.toLocaleString('id-ID')}</li>
+                    </ul>
+                    <p className="mt-3 text-sm text-gray-600">
+                      Satu mobil hanya boleh memiliki satu WO aktif. Buka WO tersebut untuk melanjutkan pekerjaan
+                      {sameBranch ? '.' : ', atau lanjutkan di cabang ini untuk membuat WO baru dan menandai WO lama selesai.'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500">
-                  Satu mobil hanya boleh memiliki satu WO aktif. Selesaikan dulu WO ini atau lanjutkan pengerjaannya.
-                </p>
-                <div className="flex flex-col gap-2">
+
+                <footer className="mt-5 flex flex-col-reverse gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <button
-                    onClick={() => void openActiveWorkOrder(conflict)}
-                    className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                    type="button"
+                    onClick={() => void navigator.clipboard.writeText(conflictSummary).catch(() => window.alert('Informasi WO gagal disalin.'))}
+                    className="h-11 rounded-sm border border-blue-300 bg-white px-6 text-base font-medium text-blue-700 hover:bg-blue-50"
                   >
-                    {activeWorkOrderActionLabel(conflict, sameBranch)}
+                    Salin
                   </button>
-                  {!sameBranch && (
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <button
-                      onClick={() => { const target = conflict; setActiveWoConflict(null); setContinueWO(target); }}
-                      className="rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-700"
+                      type="button"
+                      onClick={() => setActiveWoConflict(null)}
+                      className="h-11 rounded-sm border border-gray-300 bg-white px-5 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
-                      Lanjutkan di Cabang Ini (buat WO baru, WO lama ditandai selesai)
+                      Batal
                     </button>
-                  )}
-                  <button
-                    onClick={() => setActiveWoConflict(null)}
-                    className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Batal
-                  </button>
-                </div>
+                    {!sameBranch && (
+                      <button
+                        type="button"
+                        onClick={() => { const target = conflict; setActiveWoConflict(null); setContinueWO(target); }}
+                        className="h-11 rounded-sm bg-cyan-600 px-5 text-sm font-semibold text-white hover:bg-cyan-700"
+                      >
+                        Lanjutkan di Cabang Ini
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void openActiveWorkOrder(conflict)}
+                      className="h-11 rounded-sm bg-[#1f4fa3] px-6 text-sm font-semibold text-white hover:bg-blue-800"
+                    >
+                      {activeWorkOrderActionLabel(conflict, sameBranch)}
+                    </button>
+                  </div>
+                </footer>
               </div>
             </div>
           </div>
