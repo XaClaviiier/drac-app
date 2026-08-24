@@ -967,6 +967,19 @@ export default function WorkOrders() {
     setServiceEditMode(false);
   };
 
+  // New WO adalah standar tunggal editor. Klik nomor/ikon WO yang masih dapat
+  // diubah harus membuka editor yang sama, sedangkan dokumen terkunci tetap
+  // memakai tampilan detail read-only.
+  const openWorkOrderStandard = (wo: WorkOrder) => {
+    const sameBranch = wo.branchId === resolveBranchId();
+    const readOnly = !sameBranch || !hasPermission('wo:edit') || Boolean(wo.invoiceId) || statusLabel(wo.status) === 'Lost Sales';
+    if (readOnly) {
+      openDetailTab(wo);
+      return;
+    }
+    handleOpenModal(wo, true);
+  };
+
   const requestedNewWO = searchParams.get('new');
   const requestedEditWO = searchParams.get('edit');
   const requestedViewWO = searchParams.get('view');
@@ -1978,15 +1991,10 @@ export default function WorkOrders() {
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
-        ) : showModal && serviceEditMode && editingWO ? (
-          <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
-            EDIT PEKERJAAN {editingWO.woNumber}
-            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
-          </button>
         ) : showModal && editingWO ? (
           <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
-            {isAutoRegisteredDraft ? <FileText className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
-            {isAutoRegisteredDraft ? editingWO.woNumber : `Edit ${editingWO.woNumber}`}
+            <FileText className="h-4 w-4" />
+            {editingWO.woNumber}
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
           </button>
         ) : showModal && hasPermission('wo:create') ? (
@@ -2284,7 +2292,7 @@ export default function WorkOrders() {
                 {filteredWOs.map((wo) => (
                   <tr key={wo.id} className="transition-colors hover:bg-blue-50/50">
                     {isColumnVisible('number') && <td className="px-4 py-3">
-                      <button type="button" onClick={() => openDetailTab(wo)} className="text-left">
+                      <button type="button" onClick={() => openWorkOrderStandard(wo)} className="text-left">
                         <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
                         <span className="mt-0.5 block text-xs text-gray-500">
                           {wo.date}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
@@ -2302,7 +2310,7 @@ export default function WorkOrders() {
                             const attention = attentionByWorkOrderId.get(wo.id);
                             if (attention?.kind === 'payment' && attention.invoice) window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(attention.invoice.id)}`);
                             else if (attention?.kind === 'invoice' && hasPermission('invoice:create')) handleOpenInvoiceModal(wo);
-                            else openDetailTab(wo);
+                            else openWorkOrderStandard(wo);
                           }}
                           className={`inline-flex h-8 w-8 items-center justify-center rounded ${['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
                           title={`${attentionByWorkOrderId.get(wo.id)?.label}: ${attentionByWorkOrderId.get(wo.id)?.description}`}
@@ -2342,7 +2350,7 @@ export default function WorkOrders() {
                         >
                           <MessageCircle className="h-4 w-4" />
                         </button>
-                        <button onClick={() => openDetailTab(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Lihat detail">
+                        <button onClick={() => openWorkOrderStandard(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Buka WO">
                           <Eye className="h-4 w-4" />
                         </button>
                         {canShowAdminRowActions && hasPermission('wo:edit') && !wo.invoiceId && (
@@ -2363,7 +2371,7 @@ export default function WorkOrders() {
             </table>
           </div>
           <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
-            <span>Klik nomor WO atau ikon mata untuk melihat rincian lengkap.</span>
+            <span>Klik nomor WO atau ikon mata untuk membuka WO pada form standar.</span>
             <span className="font-semibold">{filteredWOs.length} order kerja</span>
           </div>
         </div>
@@ -2393,7 +2401,7 @@ export default function WorkOrders() {
           const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name.replace('CABANG ', '');
           return (
             <article key={`compact-${wo.id}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <button type="button" onClick={() => openDetailTab(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
+              <button type="button" onClick={() => openWorkOrderStandard(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
                 <div className="flex items-start justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2"><span className="truncate font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span><span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
                   <span className="whitespace-nowrap text-[11px] text-gray-500">
@@ -2419,7 +2427,7 @@ export default function WorkOrders() {
                 {canViewAllBranches && <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>}
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
-                <button type="button" onClick={() => openDetailTab(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Lihat detail ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
+                <button type="button" onClick={() => openWorkOrderStandard(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Buka ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
                 {canShowAdminRowActions && hasPermission('wo:edit') && !wo.invoiceId && (
                   <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>
                 )}
@@ -2568,7 +2576,7 @@ export default function WorkOrders() {
                     </button>}
                     <button
                       type="button"
-                      onClick={() => openDetailTab(wo)}
+                      onClick={() => openWorkOrderStandard(wo)}
                       className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700"
                       title={wo.status === 'Closed' ? 'Lihat detail Lost Sales' : 'Lihat detail WO'}
                       aria-label={`Lihat detail ${wo.woNumber}`}
@@ -2908,9 +2916,9 @@ export default function WorkOrders() {
             <div className="z-30 flex flex-shrink-0 items-start justify-between border-b border-gray-200 bg-white px-4 py-3 sm:rounded-t-xl sm:px-6 sm:py-4 lg:hidden">
               <div className="min-w-0 pr-3">
                 <h3 className="break-words text-base font-semibold leading-tight text-gray-900 sm:text-lg">
-                  {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : serviceEditMode && editingWO ? `EDIT PEKERJAAN ${editingWO.woNumber}` : isAutoRegisteredDraft && editingWO ? editingWO.woNumber : editingWO ? 'Edit Registrasi WO' : 'Register Baru'}
+                  {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? editingWO.woNumber : 'Register Baru'}
                 </h3>
-                <p className="mt-1 text-xs leading-snug text-gray-500 sm:text-sm">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : serviceEditMode ? 'Tambah atau ubah layanan sebelum dibuatkan faktur' : isAutoRegisteredDraft ? 'WO sudah terdaftar. Tambahkan layanan lalu simpan.' : 'Pilih pelanggan, kendaraan, dan isi keluhan untuk Register WO'}</p>
+                <p className="mt-1 text-xs leading-snug text-gray-500 sm:text-sm">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : editingWO ? 'WO sudah terdaftar. Tambahkan atau ubah layanan lalu simpan.' : 'Pilih pelanggan, kendaraan, dan isi keluhan untuk Register WO'}</p>
               </div>
               <button
                 onClick={handleCloseModal}
@@ -2965,18 +2973,13 @@ export default function WorkOrders() {
                   </div>
                 </div>
               )}
-              {(diagnosisMode || serviceEditMode) && editingWO ? (
+              {diagnosisMode && editingWO ? (
                 <div className="space-y-3">
                   <div className="relative grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
                     <div className="md:col-span-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"><span className="block text-xs font-semibold uppercase text-blue-600">Keluhan awal</span><strong className="mt-0.5 block whitespace-pre-wrap text-slate-900">{editingWO.description || '-'}</strong></div>
-                    {serviceEditMode && (
-                      <button type="button" onClick={() => setServiceEditMode(false)} className="absolute right-3 top-3 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                        Edit Data Registrasi
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : <>
@@ -3707,13 +3710,9 @@ export default function WorkOrders() {
                   </button>
                 )}
                 <button
-                  type={editingWO && !isAutoRegisteredDraft && !diagnosisMode && !serviceEditMode ? 'button' : 'submit'}
+                  type="submit"
                   disabled={!editingWO ? isAutoRegistering : false}
                   onClick={() => {
-                    if (editingWO && !isAutoRegisteredDraft && !diagnosisMode && !serviceEditMode) {
-                      setServiceEditMode(true);
-                      return;
-                    }
                     diagnosisSubmitAction.current = 'save';
                   }}
                   className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 sm:flex-none sm:gap-2 sm:px-5 sm:text-sm"
@@ -3723,13 +3722,9 @@ export default function WorkOrders() {
                     ? 'Setuju · Dikerjakan'
                     : diagnosisMode
                       ? 'Simpan Diagnosa'
-                      : serviceEditMode
-                        ? 'Simpan Perubahan'
-                        : isAutoRegisteredDraft
-                          ? 'Simpan'
-                        : editingWO
-                          ? 'Edit Layanan'
-                          : isAutoRegistering ? 'Meregister...' : 'Register'}
+                      : editingWO
+                        ? 'Simpan'
+                        : isAutoRegistering ? 'Meregister...' : 'Register'}
                 </button>
                 {diagnosisMode && editingWO && hasPermission('invoice:create') && !editingWO.invoiceId && (
                   <button

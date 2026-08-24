@@ -539,6 +539,12 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.doesNotMatch(page, /<span>Nomor: <strong className="text-gray-900">\{editingWO\?\.woNumber/);
   assert.doesNotMatch(page, /<span>Cabang: <strong className="text-gray-900">\{data\.branches\.find\(branch/);
   assert.match(page, /ariaLabel="Aksi Work Order"/);
+  assert.match(page, /const openWorkOrderStandard = \(wo: WorkOrder\)/);
+  assert.match(page, /handleOpenModal\(wo, true\)/);
+  assert.match(page, /onClick=\{\(\) => openWorkOrderStandard\(wo\)\}/);
+  assert.doesNotMatch(page, /EDIT PEKERJAAN \{editingWO\.woNumber\}/);
+  assert.doesNotMatch(page, /Edit Registrasi WO/);
+  assert.doesNotMatch(page, />\s*Edit Data Registrasi\s*</);
   assert.match(page, /top-2 z-50 hidden gap-1\.5 lg:flex \[&>div\]:mt-1\.5/);
   assert.match(page, /Terjadi Permasalahan pada Pemrosesan/);
   assert.match(page, /id="active-wo-conflict-title"/);
@@ -555,7 +561,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /form: 'work-order-entry-form'/);
   assert.match(page, /void handleSubmit\(\)/);
   assert.match(page, /setEditingWO\(created\);[\s\S]*?setIsAutoRegisteredDraft\(true\);[\s\S]*?setShowServiceForm\(true\)/);
-  assert.match(page, /isAutoRegisteredDraft \? editingWO\.woNumber : `Edit \$\{editingWO\.woNumber\}`/);
+  assert.match(page, /<FileText className="h-4 w-4" \/>\s*\{editingWO\.woNumber\}/);
   assert.match(page, /disabled=\{!editingWO \|\| !customerVehicleReady \|\| isAutoRegistering\}/);
   assert.match(page, /Hapus barang atau jasa terpilih/);
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
