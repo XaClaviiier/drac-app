@@ -2933,8 +2933,8 @@ export default function WorkOrders() {
                   onNewCustomerCreated={handleNewCustomerCreated}
                   disabled={customerVehicleLocked}
                   selectedAction={!customerVehicleLocked && !showQuickContact ? (
-                    <button type="button" onClick={() => setShowQuickContact(true)} className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:text-blue-900">
-                      <Plus className="h-3.5 w-3.5" /> Tambah Kontak
+                    <button type="button" onClick={() => setShowQuickContact(true)} className="grid h-6 w-6 place-items-center rounded text-blue-600 hover:bg-blue-100 hover:text-blue-800" title="Tambah kontak" aria-label="Tambah kontak">
+                      <Plus className="h-4 w-4" />
                     </button>
                   ) : undefined}
                 />

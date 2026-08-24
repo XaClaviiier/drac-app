@@ -554,6 +554,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /Register WO terlebih dahulu/);
   assert.match(page, /ComplaintMultiSelect/);
   assert.match(page, /selectedAction=\{!customerVehicleLocked/);
+  assert.match(page, /aria-label="Tambah kontak"/);
   assert.doesNotMatch(page, />Kontak kunjungan</);
   assert.doesNotMatch(page, /Kontak utama otomatis digunakan/);
   assert.match(page, /AccurateDocumentSideTabs active=\{documentTab\}/);
@@ -567,8 +568,14 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /NA#/);
   assert.match(source('src/components/CustomerPicker.tsx'), /placeholder="Ketik nama, HP, atau nopol\.\.\."/);
   assert.match(source('src/components/CustomerPicker.tsx'), /onVehicleSelect\?\.\(vehicle\.id\)/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /getSelectedCustomerLabel/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /customer\.phone\.trim\(\)/);
+  assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /Badge pelanggan terpilih/);
   assert.match(source('src/components/CustomerPicker.tsx'), /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
   assert.match(source('src/components/VehiclePicker.tsx'), /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
+  assert.match(source('src/components/VehiclePicker.tsx'), /getSelectedVehicleLabel/);
+  assert.match(source('src/components/VehiclePicker.tsx'), /\.filter\(Boolean\)\.join\(' '\)/);
+  assert.doesNotMatch(source('src/components/VehiclePicker.tsx'), /Badge kendaraan terpilih/);
   assert.match(complaints, /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
   assert.match(source('src/pages/WorkOrders.tsx'), /onVehicleSelect=\{handleVehicleSelect\}/);
   assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), />\{customer\.customerCode\}<\/span>/);

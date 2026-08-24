@@ -29,6 +29,9 @@ const getVehicleLabel = (vehicle: Vehicle) => {
   return `${brand} ${model}`;
 };
 
+const getSelectedCustomerLabel = (customer: Customer) =>
+  [customer.name.trim(), customer.phone.trim()].filter(Boolean).join(' - ');
+
 export default function CustomerPicker({ value, onChange, onVehicleSelect, onNewCustomerCreated, disabled = false, selectedAction }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
@@ -43,7 +46,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
   // Sinkronisasi input text dengan pelanggan yang dipilih
   useEffect(() => {
     if (selectedCustomer && !open) {
-      setInputText(selectedCustomer.name);
+      setInputText(getSelectedCustomerLabel(selectedCustomer));
     }
   }, [selectedCustomer, open]);
 
@@ -54,7 +57,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
         setOpen(false);
         setShowNewForm(false);
         // Kalau ada pelanggan terpilih, kembalikan teks ke namanya
-        if (selectedCustomer) setInputText(selectedCustomer.name);
+        if (selectedCustomer) setInputText(getSelectedCustomerLabel(selectedCustomer));
         else setInputText('');
       }
     };
@@ -95,7 +98,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
   const handleSelect = useCallback((customer: Customer, vehicle: Vehicle | null = null) => {
     onChange(customer.id);
     if (vehicle) onVehicleSelect?.(vehicle.id);
-    setInputText(customer.name);
+    setInputText(getSelectedCustomerLabel(customer));
     setOpen(false);
     setShowNewForm(false);
   }, [onChange, onVehicleSelect]);
@@ -109,7 +112,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setOpen(false);
-      if (selectedCustomer) setInputText(selectedCustomer.name);
+      if (selectedCustomer) setInputText(getSelectedCustomerLabel(selectedCustomer));
     }
     if (e.key === 'Enter' && filtered.length === 1) {
       e.preventDefault();
@@ -150,7 +153,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
       // Pilih langsung hasil simpan. Jangan menunggu render/refresh berikutnya karena
       // di HP hal itu sempat membuat editor WO terlihat tertutup lebih dulu.
       onChange(created.id);
-      setInputText(created.name);
+      setInputText(getSelectedCustomerLabel(created));
       onNewCustomerCreated?.(created);
       setShowNewForm(false);
       setOpen(false);
@@ -175,7 +178,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setOpen(false);
           setShowNewForm(false);
-          setInputText(selectedCustomer?.name || '');
+          setInputText(selectedCustomer ? getSelectedCustomerLabel(selectedCustomer) : '');
         }
       }}
     >
@@ -192,7 +195,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
           disabled={disabled}
           placeholder="Ketik nama, HP, atau nopol..."
           autoComplete="off"
-          className={`w-full pl-9 pr-10 py-2.5 border rounded-lg outline-none transition-colors text-sm ${
+          className={`h-[42px] w-full border rounded-lg py-0 pl-9 ${selectedCustomer && selectedAction && !disabled ? 'pr-[4.5rem]' : 'pr-10'} outline-none transition-colors text-sm ${
             disabled
               ? 'cursor-not-allowed border-gray-200 bg-gray-100 font-medium text-gray-600'
               : selectedCustomer
@@ -200,6 +203,11 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
               : 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
           }`}
         />
+        {selectedCustomer && selectedAction && !disabled && (
+          <div className="absolute right-9 top-1/2 -translate-y-1/2">
+            {selectedAction}
+          </div>
+        )}
         {selectedCustomer && !disabled && (
           <button
             type="button"
@@ -216,17 +224,6 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
           </button>
         )}
       </div>
-
-      {/* Badge pelanggan terpilih */}
-      {selectedCustomer && !open && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 px-1">
-          <span>{selectedCustomer.phone}</span>
-          {selectedCustomer.address && (
-            <span className="max-w-xs truncate">{selectedCustomer.address}</span>
-          )}
-          {selectedAction}
-        </div>
-      )}
 
       {/* Dropdown */}
       {open && !disabled && (

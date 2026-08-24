@@ -20,6 +20,18 @@ interface VehiclePickerProps {
 
 const normalizePlate = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
+const formatPlateNumber = (value?: string) => {
+  const normalized = normalizePlate(String(value || ''));
+  const match = normalized.match(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/);
+  return match ? [match[1], match[2], match[3]].filter(Boolean).join(' ') : normalized;
+};
+
+const getSelectedVehicleLabel = (vehicle: Vehicle) => [
+  formatPlateNumber(vehicle.plateNumber),
+  vehicle.model.trim().toUpperCase() || vehicle.brand.trim().toUpperCase(),
+  vehicle.color.trim().toUpperCase(),
+].filter(Boolean).join(' ');
+
 export default function VehiclePicker({ customer, value, onChange, onNewVehicleCreated, locked = false }: VehiclePickerProps) {
   const { data, addVehicle, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
@@ -64,7 +76,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   // Sinkronisasi teks input dengan kendaraan terpilih
   useEffect(() => {
     if (selectedVehicle && !open) {
-      setInputText(selectedVehicle.plateNumber);
+      setInputText(getSelectedVehicleLabel(selectedVehicle));
     }
   }, [selectedVehicle, open]);
 
@@ -83,7 +95,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setOpen(false);
         setShowNewForm(false);
-        if (selectedVehicle) setInputText(selectedVehicle.plateNumber);
+        if (selectedVehicle) setInputText(getSelectedVehicleLabel(selectedVehicle));
         else setInputText('');
       }
     };
@@ -119,7 +131,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setOpen(false);
-      if (selectedVehicle) setInputText(selectedVehicle.plateNumber);
+      if (selectedVehicle) setInputText(getSelectedVehicleLabel(selectedVehicle));
     }
     if (e.key === 'Enter' && filtered.length === 1) {
       e.preventDefault();
@@ -129,7 +141,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
 
   const handleSelect = useCallback((vehicle: Vehicle) => {
     onChange(vehicle.id);
-    setInputText(vehicle.plateNumber);
+    setInputText(getSelectedVehicleLabel(vehicle));
     setOpen(false);
     setShowNewForm(false);
   }, [onChange]);
@@ -185,7 +197,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
       await addVehicle(vehicle);
       // Tetap berada di editor WO dan langsung gunakan kendaraan yang baru dibuat.
       onChange(vehicle.id);
-      setInputText(vehicle.plateNumber);
+      setInputText(getSelectedVehicleLabel(vehicle));
       onNewVehicleCreated?.(vehicle);
       setShowNewForm(false);
       setOpen(false);
@@ -212,7 +224,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setOpen(false);
           setShowNewForm(false);
-          setInputText(selectedVehicle?.plateNumber || '');
+          setInputText(selectedVehicle ? getSelectedVehicleLabel(selectedVehicle) : '');
         }
       }}
     >
@@ -229,7 +241,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
           disabled={disabled}
           placeholder={!customer ? 'Pilih pelanggan terlebih dahulu' : locked ? 'Kendaraan sudah teregister' : 'Ketik nomor plat kendaraan...'}
           autoComplete="off"
-          className={`w-full pl-9 pr-10 py-2.5 border rounded-lg outline-none transition-colors text-sm font-mono ${
+          className={`h-[42px] w-full border rounded-lg py-0 pl-9 pr-10 outline-none transition-colors text-sm ${
             disabled
               ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
               : selectedVehicle
@@ -253,15 +265,6 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
           </button>
         )}
       </div>
-
-      {/* Badge kendaraan terpilih */}
-      {selectedVehicle && !open && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 px-1">
-          <span className="font-semibold text-gray-800">{selectedVehicle.brand} {selectedVehicle.model}</span>
-          <span className="text-gray-500">{selectedVehicle.year}</span>
-          <span className="text-gray-500">{selectedVehicle.color}</span>
-        </div>
-      )}
 
       {/* Dropdown */}
       {open && !disabled && (
