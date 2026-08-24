@@ -156,6 +156,7 @@ export default function WorkOrders() {
   const [isFollowingUpLostSales, setIsFollowingUpLostSales] = useState(false);
   const [resumeLostSalesAfterEstimate, setResumeLostSalesAfterEstimate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [processingIssues, setProcessingIssues] = useState<string[]>([]);
   const [showQuickContact, setShowQuickContact] = useState(false);
   const [quickContactSaving, setQuickContactSaving] = useState(false);
   const [quickContactDeletingId, setQuickContactDeletingId] = useState('');
@@ -853,14 +854,6 @@ export default function WorkOrders() {
   };
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
-  const newWOReadyForRegister = Boolean(
-    !editingWO
-    && currentBranchId !== 'ALL'
-    && formData.customerRefId
-    && formData.vehicleRefId
-    && formData.description.trim()
-  );
-
   const resetForm = () => {
     setFormData({
       date: localDateKey(),
@@ -1151,42 +1144,27 @@ export default function WorkOrders() {
     }
     if (!editingWO && autoRegisteringRef.current) return;
 
-    // Validasi wajib
-    if (!formData.customerRefId) {
-      setSuccessMsg('');
-      window.alert('Pelanggan wajib dipilih dari data pelanggan.');
-      return;
-    }
-    if (!formData.vehicleRefId) {
-      window.alert('Kendaraan wajib dipilih dari data kendaraan.');
-      return;
-    }
-    if (!formData.description.trim()) {
-      window.alert('Keluhan atau keterangan service wajib diisi.');
-      return;
-    }
-    if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length === 0) {
-      window.alert('Tambahkan minimal 1 layanan/barang sebelum menyimpan.');
-      return;
-    }
-    if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && totalServices <= 0) {
-      window.alert('Total estimasi harus lebih dari Rp0. Isi harga minimal satu layanan/barang sebelum menyimpan diagnosa.');
-      return;
-    }
+    // Validasi wajib ditampilkan sekaligus seperti dialog pemrosesan Accurate.
+    const issues: string[] = [];
+    if (!editingWO && currentBranchId === 'ALL') issues.push('Cabang aktif harus dipilih');
+    if (!formData.customerRefId) issues.push('Pelanggan harus diisi');
+    if (!formData.vehicleRefId) issues.push('Kendaraan harus diisi');
+    if (!formData.description.trim()) issues.push('Keluhan pelanggan harus diisi');
+    if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length === 0) issues.push('Rincian Barang / Jasa harus diisi');
+    if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length > 0 && totalServices <= 0) issues.push('Total estimasi harus lebih dari Rp0');
     const diagnosisMeasurements = [formData.diagnosisTemperature, formData.diagnosisLp, formData.diagnosisHp];
     const hasAnyMeasurement = diagnosisMeasurements.some(value => value !== undefined && value !== null);
     const hasCompleteMeasurements = diagnosisMeasurements
       .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
-    if (diagnosisMode && hasAnyMeasurement && !hasCompleteMeasurements) {
-      window.alert('Data pengukuran belum lengkap. Jika salah satu diisi, Suhu, LP, dan HP wajib diisi semuanya.');
-      return;
-    }
+    if (diagnosisMode && hasAnyMeasurement && !hasCompleteMeasurements) issues.push('Suhu, LP, dan HP harus diisi lengkap');
     if (shouldCreateInvoice) {
       const hasCompletionNote = Boolean(formData.findings.trim());
-      if (!hasCompleteMeasurements && !hasCompletionNote) {
-        window.alert('Pekerjaan belum dapat diselesaikan. Isi Suhu, LP, dan HP secara lengkap atau tuliskan catatan hasil pekerjaan.');
-        return;
-      }
+      if (!hasCompleteMeasurements && !hasCompletionNote) issues.push('Hasil pengukuran atau catatan hasil pekerjaan harus diisi');
+    }
+    if (issues.length > 0) {
+      setSuccessMsg('');
+      setProcessingIssues(issues);
+      return;
     }
 
     // Aturan: satu mobil hanya boleh punya satu WO aktif dalam satu waktu.
@@ -2845,6 +2823,24 @@ export default function WorkOrders() {
           </div>
         </div>
       )}
+      {processingIssues.length > 0 && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="processing-issues-title">
+          <div className="w-full max-w-2xl overflow-hidden rounded-md bg-white shadow-2xl">
+            <header className="flex items-center justify-between bg-[#0d3264] px-5 py-3 text-white">
+              <div className="flex items-center gap-3"><AlertTriangle className="h-5 w-5"/><h3 id="processing-issues-title" className="font-semibold">Terjadi Permasalahan pada Pemrosesan</h3></div>
+              <button type="button" onClick={() => setProcessingIssues([])} className="rounded p-1 hover:bg-white/10" aria-label="Tutup"><X className="h-5 w-5"/></button>
+            </header>
+            <div className="grid gap-5 px-6 py-5 sm:grid-cols-[88px_minmax(0,1fr)]">
+              <div className="flex items-start justify-center"><div className="flex h-16 w-16 items-center justify-center rounded-lg border-2 border-red-700 bg-red-500 text-white shadow"><X className="h-11 w-11 stroke-[4]"/></div></div>
+              <div><p className="text-lg text-gray-900">Silakan perbaiki permasalahan berikut ini:</p><ul className="mt-2 list-disc space-y-1 pl-6 text-base text-red-700">{processingIssues.map(issue => <li key={issue}>{issue}</li>)}</ul></div>
+            </div>
+            <footer className="flex items-center justify-between px-5 pb-4">
+              <button type="button" onClick={() => void navigator.clipboard.writeText(processingIssues.map(issue => `• ${issue}`).join('\n'))} className="inline-flex items-center gap-2 rounded border border-blue-300 bg-white px-5 py-2.5 font-medium text-blue-700 hover:bg-blue-50"><Copy className="h-4 w-4"/>Salin</button>
+              <button type="button" autoFocus onClick={() => setProcessingIssues([])} className="rounded bg-[#1f4fa3] px-7 py-2.5 font-semibold text-white hover:bg-blue-800">OK</button>
+            </footer>
+          </div>
+        </div>
+      )}
       {/* Data Baru / Edit: subtab penuh pada desktop, modal pada mobile */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-0 sm:items-center sm:p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-0 lg:pb-3 lg:pt-0">
@@ -2872,7 +2868,7 @@ export default function WorkOrders() {
                   type: 'submit',
                   form: 'work-order-entry-form',
                   onClick: () => { diagnosisSubmitAction.current = 'save'; },
-                  disabled: editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : (!newWOReadyForRegister || isAutoRegistering),
+                  disabled: editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : isAutoRegistering,
                   title: editingWO ? 'Simpan Work Order' : 'Register Work Order',
                 }}
                 document={{
@@ -3649,7 +3645,7 @@ export default function WorkOrders() {
                 )}
                 <button
                   type={editingWO && !isAutoRegisteredDraft && !diagnosisMode && !serviceEditMode ? 'button' : 'submit'}
-                  disabled={!editingWO ? (!newWOReadyForRegister || isAutoRegistering) : false}
+                  disabled={!editingWO ? isAutoRegistering : false}
                   onClick={() => {
                     if (editingWO && !isAutoRegisteredDraft && !diagnosisMode && !serviceEditMode) {
                       setServiceEditMode(true);
