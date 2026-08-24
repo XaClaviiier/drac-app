@@ -572,3 +572,16 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
   assert.ok((invoices.match(/ui\.documentAction/g) || []).length >= 4);
   assert.match(workOrders, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
 });
+
+test('Daftar Laporan memakai katalog kategori Accurate yang padat dan responsif', () => {
+  const page = source('src/pages/ReportsIndex.tsx');
+  assert.match(page, /lg:grid-cols-\[270px_minmax\(0,1fr\)\]/);
+  assert.match(page, /aria-label="Kategori laporan"/);
+  assert.match(page, /\{ id: 'memorize', label: 'Memorize'/);
+  assert.match(page, /\{ id: 'gudang', label: 'Gudang'/);
+  assert.match(page, /className="grid gap-x-8 lg:grid-cols-2"/);
+  assert.match(page, /label: 'Stok per Gudang'/);
+  assert.match(page, /label: 'Lembar Penghitungan Stok'/);
+  assert.match(page, /MEMORIZED_REPORTS_KEY = 'drac\.reports\.memorized\.v1'/);
+  assert.match(page, /placeholder="Cari laporan\.\.\."/);
+});
