@@ -616,3 +616,17 @@ test('faktur baru dari WO dibuka sebagai subtab Data Baru tanpa modal melayang',
   assert.doesNotMatch(page, /showWOPicker\s*&&\s*\(\s*<div className="fixed inset-0 bg-black\/50/);
   assert.match(page, /createInvoiceFromWO\([\s\S]*?woDraftItems[\s\S]*?normalizedManualReceiptNumber/);
 });
+
+test('form Faktur Penjualan mengikuti kerangka padat Data Baru Order Kerja', () => {
+  const page = source('src/pages/SalesInvoice.tsx');
+
+  assert.match(page, /aria-label="Aksi Faktur Penjualan"/);
+  assert.match(page, /lg:grid-cols-\[120px_minmax\(0,1fr\)_minmax\(0,\.8fr\)_82px_190px_44px\]/);
+  assert.match(page, />Pelanggan <span className="ml-1 text-red-500">\*<\/span>/);
+  assert.match(page, />No\. Nota Fisik<\/label>/);
+  assert.match(page, /className="flex justify-end gap-1 lg:col-span-2"/);
+  assert.match(page, /aria-label="Tab rincian Faktur Penjualan"/);
+  assert.match(page, /setSelectedFormItemId\(item\.id\)/);
+  assert.match(page, /lg:pr-\[82px\]/);
+  assert.doesNotMatch(page, /order-first mr-auto flex flex-wrap gap-x-5/);
+});

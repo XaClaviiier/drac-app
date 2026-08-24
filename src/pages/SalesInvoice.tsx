@@ -82,6 +82,7 @@ export default function SalesInvoice() {
   const [detailWarehouseId, setDetailWarehouseId] = useState('');
   const [detailActiveTab, setDetailActiveTab] = useState<'detail' | 'info' | 'image'>('detail');
   const [detailFormRowId, setDetailFormRowId] = useState('');
+  const [selectedFormItemId, setSelectedFormItemId] = useState('');
   const activeFilterCount = [filterCustomer, filterStatus, filterDate].filter(Boolean).length;
   const resetInvoiceFilters = () => {
     setFilterCustomer('');
@@ -389,6 +390,7 @@ export default function SalesInvoice() {
     setFormDiscount(0);
     setItemSearchOpen(false);
     setDetailItemId('');
+    setSelectedFormItemId('');
     setInvoiceDateUnlocked(false);
   };
 
@@ -698,6 +700,7 @@ export default function SalesInvoice() {
 
   const removeFormItem = (id: string) => {
     setFormItems(current => removeInvoiceItem(current, id));
+    setSelectedFormItemId(current => current === id ? '' : current);
   };
 
   const removeWODraftItem = (id: string) => {
@@ -1188,53 +1191,31 @@ export default function SalesInvoice() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4">
-              <div className="flex flex-wrap items-center justify-end gap-1.5">
-                <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'ambil' ? null : 'ambil')} className={ui.documentAction}>Ambil <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'ambil' && <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => { setFormActionMenu(null); setShowModal(false); handleOpenWOPicker(); }} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Wrench className="h-4 w-4 text-emerald-600"/>Ambil dari Order Kerja</button></div>}</div>
-                {editingInvoice ? <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'proses' ? null : 'proses')} className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'proses' && <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Eye className="h-4 w-4"/>Lihat Riwayat Pembayaran</button><button type="button" disabled={formGrandTotal <= editingInvoice.payment} onClick={() => formGrandTotal > editingInvoice.payment && window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"><Receipt className="h-4 w-4"/>Tambah Pembayaran</button></div>}</div> : <button type="button" disabled title="Simpan faktur terlebih dahulu" className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>}
-                <div className="order-first mr-auto flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
-                  <span>Nomor: <strong className="text-gray-800">{editingInvoice?.invoiceNumber || 'Otomatis saat disimpan'}</strong></span>
-                  <span>Cabang: <strong className="text-gray-800">{currentBranchId === 'ALL' ? 'Wajib pilih cabang' : data.branches.find(branch => branch.id === currentBranchId)?.name || '-'}</strong></span>
+            <form onSubmit={handleSubmit} className="relative grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4 lg:overflow-visible lg:pr-[82px]">
+              <aside className="absolute bottom-2 right-2 top-2 z-30 hidden w-[66px] flex-col items-stretch gap-2 border-l border-gray-300 bg-gray-50 pl-2 lg:flex" aria-label="Aksi Faktur Penjualan">
+                <button type="submit" disabled={!manualInvoiceReady} className="grid h-14 w-14 place-items-center rounded border border-blue-700 bg-blue-700 text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-300" title="Simpan Faktur" aria-label="Simpan Faktur"><Save className="h-6 w-6" /></button>
+                <button type="button" onClick={() => document.getElementById('invoice-description')?.focus()} className="grid h-14 w-14 place-items-center rounded border border-blue-400 bg-white text-blue-700 hover:bg-blue-50" title="Info lainnya / keterangan" aria-label="Info lainnya"><Settings2 className="h-6 w-6" /></button>
+                <button type="button" onClick={() => selectedFormItemId && removeFormItem(selectedFormItemId)} disabled={!selectedFormItemId} className="grid h-14 w-14 place-items-center rounded border border-red-300 bg-white text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-300" title={selectedFormItemId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu'} aria-label="Hapus barang atau jasa terpilih"><Trash2 className="h-6 w-6" /></button>
+              </aside>
+              <section className="border border-gray-300 bg-white p-3">
+                <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
+                  <label className="flex h-10 items-center text-sm font-medium text-gray-700">Pelanggan <span className="ml-1 text-red-500">*</span></label>
+                  {editingInvoice ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice.customerName}</div> : <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} onVehicleSelect={handleVehicleSelect} />}
+                  {editingInvoice ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice.vehicleInfo}</div> : <VehiclePicker customer={selectedCustomer} value={formData.vehicleRefId} onChange={handleVehicleSelect} />}
+                  <label className="flex h-10 items-center justify-end pr-2 text-sm font-medium text-gray-700">Tanggal <span className="ml-1 text-red-500">*</span></label>
+                  <IndonesianDateInput required max={localDateKey()} disabled={!invoiceDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-10 min-w-0 w-full" />
+                  <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} title={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} aria-label={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} className={`inline-flex h-10 w-10 items-center justify-center rounded border ${invoiceDateUnlocked ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}><Edit className="h-4 w-4" /></button>
+                  <label className="flex h-10 items-center text-sm font-medium text-gray-700">No. Nota Fisik</label>
+                  <input value={formData.manualReceiptNumber} onChange={(event) => setFormData({ ...formData, manualReceiptNumber: event.target.value.toUpperCase() })} maxLength={50} placeholder="Opsional, harus unik" className="app-field h-10 w-full px-3 text-sm font-semibold uppercase lg:col-span-2" />
+                  <div className="hidden lg:block" />
+                  <div className="flex justify-end gap-1 lg:col-span-2">
+                    <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'ambil' ? null : 'ambil')} className={ui.documentAction}>Ambil <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'ambil' && <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => { setFormActionMenu(null); setShowModal(false); handleOpenWOPicker(); }} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Wrench className="h-4 w-4 text-emerald-600"/>Ambil dari Order Kerja</button></div>}</div>
+                    {editingInvoice ? <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'proses' ? null : 'proses')} className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'proses' && <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Eye className="h-4 w-4"/>Lihat Riwayat Pembayaran</button><button type="button" disabled={formGrandTotal <= editingInvoice.payment} onClick={() => formGrandTotal > editingInvoice.payment && window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"><Receipt className="h-4 w-4"/>Tambah Pembayaran</button></div>}</div> : <button type="button" disabled title="Simpan faktur terlebih dahulu" className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>}
+                  </div>
                 </div>
-                <button type="submit" disabled={!manualInvoiceReady} title="Simpan Faktur" className="inline-flex h-9 items-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4"/>Simpan</button>
-              </div>
-              <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_190px_190px]">
-              {/* Tanggal */}
-              <div className="lg:order-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tanggal <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <IndonesianDateInput
-                    required max={localDateKey()} disabled={!invoiceDateUnlocked}
-                    value={formData.date}
-                    onChange={date=>setFormData({...formData,date})}
-                    className="h-10 min-w-0 flex-1"
-                  />
-                  <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} title={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} aria-label={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} className={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded border ${invoiceDateUnlocked ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}>
-                    <Edit className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="lg:order-4">
-                <label className="mb-1 block text-sm font-medium text-gray-700">No. Nota Fisik <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
-                <input
-                  value={formData.manualReceiptNumber}
-                  onChange={(event) => setFormData({ ...formData, manualReceiptNumber: event.target.value.toUpperCase() })}
-                  maxLength={50}
-                  placeholder="Sesuai nota asli"
-                  className="app-field h-10 w-full px-3 text-sm font-semibold uppercase"
-                />
-              </div>
-              {/* Pelanggan & Kendaraan Picker */}
-              <div className="contents">
-                {editingInvoice ? (
-                  <div className="space-y-3 lg:col-span-2">
-                    <div className="grid grid-cols-1 gap-3 border border-blue-200 bg-blue-50 p-4 sm:grid-cols-3">
-                      <div><span className="block text-[10px] font-bold uppercase text-blue-500">Pelanggan · terkunci</span><strong>{editingInvoice.customerName}</strong></div>
-                      <div><span className="block text-[10px] font-bold uppercase text-blue-500">Referensi · terkunci</span><strong>{editingInvoice.woNumber || 'Faktur manual'}</strong></div>
-                      <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{editingInvoice.vehicleInfo}</strong></div>
-                    </div>
+                {editingInvoice && <div className="mt-2 text-xs text-gray-500">Nomor Faktur: <strong className="text-gray-800">{editingInvoice.invoiceNumber}</strong>{editingInvoice.woNumber && <> · Referensi WO: <strong className="text-gray-800">{editingInvoice.woNumber}</strong></>}</div>}
+                {editingInvoice && (
+                  <div className="mt-2">
                     {editingInvoice.woId && hasPermission('wo:edit') && (
                       <div className="rounded border border-amber-300 bg-amber-50 p-3">
                         {!identityCorrection.open ? <button type="button" onClick={() => setIdentityCorrection(current => ({ ...current, open: true }))} className="rounded border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-800">Koreksi Identitas WO & Faktur</button> : (
@@ -1250,38 +1231,22 @@ export default function SalesInvoice() {
                       </div>
                     )}
                   </div>
-                ) : (
-                  <>
-                    <div className="lg:order-1">
-                      <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                        <User className="w-4 h-4 text-blue-600" />
-                        Data Pelanggan <span className="text-red-500">*</span>
-                      </label>
-                      <CustomerPicker
-                        value={formData.customerRefId}
-                        onChange={handleCustomerSelect}
-                        onVehicleSelect={handleVehicleSelect}
-                      />
-                    </div>
-                    <div className="lg:order-2">
-                      <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                        <Car className="w-4 h-4 text-orange-600" />
-                        Data Kendaraan <span className="text-red-500">*</span>
-                      </label>
-                      <VehiclePicker customer={selectedCustomer} value={formData.vehicleRefId} onChange={handleVehicleSelect} />
-                    </div>
-                  </>
                 )}
-              </div>
               </section>
               {data.settings.security.requireBackdateReason !== false && (formData.date < localDateKey() || (formData.payment > 0 && formData.paymentDate < localDateKey())) && (
                 <input required value={formData.backdateReason} onChange={(e) => setFormData({ ...formData, backdateReason: e.target.value })} placeholder="Alasan transaksi tanggal mundur" className="w-full rounded border border-amber-400 bg-amber-50 px-4 py-2.5 lg:col-span-2" />
               )}
 
-              <section className="relative min-h-[320px] space-y-2 border border-gray-300 bg-white p-3">
+              <section className="relative min-h-[320px] space-y-2 border border-gray-300 bg-white p-3 pl-[62px]">
+                <aside className="absolute bottom-0 left-0 top-0 flex w-12 flex-col border-r border-gray-300 bg-gray-100" aria-label="Tab rincian Faktur Penjualan">
+                  <button type="button" className="grid h-11 place-items-center border-l-2 border-rose-500 bg-white text-rose-500" title="Rincian Barang"><FileText className="h-5 w-5" /></button>
+                  <button type="button" onClick={() => document.getElementById('invoice-description')?.focus()} className="grid h-11 place-items-center border-t border-gray-300 text-slate-700 hover:bg-blue-50" title="Info lainnya"><AlertTriangle className="h-5 w-5" /></button>
+                  <button type="button" className="grid h-11 place-items-center border-t border-gray-300 text-slate-700 hover:bg-blue-50" title="Perhitungan"><Settings2 className="h-5 w-5" /></button>
+                  <button type="button" className="grid h-11 place-items-center border-t border-gray-300 text-slate-700 hover:bg-blue-50" title="Pembayaran"><Receipt className="h-5 w-5" /></button>
+                </aside>
                 {editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"><div className="-rotate-12 rounded-full border-[5px] border-emerald-500/25 px-7 py-4 text-4xl font-black tracking-widest text-emerald-500/25">LUNAS</div></div>}
                 <div className="flex items-center justify-between gap-4">
-                  <div className="relative w-full max-w-xl" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setItemSearchOpen(false); }}>
+                  <div className="relative min-w-0 flex-1" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setItemSearchOpen(false); }}>
                     <Search className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400"/>
                     <input id="invoice-item-search" value={formItemSearch} onFocus={() => setItemSearchOpen(true)} onChange={event => { setFormItemSearch(event.target.value); setItemSearchOpen(true); }} onKeyDown={event => { if (event.key === 'Escape') setItemSearchOpen(false); if (event.key === 'Enter' && searchableItems[0]) { event.preventDefault(); addItemDirectly(searchableItems[0].id); } }} placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 pl-9 pr-10 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/>
                     <button type="button" onClick={() => setItemSearchOpen(current => !current)} className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-blue-700"><Search className="h-5 w-5"/></button>
@@ -1308,7 +1273,7 @@ export default function SalesInvoice() {
                     if (isPackageMemberItem(item)) return null;
                     const members = isPackageHeaderItem(item) ? packageMembersAfter(formItems, index) : [];
                     return (
-                      <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                      <div key={item.id} onClick={() => setSelectedFormItemId(item.id)} className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${selectedFormItemId === item.id ? 'bg-blue-100 ring-1 ring-inset ring-blue-400' : members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
                         <div className="hidden text-center text-xs text-gray-400 lg:block">{formItems.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1}</div>
                         <div className="min-w-0">
                           <p className="truncate font-medium">{invoiceItemReceiptName(item)}</p>
@@ -1330,6 +1295,7 @@ export default function SalesInvoice() {
               <section className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(460px,560px)]">
                 <div className="h-[88px]">
                   <textarea
+                    id="invoice-description"
                     rows={2}
                     required
                     value={formData.description}
