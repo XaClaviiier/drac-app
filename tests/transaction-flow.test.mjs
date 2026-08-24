@@ -463,14 +463,19 @@ test('daftar Faktur Penjualan mengikuti kepadatan dan perataan Order Kerja', () 
   const page = source('src/pages/SalesInvoice.tsx');
   assert.match(page, /space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
   assert.match(page, /\$\{ui\.toolbar\} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2/);
-  assert.match(page, /className="flex flex-wrap items-center justify-between gap-2"/);
+  assert.match(page, /className="flex flex-wrap items-center gap-x-2 gap-y-1\.5"/);
   assert.match(page, /title="Filter daftar faktur"/);
   assert.match(page, /Filter Faktur Penjualan/);
   assert.match(page, /activeFilterCount/);
   assert.match(page, /resetInvoiceFilters/);
   assert.doesNotMatch(page, /<option value="">Pelanggan: Semua<\/option>/);
-  assert.match(page, /className="inline-flex h-9 w-11 items-center justify-center rounded border border-blue-600/);
-  assert.match(page, /className="relative w-full min-w-\[240px\] sm:w-\[360px\]"/);
+  assert.match(page, /className="order-4 inline-flex h-9 w-11 items-center justify-center rounded border border-blue-600/);
+  assert.match(page, /ariaLabel="Filter satu tanggal faktur"/);
+  assert.match(page, /title="Buat faktur penjualan baru"/);
+  assert.match(page, /title=\{`Buat faktur dari WO/);
+  assert.match(page, /className="order-3 inline-flex h-9 w-14/);
+  assert.match(page, /className="order-3 relative inline-flex h-9 w-14/);
+  assert.match(page, /className="order-5 relative ml-auto min-w-\[260px\] flex-\[0_1_360px\]/);
   assert.match(page, /\$\{ui\.tableShell\} mx-1 shadow-sm lg:mx-3 lg:mt-0\.5/);
   assert.match(page, /<thead className="sticky top-0 z-20 bg-blue-800 text-white">/);
   assert.doesNotMatch(page, /<th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Tanggal<\/th>/);
@@ -517,7 +522,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
   assert.match(page, /setSelectedServiceId\(service\.id\)/);
   assert.match(page, /Waktu WO desktop/);
-  assert.match(page, /className="hidden items-center justify-end border-b border-gray-200 bg-white pb-2 lg:sticky lg:top-0 lg:z-40 lg:flex"/);
+  assert.match(page, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
   assert.match(page, /Register WO terlebih dahulu/);
   assert.match(page, /ComplaintMultiSelect/);
   assert.match(page, /selectedAction=\{!customerVehicleLocked/);
@@ -565,4 +570,5 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
   assert.match(invoices, /disabled title="Simpan faktur terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
   assert.ok((workOrders.match(/ui\.documentAction/g) || []).length >= 4);
   assert.ok((invoices.match(/ui\.documentAction/g) || []).length >= 4);
+  assert.match(workOrders, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
 });

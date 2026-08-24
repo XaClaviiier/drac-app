@@ -2893,64 +2893,6 @@ export default function WorkOrders() {
                   <Trash2 className="h-6 w-6" />
                 </button>
               </aside>
-              <div className="hidden items-center justify-end border-b border-gray-200 bg-white pb-2 lg:sticky lg:top-0 lg:z-40 lg:flex">
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <details data-wo-action-menu className={`group relative ${editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                    <summary aria-disabled={Boolean(editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId))} tabIndex={editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>
-                      Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
-                    </summary>
-                    <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                      <button type="button" disabled={!editingWO} onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">
-                        Layanan WO Sebelumnya
-                      </button>
-                      <button type="button" disabled={!editingWO} onClick={() => setShowQuickServices(true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">
-                        Paket/Layanan Favorit
-                      </button>
-                      {!editingWO && <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-400">Register WO terlebih dahulu.</p>}
-                    </div>
-                  </details>
-
-                  {editingWO ? <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                    <summary className={`${ui.documentAction} cursor-pointer list-none`}>
-                      Proses <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
-                    </summary>
-                    <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                      {editingWO?.status === 'Register' && (
-                        <>
-                          <button
-                            type="submit"
-                            onClick={() => { diagnosisSubmitAction.current = 'process'; }}
-                            className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
-                          >
-                            Mulai Dikerjakan
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => requestStatusChange(editingWO, 'Closed')}
-                            className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50"
-                          >
-                            Batalkan / Lost Sales
-                          </button>
-                        </>
-                      )}
-                      {editingWO?.status === 'Proses' && (
-                        <>
-                          <button type="button" onClick={() => openCompletionModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Tandai Selesai</button>
-                          <button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button>
-                        </>
-                      )}
-                      {editingWO?.status === 'Selesai' && !editingWO.invoiceId && (
-                        <>
-                          <button type="button" onClick={() => handleOpenInvoiceModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Buat Faktur</button>
-                          <button type="button" onClick={() => handleReopenCompletedWorkOrder(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Kembali ke Dikerjakan</button>
-                          <button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button>
-                        </>
-                      )}
-                    </div>
-                  </details> : <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button>}
-
-                </div>
-              </div>
               {/* Blok simpan jika masih Semua Cabang */}
               {currentBranchId === 'ALL' && !editingWO && (
                 <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 flex items-start gap-3">
@@ -3050,6 +2992,28 @@ export default function WorkOrders() {
                         onChange={description => setFormData(previous => ({ ...previous, description }))}
                         onEditOptions={openComplaintEditor}
                       />
+                    </div>
+                    <div data-wo-inline-actions className="hidden items-center justify-end gap-1.5 lg:col-span-3 lg:flex">
+                      <details data-wo-action-menu className={`group relative ${editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                        <summary aria-disabled={Boolean(editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId))} tabIndex={editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>
+                          Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
+                        </summary>
+                        <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+                          <button type="button" disabled={!editingWO} onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Layanan WO Sebelumnya</button>
+                          <button type="button" disabled={!editingWO} onClick={() => setShowQuickServices(true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Paket/Layanan Favorit</button>
+                          {!editingWO && <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-400">Register WO terlebih dahulu.</p>}
+                        </div>
+                      </details>
+                      {editingWO ? <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                        <summary className={`${ui.documentAction} cursor-pointer list-none`}>
+                          Proses <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
+                        </summary>
+                        <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+                          {editingWO.status === 'Register' && <><button type="submit" onClick={() => { diagnosisSubmitAction.current = 'process'; }} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                          {editingWO.status === 'Proses' && <><button type="button" onClick={() => openCompletionModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Tandai Selesai</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button></>}
+                          {editingWO.status === 'Selesai' && !editingWO.invoiceId && <><button type="button" onClick={() => handleOpenInvoiceModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Buat Faktur</button><button type="button" onClick={() => handleReopenCompletedWorkOrder(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Kembali ke Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                        </div>
+                      </details> : <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button>}
                     </div>
                   </>
                 )}

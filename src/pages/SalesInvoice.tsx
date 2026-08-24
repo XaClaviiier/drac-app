@@ -804,9 +804,12 @@ export default function SalesInvoice() {
 
       {/* Filters */}
       <div className={`${showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <div className="order-1 flex flex-shrink-0 items-center gap-1">
+              <IndonesianDateInput value={filterDate} onChange={setFilterDate} ariaLabel="Filter satu tanggal faktur" title="Pilih satu tanggal faktur" className="h-9 w-40 text-sm" />
+              {filterDate && <button type="button" onClick={() => setFilterDate('')} className="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 hover:border-blue-500 hover:text-blue-700" title="Bersihkan tanggal — tampilkan semua tanggal" aria-label="Bersihkan tanggal faktur"><X className="h-4 w-4" /></button>}
+            </div>
+            <div className="order-1 relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
               <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar faktur"><Filter className="h-4 w-4"/> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
               {showFilterPanel && <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
                 <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Faktur Penjualan</strong><button type="button" onClick={resetInvoiceFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button></div>
@@ -819,24 +822,27 @@ export default function SalesInvoice() {
                 <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
               </div>}
             </div>
+            <div className="order-2 h-0 basis-full" />
             {hasPermission('invoice:create') && (
               <>
                 <button
                   type="button"
-                  onClick={handleOpenWOPicker}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded bg-emerald-700 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-800"
+                  onClick={() => handleOpenModal()}
+                  className="order-3 inline-flex h-9 w-14 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700"
+                  title="Buat faktur penjualan baru"
+                  aria-label="Buat faktur penjualan baru"
                 >
-                  <Wrench className="h-4 w-4" />
-                  <span className="hidden xl:inline">Faktur dari WO</span>
-                  {unbilledWOs.length > 0 && <span className="rounded-full bg-white px-1.5 text-xs font-bold text-green-700">{unbilledWOs.length}</span>}
+                  <Plus className="h-5 w-5" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleOpenModal()}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded bg-blue-800 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                  onClick={handleOpenWOPicker}
+                  className="order-3 relative inline-flex h-9 w-14 flex-shrink-0 items-center justify-center rounded bg-emerald-700 text-white shadow-sm hover:bg-emerald-800"
+                  title={`Buat faktur dari WO${unbilledWOs.length ? ` — ${unbilledWOs.length} WO siap difaktur` : ''}`}
+                  aria-label="Buat faktur dari WO"
                 >
-                  <Plus className="h-4 w-4" />
-                  <span className="hidden xl:inline">Buat Faktur</span>
+                  <Plus className="h-5 w-5" />
+                  {unbilledWOs.length > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-white px-1 text-[10px] font-bold leading-4 text-emerald-700 shadow">{unbilledWOs.length}</span>}
                 </button>
               </>
             )}
@@ -844,17 +850,16 @@ export default function SalesInvoice() {
               type="button"
               onClick={() => void handleRefresh()}
               disabled={isLoading}
-              className="inline-flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
+              className="order-4 inline-flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"
               title="Ambil ulang data faktur dari server"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:flex-nowrap">
-            <div className="relative w-full min-w-[240px] sm:w-[360px]">
+            <div className="order-5 relative ml-auto min-w-[260px] flex-[0_1_360px] xl:min-w-[300px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input type="text" placeholder="Cari faktur, nota fisik, pelanggan, kendaraan..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`${ui.search} w-full pl-9 pr-3`} />
             </div>
+            <div className="order-6 flex flex-wrap items-center gap-2 xl:flex-nowrap">
             <button className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download">
               <Download className="h-4 w-4" />
             </button>
@@ -883,7 +888,7 @@ export default function SalesInvoice() {
               )}
             </div>
             <span className="flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredInvoices.length}</span>
-          </div>
+            </div>
         </div>
       </div>
 
