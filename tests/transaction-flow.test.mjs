@@ -457,6 +457,7 @@ test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua tangga
   const page = source('src/pages/WorkOrders.tsx');
   assert.match(page, /selectedWorkOrderDate/);
   assert.match(page, /Filter satu tanggal WO/);
+  assert.match(page, /absolute left-0 top-\[calc\(100%\+6px\)\] z-40 w-\[min\(360px,calc\(100vw-24px\)\)\]/);
   assert.match(page, /Bersihkan tanggal — tampilkan semua tanggal/);
   assert.match(page, /Kosongkan tanggal untuk menampilkan semua tanggal/);
   const toolbar = page.slice(page.indexOf('{\/\* Filters \*\/}'), page.indexOf('<div className="hidden px-3 py-0.5">'));
