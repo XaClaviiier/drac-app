@@ -10,6 +10,7 @@ import { localDateKey } from '../lib/date';
 import ItemSearchOption from '../components/ItemSearchOption';
 import { ui } from '../components/ui/interfaceStandards';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -41,6 +42,7 @@ export default function SalesInvoice() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
   const [showModal, setShowModal] = useState(false);
+  useAccurateDocumentCanvas(showModal);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<SalesInvoice | null>(null);
   const [searchTerm, setSearchTerm] = useState('');

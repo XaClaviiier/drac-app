@@ -589,8 +589,12 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(styles, /\.app-page-scroll[\s\S]*?scrollbar-width: none;/);
   assert.match(styles, /\.app-page-scroll--document-locked[\s\S]*?overflow-y: hidden !important;/);
   assert.match(styles, /\.app-page-scroll::\-webkit-scrollbar[\s\S]*?display: none;/);
-  assert.match(source('src/pages/WorkOrders.tsx'), /page\.classList\.toggle\('app-page-scroll--document-locked', shouldLock\)/);
-  assert.match(source('src/pages/WorkOrders.tsx'), /if \(shouldLock\) page\.scrollTop = 0/);
+  const documentCanvas = source('src/lib/useAccurateDocumentCanvas.ts');
+  assert.match(documentCanvas, /page\.classList\.toggle\('app-page-scroll--document-locked', shouldLock\)/);
+  assert.match(documentCanvas, /if \(shouldLock\) page\.scrollTop = 0/);
+  assert.match(source('src/pages/WorkOrders.tsx'), /useAccurateDocumentCanvas\(showModal\)/);
+  assert.match(source('src/pages/SalesInvoice.tsx'), /useAccurateDocumentCanvas\(showModal\)/);
+  assert.match(source('src/pages/ItemsAndServices.tsx'), /useAccurateDocumentCanvas\(showItemModal\)/);
   assert.match(complaints, /app-combobox-field/);
   assert.match(complaints, /app-field-unstyled/);
   assert.match(tabs, /border-r-white bg-white text-rose-500/);

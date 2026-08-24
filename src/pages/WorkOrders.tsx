@@ -14,6 +14,7 @@ import IndonesianDateInput from '../components/IndonesianDateInput';
 import ComplaintMultiSelect from '../components/ComplaintMultiSelect';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
+import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -86,6 +87,7 @@ export default function WorkOrders() {
     currentUser, currentBranchId, resolveBranchId, hasPermission, generateDocumentNumber, updateSettings, refreshData, isLoading,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
+  useAccurateDocumentCanvas(showModal);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [serviceEditMode, setServiceEditMode] = useState(false);
   const diagnosisSubmitAction = useRef<'save' | 'process' | 'invoice' | 'lost'>('save');
@@ -992,25 +994,6 @@ export default function WorkOrders() {
 
     handleOpenModal(targetWO, true);
   }, [requestedNewWO, requestedEditWO, requestedViewWO, isLoading, data.workOrders]);
-
-  // Form transaksi desktop memakai kanvas tetap seperti Accurate. Kunci scroll
-  // utama agar subtab serta header Pelanggan/Tanggal tidak ikut bergeser.
-  useEffect(() => {
-    const page = document.querySelector<HTMLElement>('main.app-page-scroll');
-    if (!page) return;
-    const desktop = window.matchMedia('(min-width: 1024px)');
-    const syncDocumentScroll = () => {
-      const shouldLock = showModal && desktop.matches;
-      page.classList.toggle('app-page-scroll--document-locked', shouldLock);
-      if (shouldLock) page.scrollTop = 0;
-    };
-    syncDocumentScroll();
-    desktop.addEventListener('change', syncDocumentScroll);
-    return () => {
-      desktop.removeEventListener('change', syncDocumentScroll);
-      page.classList.remove('app-page-scroll--document-locked');
-    };
-  }, [showModal]);
 
   const handleCloseModal = () => {
     setShowModal(false);

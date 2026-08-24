@@ -10,6 +10,7 @@ import { api } from '../lib/apiClient';
 import { childTabClass, ui } from '../components/ui/interfaceStandards';
 import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -131,6 +132,7 @@ export default function ItemsAndServices() {
   const [verifyingItemId, setVerifyingItemId] = useState('');
   const [verificationFeedback, setVerificationFeedback] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
+  useAccurateDocumentCanvas(showItemModal);
   const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'account' | 'image' | 'other' | 'movement' | 'warehouse'>('general');
   const [movementDateFrom, setMovementDateFrom] = useState(() => {
     const today = new Date();
