@@ -2865,9 +2865,12 @@ export default function WorkOrders() {
                 ariaLabel="Aksi Work Order"
                 className="absolute bottom-2 right-2 top-2 z-50 hidden gap-1.5 lg:flex [&>div]:mt-1.5"
                 save={{
-                  type: 'submit',
+                  type: 'button',
                   form: 'work-order-entry-form',
-                  onClick: () => { diagnosisSubmitAction.current = 'save'; },
+                  onClick: () => {
+                    diagnosisSubmitAction.current = 'save';
+                    document.querySelector<HTMLFormElement>('#work-order-entry-form')?.requestSubmit();
+                  },
                   disabled: editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : isAutoRegistering,
                   title: editingWO ? 'Simpan Work Order' : 'Register Work Order',
                 }}

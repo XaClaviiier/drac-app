@@ -545,6 +545,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /AccurateFormActionRail/);
   assert.match(page, /lg:pr-\[88px\]/);
   assert.match(page, /form: 'work-order-entry-form'/);
+  assert.match(page, /querySelector<HTMLFormElement>\('#work-order-entry-form'\)\?\.requestSubmit\(\)/);
   assert.match(page, /Hapus barang atau jasa terpilih/);
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
   assert.match(page, /setSelectedServiceId\(service\.id\)/);
