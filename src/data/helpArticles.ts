@@ -49,10 +49,11 @@ export const helpArticles: HelpArticle[] = [
     summary: "Urutan operasional servis: Register, Dikerjakan, lalu Selesai atau Lost Sales.",
     keywords: ["wo", "order kerja", "register", "dikerjakan", "selesai", "servis"],
     route: "/workorders",
-    updatedAt: "20 Agustus 2026",
+    updatedAt: "24 Agustus 2026",
     sections: [
       { title: "Alur kerja", steps: ["Buat WO dengan memilih pelanggan, kendaraan, keluhan, cabang, dan waktu kedatangan.", "Saat Register, lakukan pemeriksaan dan tambahkan layanan atau barang beserta estimasinya.", "Setelah pelanggan menyetujui pekerjaan dan harga, ubah menjadi Dikerjakan.", "Tambahkan pekerjaan aktual bila diperlukan, lalu tandai Selesai.", "Buat faktur berdasarkan pekerjaan dan barang final."] },
       { title: "Aturan", rules: ["Keluhan wajib dipilih sebelum WO dibuat.", "Status Dikerjakan memerlukan minimal satu layanan/barang dan estimasi lebih dari Rp0.", "WO tidak memotong stok. Stok barang berkurang ketika faktur penjualan dibuat.", "Status pekerjaan dan status pembayaran adalah dua hal terpisah."] },
+      { title: "Perlu Tindakan", steps: ["Klik lonceng di header atau subtab Perlu Tindakan pada Order Kerja.", "Selesaikan Register Mengambang menjadi Dikerjakan atau Lost Sales.", "Tuntaskan pekerjaan Dikerjakan Terlambat.", "Buat faktur untuk WO yang sudah Selesai.", "Proses pembayaran untuk faktur yang belum lunas."], rules: ["Register hanya antrean sementara pada hari transaksi dan tidak boleh dibiarkan mengambang setelah hari berganti.", "Sistem tidak mengubah Register menjadi Lost Sales secara otomatis; pengguna wajib memilih hasil sebenarnya agar histori tetap akurat.", "Badge lonceng dan subtab Perlu Tindakan memakai sumber perhitungan yang sama serta mengikuti cabang aktif."] },
     ],
   },
   {

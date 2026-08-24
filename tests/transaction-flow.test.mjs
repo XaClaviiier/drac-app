@@ -674,3 +674,24 @@ test('form Faktur Penjualan mengikuti kerangka padat Data Baru Order Kerja', () 
   assert.match(page, /lg:pr-\[82px\]/);
   assert.doesNotMatch(page, /order-first mr-auto flex flex-wrap gap-x-5/);
 });
+
+test('lonceng dan tab Perlu Tindakan memakai aturan tindak lanjut WO yang sama', () => {
+  const rules = source('src/lib/workOrderAttention.ts');
+  const layout = source('src/components/Layout.tsx');
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  const help = source('src/data/helpArticles.ts');
+
+  assert.match(rules, /Register Mengambang/);
+  assert.match(rules, /Dikerjakan Terlambat/);
+  assert.match(rules, /Selesai Belum Faktur/);
+  assert.match(rules, /Faktur Belum Lunas/);
+  assert.match(rules, /workOrder\.status === 'Register' && workOrder\.date < today/);
+  assert.match(rules, /invoice\.payment < invoice\.total/);
+  assert.match(layout, /buildWorkOrderAttentionItems/);
+  assert.match(layout, /aria-label=\{`Notifikasi, \$\{workOrderAttentionItems\.length\} perlu tindakan`\}/);
+  assert.match(layout, /navigate\('\/workorders\?attention=1'\)/);
+  assert.match(workOrders, />Perlu Tindakan</);
+  assert.match(workOrders, /attentionFilter === 'all'/);
+  assert.match(workOrders, /Proses Bayar/);
+  assert.match(help, /Register hanya antrean sementara pada hari transaksi/);
+});

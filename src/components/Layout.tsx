@@ -46,6 +46,8 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
+import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from "../lib/workOrderAttention";
+import { localDateKey } from "../lib/date";
 import {
   PROCESS_QUEUE_EVENT,
   SystemProcess,
@@ -551,6 +553,7 @@ export default function Layout() {
     }
   });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationMenuOpen, setNotificationMenuOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState<string | null>(null);
@@ -609,6 +612,19 @@ export default function Layout() {
   const currentBranch = isAll
     ? null
     : data.branches.find((b) => b.id === currentBranchId);
+  const notificationWorkOrders = data.workOrders.filter((workOrder) => isAll
+    ? data.branches.some(branch => branch.isActive && branch.id === workOrder.branchId)
+    : workOrder.branchId === currentBranchId);
+  const workOrderAttentionItems = buildWorkOrderAttentionItems(
+    notificationWorkOrders,
+    data.invoices,
+    localDateKey(),
+  );
+  const workOrderAttentionCounts = countWorkOrderAttentionByKind(workOrderAttentionItems);
+  const openWorkOrderAttention = () => {
+    setNotificationMenuOpen(false);
+    navigate('/workorders?attention=1');
+  };
   const refreshRunning = systemProcesses.some(
     (task) => task.label === "Refresh Data" && task.status === "running",
   );
@@ -1118,10 +1134,57 @@ export default function Layout() {
               )}
             </div>
 
-            <button className="relative hidden h-9 w-9 items-center justify-center rounded-lg text-blue-100 transition-colors hover:bg-white/15 hover:text-white sm:flex lg:h-8 lg:w-8">
-              <Bell className="h-4 w-4" />
-              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
-            </button>
+            <div className="relative hidden sm:block">
+              <button
+                type="button"
+                onClick={() => setNotificationMenuOpen(value => !value)}
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg text-blue-100 transition-colors hover:bg-white/15 hover:text-white lg:h-8 lg:w-8"
+                title={`${workOrderAttentionItems.length} pekerjaan perlu tindakan`}
+                aria-label={`Notifikasi, ${workOrderAttentionItems.length} perlu tindakan`}
+              >
+                <Bell className="h-4 w-4" />
+                {workOrderAttentionItems.length > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                    {workOrderAttentionItems.length > 99 ? '99+' : workOrderAttentionItems.length}
+                  </span>
+                )}
+              </button>
+              {notificationMenuOpen && (
+                <>
+                  <button type="button" className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationMenuOpen(false)} aria-label="Tutup notifikasi" />
+                  <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border border-gray-200 bg-white text-gray-800 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold">Perlu Tindakan</p>
+                        <p className="text-xs text-gray-500">{workOrderAttentionItems.length} pekerjaan perlu ditangani</p>
+                      </div>
+                      <Bell className="h-4 w-4 text-blue-600" />
+                    </div>
+                    {workOrderAttentionItems.length === 0 ? (
+                      <p className="px-4 py-8 text-center text-sm text-gray-500">Tidak ada pekerjaan tertunda.</p>
+                    ) : (
+                      <div className="divide-y divide-gray-100">
+                        <button type="button" onClick={openWorkOrderAttention} className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-amber-50">
+                          <span>Register Mengambang</span><strong className="text-amber-700">{workOrderAttentionCounts.register}</strong>
+                        </button>
+                        <button type="button" onClick={openWorkOrderAttention} className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-orange-50">
+                          <span>Dikerjakan Terlambat</span><strong className="text-orange-700">{workOrderAttentionCounts.process}</strong>
+                        </button>
+                        <button type="button" onClick={openWorkOrderAttention} className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-blue-50">
+                          <span>Selesai Belum Faktur</span><strong className="text-blue-700">{workOrderAttentionCounts.invoice}</strong>
+                        </button>
+                        <button type="button" onClick={openWorkOrderAttention} className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-rose-50">
+                          <span>Faktur Belum Lunas</span><strong className="text-rose-700">{workOrderAttentionCounts.payment}</strong>
+                        </button>
+                      </div>
+                    )}
+                    <button type="button" onClick={openWorkOrderAttention} className="w-full border-t border-gray-100 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+                      Buka semua tindakan
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* User */}
             <div className="relative">
