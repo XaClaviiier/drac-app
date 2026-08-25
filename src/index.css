@@ -101,6 +101,18 @@ body { margin: 0; background: #f3f4f6; }
   background-color: #f1f3f5;
 }
 
+/* Field terkunci ala Accurate tetap terlihat seperti field normal. Kunci adalah
+ * perilaku (readOnly/tanpa dropdown), bukan penanda warna. */
+#root .app-locked-field,
+#root .app-locked-field:disabled,
+#root .app-locked-field[readonly] {
+  border-color: var(--app-field-border) !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #111827;
+}
+
 .app-combobox-field {
   min-height: 36px;
   border: 1px solid var(--app-field-border) !important;

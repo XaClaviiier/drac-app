@@ -11,6 +11,7 @@ type Props = {
  title?:string;
  ariaLabel?:string;
  className?:string;
+ lockedAppearance?:boolean;
 };
 
 const toDisplay=(value:string)=>{
@@ -27,7 +28,7 @@ const toStorage=(value:string)=>{
  return `${match[3]}-${match[2]}-${match[1]}`;
 };
 
-export default function IndonesianDateInput({value,onChange,disabled=false,required=false,min,max,title,ariaLabel='Tanggal (DD/MM/YYYY)',className=''}:Props){
+export default function IndonesianDateInput({value,onChange,disabled=false,required=false,min,max,title,ariaLabel='Tanggal (DD/MM/YYYY)',className='',lockedAppearance=false}:Props){
  const[display,setDisplay]=useState(()=>toDisplay(value));
  const pickerRef=useRef<HTMLInputElement>(null);
  useEffect(()=>setDisplay(toDisplay(value)),[value]);
@@ -53,7 +54,7 @@ export default function IndonesianDateInput({value,onChange,disabled=false,requi
    placeholder="DD/MM/YYYY"
    aria-label={ariaLabel}
    title={title}
-   className="h-full w-full rounded border border-slate-300 bg-white px-3 pr-10 disabled:bg-slate-100 disabled:text-slate-600"
+   className={`h-full w-full rounded border border-slate-300 bg-white px-3 pr-10 ${lockedAppearance ? 'app-locked-field' : 'disabled:bg-slate-100 disabled:text-slate-600'}`}
   />
   {!disabled&&<input
    ref={pickerRef}

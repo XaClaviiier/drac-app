@@ -115,6 +115,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   }, [customerVehicles, inputText]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const v = e.target.value.toUpperCase();
     setInputText(v);
     setOpen(true);
@@ -123,7 +124,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   };
 
   const handleFocus = () => {
-    if (!customer) return;
+    if (disabled) return;
     setOpen(true);
     if (selectedVehicle) setInputText('');
   };
@@ -238,15 +239,19 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
           onChange={handleInputChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
+          disabled={!customer}
+          readOnly={locked}
+          aria-readonly={locked}
           placeholder={!customer ? 'Pilih pelanggan terlebih dahulu' : locked ? 'Kendaraan sudah teregister' : 'Ketik nomor plat kendaraan...'}
           autoComplete="off"
           className={`h-[42px] w-full border rounded-lg py-0 pl-9 pr-10 outline-none transition-colors text-sm ${
-            disabled
-              ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+            locked && selectedVehicle
+              ? 'app-locked-field cursor-default border-gray-400 bg-white font-normal text-gray-900'
+              : disabled
+              ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
               : selectedVehicle
-              ? 'border-orange-400 bg-orange-50 font-normal text-orange-900'
-              : 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 uppercase'
+              ? 'border-gray-400 bg-white font-normal text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+              : 'border-gray-400 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 uppercase'
           }`}
         />
         {selectedVehicle && !locked && (

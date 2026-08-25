@@ -192,15 +192,19 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
           onChange={handleInputChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
+          disabled={disabled && !selectedCustomer}
+          readOnly={disabled && Boolean(selectedCustomer)}
+          aria-readonly={disabled && Boolean(selectedCustomer)}
           placeholder="Ketik nama, HP, atau nopol..."
           autoComplete="off"
           className={`h-[42px] w-full border rounded-lg py-0 pl-9 ${selectedCustomer && selectedAction && !disabled ? 'pr-[4.5rem]' : 'pr-10'} outline-none transition-colors text-sm ${
-            disabled
-              ? 'cursor-not-allowed border-gray-200 bg-gray-100 font-normal text-gray-600'
+            disabled && selectedCustomer
+              ? 'app-locked-field cursor-default border-gray-400 bg-white font-normal text-gray-900'
+              : disabled
+              ? 'cursor-not-allowed border-gray-200 bg-gray-100 font-normal text-gray-500'
               : selectedCustomer
-              ? 'border-blue-400 bg-blue-50 font-normal text-blue-900'
-              : 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+              ? 'border-gray-400 bg-white font-normal text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+              : 'border-gray-400 bg-white text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
           }`}
         />
         {selectedCustomer && selectedAction && !disabled && (

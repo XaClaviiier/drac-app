@@ -3201,7 +3201,7 @@ export default function WorkOrders() {
       {/* Data Baru / Edit: subtab penuh pada desktop, modal pada mobile */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-0 sm:items-center sm:p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-0 lg:pb-3 lg:pt-0">
-          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl lg:block lg:h-auto lg:max-h-none lg:max-w-none lg:overflow-visible lg:rounded-md lg:border lg:border-gray-200 lg:shadow-sm">
+          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl lg:block lg:h-auto lg:max-h-none lg:max-w-none lg:overflow-visible lg:rounded-md lg:border lg:border-gray-200 lg:bg-[var(--app-canvas)] lg:shadow-sm">
             <div className="z-30 flex flex-shrink-0 items-start justify-between border-b border-gray-200 bg-white px-4 py-3 sm:rounded-t-xl sm:px-6 sm:py-4 lg:hidden">
               <div className="min-w-0 pr-3">
                 <h3 className="break-words text-base font-semibold leading-tight text-gray-900 sm:text-lg">
@@ -3230,7 +3230,7 @@ export default function WorkOrders() {
               </div>
             </div>
 
-            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:bg-[#eeeeee] lg:p-2 lg:pr-[104px]">
+            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
               <AccurateFormActionRail
                 ariaLabel="Aksi Work Order"
                 className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
@@ -3339,7 +3339,7 @@ export default function WorkOrders() {
                   Tanggal <span className="text-red-500">*</span>
                 </label>
                 <div className="hidden lg:col-start-6 lg:row-start-1 lg:block">
-                  <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-[42px] w-full text-sm"/>
+                  <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} lockedAppearance={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-[42px] w-full text-sm"/>
                 </div>
                 <div className="hidden grid-cols-[42px_82px] justify-end gap-2 lg:col-start-7 lg:row-start-1 lg:grid">
                   <button
@@ -3361,7 +3361,7 @@ export default function WorkOrders() {
                     disabled={!woDateUnlocked}
                     value={formData.transactionTime}
                     onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
-                    className="h-[42px] w-full rounded-lg border border-gray-300 px-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                    className={`h-[42px] w-full rounded-lg border border-gray-400 bg-white px-2 text-sm text-gray-900 outline-none focus:ring-1 focus:ring-blue-500 ${!woDateUnlocked ? 'app-locked-field' : ''}`}
                     aria-label="Waktu WO desktop"
                   />
                 </div>
@@ -3408,14 +3408,14 @@ export default function WorkOrders() {
                       Tanggal &amp; Waktu <span className="text-red-500">*</span>
                     </label>
                     <div className="grid grid-cols-[minmax(145px,1fr)_88px_40px] gap-2">
-                    <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-11 w-full text-sm"/>
+                    <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} lockedAppearance={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-11 w-full text-sm"/>
                     <input
                       type="time"
                       required
                       disabled={!woDateUnlocked}
                       value={formData.transactionTime}
                       onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
-                      className="w-full rounded-lg border border-gray-300 px-2 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                      className={`w-full rounded-lg border border-gray-400 bg-white px-2 py-2.5 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${!woDateUnlocked ? 'app-locked-field' : ''}`}
                       aria-label="Waktu WO"
                     />
                     <button
@@ -3495,7 +3495,7 @@ export default function WorkOrders() {
 
               </>}
 
-              <div className="relative min-h-[320px] bg-white lg:ml-10 lg:bg-[#eeeeee]">
+              <div className="relative min-h-[320px] bg-white lg:ml-10 lg:bg-[var(--app-canvas)]">
               <AccurateDocumentSideTabs active={documentTab} onChange={setDocumentTab} />
               {documentTab === 'details' && <div className="p-3">
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
@@ -3830,7 +3830,7 @@ export default function WorkOrders() {
                   </div>
                   <div data-wo-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
                     <table className="min-w-[920px] w-full text-sm">
-                      <thead className={editingWO ? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'}>
+                      <thead className="bg-[var(--app-table-head)] text-xs uppercase text-white">
                         <tr>
                           <th className="w-10 px-3 py-2.5 text-center font-medium">No</th>
                           <th className="px-3 py-2.5 text-left font-medium">Nama Barang/Jasa</th>

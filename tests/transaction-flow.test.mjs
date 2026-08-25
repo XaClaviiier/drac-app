@@ -653,11 +653,15 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(source('src/components/CustomerPicker.tsx'), /getSelectedCustomerLabel/);
   assert.match(source('src/components/CustomerPicker.tsx'), /customer\.phone\.trim\(\)/);
   assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /border-blue-400 bg-blue-50 font-medium/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /app-locked-field cursor-default border-gray-400 bg-white font-normal text-gray-900/);
+  assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /border-blue-400 bg-blue-50 font-normal text-blue-900/);
   assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /Badge pelanggan terpilih/);
   assert.match(source('src/components/CustomerPicker.tsx'), /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
   assert.match(source('src/components/VehiclePicker.tsx'), /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
   assert.match(source('src/components/VehiclePicker.tsx'), /getSelectedVehicleLabel/);
   assert.doesNotMatch(source('src/components/VehiclePicker.tsx'), /border-orange-400 bg-orange-50 font-bold/);
+  assert.match(source('src/components/VehiclePicker.tsx'), /app-locked-field cursor-default border-gray-400 bg-white font-normal text-gray-900/);
+  assert.doesNotMatch(source('src/components/VehiclePicker.tsx'), /border-orange-400 bg-orange-50 font-normal text-orange-900/);
   assert.match(source('src/components/VehiclePicker.tsx'), /\.filter\(Boolean\)\.join\(' '\)/);
   assert.doesNotMatch(source('src/components/VehiclePicker.tsx'), /Badge kendaraan terpilih/);
   assert.match(complaints, /event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
@@ -672,6 +676,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(styles, /--app-field-error: #dc2626/);
   assert.match(styles, /height: 36px !important/);
   assert.match(styles, /box-shadow: 0 0 0 1px rgba\(22, 131, 255, \.28\) !important/);
+  assert.match(styles, /\.app-locked-field:disabled[\s\S]*?background-color: #ffffff !important;[\s\S]*?color: #111827 !important;/);
   assert.match(styles, /\.app-combobox-field:focus-within/);
   assert.match(styles, /\.app-workspace-tab[\s\S]*?flex: 0 0 auto;/);
   assert.match(styles, /\.app-workspace-bar[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
@@ -715,8 +720,8 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
 
 test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accurate', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
-  assert.match(workOrders, /work-order-entry-form[^>]*lg:bg-\[#eeeeee\]/);
-  assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:bg-\[#eeeeee\]/);
+  assert.match(workOrders, /work-order-entry-form[^>]*lg:bg-\[var\(--app-canvas\)\]/);
+  assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:bg-\[var\(--app-canvas\)\]/);
   assert.match(workOrders, /data-wo-items-table/);
   assert.match(workOrders, /const \[showQuickServices, setShowQuickServices\] = useState\(false\)/);
   assert.doesNotMatch(workOrders, /dokterac_wo_quick_services/);
@@ -736,7 +741,7 @@ test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accura
 test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
   assert.match(workOrders, /showModal && \(/);
-  assert.match(workOrders, /<thead className=\{editingWO \? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'\}>/);
+  assert.match(workOrders, /<thead className="bg-\[var\(--app-table-head\)\] text-xs uppercase text-white">/);
   assert.match(workOrders, /diagnosisMode && editingWO \? \(\s*<div className="space-y-3">/);
   assert.match(workOrders, /formData\.services\.length > 0 \|\| !editingWO \?/);
   assert.match(workOrders, /editingWO && !isAutoRegisteredDraft \? 'mb-3'/);
