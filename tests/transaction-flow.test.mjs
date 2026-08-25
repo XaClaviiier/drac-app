@@ -624,8 +624,8 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(documentCanvas, /if \(shouldLock\) page\.scrollTop = 0/);
   const workOrders = source('src/pages/WorkOrders.tsx');
   assert.match(workOrders, /useAccurateDocumentCanvas\(showModal\)/);
-  assert.match(workOrders, /\$\{ui\.childBar\} \$\{showModal \? 'hidden lg:flex' : ''\}/);
-  assert.match(workOrders, /\$\{ui\.childBar\} static z-20 lg:hidden/);
+  assert.match(workOrders, /\$\{ui\.childBar\} \$\{showModal \? '!hidden lg:!flex' : ''\}/);
+  assert.match(workOrders, /\$\{ui\.childBar\} !static !z-20 lg:!hidden/);
   assert.match(workOrders, /aria-label="Kembali ke daftar Order Kerja"/);
   assert.match(source('src/pages/SalesInvoice.tsx'), /useAccurateDocumentCanvas\(showModal\)/);
   assert.match(source('src/pages/ItemsAndServices.tsx'), /useAccurateDocumentCanvas\(showItemModal\)/);

@@ -2129,7 +2129,7 @@ export default function WorkOrders() {
 
   return (
     <div className="space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0">
-      <div className={`${ui.childBar} ${showModal ? 'hidden lg:flex' : ''}`}>
+      <div className={`${ui.childBar} ${showModal ? '!hidden lg:!flex' : ''}`}>
         <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
@@ -3139,7 +3139,7 @@ export default function WorkOrders() {
               </button>
             </div>
 
-            <div className={`${ui.childBar} static z-20 lg:hidden`}>
+            <div className={`${ui.childBar} !static !z-20 lg:!hidden`}>
               <button type="button" onClick={requestCloseEditor} className={ui.childListTab} title="Daftar Order Kerja" aria-label="Kembali ke daftar Order Kerja">
                 <ListPlus className="h-5 w-5" />
               </button>
