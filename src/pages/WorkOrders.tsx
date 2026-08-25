@@ -2296,9 +2296,7 @@ export default function WorkOrders() {
                         <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
                         <span className="mt-0.5 block text-xs text-gray-500">
                           {wo.date}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
-                          {canViewAllBranches && (isAllBranchDropdown || !activeBranchOnly) && (
-                            <> · {data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '')}</>
-                          )}
+                          {' · '}{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}
                         </span>
                       </button>
                     </td>}
@@ -2398,7 +2396,7 @@ export default function WorkOrders() {
           </div>
         ) : filteredWOs.map(wo => {
           const serviceNames = wo.services.map(service => service.name);
-          const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name.replace('CABANG ', '');
+          const branchName = data.branches.find(branch => branch.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId;
           return (
             <article key={`compact-${wo.id}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
               <button type="button" onClick={() => openWorkOrderStandard(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
@@ -2424,7 +2422,7 @@ export default function WorkOrders() {
                     {attentionByWorkOrderId.get(wo.id)?.label}
                   </span>
                 )}
-                {canViewAllBranches && <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>}
+                <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
                 <button type="button" onClick={() => openWorkOrderStandard(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Buka ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
@@ -2485,9 +2483,7 @@ export default function WorkOrders() {
                       </div>
                       <p className="text-sm text-gray-500">
                         {wo.date} • {wo.plateNumber}
-                        {canViewAllBranches && (isAllBranchDropdown || !activeBranchOnly) && (
-                          <> • <span className="font-medium text-blue-600">{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '')}</span></>
-                        )}
+                        <> • <span className="font-medium text-blue-600">{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}</span></>
                       </p>
                     </div>
                   </div>

@@ -644,6 +644,15 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
   assert.match(workOrders, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
 });
 
+test('daftar WO selalu menampilkan nama cabang pada desktop dan HP', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  assert.match(page, /\{' · '\}\{data\.branches\.find\(b => b\.id === wo\.branchId\)\?\.name\.replace\('CABANG ', ''\) \|\| wo\.branchId\}/);
+  assert.match(page, /const branchName = data\.branches\.find\(branch => branch\.id === wo\.branchId\)\?\.name\.replace\('CABANG ', ''\) \|\| wo\.branchId;/);
+  assert.match(page, /<span className="text-\[10px\] font-semibold text-gray-400">\{branchName\}<\/span>/);
+  assert.doesNotMatch(page, /\{canViewAllBranches && \(isAllBranchDropdown \|\| !activeBranchOnly\) && \(\s*<> ·/);
+  assert.doesNotMatch(page, /\{canViewAllBranches && <span className="text-\[10px\] font-semibold text-gray-400">\{branchName\}/);
+});
+
 test('Daftar Laporan memakai katalog kategori Accurate yang padat dan responsif', () => {
   const page = source('src/pages/ReportsIndex.tsx');
   assert.match(page, /lg:grid-cols-\[270px_minmax\(0,1fr\)\]/);
