@@ -9,6 +9,11 @@ type AccurateNotificationDialogProps = {
   cancelLabel?: string;
   destructive?: boolean;
   busy?: boolean;
+  inputLabel?: string;
+  inputValue?: string;
+  inputPlaceholder?: string;
+  confirmDisabled?: boolean;
+  onInputChange?: (value: string) => void;
   onConfirm: () => void;
   onClose: () => void;
 };
@@ -21,6 +26,11 @@ export default function AccurateNotificationDialog({
   cancelLabel,
   destructive = false,
   busy = false,
+  inputLabel,
+  inputValue = '',
+  inputPlaceholder,
+  confirmDisabled = false,
+  onInputChange,
   onConfirm,
   onClose,
 }: AccurateNotificationDialogProps) {
@@ -52,8 +62,20 @@ export default function AccurateNotificationDialog({
           <div className="flex items-start justify-center">
             <AlertTriangle className="h-16 w-16 fill-red-500 text-[#0d3264] stroke-[1.8]" />
           </div>
-          <div className="min-w-0 self-center text-[15px] leading-6 text-gray-800 sm:text-base">
+          <div className="min-w-0 whitespace-pre-line self-center text-[15px] leading-6 text-gray-800 sm:text-base">
             {children}
+            {inputLabel && onInputChange && (
+              <label className="mt-4 block whitespace-normal text-sm font-medium text-gray-700">
+                <span className="mb-1.5 block">{inputLabel}</span>
+                <input
+                  autoFocus
+                  value={inputValue}
+                  onChange={(event) => onInputChange(event.target.value)}
+                  placeholder={inputPlaceholder}
+                  className="h-11 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+            )}
           </div>
         </div>
 
@@ -67,8 +89,8 @@ export default function AccurateNotificationDialog({
           </div>
           <button
             type="button"
-            autoFocus
-            disabled={busy}
+            autoFocus={!inputLabel}
+            disabled={busy || confirmDisabled}
             onClick={onConfirm}
             className={`min-w-24 rounded px-6 py-2.5 font-semibold text-white disabled:cursor-wait disabled:opacity-60 ${destructive ? 'bg-red-600 hover:bg-red-700' : 'bg-[#1f4fa3] hover:bg-blue-800'}`}
           >

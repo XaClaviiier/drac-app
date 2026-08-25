@@ -196,6 +196,23 @@ export default function WorkOrders() {
   const [resumeLostSalesAfterEstimate, setResumeLostSalesAfterEstimate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [processingIssues, setProcessingIssues] = useState<string[]>([]);
+  const [accurateDialog, setAccurateDialog] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    destructive?: boolean;
+  } | null>(null);
+  const accurateDialogResolver = useRef<((confirmed: boolean) => void) | null>(null);
+  const [accuratePrompt, setAccuratePrompt] = useState<{
+    title: string;
+    message: string;
+    label: string;
+    value: string;
+    placeholder?: string;
+    confirmLabel?: string;
+  } | null>(null);
+  const accuratePromptResolver = useRef<((value: string | null) => void) | null>(null);
   const [deleteDialogWO, setDeleteDialogWO] = useState<WorkOrder | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<{ title: string; message: string } | null>(null);
   const [isDeletingWO, setIsDeletingWO] = useState(false);
@@ -206,6 +223,56 @@ export default function WorkOrders() {
   const [showCustomerVehicleCorrectionForm, setShowCustomerVehicleCorrectionForm] = useState(false);
   const [customerVehicleCorrectionReason, setCustomerVehicleCorrectionReason] = useState('');
   const [quickContact, setQuickContact] = useState({ name: '', phone: '', description: '' });
+
+  const showAccurateNotice = (message: string, title = 'Terjadi Permasalahan pada Pemrosesan') => {
+    accurateDialogResolver.current?.(false);
+    accurateDialogResolver.current = null;
+    setAccurateDialog({ title, message, confirmLabel: 'OK' });
+  };
+
+  const askAccurateConfirmation = (options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    destructive?: boolean;
+  }) => new Promise<boolean>((resolve) => {
+    accurateDialogResolver.current?.(false);
+    accurateDialogResolver.current = resolve;
+    setAccurateDialog({
+      ...options,
+      confirmLabel: options.confirmLabel || 'OK',
+      cancelLabel: options.cancelLabel || 'Batal',
+    });
+  });
+
+  const respondToAccurateDialog = (confirmed: boolean) => {
+    const resolve = accurateDialogResolver.current;
+    accurateDialogResolver.current = null;
+    setAccurateDialog(null);
+    resolve?.(confirmed);
+  };
+
+  const askAccurateText = (options: {
+    title: string;
+    message: string;
+    label: string;
+    initialValue?: string;
+    placeholder?: string;
+    confirmLabel?: string;
+  }) => new Promise<string | null>((resolve) => {
+    accuratePromptResolver.current?.(null);
+    accuratePromptResolver.current = resolve;
+    setAccuratePrompt({ ...options, value: options.initialValue || '' });
+  });
+
+  const respondToAccuratePrompt = (confirmed: boolean) => {
+    const resolve = accuratePromptResolver.current;
+    const value = confirmed ? accuratePrompt?.value.trim() || null : null;
+    accuratePromptResolver.current = null;
+    setAccuratePrompt(null);
+    resolve?.(value);
+  };
   const canShowAdminRowActions = Boolean(
     currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
   );
@@ -256,7 +323,7 @@ export default function WorkOrders() {
   const takeServicesFromPreviousWO = (wo: WorkOrder) => {
     const previous = previousWorkOrderFor(wo);
     if (!previous || previous.services.length === 0) {
-      window.alert(`Belum ada layanan WO sebelumnya untuk kendaraan ${wo.plateNumber}.`);
+      showAccurateNotice(`Belum ada layanan WO sebelumnya untuk kendaraan ${wo.plateNumber}.`);
       return;
     }
     handleOpenModal(wo, true);
@@ -278,7 +345,7 @@ export default function WorkOrders() {
 
   const takePreviousServicesIntoForm = async () => {
     if (!customerVehicleReady) {
-      window.alert('Pilih atau daftarkan pelanggan dan kendaraan terlebih dahulu.');
+      showAccurateNotice('Pilih atau daftarkan pelanggan dan kendaraan terlebih dahulu.');
       return;
     }
     const previous = data.workOrders
@@ -288,7 +355,7 @@ export default function WorkOrders() {
       ) && candidate.services.length > 0)
       .sort((left, right) => `${right.date} ${right.transactionTime || ''}`.localeCompare(`${left.date} ${left.transactionTime || ''}`))[0];
     if (!previous) {
-      window.alert('Pilih pelanggan dan kendaraan terlebih dahulu. Kendaraan ini belum memiliki layanan WO sebelumnya.');
+      showAccurateNotice('Pilih pelanggan dan kendaraan terlebih dahulu. Kendaraan ini belum memiliki layanan WO sebelumnya.');
       return;
     }
     const copiedServices = previous.services.map((service, index) => ({ ...service, id: `svc-copy-${Date.now()}-${index}` }));
@@ -421,7 +488,7 @@ export default function WorkOrders() {
       .map(template => ({ ...template, label: template.label.trim() }))
       .filter(template => template.label);
     if (cleaned.length === 0) {
-      window.alert('Minimal satu template alasan harus tersedia.');
+      showAccurateNotice('Minimal satu template alasan harus tersedia.');
       return;
     }
     setSavingPendingTemplates(true);
@@ -429,7 +496,7 @@ export default function WorkOrders() {
       await updateSettings({ ...data.settings, pendingReasonTemplates: cleaned });
       setShowPendingTemplateEditor(false);
     } catch (error: any) {
-      window.alert(error?.message || 'Gagal menyimpan template alasan.');
+      showAccurateNotice(error?.message || 'Gagal menyimpan template alasan.');
     } finally {
       setSavingPendingTemplates(false);
     }
@@ -457,7 +524,7 @@ export default function WorkOrders() {
     if (!value) return;
     const exists = complaintTemplateDraft.some(t => t.trim().toLowerCase() === value.toLowerCase());
     if (exists) {
-      window.alert(`Template "${value}" sudah ada.`);
+      showAccurateNotice(`Template "${value}" sudah ada.`);
       return;
     }
     setComplaintTemplateDraft(current => [...current, value]);
@@ -472,8 +539,13 @@ export default function WorkOrders() {
     setComplaintTemplateDraft(current => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const resetComplaintTemplates = () => {
-    if (window.confirm('Kembalikan list keluhan ke template bawaan?')) {
+  const resetComplaintTemplates = async () => {
+    if (await askAccurateConfirmation({
+      title: 'Kembalikan Template Keluhan',
+      message: 'Kembalikan daftar keluhan ke template bawaan? Perubahan template yang belum disimpan akan diganti.',
+      confirmLabel: 'Kembalikan',
+      cancelLabel: 'Batal',
+    })) {
       setComplaintTemplateDraft([...DEFAULT_COMPLAINT_TEMPLATES]);
     }
   };
@@ -567,22 +639,22 @@ export default function WorkOrders() {
 
   const handleQuickAddItem = async () => {
     if (!customerVehicleReady) {
-      window.alert('Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.');
+      showAccurateNotice('Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.');
       return;
     }
-    if (!quickItemForm.name) { window.alert('Nama barang/jasa harus diisi'); return; }
+    if (!quickItemForm.name) { showAccurateNotice('Nama barang/jasa harus diisi'); return; }
 
     // Nama barang/jasa wajib unik
     const nameUpper = quickItemForm.name.trim().toUpperCase();
     const dupName = data.items.find(i => i.name.trim().toUpperCase() === nameUpper);
     if (dupName) {
-      window.alert(`Nama "${nameUpper}" sudah ada di master (kode ${dupName.code}).\nGunakan item tersebut dari daftar, atau beri nama lain.`);
+      showAccurateNotice(`Nama "${nameUpper}" sudah ada di master (kode ${dupName.code}).\nGunakan item tersebut dari daftar, atau beri nama lain.`);
       return;
     }
 
     if (!quickItemForm.categoryId) {
       const firstCat = data.itemCategories.find(c => c.isActive);
-      if (!firstCat) { window.alert('Belum ada kategori barang. Buat kategori dulu di menu Barang & Jasa.'); return; }
+      if (!firstCat) { showAccurateNotice('Belum ada kategori barang. Buat kategori dulu di menu Barang & Jasa.'); return; }
       quickItemForm.categoryId = firstCat.id;
     }
     const category = data.itemCategories.find(c => c.id === quickItemForm.categoryId);
@@ -660,7 +732,7 @@ export default function WorkOrders() {
     });
     setQuickContactSaving(false);
     if (!result.success || !result.data) {
-      window.alert(result.message || 'Kontak gagal ditambahkan.');
+      showAccurateNotice(result.message || 'Kontak gagal ditambahkan.');
       return;
     }
     const person = result.data;
@@ -685,7 +757,13 @@ export default function WorkOrders() {
   const deleteQuickContact = async (personId: string) => {
     const person = selectedCustomerPeople.find(item => item.id === personId);
     if (!person || person.id === selectedCustomer?.primaryContactId) return;
-    if (!window.confirm(`Hapus kontak ${person.name}?`)) return;
+    if (!await askAccurateConfirmation({
+      title: 'Konfirmasi Penghapusan',
+      message: `Hapus kontak ${person.name}?`,
+      confirmLabel: 'Hapus',
+      cancelLabel: 'Batal',
+      destructive: true,
+    })) return;
     setQuickContactDeletingId(person.id);
     let result = await api.remove('customer-people', person.id);
     if (!result.success && /digunakan pada WO/i.test(result.message || '')) {
@@ -704,7 +782,7 @@ export default function WorkOrders() {
     }
     setQuickContactDeletingId('');
     if (!result.success) {
-      window.alert(result.message || 'Kontak gagal dihapus.');
+      showAccurateNotice(result.message || 'Kontak gagal dihapus.');
       return;
     }
     if (formData.driverContactId === person.id || formData.approvalContactId === person.id || formData.billingContactId === person.id) selectVisitContact('');
@@ -1041,11 +1119,11 @@ export default function WorkOrders() {
     if (requestedNewWO === '1') {
       setSearchParams({}, { replace: true });
       if (!hasPermission('wo:create')) {
-        window.alert('Anda tidak memiliki hak membuat WO.');
+        showAccurateNotice('Anda tidak memiliki hak membuat WO.');
         return;
       }
       if (currentBranchId === 'ALL') {
-        window.alert('Pilih cabang aktif terlebih dahulu sebelum membuat WO baru.');
+        showAccurateNotice('Pilih cabang aktif terlebih dahulu sebelum membuat WO baru.');
         return;
       }
       handleOpenModal();
@@ -1056,7 +1134,7 @@ export default function WorkOrders() {
     const targetWO = data.workOrders.find(wo => wo.id === targetId);
     setSearchParams({}, { replace: true });
     if (!targetWO) {
-      window.alert('WO yang dipilih tidak ditemukan atau tidak dapat diakses.');
+      showAccurateNotice('WO yang dipilih tidak ditemukan atau tidak dapat diakses.');
       return;
     }
 
@@ -1064,7 +1142,7 @@ export default function WorkOrders() {
     if (requestedViewWO || lockedByInvoice || !hasPermission('wo:edit')) {
       openDetailTab(targetWO);
       if (lockedByInvoice && requestedEditWO) {
-        window.alert(`WO ${targetWO.woNumber} sudah memiliki faktur dan dibuka dalam mode lihat.`);
+        showAccurateNotice(`WO ${targetWO.woNumber} sudah memiliki faktur dan dibuka dalam mode lihat.`);
       }
       return;
     }
@@ -1080,12 +1158,17 @@ export default function WorkOrders() {
     resetForm();
   };
 
-  const requestCloseEditor = () => {
+  const requestCloseEditor = async () => {
     const hasUnsavedNewData = !editingWO && Boolean(
       formData.customerRefId || formData.vehicleRefId || formData.description ||
       formData.notes || formData.findings || formData.services.length > 1
     );
-    if (hasUnsavedNewData && !window.confirm('Tutup Data Baru? Data yang belum disimpan akan hilang.')) return;
+    if (hasUnsavedNewData && !await askAccurateConfirmation({
+      title: 'Tutup Data Baru',
+      message: 'Data yang belum disimpan akan hilang. Tutup Data Baru sekarang?',
+      confirmLabel: 'Tutup',
+      cancelLabel: 'Batal',
+    })) return;
     handleCloseModal();
   };
 
@@ -1143,11 +1226,11 @@ export default function WorkOrders() {
 
   const persistServicesAfterAdd = async (nextServices: WorkOrderService[]) => {
     if (!customerVehicleReady) {
-      window.alert('Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.');
+      showAccurateNotice('Pilih atau daftarkan pelanggan dan kendaraan sebelum menambahkan layanan.');
       return false;
     }
     if (!editingWO) {
-      window.alert('Register WO terlebih dahulu sebelum menambahkan layanan.');
+      showAccurateNotice('Register WO terlebih dahulu sebelum menambahkan layanan.');
       return false;
     }
     if (autoRegisteringRef.current) return false;
@@ -1158,7 +1241,7 @@ export default function WorkOrders() {
   // Klik item/favorit langsung menambah satu baris. Panel tetap terbuka agar bisa tambah banyak.
   const handleUseItem = async (itemId: string) => {
     if (!editingWO) {
-      window.alert('Register WO terlebih dahulu sebelum menambahkan layanan.');
+      showAccurateNotice('Register WO terlebih dahulu sebelum menambahkan layanan.');
       return;
     }
     const item = data.items.find((entry) => entry.id === itemId);
@@ -1167,7 +1250,7 @@ export default function WorkOrders() {
     const duplicates = getDuplicateServices(itemId);
     if (duplicates.length > 0) {
       const names = [...new Set(duplicates.map(service => service.name.replace(/^\s*-\s*/, '')))];
-      window.alert(`Tidak ditambahkan karena sudah ada di WO:\n• ${names.join('\n• ')}`);
+      showAccurateNotice(`Tidak ditambahkan karena sudah ada di WO:\n• ${names.join('\n• ')}`);
       return;
     }
 
@@ -1223,7 +1306,7 @@ export default function WorkOrders() {
     diagnosisSubmitAction.current = 'save';
 
     if (editingWO?.invoiceId) {
-      window.alert(`WO ${editingWO.woNumber} sudah difakturkan dan tidak dapat diubah.`);
+      showAccurateNotice(`WO ${editingWO.woNumber} sudah difakturkan dan tidak dapat diubah.`);
       return;
     }
     if (!editingWO && autoRegisteringRef.current) return;
@@ -1266,33 +1349,36 @@ export default function WorkOrders() {
       ? formData.transactionTime !== (editingWO.transactionTime?.slice(0, 5) || formData.transactionTime)
       : false;
     if (formData.date > today) {
-      window.alert('Tanggal WO tidak boleh melewati hari ini.');
+      showAccurateNotice('Tanggal WO tidak boleh melewati hari ini.');
       return;
     }
     if (`${formData.date}T${formData.transactionTime}` > `${today}T${localTimeKey()}`) {
-      window.alert('Tanggal dan waktu WO tidak boleh melewati waktu sekarang.');
+      showAccurateNotice('Tanggal dan waktu WO tidak boleh melewati waktu sekarang.');
       return;
     }
     // Mengubah harga/layanan pada WO lama bukan transaksi tanggal mundur baru.
     // Izin dan alasan hanya diminta ketika tanggal benar-benar diubah, atau saat membuat WO baru.
     if (transactionDateChanged && formData.date < today && !hasPermission('wo:backdate')) {
-      window.alert('Anda tidak memiliki hak akses tanggal mundur.');
+      showAccurateNotice('Anda tidak memiliki hak akses tanggal mundur.');
       return;
     }
     if (transactionTimeChanged && !hasPermission('wo:backdate')) {
-      window.alert('Anda tidak memiliki hak mengubah waktu WO.');
+      showAccurateNotice('Anda tidak memiliki hak mengubah waktu WO.');
       return;
     }
     if (transactionDateChanged && data.settings.security.requireBackdateReason !== false && formData.date < today && !woBackdateReason.trim()) {
-      window.alert('Alasan tanggal mundur wajib diisi.');
+      showAccurateNotice('Alasan tanggal mundur wajib diisi.');
       return;
     }
     const targetBranch = resolveBranchId();
     const woNumber = generateDocumentNumber('workOrder', targetBranch, new Date(`${formData.date}T12:00:00`));
 
-    if (shouldCreateInvoice && !window.confirm(
-      'Tandai pekerjaan selesai dan buka Faktur/Pembayaran sekarang?'
-    )) {
+    if (shouldCreateInvoice && !await askAccurateConfirmation({
+      title: 'Selesaikan dan Buat Faktur',
+      message: 'Tandai pekerjaan selesai dan buka Faktur/Pembayaran sekarang?',
+      confirmLabel: 'Lanjutkan',
+      cancelLabel: 'Batal',
+    })) {
       return;
     }
 
@@ -1448,7 +1534,7 @@ export default function WorkOrders() {
       setTimeout(() => setSuccessMsg(''), 4000);
       if (!isAutoRegisteredDraft) handleCloseModal();
     } catch (err: any) {
-      window.alert('Gagal menyimpan Order Kerja: ' + (err?.message || 'terjadi kesalahan'));
+      showAccurateNotice('Gagal menyimpan Order Kerja: ' + (err?.message || 'terjadi kesalahan'));
     } finally {
       autoRegisteringRef.current = false;
       setIsAutoRegistering(false);
@@ -1496,7 +1582,7 @@ export default function WorkOrders() {
   // Alur status berurutan: dipanggil dari tombol aksi di kartu WO.
   const requestStatusChange = (wo: WorkOrder, next: WorkOrder['status']) => {
     if (next === 'Closed' && wo.invoiceId) {
-      window.alert(`WO tidak dapat dibatalkan karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}.`);
+      showAccurateNotice(`WO tidak dapat dibatalkan karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}.`);
       return;
     }
     setStatusReason('');
@@ -1597,7 +1683,7 @@ export default function WorkOrders() {
     if (!workResultEditor || isSavingWorkResult) return;
     const complaint = workComplaintText.trim();
     if (!complaint) {
-      window.alert('Keluhan pelanggan wajib diisi.');
+      showAccurateNotice('Keluhan pelanggan wajib diisi.');
       return;
     }
     setIsSavingWorkResult(true);
@@ -1618,7 +1704,7 @@ export default function WorkOrders() {
       setTimeout(() => setSuccessMsg(''), 3000);
       closeWorkResultEditor();
     } catch (error: any) {
-      window.alert(error?.message || 'Gagal menyimpan catatan.');
+      showAccurateNotice(error?.message || 'Gagal menyimpan catatan.');
     } finally {
       setIsSavingWorkResult(false);
     }
@@ -1630,7 +1716,7 @@ export default function WorkOrders() {
     try {
       const result = await changeWorkOrderStatus(wo.id, next, reasonOverride ?? statusReason);
       if (!result.ok) {
-        window.alert(result.message || 'Perubahan status ditolak.');
+        showAccurateNotice(result.message || 'Perubahan status ditolak.');
         return;
       }
       setSuccessMsg(`${wo.woNumber}: status berubah menjadi ${statusLabel(next)}.`);
@@ -1642,38 +1728,41 @@ export default function WorkOrders() {
       setCancelReasonNotes('');
       setDetailWO(current => current?.id === wo.id ? { ...current, status: next } : current);
     } catch (error: any) {
-      window.alert(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
+      showAccurateNotice(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
     }
   };
 
   const handleReopenCompletedWorkOrder = async (wo: WorkOrder) => {
     if (wo.invoiceId || wo.invoiceNumber || data.invoices.some(invoice => invoice.woId === wo.id)) {
-      window.alert('WO sudah memiliki faktur. Hapus faktur dan pembayarannya terlebih dahulu sebelum mengembalikan WO ke Dikerjakan.');
+      showAccurateNotice('WO sudah memiliki faktur. Hapus faktur dan pembayarannya terlebih dahulu sebelum mengembalikan WO ke Dikerjakan.');
       return;
     }
-    const reason = window.prompt(`Mundur ${wo.woNumber} kembali ke Dikerjakan.\n\nMasukkan alasan perubahan:`, 'Salah menekan Selesai');
-    if (reason === null) return;
-    if (!reason.trim()) {
-      window.alert('Alasan mengembalikan WO ke Dikerjakan wajib diisi.');
-      return;
-    }
+    const reason = await askAccurateText({
+      title: 'Kembalikan WO ke Dikerjakan',
+      message: `Mundur ${wo.woNumber} dari Selesai kembali ke Dikerjakan.`,
+      label: 'Alasan perubahan',
+      initialValue: 'Salah menekan Selesai',
+      placeholder: 'Masukkan alasan perubahan',
+      confirmLabel: 'Kembalikan',
+    });
+    if (!reason) return;
     try {
       const result = await changeWorkOrderStatus(wo.id, 'Proses', reason.trim());
       if (!result.ok) {
-        window.alert(result.message || 'WO tidak dapat dikembalikan ke Dikerjakan.');
+        showAccurateNotice(result.message || 'WO tidak dapat dikembalikan ke Dikerjakan.');
         return;
       }
       setSuccessMsg(`${wo.woNumber} dikembalikan ke Dikerjakan.`);
       setTimeout(() => setSuccessMsg(''), 4000);
       setDetailWO(current => current?.id === wo.id ? { ...current, status: 'Proses' } : current);
     } catch (error: any) {
-      window.alert(`Gagal mengembalikan WO: ${error?.message || 'server tidak merespons'}`);
+      showAccurateNotice(`Gagal mengembalikan WO: ${error?.message || 'server tidak merespons'}`);
     }
   };
 
   const handleOpenInvoiceModal = (wo: WorkOrder) => {
     if (wo.status !== 'Selesai') {
-      window.alert(`WO ${wo.woNumber} masih berstatus ${wo.status}. Ubah status menjadi Selesai sebelum membuat faktur.`);
+      showAccurateNotice(`WO ${wo.woNumber} masih berstatus ${wo.status}. Ubah status menjadi Selesai sebelum membuat faktur.`);
       return;
     }
     const warehouses = data.warehouses.filter(warehouse => warehouse.branchId === wo.branchId && warehouse.isActive && warehouse.isSellable && !warehouse.isSystem);
@@ -1762,20 +1851,20 @@ export default function WorkOrders() {
       }
       const today = localDateKey();
       if (invoiceDate > today || (invoicePayment > 0 && invoicePaymentDate > today)) {
-        window.alert('Tanggal transaksi tidak boleh melewati hari ini.');
+        showAccurateNotice('Tanggal transaksi tidak boleh melewati hari ini.');
         return;
       }
       if (invoicePayment > 0 && invoicePaymentDate < invoiceDate) {
-        window.alert('Tanggal pembayaran tidak boleh sebelum tanggal faktur.');
+        showAccurateNotice('Tanggal pembayaran tidak boleh sebelum tanggal faktur.');
         return;
       }
       if (data.settings.security.requireBackdateReason !== false && (invoiceDate < today || (invoicePayment > 0 && invoicePaymentDate < today)) && !invoiceBackdateReason.trim()) {
-        window.alert('Alasan tanggal mundur wajib diisi.');
+        showAccurateNotice('Alasan tanggal mundur wajib diisi.');
         return;
       }
       if (invoicePayment > invoiceWO.total) {
         const difference = invoicePayment - invoiceWO.total;
-        window.alert(`Pembayaran melebihi tagihan Rp ${difference.toLocaleString('id-ID')}. Kurangi nominal Tunai atau Transfer.`);
+        showAccurateNotice(`Pembayaran melebihi tagihan Rp ${difference.toLocaleString('id-ID')}. Kurangi nominal Tunai atau Transfer.`);
         return;
       }
       if (invoiceStockLines.some(line=>!line.warehouseId)) {
@@ -1819,7 +1908,7 @@ export default function WorkOrders() {
       item.id === wo.invoiceId || item.woId === wo.id || item.invoiceNumber === wo.invoiceNumber
     );
     const target = invoice?.id || wo.invoiceId || wo.invoiceNumber;
-    if (!target) return window.alert('Faktur terkait belum ditemukan.');
+    if (!target) return showAccurateNotice('Faktur terkait belum ditemukan.');
     window.location.assign(`/invoices?view=${encodeURIComponent(target)}`);
   };
 
@@ -1956,7 +2045,7 @@ export default function WorkOrders() {
       setSuccessMsg(`${wo.woNumber} berhasil disalin.`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch {
-      window.alert('Teks WO gagal disalin. Izinkan akses clipboard lalu coba lagi.');
+      showAccurateNotice('Teks WO gagal disalin. Izinkan akses clipboard lalu coba lagi.');
     }
   };
 
@@ -1971,7 +2060,7 @@ export default function WorkOrders() {
   const openNewRegistration = () => {
     if (showModal && !diagnosisMode && !serviceEditMode && !editingWO) return;
     if (currentBranchId === 'ALL') {
-      window.alert('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat registrasi WO.');
+      showAccurateNotice('Pilih cabang aktif dulu dari menu dropdown di header sebelum membuat registrasi WO.');
       return;
     }
     handleOpenModal();
@@ -1992,7 +2081,7 @@ export default function WorkOrders() {
     }
     const activeWO = findActiveWoByPlate(lostSalesFollowUp.plateNumber);
     if (activeWO && activeWO.id !== lostSalesFollowUp.id) {
-      window.alert(`Kendaraan ${lostSalesFollowUp.plateNumber} sudah memiliki WO aktif ${activeWO.woNumber}.`);
+      showAccurateNotice(`Kendaraan ${lostSalesFollowUp.plateNumber} sudah memiliki WO aktif ${activeWO.woNumber}.`);
       setLostSalesFollowUp(null);
       openDetailTab(activeWO);
       return;
@@ -2001,7 +2090,7 @@ export default function WorkOrders() {
     try {
       const result = await changeWorkOrderStatus(lostSalesFollowUp.id, 'Proses');
       if (!result.ok) {
-        window.alert(result.message || 'WO Lost Sales tidak dapat dilanjutkan.');
+        showAccurateNotice(result.message || 'WO Lost Sales tidak dapat dilanjutkan.');
         return;
       }
       setSuccessMsg(`${lostSalesFollowUp.woNumber} dipulihkan dari Lost Sales dan masuk status Dikerjakan.`);
@@ -2009,7 +2098,7 @@ export default function WorkOrders() {
       setLostSalesFollowUp(null);
       setDetailWO(null);
     } catch (error: any) {
-      window.alert(error?.message || 'Gagal melanjutkan WO Lost Sales.');
+      showAccurateNotice(error?.message || 'Gagal melanjutkan WO Lost Sales.');
     } finally {
       setIsFollowingUpLostSales(false);
     }
@@ -2022,7 +2111,7 @@ export default function WorkOrders() {
       const sourceWO = lostSalesFollowUp;
       const created = await continueWorkOrder(sourceWO.id, sourceWO.branchId, { resetJob: true });
       if (!created) {
-        window.alert('WO baru tidak dapat dibuat.');
+        showAccurateNotice('WO baru tidak dapat dibuat.');
         return;
       }
       setSuccessMsg(`${created.woNumber} dibuat untuk masalah berbeda; pelanggan dan kendaraan sudah terisi.`);
@@ -2031,7 +2120,7 @@ export default function WorkOrders() {
       setDetailWO(null);
       handleOpenModal(created);
     } catch (error: any) {
-      window.alert(error?.message || 'Gagal membuat WO baru dari Lost Sales.');
+      showAccurateNotice(error?.message || 'Gagal membuat WO baru dari Lost Sales.');
     } finally {
       setIsFollowingUpLostSales(false);
     }
@@ -2932,6 +3021,34 @@ export default function WorkOrders() {
       )}
 
       <AccurateNotificationDialog
+        open={Boolean(accurateDialog)}
+        title={accurateDialog?.title || 'Terjadi Permasalahan pada Pemrosesan'}
+        confirmLabel={accurateDialog?.confirmLabel}
+        cancelLabel={accurateDialog?.cancelLabel}
+        destructive={accurateDialog?.destructive}
+        onClose={() => respondToAccurateDialog(false)}
+        onConfirm={() => respondToAccurateDialog(true)}
+      >
+        <p>{accurateDialog?.message}</p>
+      </AccurateNotificationDialog>
+
+      <AccurateNotificationDialog
+        open={Boolean(accuratePrompt)}
+        title={accuratePrompt?.title || 'Masukkan Keterangan'}
+        confirmLabel={accuratePrompt?.confirmLabel || 'Lanjutkan'}
+        cancelLabel="Batal"
+        inputLabel={accuratePrompt?.label}
+        inputValue={accuratePrompt?.value}
+        inputPlaceholder={accuratePrompt?.placeholder}
+        confirmDisabled={!accuratePrompt?.value.trim()}
+        onInputChange={(value) => setAccuratePrompt(current => current ? { ...current, value } : current)}
+        onClose={() => respondToAccuratePrompt(false)}
+        onConfirm={() => respondToAccuratePrompt(true)}
+      >
+        <p>{accuratePrompt?.message}</p>
+      </AccurateNotificationDialog>
+
+      <AccurateNotificationDialog
         open={Boolean(deleteDialogWO)}
         title="Konfirmasi Penghapusan"
         confirmLabel="Hapus"
@@ -3127,7 +3244,7 @@ export default function WorkOrders() {
                       const next = !value;
                       if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
                       return next;
-                    }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
+                    }) : showAccurateNotice('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
                     className={`inline-flex h-[42px] w-[42px] items-center justify-center rounded-lg border transition-colors ${woDateUnlocked ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}
                     title={woDateUnlocked ? 'Kunci ke tanggal dan waktu sekarang' : 'Buka tanggal dan waktu mundur'}
                     aria-label={woDateUnlocked ? 'Kunci tanggal dan waktu WO' : 'Buka tanggal dan waktu mundur'}
@@ -3194,7 +3311,7 @@ export default function WorkOrders() {
                         const next = !value;
                         if (!next) setFormData(current => ({ ...current, date: localDateKey(), transactionTime: localTimeKey() }));
                         return next;
-                      }) : window.alert('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
+                      }) : showAccurateNotice('Anda tidak memiliki hak Ubah Tanggal/Waktu WO.')}
                       className={`inline-flex h-[42px] w-10 items-center justify-center rounded-lg border transition-colors ${woDateUnlocked ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}
                       title={woDateUnlocked ? 'Kunci ke tanggal dan waktu sekarang' : 'Buka tanggal dan waktu mundur'}
                       aria-label={woDateUnlocked ? 'Kunci tanggal dan waktu WO' : 'Buka tanggal dan waktu mundur'}
@@ -3787,15 +3904,19 @@ export default function WorkOrders() {
                 </button>
                 {editingWO && editingWO.status === 'Register' && hasPermission('wo:edit') && !editingWO.invoiceId && (
                   <button
-                    type="submit"
-                    onClick={(event) => {
-                      const reason = window.prompt('Alasan Lost Sales:');
-                      if (!reason?.trim()) {
-                        event.preventDefault();
-                        return;
-                      }
-                      lostSalesReason.current = reason.trim();
+                    type="button"
+                    onClick={async () => {
+                      const reason = await askAccurateText({
+                        title: 'Konfirmasi Lost Sales',
+                        message: `Tandai ${editingWO.woNumber} sebagai Lost Sales.`,
+                        label: 'Alasan Lost Sales',
+                        placeholder: 'Masukkan alasan Lost Sales',
+                        confirmLabel: 'Lost Sales',
+                      });
+                      if (!reason) return;
+                      lostSalesReason.current = reason;
                       diagnosisSubmitAction.current = 'lost';
+                      void handleSubmit();
                     }}
                     className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-rose-700 sm:px-5 sm:text-sm"
                   >
@@ -3883,7 +4004,7 @@ export default function WorkOrders() {
                 <footer className="mt-3 flex flex-col-reverse gap-2 border-t border-gray-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
-                    onClick={() => void navigator.clipboard.writeText(conflictSummary).catch(() => window.alert('Informasi WO gagal disalin.'))}
+                    onClick={() => void navigator.clipboard.writeText(conflictSummary).catch(() => showAccurateNotice('Informasi WO gagal disalin.'))}
                     className="h-10 rounded-sm border border-blue-300 bg-white px-4 text-sm font-normal text-blue-700 hover:bg-blue-50"
                   >
                     Salin
@@ -4532,13 +4653,13 @@ export default function WorkOrders() {
                     <label className="block text-sm font-medium mb-1">Tanggal Faktur</label>
                     <IndonesianDateInput max={localDateKey()} disabled={!invoiceDateUnlocked} value={invoiceDate} onChange={setInvoiceDate} className="h-10 w-full" />
                     <p className="mt-1 text-xs font-medium text-gray-600">{formatBusinessDate(invoiceDate)}</p>
-                    <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
+                    <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : showAccurateNotice('Tidak memiliki hak ubah tanggal faktur.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
                   </div>
                   {invoicePayment > 0 && <div>
                     <label className="block text-sm font-medium mb-1">Tanggal Pembayaran</label>
                     <IndonesianDateInput min={invoiceDate} max={localDateKey()} disabled={!invoicePaymentDateUnlocked} value={invoicePaymentDate} onChange={setInvoicePaymentDate} className="h-10 w-full" />
                     <p className="mt-1 text-xs font-medium text-gray-600">{formatBusinessDate(invoicePaymentDate)}</p>
-                    <button type="button" onClick={() => hasPermission('payment:backdate') ? setInvoicePaymentDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal pembayaran.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
+                    <button type="button" onClick={() => hasPermission('payment:backdate') ? setInvoicePaymentDateUnlocked(v => !v) : showAccurateNotice('Tidak memiliki hak ubah tanggal pembayaran.')} className="text-xs font-semibold text-blue-600 mt-1">Buka tanggal</button>
                   </div>}
                 </div>
                 {data.settings.security.requireBackdateReason !== false && (invoiceDate < localDateKey() || (invoicePayment > 0 && invoicePaymentDate < localDateKey())) && (
