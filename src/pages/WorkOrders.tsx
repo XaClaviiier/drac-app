@@ -577,6 +577,7 @@ export default function WorkOrders() {
   const [serviceSearchFocused, setServiceSearchFocused] = useState(false);
   const [isServiceSearching, setIsServiceSearching] = useState(false);
   const [showQuickServices, setShowQuickServices] = useState(false);
+  const quickServicesRef = useRef<HTMLDivElement | null>(null);
   const isLegacyFreeInspection = (item: typeof data.items[number]) => {
     const label = `${item.code} ${item.name} ${item.receiptDescription || ''}`.toUpperCase();
     return item.sellingPrice <= 0 && (/PENGECEKAN\s+GRATIS/.test(label) || /(^|\s)CEK[\s-]*AC($|\s)/.test(label));
@@ -632,6 +633,27 @@ export default function WorkOrders() {
     const timer = window.setTimeout(() => setIsServiceSearching(false), 180);
     return () => window.clearTimeout(timer);
   }, [serviceSearch]);
+
+  useEffect(() => {
+    if (!showQuickServices) return;
+    const closeWhenFocusLeaves = (event: PointerEvent | FocusEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !quickServicesRef.current?.contains(target)) {
+        setShowQuickServices(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowQuickServices(false);
+    };
+    document.addEventListener('pointerdown', closeWhenFocusLeaves);
+    document.addEventListener('focusin', closeWhenFocusLeaves);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeWhenFocusLeaves);
+      document.removeEventListener('focusin', closeWhenFocusLeaves);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showQuickServices]);
 
   const toggleQuickServices = () => {
     setShowQuickServices(previous => !previous);
@@ -3489,7 +3511,7 @@ export default function WorkOrders() {
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
               <div>
                 {showServiceForm && (
-                  <div className="relative z-20 mb-4">
+                  <div ref={quickServicesRef} className="relative z-20 mb-4">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"

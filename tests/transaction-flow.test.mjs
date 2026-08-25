@@ -758,6 +758,15 @@ test('kanvas WO saat baru, dibuka, dan diedit selalu mulai dari tampilan baku Ri
   assert.match(workOrders, />Koreksi Customer\/Kendaraan</);
 });
 
+test('panel Favorit WO langsung tertutup saat kehilangan fokus', () => {
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.match(workOrders, /const quickServicesRef = useRef<HTMLDivElement \| null>\(null\)/);
+  assert.match(workOrders, /document\.addEventListener\('pointerdown', closeWhenFocusLeaves\)/);
+  assert.match(workOrders, /document\.addEventListener\('focusin', closeWhenFocusLeaves\)/);
+  assert.match(workOrders, /event\.key === 'Escape'/);
+  assert.match(workOrders, /<div ref=\{quickServicesRef\} className="relative z-20 mb-4">/);
+});
+
 test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
   assert.match(workOrders, /showModal && \(/);
