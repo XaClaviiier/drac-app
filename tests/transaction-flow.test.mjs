@@ -622,7 +622,11 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   const documentCanvas = source('src/lib/useAccurateDocumentCanvas.ts');
   assert.match(documentCanvas, /page\.classList\.toggle\('app-page-scroll--document-locked', shouldLock\)/);
   assert.match(documentCanvas, /if \(shouldLock\) page\.scrollTop = 0/);
-  assert.match(source('src/pages/WorkOrders.tsx'), /useAccurateDocumentCanvas\(showModal\)/);
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.match(workOrders, /useAccurateDocumentCanvas\(showModal\)/);
+  assert.match(workOrders, /\$\{ui\.childBar\} \$\{showModal \? 'hidden lg:flex' : ''\}/);
+  assert.match(workOrders, /\$\{ui\.childBar\} static z-20 lg:hidden/);
+  assert.match(workOrders, /aria-label="Kembali ke daftar Order Kerja"/);
   assert.match(source('src/pages/SalesInvoice.tsx'), /useAccurateDocumentCanvas\(showModal\)/);
   assert.match(source('src/pages/ItemsAndServices.tsx'), /useAccurateDocumentCanvas\(showItemModal\)/);
   assert.match(complaints, /app-combobox-field/);

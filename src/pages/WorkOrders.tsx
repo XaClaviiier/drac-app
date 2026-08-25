@@ -2129,7 +2129,7 @@ export default function WorkOrders() {
 
   return (
     <div className="space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0">
-      <div className={ui.childBar}>
+      <div className={`${ui.childBar} ${showModal ? 'hidden lg:flex' : ''}`}>
         <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
@@ -3137,6 +3137,19 @@ export default function WorkOrders() {
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
+            </div>
+
+            <div className={`${ui.childBar} static z-20 lg:hidden`}>
+              <button type="button" onClick={requestCloseEditor} className={ui.childListTab} title="Daftar Order Kerja" aria-label="Kembali ke daftar Order Kerja">
+                <ListPlus className="h-5 w-5" />
+              </button>
+              <button type="button" className={`${ui.childTabActive} min-w-0 max-w-[260px] gap-2 px-5 text-sm`}>
+                {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? editingWO.woNumber : 'Data Baru'}
+                <X className="ml-1 h-4 w-4 flex-shrink-0" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
+              </button>
+              <div className="ml-auto flex h-10 items-center border-b-0 px-2">
+                <button type="button" onClick={() => window.open('/help?article=alur-order-kerja', '_blank')} className="flex h-8 w-10 items-center justify-center rounded bg-amber-500 text-white" title="Panduan Work Order" aria-label="Panduan Work Order"><Lightbulb className="h-4 w-4" /></button>
+              </div>
             </div>
 
             <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[88px]">
