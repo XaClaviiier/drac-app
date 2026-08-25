@@ -93,6 +93,19 @@ test('respons gagal koneksi database tidak mengirim detail internal', () => {
   assert.doesNotMatch(config, /'error'\s*=>\s*\$e->getMessage\(\)/);
 });
 
+test('audit WO, faktur, dan pembayaran memakai waktu WITA yang konsisten', () => {
+  const config = source('api/config.php');
+  const endpoint = source('api/endpoints/work-orders.php');
+  const page = source('src/pages/WorkOrders.tsx');
+
+  assert.match(config, /SET time_zone = '\+08:00'/);
+  assert.match(endpoint, /DateTimeZone\('Asia\/Makassar'\)/);
+  assert.match(endpoint, /DateTimeInterface::ATOM/);
+  assert.match(endpoint, /'createdAt' => \$formatAuditTimestamp\(\$payment\['created_at'\]/);
+  assert.match(page, /title: 'Anomali urutan audit'/);
+  assert.match(page, /sistem tidak mengubah urutannya secara semu/);
+});
+
 test('pencarian barang mendukung filter stok cabang dan mengecualikan jasa', () => {
   const page = source('src/pages/ItemsAndServices.tsx');
   const rules = source('src/lib/itemSearchRules.ts');

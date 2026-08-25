@@ -69,6 +69,15 @@ $syncWorkOrderTechnicians = static function(PDO $pdo, string $woId, string $bran
         'assistantNames' => $assistantNames,
     ];
 };
+$formatAuditTimestamp = static function($value): ?string {
+    if ($value === null || trim((string)$value) === '') return null;
+    try {
+        return (new DateTimeImmutable((string)$value, new DateTimeZone('Asia/Makassar')))
+            ->format(DateTimeInterface::ATOM);
+    } catch (Throwable $error) {
+        return (string)$value;
+    }
+};
 
 switch ($method) {
     case 'GET':
@@ -103,8 +112,8 @@ switch ($method) {
                 'total' => (float)$invoice['total'],
                 'payment' => (float)$invoice['payment'],
                 'status' => (string)$invoice['status'],
-                'createdAt' => $invoice['created_at'] ?? null,
-                'updatedAt' => $invoice['updated_at'] ?? null,
+                'createdAt' => $formatAuditTimestamp($invoice['created_at'] ?? null),
+                'updatedAt' => $formatAuditTimestamp($invoice['updated_at'] ?? null),
             ];
 
             if ($payload['canViewPayments']) {
@@ -118,12 +127,12 @@ switch ($method) {
                     'paymentMethod' => (string)$payment['payment_method'],
                     'accountName' => (string)($payment['account_name'] ?? ''),
                     'createdByName' => (string)($payment['created_by_name'] ?? ''),
-                    'createdAt' => $payment['created_at'] ?? null,
+                    'createdAt' => $formatAuditTimestamp($payment['created_at'] ?? null),
                 ], $paymentStmt->fetchAll());
 
                 $auditStmt = $pdo->prepare("SELECT * FROM customer_payment_audit_logs WHERE invoice_id=? ORDER BY created_at ASC, id ASC");
                 $auditStmt->execute([(string)$invoice['id']]);
-                $payload['paymentAudits'] = array_map(static function($audit) {
+                $payload['paymentAudits'] = array_map(static function($audit) use ($formatAuditTimestamp) {
                     $snapshot = json_decode((string)($audit['snapshot_json'] ?? '{}'), true);
                     return [
                         'id' => (string)$audit['id'],
@@ -134,7 +143,7 @@ switch ($method) {
                         'paymentMethod' => (string)($snapshot['payment_method'] ?? ''),
                         'accountName' => (string)($snapshot['account_name'] ?? ''),
                         'userName' => (string)($audit['user_name'] ?? ''),
-                        'createdAt' => $audit['created_at'] ?? null,
+                        'createdAt' => $formatAuditTimestamp($audit['created_at'] ?? null),
                     ];
                 }, $auditStmt->fetchAll());
             }

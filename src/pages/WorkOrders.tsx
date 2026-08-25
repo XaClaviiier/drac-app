@@ -2018,8 +2018,20 @@ export default function WorkOrders() {
     const finance = financialTimeline.woId === wo.id ? financialTimeline : EMPTY_FINANCIAL_TIMELINE;
     if (finance.invoice) {
       const invoice = finance.invoice;
+      const completionLog = [...(wo.statusLog || [])].reverse().find(log => log.to === 'Selesai');
+      const completionTime = completionLog ? new Date(completionLog.at).getTime() : Number.NaN;
+      const invoiceAuditAt = invoice.createdAt || `${invoice.date}T23:57:00`;
+      const invoiceTime = new Date(invoiceAuditAt.includes('T') ? invoiceAuditAt : invoiceAuditAt.replace(' ', 'T')).getTime();
+      if (!Number.isNaN(completionTime) && !Number.isNaN(invoiceTime) && invoiceTime < completionTime) {
+        events.push({
+          at: invoiceAuditAt,
+          title: 'Anomali urutan audit',
+          description: `Faktur ${invoice.invoiceNumber} tercatat sebelum WO berstatus Selesai. Riwayat ini perlu diperiksa; sistem tidak mengubah urutannya secara semu.`,
+          tone: 'bg-red-600',
+        });
+      }
       events.push({
-        at: invoice.createdAt || `${invoice.date}T23:57:00`,
+        at: invoiceAuditAt,
         title: `Faktur ${invoice.invoiceNumber} dibuat`,
         description: `Tanggal faktur ${formatBusinessDate(invoice.date)} · Total Rp ${Number(invoice.total).toLocaleString('id-ID')} · ${invoice.status}`,
         tone: 'bg-emerald-600',
