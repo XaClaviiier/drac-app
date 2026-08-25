@@ -3278,6 +3278,7 @@ export default function WorkOrders() {
                 <div className="absolute right-[104px] top-[196px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl">
                   <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button>
                   {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button>}
+                  {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => { setOpenActionRailMenu(''); setShowCustomerVehicleCorrectionForm(true); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Koreksi Customer/Kendaraan</button>}
                   {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); void copyWorkOrder(editingWO); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Salin ringkasan WO</button>}
                 </div>
               )}
@@ -3437,24 +3438,6 @@ export default function WorkOrders() {
                   </div>
                 </div>
               </div>
-              {editingWO && <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
-                customerVehicleLocked
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : customerVehicleReady
-                    ? 'border-blue-200 bg-blue-50 text-blue-700'
-                    : 'border-amber-200 bg-amber-50 text-amber-700'
-              }`}>
-                {customerVehicleLocked ? <LockKeyhole className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-                {customerVehicleLocked
-                  ? `Pelanggan dan kendaraan sudah teregister${editingWO ? ` pada ${editingWO.woNumber}` : ''}.`
-                  : customerVehicleReady
-                    ? formData.description.trim()
-                      ? 'Data siap. Tekan Register untuk membuat nomor WO.'
-                      : 'Isi keluhan/keterangan service sebelum Register.'
-                    : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum Register.'}
-                {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => setShowCustomerVehicleCorrectionForm(true)} className="ml-auto flex-shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Ubah Customer/Kendaraan</button>}
-                {customerVehicleCorrectionUnlocked && <span className="ml-auto flex-shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-amber-800">Mode koreksi aktif</span>}
-              </div>}
               {showCustomerVehicleCorrectionForm && !customerVehicleCorrectionUnlocked && (
                 <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:flex-row md:items-center">
                   <input
@@ -3505,10 +3488,6 @@ export default function WorkOrders() {
               {documentTab === 'details' && <div className="p-3">
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
               <div>
-                <div className={editingWO && !isAutoRegisteredDraft ? 'mb-3' : 'hidden'}>
-                  <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Pekerjaan / Layanan WO'}</label>
-                </div>
-
                 {showServiceForm && (
                   <div className="relative z-20 mb-4">
                     <div className="flex items-center gap-2">

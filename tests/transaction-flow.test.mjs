@@ -753,6 +753,9 @@ test('kanvas WO saat baru, dibuka, dan diedit selalu mulai dari tampilan baku Ri
   assert.match(workOrders, /useState<AccurateDocumentTab>\(DEFAULT_WORK_ORDER_DOCUMENT_TAB\)/);
   assert.match(workOrders, /const handleOpenModal = \(wo\?: WorkOrder, servicesOnly = false, viewOnly = false\) => \{\s+setShowQuickServices\(false\);\s+setDocumentTab\(DEFAULT_WORK_ORDER_DOCUMENT_TAB\);/);
   assert.ok((workOrders.match(/setDocumentTab\(DEFAULT_WORK_ORDER_DOCUMENT_TAB\)/g) || []).length >= 2);
+  assert.doesNotMatch(workOrders, /Pelanggan dan kendaraan sudah teregister/);
+  assert.doesNotMatch(workOrders, /Pekerjaan \/ Layanan WO/);
+  assert.match(workOrders, />Koreksi Customer\/Kendaraan</);
 });
 
 test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () => {
@@ -761,7 +764,7 @@ test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () =
   assert.match(workOrders, /<thead className="bg-\[var\(--app-table-head\)\] text-xs uppercase text-white">/);
   assert.match(workOrders, /diagnosisMode && editingWO \? \(\s*<div className="space-y-3">/);
   assert.match(workOrders, /formData\.services\.length > 0 \|\| !editingWO \?/);
-  assert.match(workOrders, /editingWO && !isAutoRegisteredDraft \? 'mb-3'/);
+  assert.doesNotMatch(workOrders, /editingWO && !isAutoRegisteredDraft \? 'mb-3'/);
   assert.match(workOrders, /editingWO && diagnosisMode && <div className="grid items-stretch justify-end gap-3/);
   assert.match(workOrders, /documentTab === 'info'/);
   assert.match(workOrders, /documentTab === 'payment'/);
