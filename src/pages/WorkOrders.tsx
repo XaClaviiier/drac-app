@@ -129,6 +129,7 @@ export default function WorkOrders() {
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   useAccurateDocumentCanvas(showModal);
+  const [workOrderViewOnly, setWorkOrderViewOnly] = useState(false);
   const [diagnosisMode, setDiagnosisMode] = useState(false);
   const [serviceEditMode, setServiceEditMode] = useState(false);
   const diagnosisSubmitAction = useRef<'save' | 'process' | 'invoice' | 'lost'>('save');
@@ -1035,6 +1036,7 @@ export default function WorkOrders() {
     setShowServiceForm(true);
     setServiceSearch('');
     setEditingWO(null);
+    setWorkOrderViewOnly(false);
     setIsAutoRegisteredDraft(false);
     setIsAutoRegistering(false);
     autoRegisteringRef.current = false;
@@ -1046,8 +1048,9 @@ export default function WorkOrders() {
     setSelectedServiceId('');
   };
 
-  const handleOpenModal = (wo?: WorkOrder, servicesOnly = false) => {
+  const handleOpenModal = (wo?: WorkOrder, servicesOnly = false, viewOnly = false) => {
     setDetailWO(null);
+    setWorkOrderViewOnly(Boolean(wo && viewOnly));
     setDiagnosisMode(false);
     setServiceEditMode(Boolean(wo && servicesOnly));
     setIsAutoRegisteredDraft(false);
@@ -1106,11 +1109,7 @@ export default function WorkOrders() {
   const openWorkOrderStandard = (wo: WorkOrder) => {
     const sameBranch = wo.branchId === resolveBranchId();
     const readOnly = !sameBranch || !hasPermission('wo:edit');
-    if (readOnly) {
-      openDetailTab(wo);
-      return;
-    }
-    handleOpenModal(wo, true);
+    handleOpenModal(wo, true, readOnly);
   };
 
   const requestedNewWO = searchParams.get('new');
@@ -1155,14 +1154,14 @@ export default function WorkOrders() {
     const lockedByInvoice = Boolean(targetWO.invoiceId);
     const sameBranch = targetWO.branchId === resolveBranchId();
     if (!sameBranch || !hasPermission('wo:edit')) {
-      openDetailTab(targetWO);
+      handleOpenModal(targetWO, true, true);
       if (lockedByInvoice && requestedEditWO) {
         showAccurateNotice(`WO ${targetWO.woNumber} sudah memiliki faktur dan dibuka dalam mode lihat.`);
       }
       return;
     }
 
-    handleOpenModal(targetWO, true);
+    handleOpenModal(targetWO, true, Boolean(requestedViewWO));
     if (lockedByInvoice && requestedEditWO) {
       showAccurateNotice(`WO ${targetWO.woNumber} sudah memiliki faktur. Tampilan mengikuti form WO, tetapi transaksi tetap terkunci.`);
     }
@@ -1170,6 +1169,7 @@ export default function WorkOrders() {
 
   const handleCloseModal = () => {
     setShowModal(false);
+    setWorkOrderViewOnly(false);
     setDiagnosisMode(false);
     setServiceEditMode(false);
     setResumeLostSalesAfterEstimate(false);
@@ -1322,6 +1322,11 @@ export default function WorkOrders() {
     const shouldProcessNew = !editingWO && diagnosisSubmitAction.current === 'process';
     const shouldProcessEditing = Boolean(editingWO && editingWO.status === 'Register' && diagnosisSubmitAction.current === 'process');
     diagnosisSubmitAction.current = 'save';
+
+    if (workOrderViewOnly) {
+      showAccurateNotice(`WO ${editingWO?.woNumber || ''} dibuka dalam mode lihat dan tidak dapat diubah.`);
+      return;
+    }
 
     if (editingWO?.invoiceId) {
       showAccurateNotice(`WO ${editingWO.woNumber} sudah difakturkan dan tidak dapat diubah.`);
@@ -3226,9 +3231,9 @@ export default function WorkOrders() {
                     diagnosisSubmitAction.current = 'save';
                     void handleSubmit();
                   },
-                  disabled: editingWO
+                  disabled: workOrderViewOnly || (editingWO
                     ? Boolean(editingWO.invoiceId) || (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)
-                    : isAutoRegistering,
+                    : isAutoRegistering),
                   title: editingWO ? 'Simpan Work Order' : 'Register Work Order',
                 }}
                 print={{
@@ -3260,6 +3265,7 @@ export default function WorkOrders() {
               {openActionRailMenu === 'more' && (
                 <div className="absolute right-[104px] top-[196px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl">
                   <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button>
+                  {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button>}
                   {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); void copyWorkOrder(editingWO); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Salin ringkasan WO</button>}
                 </div>
               )}

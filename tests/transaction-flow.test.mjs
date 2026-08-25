@@ -893,6 +893,16 @@ test('Closed dan status lama selalu memakai label baku Lost Sales', () => {
   assert.match(assistant, /const woStatusLabel = workOrderStatusLabel/);
   assert.doesNotMatch(timeline, /Lost Sales \/ Batal/);
   assert.doesNotMatch(assistant, /\$\{w\.status\}/);
+  assert.match(status, /status === 'Open' \|\| status === 'Terbuka'\) return 'Register'/);
+});
+
+test('semua jalur buka WO memakai form Data Baru sebagai kanvas baku', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+
+  assert.match(page, /const openWorkOrderStandard = \(wo: WorkOrder\) => \{[\s\S]*?handleOpenModal\(wo, true, readOnly\)/);
+  assert.doesNotMatch(page, /const openWorkOrderStandard = \(wo: WorkOrder\) => \{[\s\S]*?if \(readOnly\) \{\s*openDetailTab\(wo\)/);
+  assert.match(page, /workOrderViewOnly \|\| \(editingWO/);
+  assert.match(page, />Pembayaran \/ Saldo<\/button>/);
 });
 
 test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger faktur', () => {
