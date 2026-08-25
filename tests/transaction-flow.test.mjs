@@ -693,6 +693,17 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
   assert.match(workOrders, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex"/);
 });
 
+test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accurate', () => {
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.match(workOrders, /lg:bg-\[#eeeeee\] lg:shadow-\[0_2px_8px_rgba\(15,23,42,0\.16\)\]/);
+  assert.match(workOrders, /border-gray-400 bg-white shadow-\[0_2px_7px_rgba\(15,23,42,0\.18\)\]/);
+  assert.match(workOrders, /data-wo-total-summary/);
+  assert.match(workOrders, />Sub Total</);
+  assert.match(workOrders, />Diskon</);
+  assert.match(workOrders, />Total</);
+  assert.match(workOrders, /Rp \{totalServices\.toLocaleString\('id-ID'\)\}/);
+});
+
 test('daftar WO selalu menampilkan nama cabang pada desktop dan HP', () => {
   const page = source('src/pages/WorkOrders.tsx');
   assert.match(page, /\{' · '\}\{data\.branches\.find\(b => b\.id === wo\.branchId\)\?\.name\.replace\('CABANG ', ''\) \|\| wo\.branchId\}/);

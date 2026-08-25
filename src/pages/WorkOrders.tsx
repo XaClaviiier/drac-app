@@ -3418,7 +3418,7 @@ export default function WorkOrders() {
 
               </>}
 
-              <div className="relative min-h-[320px] border border-gray-300 bg-white lg:ml-10">
+              <div className="relative min-h-[320px] border border-gray-300 bg-white lg:ml-10 lg:bg-[#eeeeee] lg:shadow-[0_2px_8px_rgba(15,23,42,0.16)]">
               <AccurateDocumentSideTabs active={documentTab} onChange={setDocumentTab} />
               {documentTab === 'details' && <div className="p-3">
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
@@ -3751,7 +3751,7 @@ export default function WorkOrders() {
                       <span className="text-base font-bold text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</span>
                     </div>}
                   </div>
-                  <div className="hidden overflow-x-auto rounded border border-gray-200 bg-white sm:block">
+                  <div className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block">
                     <table className="min-w-[920px] w-full text-sm">
                       <thead className={editingWO ? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'}>
                         <tr>
@@ -3849,22 +3849,39 @@ export default function WorkOrders() {
                     </p>
                   </div>
                 )}
+
+                <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[640px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
+                  <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">
+                    <span className="text-sm font-medium text-gray-900">Sub Total</span>
+                    <strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {totalServices.toLocaleString('id-ID')}</strong>
+                  </div>
+                  <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                      <span>Diskon</span>
+                      <span className="rounded border border-blue-500 bg-blue-50 px-1 text-[11px] leading-4 text-blue-700">0%</span>
+                    </div>
+                    <div className="flex h-8 items-center border border-gray-400 bg-gray-50 px-2 text-sm text-gray-500">
+                      <span>Rp</span>
+                      <strong className="ml-auto font-semibold tabular-nums text-gray-700">0</strong>
+                    </div>
+                  </div>
+                  <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">
+                    <span className="text-sm font-medium text-gray-900">Total</span>
+                    <strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {totalServices.toLocaleString('id-ID')}</strong>
+                  </div>
+                </div>
               </div>
 
               {/* Pengukuran dan total; teknisi serta hasil kerja berada di tab Info lainnya. */}
-              <div className={!editingWO ? 'hidden' : `grid items-stretch justify-end gap-3 ${diagnosisMode ? 'lg:grid-cols-[minmax(210px,1fr)_300px]' : 'lg:grid-cols-[300px]'}`}>
-                {diagnosisMode && <div className="grid min-h-[148px] grid-rows-2 gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3">
+              {editingWO && diagnosisMode && <div className="grid items-stretch justify-end gap-3 lg:grid-cols-[minmax(210px,1fr)]">
+                <div className="grid min-h-[148px] grid-rows-2 gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3">
                   <div className="grid grid-cols-2 gap-2">
                     <label className="text-[11px] font-semibold text-slate-600">LP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
                     <label className="text-[11px] font-semibold text-slate-600">HP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
                   </div>
                   <label className="text-[11px] font-semibold text-slate-600">Suhu (°C)<input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
-                </div>}
-                <div className="flex min-h-[148px] flex-col justify-between rounded-xl border border-gray-300 bg-white px-4 py-3 shadow-sm">
-                  <span className="text-sm font-medium text-gray-600">Total Estimasi ({formData.services.filter(service => !isPackageMemberService(service)).length} item)</span>
-                  <strong className="text-right text-xl font-bold tabular-nums text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</strong>
                 </div>
-              </div>
+              </div>}
               </div>}
 
               {documentTab === 'info' && (
