@@ -5,6 +5,9 @@
 date_default_timezone_set('Asia/Makassar');
 require_once 'config.php';
 require_once 'helpers.php';
+// Seluruh audit operasional memakai WITA. Berkas router ini ikut deployment,
+// sedangkan config.php sengaja tidak ditimpa agar kredensial hosting tetap aman.
+$pdo->exec("SET time_zone = '+08:00'");
 ensureApiSupportTables($pdo);
 
 $route = $_GET['route'] ?? '';

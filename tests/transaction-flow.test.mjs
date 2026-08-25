@@ -94,11 +94,11 @@ test('respons gagal koneksi database tidak mengirim detail internal', () => {
 });
 
 test('audit WO, faktur, dan pembayaran memakai waktu WITA yang konsisten', () => {
-  const config = source('api/config.php');
+  const router = source('api/index.php');
   const endpoint = source('api/endpoints/work-orders.php');
   const page = source('src/pages/WorkOrders.tsx');
 
-  assert.match(config, /SET time_zone = '\+08:00'/);
+  assert.match(router, /SET time_zone = '\+08:00'/);
   assert.match(endpoint, /DateTimeZone\('Asia\/Makassar'\)/);
   assert.match(endpoint, /DateTimeInterface::ATOM/);
   assert.match(endpoint, /'createdAt' => \$formatAuditTimestamp\(\$payment\['created_at'\]/);

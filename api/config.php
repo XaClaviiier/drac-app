@@ -51,9 +51,6 @@ try {
             PDO::ATTR_EMULATE_PREPARES => false,
         ]
     );
-    // Seluruh audit operasional memakai WITA. Tanpa zona sesi yang sama,
-    // CURRENT_TIMESTAMP MySQL dapat terbaca lebih awal daripada status_log PHP.
-    $pdo->exec("SET time_zone = '+08:00'");
 } catch (PDOException $e) {
     error_log('DRAC database connection failed: ' . $e->getMessage());
     http_response_code(500);
