@@ -12,6 +12,8 @@ import { ui } from '../components/ui/interfaceStandards';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
+import AccurateFormActionRail from '../components/AccurateFormActionRail';
+import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -71,7 +73,6 @@ export default function SalesInvoice() {
   const woPickerPanelRef = useRef<HTMLDivElement>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [formItems, setFormItems] = useState<NonNullable<SalesInvoice['items']>>([]);
-  const [formItemToAdd, setFormItemToAdd] = useState('');
   const [formItemSearch, setFormItemSearch] = useState('');
   const [formActionMenu, setFormActionMenu] = useState<'ambil' | 'proses' | null>(null);
   const [formDiscount, setFormDiscount] = useState(0);
@@ -86,6 +87,8 @@ export default function SalesInvoice() {
   const [detailActiveTab, setDetailActiveTab] = useState<'detail' | 'info' | 'image'>('detail');
   const [detailFormRowId, setDetailFormRowId] = useState('');
   const [selectedFormItemId, setSelectedFormItemId] = useState('');
+  const [invoiceDocumentTab, setInvoiceDocumentTab] = useState<AccurateDocumentTab>('details');
+  const [invoiceRailMenu, setInvoiceRailMenu] = useState<'print' | 'more' | ''>('');
   const activeFilterCount = [filterCustomer, filterStatus, filterDate].filter(Boolean).length;
   const resetInvoiceFilters = () => {
     setFilterCustomer('');
@@ -387,7 +390,6 @@ export default function SalesInvoice() {
     });
     setEditingInvoice(null);
     setFormItems([]);
-    setFormItemToAdd('');
     setFormItemSearch('');
     setFormActionMenu(null);
     setFormDiscount(0);
@@ -395,10 +397,14 @@ export default function SalesInvoice() {
     setDetailItemId('');
     setSelectedFormItemId('');
     setInvoiceDateUnlocked(false);
+    setInvoiceDocumentTab('details');
+    setInvoiceRailMenu('');
   };
 
   const handleOpenModal = (invoice?: SalesInvoice) => {
     setFormActionMenu(null);
+    setInvoiceDocumentTab('details');
+    setInvoiceRailMenu('');
     if (invoice) {
       setEditingInvoice(invoice);
       const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
@@ -633,18 +639,6 @@ export default function SalesInvoice() {
       return next;
     }, { replace: true });
   }, [searchParams, setSearchParams, hasLoadedData, data.invoices]);
-
-  const addFormItem = () => {
-    const item = data.items.find((entry) => entry.id === formItemToAdd);
-    if (!item) return;
-    setFormItems((current) => {
-      const existing = current.find((entry) => entry.itemId === item.id);
-      return existing
-        ? current.map((entry) => entry.id === existing.id ? { ...entry, qty: entry.qty + 1 } : entry)
-        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: item.sellingPrice, qty: 1 }];
-    });
-    setFormItemToAdd('');
-  };
 
   const addItemDirectly = (itemId: string) => {
     const item = data.items.find(entry => entry.id === itemId);
@@ -1177,8 +1171,8 @@ export default function SalesInvoice() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-3 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
-          <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50 shadow-2xl sm:h-[94vh] sm:max-w-6xl sm:rounded-xl sm:border sm:border-gray-300 lg:h-auto lg:max-w-none lg:rounded-md lg:shadow-sm">
+        <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-0 sm:items-center sm:p-4 lg:static lg:z-auto lg:block lg:bg-transparent lg:px-0 lg:pb-3 lg:pt-0">
+          <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl lg:block lg:h-auto lg:max-h-none lg:max-w-none lg:overflow-visible lg:rounded-md lg:border lg:border-gray-200 lg:bg-[var(--app-canvas)] lg:shadow-sm">
             <div className="flex flex-shrink-0 items-center justify-between border-b border-blue-900 bg-slate-700 px-4 py-3 text-white sm:px-5 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold">
@@ -1194,13 +1188,20 @@ export default function SalesInvoice() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="relative grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4 lg:overflow-visible lg:pr-[82px]">
-              <aside className="absolute bottom-2 right-2 top-2 z-30 hidden w-[66px] flex-col items-stretch gap-2 border-l border-gray-300 bg-gray-50 pl-2 lg:flex" aria-label="Aksi Faktur Penjualan">
-                <button type="submit" disabled={!manualInvoiceReady} className="grid h-14 w-14 place-items-center rounded border border-blue-700 bg-blue-700 text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-300" title="Simpan Faktur" aria-label="Simpan Faktur"><Save className="h-6 w-6" /></button>
-                <button type="button" onClick={() => document.getElementById('invoice-description')?.focus()} className="grid h-14 w-14 place-items-center rounded border border-blue-400 bg-white text-blue-700 hover:bg-blue-50" title="Info lainnya / keterangan" aria-label="Info lainnya"><Settings2 className="h-6 w-6" /></button>
-                <button type="button" onClick={() => selectedFormItemId && removeFormItem(selectedFormItemId)} disabled={!selectedFormItemId} className="grid h-14 w-14 place-items-center rounded border border-red-300 bg-white text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-300" title={selectedFormItemId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu'} aria-label="Hapus barang atau jasa terpilih"><Trash2 className="h-6 w-6" /></button>
-              </aside>
-              <section className="border border-gray-300 bg-white p-3">
+            <form id="sales-invoice-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
+              <AccurateFormActionRail
+                ariaLabel="Aksi Faktur Penjualan"
+                className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
+                save={{ type: 'submit', form: 'sales-invoice-entry-form', disabled: !manualInvoiceReady, title: editingInvoice ? 'Simpan perubahan faktur' : 'Simpan faktur' }}
+                print={{ onClick: () => setInvoiceRailMenu(invoiceRailMenu === 'print' ? '' : 'print'), title: 'Cetak / simpan sebagai' }}
+                attachment={{ disabled: true, title: 'Lampiran belum tersedia untuk Faktur Penjualan' }}
+                more={{ onClick: () => setInvoiceRailMenu(invoiceRailMenu === 'more' ? '' : 'more'), title: 'Lain-lain' }}
+                remove={{ onClick: selectedFormItemId ? () => removeFormItem(selectedFormItemId) : undefined, disabled: !selectedFormItemId, title: selectedFormItemId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu' }}
+              />
+              {invoiceRailMenu && <button type="button" aria-label="Tutup menu aksi faktur" onClick={() => setInvoiceRailMenu('')} className="fixed inset-0 z-[55] cursor-default" />}
+              {invoiceRailMenu === 'print' && <div className="absolute right-[104px] top-[74px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl"><button type="button" onClick={() => { setInvoiceRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Cetak Faktur Penjualan</button><button type="button" onClick={() => { setInvoiceRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Simpan sebagai PDF</button>{editingInvoice && <button type="button" onClick={() => { setInvoiceRailMenu(''); shareInvoiceToWhatsApp(editingInvoice); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Bagikan Faktur</button>}</div>}
+              {invoiceRailMenu === 'more' && <div className="absolute right-[104px] top-[196px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl"><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button></div>}
+              <section className="bg-transparent p-1 lg:p-0">
                 <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
                   <label className="flex h-10 items-center text-sm font-medium text-gray-700">Pelanggan <span className="ml-1 text-red-500">*</span></label>
                   {editingInvoice ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice.customerName}</div> : <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} onVehicleSelect={handleVehicleSelect} />}
@@ -1240,78 +1241,53 @@ export default function SalesInvoice() {
                 <input required value={formData.backdateReason} onChange={(e) => setFormData({ ...formData, backdateReason: e.target.value })} placeholder="Alasan transaksi tanggal mundur" className="w-full rounded border border-amber-400 bg-amber-50 px-4 py-2.5 lg:col-span-2" />
               )}
 
-              <section className="relative min-h-[320px] space-y-2 border border-gray-300 bg-white p-3 pl-[62px]">
-                <aside className="absolute bottom-0 left-0 top-0 flex w-12 flex-col border-r border-gray-300 bg-gray-100" aria-label="Tab rincian Faktur Penjualan">
-                  <button type="button" className="grid h-11 place-items-center border-l-2 border-rose-500 bg-white text-rose-500" title="Rincian Barang"><FileText className="h-5 w-5" /></button>
-                  <button type="button" onClick={() => document.getElementById('invoice-description')?.focus()} className="grid h-11 place-items-center border-t border-gray-300 text-slate-700 hover:bg-blue-50" title="Info lainnya"><AlertTriangle className="h-5 w-5" /></button>
-                  <button type="button" className="grid h-11 place-items-center border-t border-gray-300 text-slate-700 hover:bg-blue-50" title="Perhitungan"><Settings2 className="h-5 w-5" /></button>
-                  <button type="button" className="grid h-11 place-items-center border-t border-gray-300 text-slate-700 hover:bg-blue-50" title="Pembayaran"><Receipt className="h-5 w-5" /></button>
-                </aside>
-                {editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"><div className="-rotate-12 rounded-full border-[5px] border-emerald-500/25 px-7 py-4 text-4xl font-black tracking-widest text-emerald-500/25">LUNAS</div></div>}
-                <div className="flex items-center justify-between gap-4">
-                  <div className="relative min-w-0 flex-1" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setItemSearchOpen(false); }}>
-                    <Search className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400"/>
-                    <input id="invoice-item-search" value={formItemSearch} onFocus={() => setItemSearchOpen(true)} onChange={event => { setFormItemSearch(event.target.value); setItemSearchOpen(true); }} onKeyDown={event => { if (event.key === 'Escape') setItemSearchOpen(false); if (event.key === 'Enter' && searchableItems[0]) { event.preventDefault(); addItemDirectly(searchableItems[0].id); } }} placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 pl-9 pr-10 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/>
-                    <button type="button" onClick={() => setItemSearchOpen(current => !current)} className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-blue-700"><Search className="h-5 w-5"/></button>
-                    {itemSearchOpen && formItemSearch.trim() && <div className="absolute left-0 top-full z-40 mt-1 max-h-72 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-2xl">
-                      {searchableItems.slice(0, 20).map(item => <button key={item.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => addItemDirectly(item.id)} className="block w-full border-b border-slate-200 px-3 py-2 text-left hover:bg-blue-50"><ItemSearchOption name={item.name} code={item.code}/></button>)}
-                      {!searchableItems.length && <p className="p-4 text-center text-sm text-gray-400">Barang atau jasa tidak ditemukan.</p>}
-                    </div>}
+              <section data-invoice-document-shell className="relative min-h-[320px] bg-white lg:ml-10 lg:border lg:border-gray-400 lg:bg-white lg:shadow-[0_2px_7px_rgba(15,23,42,0.18)]">
+                <AccurateDocumentSideTabs active={invoiceDocumentTab} onChange={setInvoiceDocumentTab} ariaLabel="Bagian dokumen Faktur Penjualan" />
+                {invoiceDocumentTab === 'details' && <div className="p-3">
+                  {editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"><div className="-rotate-12 rounded-full border-[5px] border-emerald-500/25 px-7 py-4 text-4xl font-black tracking-widest text-emerald-500/25">LUNAS</div></div>}
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="relative min-w-0 flex-1" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setItemSearchOpen(false); }}>
+                      <Search className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400"/>
+                      <input id="invoice-item-search" value={formItemSearch} onFocus={() => setItemSearchOpen(true)} onChange={event => { setFormItemSearch(event.target.value); setItemSearchOpen(true); }} onKeyDown={event => { if (event.key === 'Escape') setItemSearchOpen(false); if (event.key === 'Enter' && searchableItems[0]) { event.preventDefault(); addItemDirectly(searchableItems[0].id); } }} placeholder="Cari/Pilih Barang & Jasa..." className="app-field h-10 w-full pl-9 pr-10 text-sm"/>
+                      <button type="button" onClick={() => setItemSearchOpen(current => !current)} className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-blue-700"><Search className="h-5 w-5"/></button>
+                      {itemSearchOpen && formItemSearch.trim() && <div className="absolute left-0 top-full z-40 mt-1 max-h-72 w-full overflow-y-auto rounded border border-gray-300 bg-white shadow-2xl">
+                        {searchableItems.slice(0, 20).map(item => <button key={item.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => addItemDirectly(item.id)} className="block w-full border-b border-slate-200 px-3 py-2 text-left hover:bg-blue-50"><ItemSearchOption name={item.name} code={item.code}/></button>)}
+                        {!searchableItems.length && <p className="p-4 text-center text-sm text-gray-400">Barang atau jasa tidak ditemukan.</p>}
+                      </div>}
+                    </div>
+                    <strong className="shrink-0 text-sm text-gray-800">{visibleInvoiceItems.length} Barang/Jasa</strong>
                   </div>
-                  <strong className="shrink-0 text-sm text-gray-700">{visibleInvoiceItems.length} Barang/Jasa</strong>
-                </div>
-                <div className="hidden gap-2 sm:grid-cols-[minmax(180px,.7fr)_minmax(240px,1fr)_44px]">
-                  <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"/><input value={formItemSearch} onChange={event => { setFormItemSearch(event.target.value); setFormItemToAdd(''); }} placeholder="Cari kode atau nama barang/jasa..." className="h-10 w-full rounded border border-gray-300 pl-9 pr-3 text-sm outline-none focus:border-blue-500"/></div>
-                  <select value={formItemToAdd} onChange={(e) => setFormItemToAdd(e.target.value)} className="min-w-0 rounded border border-gray-300 bg-white px-3 py-2 text-sm">
-                    <option value="">Pilih barang atau jasa...</option>
-                    {searchableItems.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.code}</option>)}
-                  </select>
-                  <button type="button" disabled={!formItemToAdd} onClick={addFormItem} className="rounded bg-blue-700 px-4 py-2 text-white disabled:bg-gray-300"><Plus className="h-4 w-4" /></button>
-                </div>
-                <div className="hidden min-w-[980px] grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid">
-                  <span className="text-center">No</span><span>Nama Barang/Jasa</span><span>Barcode / Kode</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span>
-                </div>
-                <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-auto border border-gray-200 p-1">
-                  {formItems.map((item, index) => {
-                    if (isPackageMemberItem(item)) return null;
-                    const members = isPackageHeaderItem(item) ? packageMembersAfter(formItems, index) : [];
-                    return (
-                      <div key={item.id} onClick={() => setSelectedFormItemId(item.id)} className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${selectedFormItemId === item.id ? 'bg-blue-100 ring-1 ring-inset ring-blue-400' : members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
-                        <div className="hidden text-center text-xs text-gray-400 lg:block">{formItems.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1}</div>
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{invoiceItemReceiptName(item)}</p>
-                          <p className="truncate font-mono text-[10px] text-gray-500">{invoiceItemCode(item)}</p>
-                          {members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{invoiceItemCode(member)}</span> · {invoiceItemReceiptName(member)} ×{member.qty}</p>)}</div>}
-                        </div>
-                        <div className="hidden truncate font-mono text-xs text-gray-600 lg:block" title={invoiceItemBarcodeOrCode(item)}>{invoiceItemBarcodeOrCode(item)}</div>
-                        <input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(e) => updateFormItem(item.id, 'qty', Number(e.target.value) || 1)} className="rounded border px-2 py-1 text-center" />
-                        <input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(e) => updateFormItem(item.id, 'price', Number(e.target.value) || 0)} className="rounded border px-2 py-1 text-right" />
-                        <strong className="hidden text-right tabular-nums lg:block">{(item.price * item.qty).toLocaleString('id-ID')}</strong>
-                        <div className="flex items-center justify-center gap-1"><button type="button" onClick={() => openItemDetail(item.id)} className="rounded p-1 text-slate-600 hover:bg-blue-50 hover:text-blue-700" title="Lihat/Edit rincian"><Eye className="h-4 w-4" /></button><button type="button" onClick={() => removeFormItem(item.id)} className="rounded p-1 text-red-600 hover:bg-red-50" title="Hapus"><Trash2 className="h-4 w-4" /></button></div>
-                      </div>
-                    );
-                  })}
-                  {formItems.length === 0 && <p className="py-4 text-center text-xs text-gray-500">Belum ada barang atau jasa.</p>}
-                </div>
-              </section>
 
-              <section className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(460px,560px)]">
-                <div className="h-[88px]">
-                  <textarea
-                    id="invoice-description"
-                    rows={2}
-                    required
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value.toUpperCase() })}
-                    placeholder="Keterangan service *"
-                    className="h-full w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm leading-5 uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-                <div className="grid h-[88px] grid-cols-3 rounded border border-gray-300 bg-white p-2 shadow-sm">
-                  <div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Sub Total</span><strong className="text-right text-lg tabular-nums">Rp {formItemsTotal.toLocaleString('id-ID')}</strong></div>
-                  <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Diskon</span><div className="flex h-9 items-center rounded border border-gray-300 bg-white"><span className="border-r border-gray-200 px-2 text-gray-400">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(formDiscount)} onChange={event => setFormDiscount(Math.min(formItemsTotal, parsePaymentInput(event.target.value)))} className="min-w-0 flex-1 px-2 text-right font-semibold tabular-nums outline-none"/></div></div>
-                  <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {formGrandTotal.toLocaleString('id-ID')}</strong></div>
-                </div>
+                  <div className="space-y-2 sm:hidden">
+                    {visibleInvoiceItems.map((item, index) => <button key={item.id} type="button" onClick={() => openItemDetail(item.id)} className="block w-full rounded border border-gray-300 bg-white p-3 text-left"><span className="block font-semibold text-gray-900">{index + 1}. {invoiceItemReceiptName(item)}</span><span className="mt-1 block font-mono text-[10px] text-gray-500">{invoiceItemBarcodeOrCode(item)}</span><span className="mt-2 flex justify-between text-xs"><span>{item.qty} × Rp {item.price.toLocaleString('id-ID')}</span><strong>Rp {(item.qty * item.price).toLocaleString('id-ID')}</strong></span></button>)}
+                    {!visibleInvoiceItems.length && <div className="rounded border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">Belum ada barang atau jasa.</div>}
+                  </div>
+
+                  <div data-invoice-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
+                    <table className="min-w-[920px] w-full text-sm">
+                      <thead className="bg-[var(--app-table-head)] text-xs uppercase text-white"><tr><th className="w-10 px-3 py-2.5 text-center font-medium">No</th><th className="px-3 py-2.5 text-left font-medium">Nama Barang/Jasa</th><th className="w-40 px-3 py-2.5 text-left font-medium">Barcode / Kode</th><th className="w-24 px-3 py-2.5 text-center font-medium">Qty</th><th className="w-40 px-3 py-2.5 text-right font-medium">Harga Satuan</th><th className="w-36 px-3 py-2.5 text-right font-medium">Subtotal</th></tr></thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {formItems.map((item, index) => {
+                          if (isPackageMemberItem(item)) return null;
+                          const members = isPackageHeaderItem(item) ? packageMembersAfter(formItems, index) : [];
+                          const visibleIndex = formItems.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1;
+                          return <tr key={item.id} onClick={() => setSelectedFormItemId(item.id)} onDoubleClick={() => openItemDetail(item.id)} className={`cursor-pointer ${selectedFormItemId === item.id ? 'bg-blue-100 outline outline-1 outline-blue-400' : members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}`}><td className="px-3 py-2 text-center text-xs text-gray-400">{visibleIndex}</td><td className="px-3 py-2"><p className={`font-semibold ${members.length ? 'text-purple-700' : 'text-gray-900'}`}>{invoiceItemReceiptName(item)}</p><p className="font-mono text-[10px] text-gray-400">{invoiceItemCode(item)}</p>{members.length > 0 && <div className="mt-1.5 border-l-2 border-purple-200 pl-2 text-[11px] text-purple-700"><span className="mr-2 font-semibold">Isi paket:</span>{members.map(member => <span key={member.id} className="mr-3">{invoiceItemReceiptName(member)} ×{member.qty}</span>)}</div>}</td><td className="px-3 py-2 font-mono text-xs text-gray-600">{invoiceItemBarcodeOrCode(item)}</td><td className="px-3 py-2"><input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(event) => updateFormItem(item.id, 'qty', Number(event.target.value) || 1)} className="w-full rounded border border-gray-300 px-2 py-1.5 text-center outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></td><td className="px-3 py-2"><div className="relative"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span><input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(event) => updateFormItem(item.id, 'price', Number(event.target.value) || 0)} className="w-full rounded border border-gray-300 py-1.5 pl-7 pr-2 text-right outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></div></td><td className="whitespace-nowrap px-3 py-2 text-right font-bold text-gray-900">Rp {(item.price * item.qty).toLocaleString('id-ID')}</td></tr>;
+                        })}
+                        {!visibleInvoiceItems.length && <tr><td colSpan={6} className="h-48 px-4 text-center text-sm text-gray-400">Belum ada barang atau jasa.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div data-invoice-total-summary className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
+                    <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Sub Total</span><strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {formItemsTotal.toLocaleString('id-ID')}</strong></div>
+                    <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5"><div className="flex items-center gap-1.5 text-sm font-medium text-gray-900"><span>Diskon</span><span className="rounded border border-blue-500 bg-blue-50 px-1 text-[11px] leading-4 text-blue-700">{formItemsTotal ? Math.round((formDiscount / formItemsTotal) * 100) : 0}%</span></div><div className="flex h-8 items-center border border-gray-400 bg-gray-50"><span className="border-r border-gray-300 px-2 text-sm text-gray-500">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(formDiscount)} onChange={event => setFormDiscount(Math.min(formItemsTotal, parsePaymentInput(event.target.value)))} className="min-w-0 flex-1 bg-transparent px-2 text-right text-sm font-semibold tabular-nums outline-none"/></div></div>
+                    <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Total</span><strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {formGrandTotal.toLocaleString('id-ID')}</strong></div>
+                  </div>
+                </div>}
+
+                {invoiceDocumentTab === 'info' && <div className="min-h-[320px] p-4"><label className="block text-sm font-medium text-gray-800">Keterangan Faktur<textarea id="invoice-description" rows={5} value={formData.description} onChange={(event) => setFormData({ ...formData, description: event.target.value.toUpperCase() })} placeholder="Keterangan layanan atau faktur (opsional)" className="app-field mt-2 w-full resize-none p-3 text-sm uppercase"/></label>{editingInvoice?.woNumber && <p className="mt-3 text-sm text-gray-600">Referensi Order Kerja: <strong>{editingInvoice.woNumber}</strong></p>}</div>}
+                {invoiceDocumentTab === 'estimate' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Perhitungan Faktur</h4><div className="mt-4 ml-auto max-w-xl space-y-3 text-sm"><div className="flex justify-between border-b pb-2"><span>Subtotal barang/jasa</span><strong>Rp {formItemsTotal.toLocaleString('id-ID')}</strong></div><div className="flex justify-between border-b pb-2"><span>Diskon</span><strong>Rp {formDiscount.toLocaleString('id-ID')}</strong></div><div className="flex justify-between text-base"><span>Total Faktur</span><strong>Rp {formGrandTotal.toLocaleString('id-ID')}</strong></div></div></div>}
+                {invoiceDocumentTab === 'payment' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Pembayaran / Saldo</h4><div className="mt-4 grid max-w-2xl gap-3 sm:grid-cols-2"><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sudah dibayar</span><strong className="mt-1 block text-lg">Rp {(editingInvoice?.payment || 0).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sisa tagihan</span><strong className="mt-1 block text-lg">Rp {Math.max(0, formGrandTotal - (editingInvoice?.payment || 0)).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Status</span><strong className="mt-1 block">{editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 ? 'Lunas' : 'Belum Lunas'}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Metode terakhir</span><strong className="mt-1 block">{editingInvoice?.paymentMethod || '-'}</strong></div></div></div>}
               </section>
 
               <div className="flex items-center justify-end gap-3 border-t border-gray-300 bg-gray-100 px-4 py-2 lg:hidden">

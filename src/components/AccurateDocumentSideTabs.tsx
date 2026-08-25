@@ -5,6 +5,7 @@ export type AccurateDocumentTab = 'details' | 'info' | 'estimate' | 'payment';
 type AccurateDocumentSideTabsProps = {
   active: AccurateDocumentTab;
   onChange: (tab: AccurateDocumentTab) => void;
+  ariaLabel?: string;
 };
 
 const tabs: Array<{ id: AccurateDocumentTab; label: string; icon: typeof FileText }> = [
@@ -14,9 +15,9 @@ const tabs: Array<{ id: AccurateDocumentTab; label: string; icon: typeof FileTex
   { id: 'payment', label: 'Pembayaran', icon: CreditCard },
 ];
 
-export default function AccurateDocumentSideTabs({ active, onChange }: AccurateDocumentSideTabsProps) {
+export default function AccurateDocumentSideTabs({ active, onChange, ariaLabel = 'Bagian dokumen' }: AccurateDocumentSideTabsProps) {
   return (
-    <div className="flex border-b border-gray-300 bg-gray-100 lg:absolute lg:right-full lg:top-0 lg:z-10 lg:block lg:border-b-0 lg:bg-transparent" aria-label="Bagian dokumen Work Order">
+    <div className="flex border-b border-gray-300 bg-gray-100 lg:absolute lg:right-full lg:top-0 lg:z-10 lg:block lg:border-b-0 lg:bg-transparent" aria-label={ariaLabel}>
       {tabs.map(tab => {
         const Icon = tab.icon;
         const selected = active === tab.id;

@@ -854,14 +854,21 @@ test('faktur baru dari WO dibuka sebagai subtab Data Baru tanpa modal melayang',
 test('form Faktur Penjualan mengikuti kerangka padat Data Baru Order Kerja', () => {
   const page = source('src/pages/SalesInvoice.tsx');
 
-  assert.match(page, /aria-label="Aksi Faktur Penjualan"/);
+  assert.match(page, /<AccurateFormActionRail/);
+  assert.match(page, /ariaLabel="Aksi Faktur Penjualan"/);
   assert.match(page, /lg:grid-cols-\[120px_minmax\(0,1fr\)_minmax\(0,\.8fr\)_82px_190px_44px\]/);
   assert.match(page, />Pelanggan <span className="ml-1 text-red-500">\*<\/span>/);
   assert.match(page, />No\. Nota Fisik<\/label>/);
   assert.match(page, /className="flex justify-end gap-1 lg:col-span-2"/);
-  assert.match(page, /aria-label="Tab rincian Faktur Penjualan"/);
+  assert.match(page, /<AccurateDocumentSideTabs active=\{invoiceDocumentTab\}/);
+  assert.match(page, /ariaLabel="Bagian dokumen Faktur Penjualan"/);
+  assert.match(page, /data-invoice-document-shell/);
+  assert.match(page, /data-invoice-items-table/);
+  assert.match(page, /data-invoice-total-summary/);
+  assert.match(page, /bg-\[var\(--app-table-head\)\]/);
   assert.match(page, /setSelectedFormItemId\(item\.id\)/);
-  assert.match(page, /lg:pr-\[82px\]/);
+  assert.match(page, /lg:pr-\[104px\]/);
+  assert.doesNotMatch(page, /aria-label="Tab rincian Faktur Penjualan"/);
   assert.doesNotMatch(page, /order-first mr-auto flex flex-wrap gap-x-5/);
 });
 
