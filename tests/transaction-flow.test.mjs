@@ -536,6 +536,14 @@ test('dashboard HP menukar posisi Pembayaran dengan Terima Barang', () => {
   assert.doesNotMatch(page, /\['Pembayaran','Terima & Riwayat Bayar',Banknote,'\/customer-payments'/);
 });
 
+test('dashboard HP tidak menampilkan kartu ringkasan transaksi', () => {
+  const page = source('src/components/MobileDashboard.tsx');
+  assert.doesNotMatch(page, /\[orderNew,'Order Baru'\]/);
+  assert.doesNotMatch(page, /Dalam Proses/);
+  assert.doesNotMatch(page, /Faktur Hari Ini/);
+  assert.match(page, /<section className="mt-5 grid grid-cols-3 gap-3">/);
+});
+
 test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const complaints = source('src/components/ComplaintMultiSelect.tsx');
