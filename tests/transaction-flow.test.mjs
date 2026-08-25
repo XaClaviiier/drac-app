@@ -721,7 +721,8 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
 test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accurate', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
   assert.match(workOrders, /work-order-entry-form[^>]*lg:bg-\[var\(--app-canvas\)\]/);
-  assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:bg-\[var\(--app-canvas\)\]/);
+  assert.match(workOrders, /data-wo-document-shell/);
+  assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:border lg:border-gray-400 lg:bg-white lg:shadow-/);
   assert.match(workOrders, /data-wo-items-table/);
   assert.match(workOrders, /const \[showQuickServices, setShowQuickServices\] = useState\(false\)/);
   assert.doesNotMatch(workOrders, /dokterac_wo_quick_services/);
@@ -736,6 +737,14 @@ test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accura
   assert.match(workOrders, />Diskon</);
   assert.match(workOrders, />Total</);
   assert.match(workOrders, /Rp \{totalServices\.toLocaleString\('id-ID'\)\}/);
+});
+
+test('tab samping WO menyatu satu piksel dengan lembar dokumen putih', () => {
+  const tabs = source('src/components/AccurateDocumentSideTabs.tsx');
+  assert.match(tabs, /lg:absolute lg:right-full lg:top-0/);
+  assert.match(tabs, /lg:bg-transparent/);
+  assert.match(tabs, /border-r-white bg-white/);
+  assert.match(tabs, /lg:-mr-px/);
 });
 
 test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () => {

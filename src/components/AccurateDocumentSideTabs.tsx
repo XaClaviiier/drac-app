@@ -16,7 +16,7 @@ const tabs: Array<{ id: AccurateDocumentTab; label: string; icon: typeof FileTex
 
 export default function AccurateDocumentSideTabs({ active, onChange }: AccurateDocumentSideTabsProps) {
   return (
-    <div className="flex border-b border-gray-300 bg-gray-100 lg:absolute lg:right-full lg:top-0 lg:z-10 lg:block lg:border-b-0" aria-label="Bagian dokumen Work Order">
+    <div className="flex border-b border-gray-300 bg-gray-100 lg:absolute lg:right-full lg:top-0 lg:z-10 lg:block lg:border-b-0 lg:bg-transparent" aria-label="Bagian dokumen Work Order">
       {tabs.map(tab => {
         const Icon = tab.icon;
         const selected = active === tab.id;
@@ -30,7 +30,7 @@ export default function AccurateDocumentSideTabs({ active, onChange }: AccurateD
             onClick={() => onChange(tab.id)}
             className={`relative grid h-10 w-10 place-items-center border border-gray-300 text-gray-800 lg:-mb-px lg:h-[42px] lg:w-10 ${
               selected
-                ? 'z-10 border-r-white bg-white text-rose-500 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-rose-500 lg:-mr-px'
+                ? 'z-10 border-r-white bg-white text-rose-500 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-rose-500 lg:-mr-px lg:shadow-[-2px_1px_3px_rgba(15,23,42,0.08)]'
                 : 'bg-[#dedede] hover:bg-gray-100'
             }`}
           >

@@ -3495,7 +3495,10 @@ export default function WorkOrders() {
 
               </>}
 
-              <div className="relative min-h-[320px] bg-white lg:ml-10 lg:bg-[var(--app-canvas)]">
+              <div
+                data-wo-document-shell
+                className="relative min-h-[320px] bg-white lg:ml-10 lg:border lg:border-gray-400 lg:bg-white lg:shadow-[0_2px_7px_rgba(15,23,42,0.18)]"
+              >
               <AccurateDocumentSideTabs active={documentTab} onChange={setDocumentTab} />
               {documentTab === 'details' && <div className="p-3">
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
