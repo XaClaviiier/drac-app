@@ -653,6 +653,20 @@ test('daftar WO selalu menampilkan nama cabang pada desktop dan HP', () => {
   assert.doesNotMatch(page, /\{canViewAllBranches && <span className="text-\[10px\] font-semibold text-gray-400">\{branchName\}/);
 });
 
+test('konfirmasi hapus WO memakai modal Accurate dan bukan dialog bawaan browser', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const dialog = source('src/components/AccurateNotificationDialog.tsx');
+  assert.doesNotMatch(page, /window\.confirm\(`Hapus \$\{wo\.woNumber\}/);
+  assert.doesNotMatch(page, /window\.alert\(`WO tidak dapat dihapus/);
+  assert.match(page, /setDeleteDialogWO\(wo\)/);
+  assert.match(page, /const confirmDeleteWorkOrder = async \(\) =>/);
+  assert.match(page, /title="Konfirmasi Penghapusan"[\s\S]*?confirmLabel="Hapus"[\s\S]*?cancelLabel="Batal"/);
+  assert.match(page, /title=\{deleteNotice\?\.title \|\| 'Terjadi Permasalahan pada Pemrosesan'\}/);
+  assert.match(dialog, /role="dialog" aria-modal="true"/);
+  assert.match(dialog, /bg-\[#0d3264\]/);
+  assert.match(dialog, /busy \? 'Memproses…' : confirmLabel/);
+});
+
 test('Daftar Laporan memakai katalog kategori Accurate yang padat dan responsif', () => {
   const page = source('src/pages/ReportsIndex.tsx');
   assert.match(page, /lg:grid-cols-\[270px_minmax\(0,1fr\)\]/);

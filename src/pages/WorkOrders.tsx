@@ -14,6 +14,7 @@ import IndonesianDateInput from '../components/IndonesianDateInput';
 import ComplaintMultiSelect from '../components/ComplaintMultiSelect';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
+import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
 
@@ -158,6 +159,9 @@ export default function WorkOrders() {
   const [resumeLostSalesAfterEstimate, setResumeLostSalesAfterEstimate] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [processingIssues, setProcessingIssues] = useState<string[]>([]);
+  const [deleteDialogWO, setDeleteDialogWO] = useState<WorkOrder | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<{ title: string; message: string } | null>(null);
+  const [isDeletingWO, setIsDeletingWO] = useState(false);
   const [showQuickContact, setShowQuickContact] = useState(false);
   const [quickContactSaving, setQuickContactSaving] = useState(false);
   const [quickContactDeletingId, setQuickContactDeletingId] = useState('');
@@ -1414,22 +1418,41 @@ export default function WorkOrders() {
     }
   };
 
-  const handleDelete = async (wo: WorkOrder) => {
+  const handleDelete = (wo: WorkOrder) => {
     if (wo.invoiceId) {
-      window.alert(`WO tidak dapat dihapus karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}. Hapus pembayaran dan faktur terlebih dahulu.`);
+      setDeleteNotice({
+        title: 'WO Tidak Dapat Dihapus',
+        message: `WO ${wo.woNumber} sudah terhubung dengan Faktur ${wo.invoiceNumber || '-'}. Hapus pembayaran dan faktur terlebih dahulu.`,
+      });
       return;
     }
     if (!['Register', 'Selesai'].includes(wo.status)) {
-      window.alert(`WO berstatus ${wo.status} tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`);
+      setDeleteNotice({
+        title: 'WO Tidak Dapat Dihapus',
+        message: `WO ${wo.woNumber} berstatus ${statusLabel(wo.status)} dan tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`,
+      });
       return;
     }
-    if (!window.confirm(`Hapus ${wo.woNumber}? Data layanan pada WO ini juga akan dihapus.`)) return;
+    setDeleteDialogWO(wo);
+  };
+
+  const confirmDeleteWorkOrder = async () => {
+    if (!deleteDialogWO || isDeletingWO) return;
+    const wo = deleteDialogWO;
+    setIsDeletingWO(true);
     try {
       await deleteWorkOrder(wo.id);
+      setDeleteDialogWO(null);
       setSuccessMsg(`${wo.woNumber} berhasil dihapus.`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
-      window.alert(err?.message || 'WO gagal dihapus.');
+      setDeleteDialogWO(null);
+      setDeleteNotice({
+        title: 'Terjadi Permasalahan pada Pemrosesan',
+        message: err?.message || `${wo.woNumber} gagal dihapus.`,
+      });
+    } finally {
+      setIsDeletingWO(false);
     }
   };
 
@@ -2856,6 +2879,29 @@ export default function WorkOrders() {
           </aside>
         </div>
       )}
+
+      <AccurateNotificationDialog
+        open={Boolean(deleteDialogWO)}
+        title="Konfirmasi Penghapusan"
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        destructive
+        busy={isDeletingWO}
+        onClose={() => !isDeletingWO && setDeleteDialogWO(null)}
+        onConfirm={() => void confirmDeleteWorkOrder()}
+      >
+        <p>Hapus <strong className="font-mono text-gray-950">{deleteDialogWO?.woNumber}</strong>?</p>
+        <p className="mt-1 text-gray-600">Data layanan pada WO ini juga akan dihapus dan tindakan ini tidak dapat dibatalkan.</p>
+      </AccurateNotificationDialog>
+
+      <AccurateNotificationDialog
+        open={Boolean(deleteNotice)}
+        title={deleteNotice?.title || 'Terjadi Permasalahan pada Pemrosesan'}
+        onClose={() => setDeleteNotice(null)}
+        onConfirm={() => setDeleteNotice(null)}
+      >
+        <p>{deleteNotice?.message}</p>
+      </AccurateNotificationDialog>
 
       {lostSalesFollowUp && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
