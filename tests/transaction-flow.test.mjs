@@ -476,6 +476,18 @@ test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua filter
   assert.match(toolbar, /order-6 hidden h-9 min-w-14/);
 });
 
+test('perubahan status WO lama tidak diblokir warna kendaraan historis', () => {
+  const helpers = source('api/helpers.php');
+  const workOrders = source('api/endpoints/work-orders.php');
+  assert.match(helpers, /bool \$requireClearColor = true/);
+  assert.match(helpers, /function assertVehicleColorClear\(array \$vehicle\): void/);
+  assert.match(helpers, /if \(\$requireClearColor\) assertVehicleColorClear\(\$vehicle\)/);
+  assert.match(workOrders, /resolveCustomerVehicle\([\s\S]*?true,[\s\S]*?false[\s\S]*?\);/);
+  assert.match(workOrders, /\$vehicleChanged = \(string\)\$currentWorkOrder\['vehicle_ref_id'\] !== \(string\)\$vehicle\['id'\]/);
+  assert.match(workOrders, /if \(\$vehicleChanged\) assertVehicleColorClear\(\$vehicle\)/);
+  assert.match(workOrders, /if \(\$vehicleChanged\) \{[\s\S]*?assertNoActiveWorkOrder/);
+});
+
 test('semua daftar utama memakai tombol X Clear Filter hanya saat filter aktif', () => {
   const resetButton = source('src/components/ActiveFilterResetButton.tsx');
   assert.match(resetButton, /if \(!active\) return null/);

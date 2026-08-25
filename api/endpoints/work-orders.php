@@ -339,7 +339,8 @@ switch ($method) {
                 $pdo,
                 (string)($d['customerRefId'] ?? ''),
                 (string)($d['vehicleRefId'] ?? ''),
-                true
+                true,
+                false
             );
             $contacts = $resolveWorkOrderContacts($pdo, (string)$customer['id'], $d);
             $currentStmt = $pdo->prepare("SELECT wo_number,customer_ref_id,customer_name,vehicle_ref_id,plate_number,date,transaction_time,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
@@ -353,6 +354,8 @@ switch ($method) {
             if (!empty($currentWorkOrder['invoice_id'])) {
                 throw new DomainException('WO yang sudah difakturkan tidak dapat diedit. Ubah rincian pada faktur atau hapus faktur terlebih dahulu.');
             }
+            $vehicleChanged = (string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id'];
+            if ($vehicleChanged) assertVehicleColorClear($vehicle);
             $identityChanged = (string)$currentWorkOrder['customer_ref_id'] !== (string)$customer['id']
                 || (string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id'];
             $correctionReason = trim((string)($d['correctionReason'] ?? ''));
@@ -407,7 +410,7 @@ switch ($method) {
             }
             // Validasi WO aktif hanya diperlukan bila kendaraan benar-benar diganti.
             // Perubahan status pada WO yang sama tidak boleh tertahan oleh data lama/duplikat.
-            if ((string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id']) {
+            if ($vehicleChanged) {
                 assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], (string)$id);
             }
             if ($nextStatus === 'Closed' && trim((string)($d['cancelReason'] ?? '')) === '') {

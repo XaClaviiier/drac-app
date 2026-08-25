@@ -60,7 +60,20 @@ function findVehicleByNormalizedPlate(PDO $pdo, string $plate, ?string $excludeI
     return null;
 }
 
-function resolveCustomerVehicle(PDO $pdo, string $customerRefId, string $vehicleRefId, bool $forUpdate = false): array {
+function assertVehicleColorClear(array $vehicle): void {
+    $vehicleColor = strtolower(trim((string)($vehicle['color'] ?? '')));
+    if ($vehicleColor === '' || $vehicleColor === 'lainnya') {
+        throw new InvalidArgumentException('Warna kendaraan belum jelas. Lengkapi warna sebenarnya pada Register Kendaraan sebelum membuat transaksi.');
+    }
+}
+
+function resolveCustomerVehicle(
+    PDO $pdo,
+    string $customerRefId,
+    string $vehicleRefId,
+    bool $forUpdate = false,
+    bool $requireClearColor = true
+): array {
     if ($customerRefId === '' || $vehicleRefId === '') {
         throw new InvalidArgumentException('Pelanggan dan kendaraan wajib dipilih dari data master.');
     }
@@ -74,10 +87,7 @@ function resolveCustomerVehicle(PDO $pdo, string $customerRefId, string $vehicle
     $vehicleStmt->execute([$vehicleRefId]);
     $vehicle = $vehicleStmt->fetch();
     if (!$vehicle) throw new InvalidArgumentException('Data kendaraan tidak ditemukan.');
-    $vehicleColor = strtolower(trim((string)($vehicle['color'] ?? '')));
-    if ($vehicleColor === '' || $vehicleColor === 'lainnya') {
-        throw new InvalidArgumentException('Warna kendaraan belum jelas. Lengkapi warna sebenarnya pada Register Kendaraan sebelum membuat transaksi.');
-    }
+    if ($requireClearColor) assertVehicleColorClear($vehicle);
     if ((string)$vehicle['customer_id'] !== (string)$customer['id']) {
         throw new InvalidArgumentException('Kendaraan yang dipilih bukan milik pelanggan tersebut.');
     }
