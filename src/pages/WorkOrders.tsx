@@ -1020,6 +1020,13 @@ export default function WorkOrders() {
     setPeriodFilter('all');
     setDateFrom('');
     setDateTo('');
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      next.delete('date');
+      next.delete('attention');
+      next.delete('status');
+      return next;
+    }, { replace: true });
   };
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
@@ -1140,8 +1147,24 @@ export default function WorkOrders() {
     if (searchParams.get('attention') !== '1') return;
     setFilterAttention('attention');
     setDetailWO(null);
-    setSearchParams({}, { replace: true });
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      next.delete('attention');
+      return next;
+    }, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const requestedDate = searchParams.get('date');
+    if (!requestedDate || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) return;
+    setSelectedWorkOrderDate(requestedDate);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const requestedStatus = searchParams.get('status');
+    if (!requestedStatus || !['Register', 'Proses', 'Selesai', 'Closed'].includes(requestedStatus)) return;
+    setFilterStatus(requestedStatus);
+  }, [searchParams]);
 
   // Aksi dari WO Timeline selalu membawa ID WO agar baris yang dipilih itulah
   // yang dibuka. WO yang sudah difakturkan hanya boleh dilihat (read-only).

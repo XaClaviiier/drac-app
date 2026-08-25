@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import {
   AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Banknote,
   CalendarDays, CheckCircle2, CircleDollarSign, Clock3, FileText,
-  Gauge, Landmark, RefreshCw, TrendingUp, WalletCards, Wrench,
+  Gauge, Landmark, PackageSearch, RefreshCw, TrendingUp, WalletCards, Wrench,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import MobileDashboard from '../components/MobileDashboard';
+import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../lib/workOrderAttention';
 
 type CustomerPayment = { id: string; date: string; amount: number; paymentMethod: string; branchId: string; invoiceNumber: string; customerName: string };
 type CashAccount = { id: string; name: string; accountType: 'cash' | 'bank' | 'qris'; branchId?: string; balance: number; unsubmitted: number; isActive: boolean };
@@ -85,6 +86,26 @@ export default function Dashboard() {
   const receivables = visibleInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - Number(invoice.payment)), 0);
   const cashBalance = visibleAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
   const unsubmitted = visibleDeposits.reduce((sum, row) => sum + Number(row.unsubmitted || 0), 0);
+  const todayInvoices = visibleInvoices.filter(invoice => invoice.date === todayKey);
+  const todayInvoiceTotal = todayInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const todayPayments = visiblePayments.filter(payment => payment.date === todayKey);
+  const todayPaymentTotal = todayPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+  const attentionItems = buildWorkOrderAttentionItems(visibleWOs, visibleInvoices, todayKey);
+  const attentionCounts = countWorkOrderAttentionByKind(attentionItems);
+  const activeWarehouseIds = new Set(data.warehouses
+    .filter(warehouse => warehouse.isActive && matchesBranch(warehouse.branchId))
+    .map(warehouse => warehouse.id));
+  const inventoryItems = data.items.filter(item => item.isActive && item.type === 'Persediaan' && item.verificationStatus !== 'Merged');
+  const inventoryStockTotals = data.warehouseStocks.reduce((totals, stock) => {
+    if (!activeWarehouseIds.has(stock.warehouseId)) return totals;
+    totals.set(stock.itemId, (totals.get(stock.itemId) || 0) + Number(stock.quantity || 0));
+    return totals;
+  }, new Map<string, number>());
+  const inventoryQuantity = (itemId: string) => inventoryStockTotals.get(itemId) || 0;
+  const negativeStockCount = inventoryItems.filter(item => inventoryQuantity(item.id) < 0).length;
+  const emptyStockCount = inventoryItems.filter(item => inventoryQuantity(item.id) === 0).length;
+  const pendingVerificationCount = inventoryItems.filter(item => item.verificationStatus === 'Pending').length;
 
   const statusCounts = {
     register: visibleWOs.filter(wo => wo.status === 'Register').length,
@@ -92,7 +113,6 @@ export default function Dashboard() {
     process: visibleWOs.filter(wo => wo.status === 'Proses').length,
     completed: visibleWOs.filter(wo => wo.status === 'Selesai').length,
   };
-  const staleRegister = visibleWOs.filter(wo => wo.status === 'Register' && wo.date < dateKey(addDays(today, -7)));
   const overdueInvoices = visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7);
 
   const branchPerformance = data.branches.filter(branch => branch.isActive && (currentBranchId === 'ALL' || branch.id === currentBranchId)).map(branch => {
@@ -125,19 +145,20 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {canViewFinancial ? <>
-          <KpiCard label="Kas Masuk · 10 Hari" value={compactMoney(cashIn10)} note={`${cashGrowth >= 0 ? '+' : ''}${cashGrowth}% dibanding 10 hari sebelumnya`} icon={ArrowDownRight} tone="emerald" />
-          <KpiCard label="Arus Kas Bersih" value={compactMoney(netCash10)} note={`Keluar ${compactMoney(cashOut10)}`} icon={netCash10 >= 0 ? TrendingUp : ArrowUpRight} tone={netCash10 >= 0 ? 'blue' : 'red'} />
-          <KpiCard label="Konversi WO → Invoice" value={`${salesRate}%`} note={`${convertedWOs.length} dari ${tenDayWOs.length} WO menjadi invoice`} icon={Gauge} tone={salesRate >= 70 ? 'emerald' : salesRate >= 50 ? 'amber' : 'red'} />
-          <KpiCard label="Piutang Pelanggan" value={compactMoney(receivables)} note={`${visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas').length} faktur belum lunas`} icon={WalletCards} tone="amber" />
-        </> : <>
-          <KpiCard label="Register" value={String(statusCounts.register)} note="Belum mulai dikerjakan" icon={Wrench} tone="amber" />
-          <KpiCard label="Lost Sales" value={String(statusCounts.lost)} note="Tidak dilanjutkan" icon={Clock3} tone="red" />
-          <KpiCard label="Dikerjakan" value={String(statusCounts.process)} note="Sedang dalam proses" icon={Gauge} tone="blue" />
-          <KpiCard label="Selesai" value={String(statusCounts.completed)} note="Total pekerjaan selesai" icon={CheckCircle2} tone="emerald" />
-        </>}
+      <section className={`grid grid-cols-2 gap-3 ${canViewFinancial ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
+        <KpiCard to={`/workorders?date=${todayKey}`} label="WO Hari Ini" value={`${visibleWOs.filter(wo => wo.date === todayKey).length} WO`} note="Semua WO tanggal hari ini" icon={Wrench} tone="blue" />
+        <KpiCard to="/workorders?status=Proses" label="Sedang Dikerjakan" value={`${statusCounts.process} WO`} note={`${attentionCounts.process} melewati hari transaksi`} icon={Gauge} tone={attentionCounts.process > 0 ? 'amber' : 'blue'} />
+        <KpiCard to="/workorders?status=Selesai&attention=1" label="Selesai Belum Faktur" value={`${attentionCounts.invoice} WO`} note="Perlu dibuatkan faktur" icon={CheckCircle2} tone={attentionCounts.invoice > 0 ? 'amber' : 'emerald'} />
+        <KpiCard to={`/invoices?date=${todayKey}`} label={`Faktur ${today.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`} value={`${todayInvoices.length} Faktur`} note={`Total ${compactMoney(todayInvoiceTotal)}`} icon={FileText} tone="emerald" />
+        {canViewFinancial && <KpiCard to="/customer-payments" label="Pembayaran Hari Ini" value={compactMoney(todayPaymentTotal)} note={`${todayPayments.length} transaksi`} icon={Banknote} tone="emerald" />}
       </section>
+
+      {canViewFinancial && <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <KpiCard to="/customer-payments" label="Kas Masuk · 10 Hari" value={compactMoney(cashIn10)} note={`${cashGrowth >= 0 ? '+' : ''}${cashGrowth}% dibanding periode sebelumnya`} icon={ArrowDownRight} tone="emerald" />
+        <KpiCard to="/cash-accounts" label="Arus Kas Bersih" value={compactMoney(netCash10)} note={`Kas keluar ${compactMoney(cashOut10)}`} icon={netCash10 >= 0 ? TrendingUp : ArrowUpRight} tone={netCash10 >= 0 ? 'blue' : 'red'} />
+        <KpiCard to="/invoices" label="Piutang Pelanggan" value={compactMoney(receivables)} note={`${visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas').length} faktur belum lunas`} icon={WalletCards} tone="amber" />
+        <KpiCard to="/branch-deposits" label="Tunai Belum Disetor" value={compactMoney(unsubmitted)} note="Perlu diperiksa per cabang" icon={Landmark} tone={unsubmitted > 0 ? 'amber' : 'emerald'} />
+      </section>}
 
       {canViewFinancial && <section className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -177,10 +198,11 @@ export default function Dashboard() {
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between"><div><h2 className="font-bold text-slate-900">Perlu Perhatian</h2><p className="text-xs text-slate-500">Prioritas tindak lanjut hari ini.</p></div><AlertTriangle className="h-5 w-5 text-amber-500" /></div>
           <div className="space-y-2">
-            <AttentionRow to="/workorders" tone="amber" icon={Clock3} title={`${staleRegister.length} WO register lebih dari 7 hari`} detail="Periksa kembali WO yang belum mulai dikerjakan." />
+            <AttentionRow to="/workorders?attention=1" tone="red" icon={AlertTriangle} title={`${attentionItems.length} pekerjaan butuh tindakan`} detail={`${attentionCounts.register} register · ${attentionCounts.process} terlambat · ${attentionCounts.invoice} belum faktur · ${attentionCounts.payment} belum lunas`} />
+            <AttentionRow to="/workorders?attention=1" tone="amber" icon={Clock3} title={`${attentionCounts.register} register mengambang`} detail="Belum diputuskan menjadi Dikerjakan atau Lost Sales." />
             {canViewFinancial && <AttentionRow to="/invoices" tone="red" icon={FileText} title={`${overdueInvoices.length} faktur menunggak lebih dari 7 hari`} detail={`Total piutang ${rupiah(receivables)}`} />}
             {canViewFinancial && <AttentionRow to="/branch-deposits" tone="blue" icon={Banknote} title={`${rupiah(unsubmitted)} tunai belum disetor`} detail="Periksa setoran tunai masing-masing cabang." />}
-            <AttentionRow to="/workorders" tone="emerald" icon={Wrench} title={`${statusCounts.process} kendaraan sedang dikerjakan`} detail={`${statusCounts.register} masih berstatus register.`} />
+            <AttentionRow to="/inventory-report" tone={negativeStockCount > 0 ? 'red' : 'amber'} icon={PackageSearch} title={`${negativeStockCount} stok negatif · ${emptyStockCount} stok kosong`} detail={`${pendingVerificationCount} barang masih menunggu verifikasi.`} />
           </div>
         </div>
       </section>
@@ -212,8 +234,10 @@ const kpiTones = {
   emerald: 'bg-emerald-50 text-emerald-600 ring-emerald-100', blue: 'bg-blue-50 text-blue-600 ring-blue-100',
   amber: 'bg-amber-50 text-amber-600 ring-amber-100', red: 'bg-red-50 text-red-600 ring-red-100',
 };
-function KpiCard({ label, value, note, icon: Icon, tone }: { label: string; value: string; note: string; icon: any; tone: keyof typeof kpiTones }) {
-  return <article className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ring-1 ${kpiTones[tone]}`}><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-500">{label}</p><p className="truncate text-xl font-bold text-slate-900">{value}</p><p className="truncate text-[11px] text-slate-400">{note}</p></div></article>;
+function KpiCard({ label, value, note, icon: Icon, tone, to }: { label: string; value: string; note: string; icon: any; tone: keyof typeof kpiTones; to?: string }) {
+  const content = <><span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ring-1 ${kpiTones[tone]}`}><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-500">{label}</p><p className="truncate text-xl font-bold text-slate-900">{value}</p><p className="truncate text-[11px] text-slate-400">{note}</p></div>{to && <ArrowRight className="ml-auto h-4 w-4 flex-shrink-0 text-slate-300 transition group-hover:text-blue-500" />}</>;
+  const className = "group flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md";
+  return to ? <Link to={to} className={className}>{content}</Link> : <article className={className}>{content}</article>;
 }
 
 const attentionTones = { amber: 'bg-amber-50 text-amber-600', red: 'bg-red-50 text-red-600', blue: 'bg-blue-50 text-blue-600', emerald: 'bg-emerald-50 text-emerald-600' };

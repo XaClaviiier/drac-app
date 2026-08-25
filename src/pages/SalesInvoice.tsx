@@ -93,6 +93,21 @@ export default function SalesInvoice() {
     setFilterCustomer('');
     setFilterStatus('');
     setFilterDate('');
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      next.delete('date');
+      return next;
+    }, { replace: true });
+  };
+
+  const updateFilterDate = (date: string) => {
+    setFilterDate(date);
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      if (date) next.set('date', date);
+      else next.delete('date');
+      return next;
+    }, { replace: true });
   };
 
   const invoiceColumnStorageKey = `dokterac_invoice_columns_${currentUser?.id || currentUser?.username || 'default'}`;
@@ -609,6 +624,12 @@ export default function SalesInvoice() {
   }, [searchParams, data.workOrders, setSearchParams]);
 
   useEffect(() => {
+    const requestedDate = searchParams.get('date');
+    if (!requestedDate || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) return;
+    setFilterDate(requestedDate);
+  }, [searchParams]);
+
+  useEffect(() => {
     const requestedSearch = searchParams.get('search');
     if (!requestedSearch) return;
     setSearchTerm(requestedSearch);
@@ -822,7 +843,7 @@ export default function SalesInvoice() {
       <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <div className="order-1 flex flex-shrink-0 items-center gap-1">
-              <IndonesianDateInput value={filterDate} onChange={setFilterDate} ariaLabel="Filter satu tanggal faktur" title="Pilih satu tanggal faktur" className="h-9 w-40 text-sm" />
+              <IndonesianDateInput value={filterDate} onChange={updateFilterDate} ariaLabel="Filter satu tanggal faktur" title="Pilih satu tanggal faktur" className="h-9 w-40 text-sm" />
             </div>
             <ActiveFilterResetButton active={activeFilterCount > 0} onReset={resetInvoiceFilters} className="order-1" />
             <div className="order-1 relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
@@ -832,7 +853,7 @@ export default function SalesInvoice() {
                 <div className="space-y-3">
                   <label className="block text-xs font-semibold text-gray-600">Pelanggan<select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua pelanggan</option>{invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}</select></label>
                   <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua status</option><option value="Lunas">Lunas</option><option value="Belum Lunas">Belum Lunas</option></select></label>
-                  <label className="block text-xs font-semibold text-gray-600">Tanggal Faktur<IndonesianDateInput value={filterDate} onChange={setFilterDate} className="mt-1 h-10 w-full text-sm font-normal" title="Tanggal faktur"/></label>
+                  <label className="block text-xs font-semibold text-gray-600">Tanggal Faktur<IndonesianDateInput value={filterDate} onChange={updateFilterDate} className="mt-1 h-10 w-full text-sm font-normal" title="Tanggal faktur"/></label>
                 </div>
                 <p className="mt-2 text-xs text-gray-500">Kosongkan pilihan untuk menampilkan semua faktur.</p>
                 <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
