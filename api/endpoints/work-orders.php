@@ -196,19 +196,25 @@ switch ($method) {
             $r['pendingUntil']            = $r['pending_until'] ?? null;
             $r['pendingReason']           = $r['pending_reason'] ?? null;
             $r['cancelReason']            = $r['cancel_reason'] ?? null;
-            $r['statusLog']               = isset($r['status_log']) && $r['status_log'] ? json_decode($r['status_log'], true) : [];
+            $statusLog                    = isset($r['status_log']) && $r['status_log'] ? json_decode($r['status_log'], true) : [];
+            if (!is_array($statusLog)) $statusLog = [];
+            $r['statusLog']               = array_values(array_map(static function ($entry) use ($formatAuditTimestamp) {
+                if (!is_array($entry)) return $entry;
+                if (!empty($entry['at'])) $entry['at'] = $formatAuditTimestamp($entry['at']);
+                return $entry;
+            }, $statusLog));
             $r['continuedFromWoId']       = $r['continued_from_wo_id'] ?? null;
             $r['continuedFromWoNumber']   = $r['continued_from_wo_number'] ?? null;
             $r['continuedFromBranchName'] = $r['continued_from_branch_name'] ?? null;
             $r['continuedToWoId']         = $r['continued_to_wo_id'] ?? null;
             $r['continuedToWoNumber']     = $r['continued_to_wo_number'] ?? null;
             $r['continuedToBranchName']   = $r['continued_to_branch_name'] ?? null;
-            $r['continuedAt']             = $r['continued_at'] ?? null;
+            $r['continuedAt']             = $formatAuditTimestamp($r['continued_at'] ?? null);
             $r['continuedBy']             = $r['continued_by'] ?? null;
             $r['continuedByName']         = $r['continued_by_name'] ?? null;
             $r['continuedBranchId']       = $r['continued_branch_id'] ?? null;
-            $r['createdAt']               = $r['created_at'] ?? null;
-            $r['updatedAt']               = $r['updated_at'] ?? null;
+            $r['createdAt']               = $formatAuditTimestamp($r['created_at'] ?? null);
+            $r['updatedAt']               = $formatAuditTimestamp($r['updated_at'] ?? null);
 
             $stmt = $pdo->prepare("SELECT * FROM work_order_services WHERE wo_id = ?");
             $stmt->execute([$r['id']]);

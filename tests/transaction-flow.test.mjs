@@ -102,6 +102,9 @@ test('audit WO, faktur, dan pembayaran memakai waktu WITA yang konsisten', () =>
   assert.match(endpoint, /DateTimeZone\('Asia\/Makassar'\)/);
   assert.match(endpoint, /DateTimeInterface::ATOM/);
   assert.match(endpoint, /'createdAt' => \$formatAuditTimestamp\(\$payment\['created_at'\]/);
+  assert.match(endpoint, /\$r\['createdAt'\]\s*=\s*\$formatAuditTimestamp\(\$r\['created_at'\]/);
+  assert.match(endpoint, /\$r\['continuedAt'\]\s*=\s*\$formatAuditTimestamp\(\$r\['continued_at'\]/);
+  assert.match(endpoint, /\$entry\['at'\]\s*=\s*\$formatAuditTimestamp\(\$entry\['at'\]/);
   assert.match(page, /title: 'Anomali urutan audit'/);
   assert.match(page, /sistem tidak mengubah urutannya secara semu/);
 });
