@@ -14,6 +14,7 @@ type CustomerPayment = { id: string; date: string; amount: number; paymentMethod
 type CashAccount = { id: string; name: string; accountType: 'cash' | 'bank' | 'qris'; branchId?: string; balance: number; unsubmitted: number; isActive: boolean };
 type DepositSummary = { branchId: string; branchName: string; cashReceived: number; deposited: number; unsubmitted: number };
 type TrendDay = { date: string; label: string; cashIn: number; cashOut: number; wo: number; converted: number };
+type MonthMetric = { key: string; label: string; from: string; to: string; sales: number; invoices: number; cashIn: number; cashOut: number; net: number };
 
 const rupiah = (value: number) => `Rp ${Math.round(Number(value || 0)).toLocaleString('id-ID')}`;
 const compactMoney = (value: number) => {
@@ -25,6 +26,8 @@ const compactMoney = (value: number) => {
 };
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const addDays = (date: Date, amount: number) => { const next = new Date(date); next.setDate(next.getDate() + amount); return next; };
+const monthStartKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+const monthEndKey = (date: Date) => dateKey(new Date(date.getFullYear(), date.getMonth() + 1, 0));
 const percent = (value: number, total: number) => total > 0 ? Math.round((value / total) * 100) : 0;
 
 export default function Dashboard() {
@@ -34,6 +37,7 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<CashAccount[]>([]);
   const [depositSummary, setDepositSummary] = useState<DepositSummary[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [salesTrendMode, setSalesTrendMode] = useState<'week' | 'months'>('months');
 
   const loadFinance = async () => {
     if (!canViewFinancial) return;
@@ -75,9 +79,6 @@ export default function Dashboard() {
     return { date: key, label: `${date.getDate()}/${date.getMonth() + 1}`, cashIn, cashOut, wo: dayWOs.length, converted };
   }), [data.workOrders, data.invoices, data.purchaseInvoices, payments, currentBranchId]);
 
-  const tenDayWOs = visibleWOs.filter(wo => wo.date >= tenDaysAgo && wo.date <= todayKey);
-  const convertedWOs = tenDayWOs.filter(wo => wo.invoiceId || visibleInvoices.some(invoice => invoice.woId === wo.id || invoice.woNumber === wo.woNumber));
-  const salesRate = percent(convertedWOs.length, tenDayWOs.length);
   const cashIn10 = trends.reduce((sum, item) => sum + item.cashIn, 0);
   const cashOut10 = trends.reduce((sum, item) => sum + item.cashOut, 0);
   const netCash10 = cashIn10 - cashOut10;
@@ -90,6 +91,48 @@ export default function Dashboard() {
   const todayInvoiceTotal = todayInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
   const todayPayments = visiblePayments.filter(payment => payment.date === todayKey);
   const todayPaymentTotal = todayPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const currentMonthStart = monthStartKey(today);
+  const currentMonthEnd = monthEndKey(today);
+  const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const previousMonthStart = monthStartKey(previousMonth);
+  const previousMonthEnd = monthEndKey(previousMonth);
+  const currentMonthInvoices = visibleInvoices.filter(invoice => invoice.date >= currentMonthStart && invoice.date <= currentMonthEnd);
+  const currentMonthSales = currentMonthInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const currentMonthPaid = currentMonthInvoices.reduce((sum, invoice) => sum + Math.min(Number(invoice.total || 0), Number(invoice.payment || 0)), 0);
+  const currentMonthUnpaid = currentMonthInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
+  const currentMonthNotDue = currentMonthInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) <= 7).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
+  const currentMonthOverdue = currentMonthInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
+
+  const monthlyMetrics = useMemo<MonthMetric[]>(() => Array.from({ length: 6 }, (_, index) => {
+    const month = new Date(today.getFullYear(), today.getMonth() + index - 5, 1);
+    const from = monthStartKey(month);
+    const to = monthEndKey(month);
+    const monthInvoices = visibleInvoices.filter(invoice => invoice.date >= from && invoice.date <= to);
+    const cashIn = visiblePayments.filter(payment => payment.date >= from && payment.date <= to).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const cashOut = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).flatMap(invoice => invoice.payments || []).filter(payment => payment.date >= from && payment.date <= to).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    return {
+      key: from.slice(0, 7), label: month.toLocaleDateString('id-ID', { month: 'short' }), from, to,
+      sales: monthInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0),
+      invoices: monthInvoices.length, cashIn, cashOut, net: cashIn - cashOut,
+    };
+  }), [data.invoices, data.purchaseInvoices, payments, currentBranchId]);
+
+  const weeklySales = useMemo(() => Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(today, index - 6);
+    const key = dateKey(date);
+    const dayInvoices = visibleInvoices.filter(invoice => invoice.date === key);
+    return { key, label: index === 5 ? 'Kemarin' : index === 6 ? 'Hari ini' : date.toLocaleDateString('id-ID', { weekday: 'short' }), value: dayInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0), count: dayInvoices.length };
+  }), [data.invoices, currentBranchId]);
+
+  const currentExpenseRows = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).map(invoice => ({
+    label: invoice.supplierName || 'Lainnya',
+    amount: (invoice.payments || []).filter(payment => payment.date >= currentMonthStart && payment.date <= currentMonthEnd).reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
+  })).filter(row => row.amount > 0);
+  const expensesBySupplier = Array.from(currentExpenseRows.reduce((rows, row) => rows.set(row.label, (rows.get(row.label) || 0) + row.amount), new Map<string, number>()))
+    .map(([label, amount]) => ({ label, amount })).sort((a, b) => b.amount - a.amount);
+  const currentExpenseTotal = expensesBySupplier.reduce((sum, row) => sum + row.amount, 0);
+  const previousExpenseTotal = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).flatMap(invoice => invoice.payments || []).filter(payment => payment.date >= previousMonthStart && payment.date <= previousMonthEnd).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const expenseChange = previousExpenseTotal > 0 ? Math.round(((currentExpenseTotal - previousExpenseTotal) / previousExpenseTotal) * 100) : currentExpenseTotal > 0 ? 100 : 0;
 
   const attentionItems = buildWorkOrderAttentionItems(visibleWOs, visibleInvoices, todayKey);
   const attentionCounts = countWorkOrderAttentionByKind(attentionItems);
@@ -160,34 +203,47 @@ export default function Dashboard() {
         <KpiCard to="/branch-deposits" label="Tunai Belum Disetor" value={compactMoney(unsubmitted)} note="Perlu diperiksa per cabang" icon={Landmark} tone={unsubmitted > 0 ? 'amber' : 'emerald'} />
       </section>}
 
-      {canViewFinancial && <section className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-start justify-between">
-            <div><h2 className="font-bold text-slate-900">Arus Kas Operasional 10 Hari</h2><p className="text-xs text-slate-500">Pembayaran pelanggan dibanding pembayaran supplier; biaya non-pembelian belum termasuk.</p></div>
-            <div className="flex gap-3 text-xs"><span className="flex items-center gap-1 text-emerald-700"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Masuk</span><span className="flex items-center gap-1 text-red-600"><i className="h-2.5 w-2.5 rounded-sm bg-red-400" />Keluar</span></div>
-          </div>
-          <CashFlowChart rows={trends} />
-          <div className="mt-3 grid grid-cols-3 divide-x divide-slate-200 rounded-lg bg-slate-50 py-2 text-center">
-            <div><p className="text-[11px] text-slate-500">Kas masuk</p><b className="text-sm text-emerald-700">{rupiah(cashIn10)}</b></div>
-            <div><p className="text-[11px] text-slate-500">Kas keluar</p><b className="text-sm text-red-600">{rupiah(cashOut10)}</b></div>
-            <div><p className="text-[11px] text-slate-500">Arus bersih</p><b className={`text-sm ${netCash10 >= 0 ? 'text-blue-700' : 'text-red-700'}`}>{rupiah(netCash10)}</b></div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3"><h2 className="font-bold text-slate-900">Konversi Sales</h2><p className="text-xs text-slate-500">Keberhasilan WO menjadi invoice dalam 10 hari.</p></div>
-          <div className="flex items-center gap-5">
-            <ProgressRing value={salesRate} />
-            <div className="min-w-0 flex-1 space-y-2">
-              <FunnelRow label="WO Masuk" value={tenDayWOs.length} total={tenDayWOs.length} tone="bg-blue-500" />
-              <FunnelRow label="Disetujui" value={tenDayWOs.filter(wo => ['Proses', 'Selesai'].includes(wo.status)).length} total={tenDayWOs.length} tone="bg-cyan-500" />
-              <FunnelRow label="Menjadi Invoice" value={convertedWOs.length} total={tenDayWOs.length} tone="bg-emerald-500" />
-              <FunnelRow label="Lunas" value={convertedWOs.filter(wo => visibleInvoices.some(invoice => (invoice.woId === wo.id || invoice.woNumber === wo.woNumber) && invoice.status === 'Lunas')).length} total={tenDayWOs.length} tone="bg-violet-500" />
+      {canViewFinancial && <>
+        <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,1fr)]">
+          <DashboardPanel title="Arus Kas" subtitle="6 bulan terakhir · berdasarkan pembayaran aktual" onRefresh={() => void refreshDashboard()} refreshing={refreshing}>
+            <CashFlowMonthChart rows={monthlyMetrics} />
+            <div className="mt-3 flex justify-center gap-4 text-[11px] text-slate-500">
+              <span className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-400" />Kas masuk</span>
+              <span className="flex items-center gap-1"><i className="h-0.5 w-4 bg-sky-500" />Arus bersih</span>
             </div>
-          </div>
-          <p className={`mt-4 rounded-lg px-3 py-2 text-xs ${salesRate >= 70 ? 'bg-emerald-50 text-emerald-700' : salesRate >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{salesRate >= 70 ? 'Konversi baik. Pertahankan kecepatan follow-up estimasi.' : salesRate >= 50 ? 'Konversi cukup. Periksa WO pending yang belum disetujui.' : 'Konversi rendah. Prioritaskan follow-up pelanggan dan evaluasi estimasi.'}</p>
-        </div>
-      </section>}
+          </DashboardPanel>
+
+          <DashboardPanel title="Penjualan" subtitle={`${today.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} · bulan berjalan`} onRefresh={() => void refreshDashboard()} refreshing={refreshing}>
+            <div className="grid grid-cols-3 gap-3 border-b border-slate-100 pb-3">
+              <SalesSummaryLink to="/invoices" label="Pendapatan" value={currentMonthSales} tone="slate" />
+              <SalesSummaryLink to="/invoices?status=Lunas" label="Faktur Lunas" value={currentMonthPaid} tone="emerald" />
+              <SalesSummaryLink to="/invoices?status=Belum%20Lunas" label="Belum Lunas" value={currentMonthUnpaid} tone="amber" />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <SalesBarLink to="/invoices?status=Belum%20Lunas" label="Belum jatuh tempo" value={currentMonthNotDue} total={Math.max(1, currentMonthUnpaid)} tone="amber" />
+              <SalesBarLink to="/invoices?status=Belum%20Lunas" label="Lewat jatuh tempo" value={currentMonthOverdue} total={Math.max(1, currentMonthUnpaid)} tone="red" />
+            </div>
+            <p className="mt-3 text-[10px] text-slate-400">Jatuh tempo memakai aturan tindak lanjut 7 hari karena faktur penjualan belum memiliki tanggal jatuh tempo tersendiri.</p>
+          </DashboardPanel>
+        </section>
+
+        <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,1fr)]">
+          <DashboardPanel title="Tren Penjualan" subtitle={salesTrendMode === 'week' ? '7 hari terakhir' : '6 bulan terakhir'} onRefresh={() => void refreshDashboard()} refreshing={refreshing} action={<div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px]"><button type="button" onClick={() => setSalesTrendMode('week')} className={`rounded-md px-2.5 py-1 ${salesTrendMode === 'week' ? 'bg-white font-semibold text-blue-700 shadow-sm' : 'text-slate-500'}`}>7 Hari</button><button type="button" onClick={() => setSalesTrendMode('months')} className={`rounded-md px-2.5 py-1 ${salesTrendMode === 'months' ? 'bg-white font-semibold text-blue-700 shadow-sm' : 'text-slate-500'}`}>6 Bulan</button></div>}>
+            <SalesTrendChart rows={salesTrendMode === 'week' ? weeklySales : monthlyMetrics.map(row => ({ key: row.key, label: row.label, value: row.sales, count: row.invoices }))} />
+          </DashboardPanel>
+
+          <DashboardPanel title="Beban Perusahaan" subtitle={`${today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} · pembayaran supplier`} onRefresh={() => void refreshDashboard()} refreshing={refreshing}>
+            <div className="flex items-center gap-5">
+              <ExpenseRing value={currentExpenseTotal} change={expenseChange} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-end justify-between border-b border-slate-200 pb-2"><span className="font-semibold text-slate-700">Beban</span><b className="text-xl text-slate-900">{rupiah(currentExpenseTotal)}</b></div>
+                <div className="mt-2 space-y-2">{expensesBySupplier.slice(0, 4).map(row => <div key={row.label} className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-slate-600">{row.label}</span><b className="flex-shrink-0 text-slate-800">{rupiah(row.amount)}</b></div>)}{expensesBySupplier.length === 0 && <p className="py-3 text-xs text-slate-400">Belum ada pembayaran supplier pada periode ini.</p>}</div>
+              </div>
+            </div>
+            <Link to="/purchase-invoices" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline">Lihat transaksi beban <ArrowRight className="h-3.5 w-3.5" /></Link>
+          </DashboardPanel>
+        </section>
+      </>}
 
       <section className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -216,18 +272,55 @@ export default function Dashboard() {
   </>;
 }
 
-function CashFlowChart({ rows }: { rows: TrendDay[] }) {
-  const max = Math.max(1, ...rows.flatMap(row => [row.cashIn, row.cashOut]));
-  return <div className="flex h-44 items-end gap-2 border-b border-slate-200 px-1 pt-4">{rows.map(row => <div key={row.date} className="flex h-full min-w-0 flex-1 flex-col justify-end"><div className="flex flex-1 items-end justify-center gap-1"><div title={`Masuk ${rupiah(row.cashIn)}`} className="w-2.5 rounded-t bg-emerald-500 transition-all hover:bg-emerald-600" style={{ height: `${Math.max(row.cashIn ? 4 : 0, (row.cashIn / max) * 100)}%` }} /><div title={`Keluar ${rupiah(row.cashOut)}`} className="w-2.5 rounded-t bg-red-400 transition-all hover:bg-red-500" style={{ height: `${Math.max(row.cashOut ? 4 : 0, (row.cashOut / max) * 100)}%` }} /></div><span className="mt-1.5 text-center text-[10px] text-slate-500">{row.label}</span></div>)}</div>;
+function DashboardPanel({ title, subtitle, onRefresh, refreshing, action, children }: { title: string; subtitle: string; onRefresh: () => void; refreshing: boolean; action?: React.ReactNode; children: React.ReactNode }) {
+  return <article className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+    <header className="flex min-h-12 items-center justify-between border-b border-slate-200 px-4 py-2.5">
+      <div><h2 className="font-bold text-slate-800">{title}</h2><p className="text-[11px] text-slate-400">{subtitle}</p></div>
+      <div className="flex items-center gap-2">{action}<button type="button" onClick={onRefresh} title={`Refresh ${title}`} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-blue-600"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /></button></div>
+    </header>
+    <div className="p-4">{children}</div>
+  </article>;
 }
 
-function ProgressRing({ value }: { value: number }) {
-  const safe = Math.max(0, Math.min(100, value));
-  return <div className="relative h-28 w-28 flex-shrink-0 rounded-full" style={{ background: `conic-gradient(#10b981 ${safe * 3.6}deg,#e2e8f0 0deg)` }}><div className="absolute inset-2.5 flex flex-col items-center justify-center rounded-full bg-white"><b className="text-2xl text-slate-900">{safe}%</b><span className="text-[10px] text-slate-500">berhasil</span></div></div>;
+function CashFlowMonthChart({ rows }: { rows: MonthMetric[] }) {
+  const max = Math.max(1, ...rows.flatMap(row => [row.cashIn, Math.abs(row.net)]));
+  const netY = (value: number) => 80 - (value / max) * 55;
+  const points = rows.map((row, index) => `${50 + index * 100},${netY(row.net)}`).join(' ');
+  return <div className="relative h-48">
+    <div className="pointer-events-none absolute inset-x-0 top-2 h-36"><div className="absolute inset-x-0 top-0 border-t border-slate-100" /><div className="absolute inset-x-0 top-1/2 border-t border-slate-100" /><div className="absolute inset-x-0 bottom-0 border-t border-slate-200" /></div>
+    <div className="absolute inset-x-0 bottom-5 top-2 flex items-end">{rows.map(row => <div key={row.key} className="flex h-full flex-1 items-end justify-center"><div title={`${row.label}: kas masuk ${rupiah(row.cashIn)}`} className="w-8 max-w-[45%] rounded-t-sm bg-emerald-300 transition hover:bg-emerald-400" style={{ height: `${Math.max(row.cashIn > 0 ? 3 : 0, (row.cashIn / max) * 100)}%` }} /></div>)}</div>
+    <svg className="pointer-events-none absolute inset-x-0 top-2 h-36 w-full" viewBox="0 0 600 160" preserveAspectRatio="none" aria-label="Garis arus kas bersih"><line x1="0" y1="80" x2="600" y2="80" stroke="#bae6fd" strokeDasharray="4 4" /><polyline points={points} fill="none" stroke="#0ea5e9" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />{rows.map((row, index) => <circle key={row.key} cx={50 + index * 100} cy={netY(row.net)} r="5" fill="#0ea5e9"><title>{`${row.label}: arus bersih ${rupiah(row.net)}`}</title></circle>)}</svg>
+    <div className="absolute inset-x-0 bottom-0 flex">{rows.map(row => <span key={row.key} className="flex-1 text-center text-[11px] text-slate-500">{row.label}</span>)}</div>
+  </div>;
 }
 
-function FunnelRow({ label, value, total, tone }: { label: string; value: number; total: number; tone: string }) {
-  return <div><div className="mb-1 flex justify-between text-xs"><span className="text-slate-600">{label}</span><b>{value}</b></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${tone}`} style={{ width: `${percent(value, total)}%` }} /></div></div>;
+function SalesTrendChart({ rows }: { rows: { key: string; label: string; value: number; count: number }[] }) {
+  const max = Math.max(1, ...rows.map(row => row.value));
+  const gap = rows.length > 1 ? 540 / (rows.length - 1) : 0;
+  const points = rows.map((row, index) => `${30 + index * gap},${140 - (row.value / max) * 105}`).join(' ');
+  return <div className="h-48">
+    <svg viewBox="0 0 600 180" className="h-full w-full" role="img" aria-label="Tren nilai penjualan">
+      <line x1="30" y1="35" x2="570" y2="35" stroke="#e2e8f0" /><line x1="30" y1="87" x2="570" y2="87" stroke="#e2e8f0" /><line x1="30" y1="140" x2="570" y2="140" stroke="#cbd5e1" />
+      <polyline points={points} fill="none" stroke="#60a5fa" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+      {rows.map((row, index) => <g key={row.key}><circle cx={30 + index * gap} cy={140 - (row.value / max) * 105} r="5" fill="#60a5fa"><title>{`${row.label}: ${row.count} faktur · ${rupiah(row.value)}`}</title></circle><text x={30 + index * gap} y="165" textAnchor="middle" fontSize="11" fill="#64748b">{row.label}</text></g>)}
+    </svg>
+  </div>;
+}
+
+function ExpenseRing({ value, change }: { value: number; change: number }) {
+  const safe = Math.min(100, Math.abs(change));
+  const color = change > 0 ? '#f97316' : '#10b981';
+  return <div className="text-center"><div className="relative h-28 w-28 flex-shrink-0 rounded-full" style={{ background: `conic-gradient(${color} ${safe * 3.6}deg,#e5e7eb 0deg)` }}><div className="absolute inset-3 flex flex-col items-center justify-center rounded-full bg-white"><b className={change > 0 ? 'text-orange-600' : 'text-emerald-600'}>{change > 0 ? '+' : ''}{change}%</b><span className="text-[9px] text-slate-400">vs bulan lalu</span></div></div><span className="mt-1 block text-[10px] text-slate-400">{value > 0 ? 'Pembayaran supplier' : 'Belum ada beban'}</span></div>;
+}
+
+const salesTextTones = { slate: 'text-slate-900', emerald: 'text-emerald-600', amber: 'text-amber-600' };
+function SalesSummaryLink({ to, label, value, tone }: { to: string; label: string; value: number; tone: keyof typeof salesTextTones }) {
+  return <Link to={to} className="min-w-0 hover:opacity-75"><span className="block truncate text-[11px] text-slate-500">{label}</span><b className={`block truncate text-lg ${salesTextTones[tone]}`}>{compactMoney(value)}</b></Link>;
+}
+
+const salesBarTones = { amber: 'bg-amber-400', red: 'bg-red-500' };
+function SalesBarLink({ to, label, value, total, tone }: { to: string; label: string; value: number; total: number; tone: keyof typeof salesBarTones }) {
+  return <Link to={to} className="group"><div className="mb-1 flex justify-between gap-2 text-[11px]"><span className="truncate text-slate-500">{label}</span><b className={tone === 'red' ? 'text-red-600' : 'text-amber-600'}>{compactMoney(value)}</b></div><div className="h-2 overflow-hidden bg-slate-100"><div className={`h-full transition group-hover:opacity-80 ${salesBarTones[tone]}`} style={{ width: `${percent(value, total)}%` }} /></div></Link>;
 }
 
 const kpiTones = {

@@ -17,6 +17,12 @@ test('dashboard menjadi pusat kendali yang dapat membuka daftar terfilter', () =
   assert.match(dashboard, /data\.warehouseStocks/);
   assert.match(dashboard, /negativeStockCount/);
   assert.match(dashboard, /pendingVerificationCount/);
+  assert.match(dashboard, /title="Arus Kas"/);
+  assert.match(dashboard, /CashFlowMonthChart rows=\{monthlyMetrics\}/);
+  assert.match(dashboard, /title="Penjualan"/);
+  assert.match(dashboard, /title="Tren Penjualan"/);
+  assert.match(dashboard, /title="Beban Perusahaan"/);
+  assert.match(dashboard, /invoice\.payments \|\| \[\]/);
 });
 
 test('daftar faktur dan WO membaca filter tanggal dari tautan dashboard', () => {
@@ -27,6 +33,8 @@ test('daftar faktur dan WO membaca filter tanggal dari tautan dashboard', () => 
   assert.match(invoices, /setFilterDate\(requestedDate\)/);
   assert.match(invoices, /const updateFilterDate = \(date: string\)/);
   assert.match(invoices, /next\.delete\('date'\)/);
+  assert.match(invoices, /const requestedStatus = searchParams\.get\('status'\)/);
+  assert.match(invoices, /setFilterStatus\(requestedStatus\)/);
   assert.match(workOrders, /const requestedDate = searchParams\.get\('date'\)/);
   assert.match(workOrders, /setSelectedWorkOrderDate\(requestedDate\)/);
   assert.match(workOrders, /const requestedStatus = searchParams\.get\('status'\)/);

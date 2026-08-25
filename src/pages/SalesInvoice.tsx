@@ -96,6 +96,7 @@ export default function SalesInvoice() {
     setSearchParams(params => {
       const next = new URLSearchParams(params);
       next.delete('date');
+      next.delete('status');
       return next;
     }, { replace: true });
   };
@@ -627,6 +628,12 @@ export default function SalesInvoice() {
     const requestedDate = searchParams.get('date');
     if (!requestedDate || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) return;
     setFilterDate(requestedDate);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const requestedStatus = searchParams.get('status');
+    if (requestedStatus !== 'Lunas' && requestedStatus !== 'Belum Lunas') return;
+    setFilterStatus(requestedStatus);
   }, [searchParams]);
 
   useEffect(() => {
