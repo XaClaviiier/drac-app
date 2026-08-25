@@ -3418,7 +3418,7 @@ export default function WorkOrders() {
 
               </>}
 
-              <div className="relative min-h-[320px] border border-gray-300 bg-white lg:ml-10 lg:bg-[#eeeeee] lg:shadow-[0_2px_8px_rgba(15,23,42,0.16)]">
+              <div className="relative min-h-[320px] bg-white lg:ml-10 lg:bg-[#eeeeee]">
               <AccurateDocumentSideTabs active={documentTab} onChange={setDocumentTab} />
               {documentTab === 'details' && <div className="p-3">
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
@@ -3751,7 +3751,7 @@ export default function WorkOrders() {
                       <span className="text-base font-bold text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</span>
                     </div>}
                   </div>
-                  <div className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block">
+                  <div data-wo-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)]">
                     <table className="min-w-[920px] w-full text-sm">
                       <thead className={editingWO ? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'}>
                         <tr>
@@ -3850,7 +3850,7 @@ export default function WorkOrders() {
                   </div>
                 )}
 
-                <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[640px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
+                <div data-wo-total-summary className="ml-auto mt-3 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
                   <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">
                     <span className="text-sm font-medium text-gray-900">Sub Total</span>
                     <strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {totalServices.toLocaleString('id-ID')}</strong>
