@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, CircleAlert, Undo2, LockKeyhole, Download, Printer, Filter } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, CircleAlert, Undo2, LockKeyhole, Download, Printer, Filter, ClipboardList } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, Vehicle, WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -25,6 +25,7 @@ import { workOrderStatusLabel } from '../lib/workOrderStatus';
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
 const COMPLAINT_TEMPLATE_VERSION_KEY = 'dokterac_complaint_templates_version';
 const COMPLAINT_TEMPLATE_VERSION = '2';
+const WO_ENTRY_GUIDANCE_ISSUES = ['Pelanggan harus diisi', 'Kendaraan harus diisi', 'Keluhan pelanggan harus diisi'] as const;
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
   { id: 'fund', label: 'Menyiapkan dana', isActive: true },
@@ -2143,6 +2144,28 @@ export default function WorkOrders() {
     }
   };
 
+  const entryGuidanceOnly = processingIssues.length > 0
+    && processingIssues.every(issue => WO_ENTRY_GUIDANCE_ISSUES.includes(issue as typeof WO_ENTRY_GUIDANCE_ISSUES[number]));
+  const firstEntryGuidance = WO_ENTRY_GUIDANCE_ISSUES.find(issue => processingIssues.includes(issue));
+  const entryGuidanceMessage = firstEntryGuidance === 'Pelanggan harus diisi'
+    ? 'Mulai dengan memilih Pelanggan terlebih dahulu.'
+    : firstEntryGuidance === 'Kendaraan harus diisi'
+      ? 'Selanjutnya, pilih Kendaraan pelanggan.'
+      : 'Lengkapi Keluhan Pelanggan sebelum Register.';
+  const closeProcessingIssues = () => {
+    const firstIssue = processingIssues[0];
+    setProcessingIssues([]);
+    if (!entryGuidanceOnly) return;
+    window.setTimeout(() => {
+      const selector = firstIssue === 'Pelanggan harus diisi'
+        ? 'input[placeholder="Ketik nama, HP, atau nopol..."]'
+        : firstIssue === 'Kendaraan harus diisi'
+          ? 'input[placeholder="Ketik nomor plat kendaraan..."]'
+          : 'input[placeholder="Cari atau ketik keluhan..."]';
+      document.querySelector<HTMLElement>(selector)?.focus();
+    }, 0);
+  };
+
   return (
     <div className="space-y-0 lg:-mx-6 lg:-mt-6">
       <div className={`${ui.childBar} ${showModal ? '!hidden lg:!flex' : ''}`}>
@@ -3118,12 +3141,49 @@ export default function WorkOrders() {
           </div>
         </div>
       )}
-      {processingIssues.length > 0 && (
+      {processingIssues.length > 0 && entryGuidanceOnly && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="wo-entry-guidance-title">
+          <div className="w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
+            <header className="flex items-center justify-between bg-[#0d3264] px-6 py-4 text-white">
+              <div className="flex items-center gap-3"><ClipboardList className="h-7 w-7"/><h3 id="wo-entry-guidance-title" className="text-xl font-semibold">Lengkapi Data Servis</h3></div>
+              <button type="button" onClick={closeProcessingIssues} className="rounded p-1 hover:bg-white/10" aria-label="Tutup arahan"><X className="h-7 w-7"/></button>
+            </header>
+            <div className="grid gap-6 px-6 py-7 sm:grid-cols-[150px_minmax(0,1fr)] sm:px-10">
+              <div className="flex items-start justify-center">
+                <div className="flex h-32 w-32 items-center justify-center rounded-full bg-amber-50 text-amber-500"><AlertTriangle className="h-20 w-20 stroke-[2.25]"/></div>
+              </div>
+              <div>
+                <p className="text-xl font-medium text-slate-900">Sebelum melanjutkan, silakan lengkapi data berikut:</p>
+                <ol className="relative mt-5 space-y-3 before:absolute before:bottom-5 before:left-5 before:top-5 before:border-l-2 before:border-dashed before:border-blue-200">
+                  {[
+                    { issue: 'Pelanggan harus diisi', label: 'Pilih Pelanggan', complete: Boolean(formData.customerRefId) },
+                    { issue: 'Kendaraan harus diisi', label: 'Pilih Kendaraan', complete: Boolean(formData.vehicleRefId) },
+                    { issue: 'Keluhan pelanggan harus diisi', label: 'Isi Keluhan Pelanggan', complete: Boolean(formData.description.trim()) },
+                  ].map((step, index) => (
+                    <li key={step.issue} className="relative flex items-center gap-4">
+                      <span className={`relative z-10 grid h-10 w-10 flex-shrink-0 place-items-center rounded-full border text-base font-bold ${step.complete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : processingIssues.includes(step.issue) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-400'}`}>{step.complete ? <CheckCircle2 className="h-5 w-5"/> : index + 1}</span>
+                      <span className={`text-lg ${step.complete ? 'text-emerald-700' : 'text-slate-900'}`}>{step.label}</span>
+                    </li>
+                  ))}
+                </ol>
+                <div className="mt-6 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-base font-medium text-slate-900">
+                  <CircleAlert className="h-6 w-6 flex-shrink-0 text-amber-500" />
+                  <span>{entryGuidanceMessage}</span>
+                </div>
+              </div>
+            </div>
+            <footer className="flex justify-end border-t border-gray-200 px-6 py-4">
+              <button type="button" autoFocus onClick={closeProcessingIssues} className="h-11 min-w-32 rounded border border-blue-500 bg-white px-6 font-semibold text-blue-700 hover:bg-blue-50">Tutup</button>
+            </footer>
+          </div>
+        </div>
+      )}
+      {processingIssues.length > 0 && !entryGuidanceOnly && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="processing-issues-title">
           <div className="w-full max-w-2xl overflow-hidden rounded-md bg-white shadow-2xl">
             <header className="flex items-center justify-between bg-[#0d3264] px-5 py-3 text-white">
               <div className="flex items-center gap-3"><AlertTriangle className="h-5 w-5"/><h3 id="processing-issues-title" className="font-semibold">Terjadi Permasalahan pada Pemrosesan</h3></div>
-              <button type="button" onClick={() => setProcessingIssues([])} className="rounded p-1 hover:bg-white/10" aria-label="Tutup"><X className="h-5 w-5"/></button>
+              <button type="button" onClick={closeProcessingIssues} className="rounded p-1 hover:bg-white/10" aria-label="Tutup"><X className="h-5 w-5"/></button>
             </header>
             <div className="grid gap-5 px-6 py-5 sm:grid-cols-[88px_minmax(0,1fr)]">
               <div className="flex items-start justify-center"><div className="flex h-16 w-16 items-center justify-center rounded-lg border-2 border-red-700 bg-red-500 text-white shadow"><X className="h-11 w-11 stroke-[4]"/></div></div>
@@ -3131,7 +3191,7 @@ export default function WorkOrders() {
             </div>
             <footer className="flex items-center justify-between px-5 pb-4">
               <button type="button" onClick={() => void navigator.clipboard.writeText(processingIssues.map(issue => `• ${issue}`).join('\n'))} className="inline-flex items-center gap-2 rounded border border-blue-300 bg-white px-5 py-2.5 font-medium text-blue-700 hover:bg-blue-50"><Copy className="h-4 w-4"/>Salin</button>
-              <button type="button" autoFocus onClick={() => setProcessingIssues([])} className="rounded bg-[#1f4fa3] px-7 py-2.5 font-semibold text-white hover:bg-blue-800">OK</button>
+              <button type="button" autoFocus onClick={closeProcessingIssues} className="rounded bg-[#1f4fa3] px-7 py-2.5 font-semibold text-white hover:bg-blue-800">OK</button>
             </footer>
           </div>
         </div>

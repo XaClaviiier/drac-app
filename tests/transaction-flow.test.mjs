@@ -734,6 +734,19 @@ test('seluruh notifikasi dan konfirmasi WO memakai modal Accurate, bukan dialog 
   assert.match(dialog, /busy \? 'Memproses…' : confirmLabel/);
 });
 
+test('data awal WO yang belum lengkap tampil sebagai arahan dan memfokuskan field pertama', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  assert.match(page, /WO_ENTRY_GUIDANCE_ISSUES/);
+  assert.match(page, /entryGuidanceOnly/);
+  assert.match(page, /Lengkapi Data Servis/);
+  assert.match(page, /Pilih Pelanggan/);
+  assert.match(page, /Pilih Kendaraan/);
+  assert.match(page, /Isi Keluhan Pelanggan/);
+  assert.match(page, /Tutup/);
+  assert.match(page, /document\.querySelector<HTMLElement>\(selector\)\?\.focus\(\)/);
+  assert.match(page, /processingIssues\.length > 0 && !entryGuidanceOnly/);
+});
+
 test('Daftar Laporan memakai katalog kategori Accurate yang padat dan responsif', () => {
   const page = source('src/pages/ReportsIndex.tsx');
   assert.match(page, /lg:grid-cols-\[270px_minmax\(0,1fr\)\]/);
