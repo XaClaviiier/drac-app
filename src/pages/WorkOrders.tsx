@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, CircleAlert, Undo2, LockKeyhole, Download, Printer, Filter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { Customer, LegacyWOStatus, Vehicle, WorkOrder, WorkOrderService, WOStatus } from '../types';
+import type { Customer, Vehicle, WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { localDateKey } from '../lib/date';
@@ -17,6 +17,7 @@ import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
+import { workOrderStatusLabel } from '../lib/workOrderStatus';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -1762,7 +1763,7 @@ export default function WorkOrders() {
 
   const handleOpenInvoiceModal = (wo: WorkOrder) => {
     if (wo.status !== 'Selesai') {
-      showAccurateNotice(`WO ${wo.woNumber} masih berstatus ${wo.status}. Ubah status menjadi Selesai sebelum membuat faktur.`);
+      showAccurateNotice(`WO ${wo.woNumber} masih berstatus ${statusLabel(wo.status)}. Ubah status menjadi Selesai sebelum membuat faktur.`);
       return;
     }
     const warehouses = data.warehouses.filter(warehouse => warehouse.branchId === wo.branchId && warehouse.isActive && warehouse.isSellable && !warehouse.isSystem);
@@ -1896,7 +1897,7 @@ export default function WorkOrders() {
     Selesai: 'bg-green-100 text-green-800',
     Closed: 'bg-rose-100 text-rose-800',
   };
-  const statusLabel = (status: WOStatus | LegacyWOStatus) => status === 'Closed' || status === 'Batal' ? 'Lost Sales' : status === 'Proses' ? 'Dikerjakan' : status === 'Pengecekan' || status === 'Pending' ? 'Register' : status === 'Invoiced' || status === 'Dibayar' ? 'Selesai' : status;
+  const statusLabel = workOrderStatusLabel;
   const diagnosisMeasurementLabel = (wo: WorkOrder) => [
     wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
     wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
@@ -2653,7 +2654,7 @@ export default function WorkOrders() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${statusColors[wo.status]}`}
-                      title={`Status saat ini: ${wo.status}`}
+                      title={`Status saat ini: ${statusLabel(wo.status)}`}
                     >
                       {wo.status === 'Register' && '0.'}
                       {wo.status === 'Proses' && '1.'}

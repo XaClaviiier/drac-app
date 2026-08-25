@@ -743,3 +743,37 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.doesNotMatch(workOrders, /listMode === 'attention'/);
   assert.match(help, /Register hanya antrean sementara pada hari transaksi/);
 });
+
+test('status Lunas selalu direkonsiliasi dari ledger pembayaran pelanggan', () => {
+  const helpers = source('api/helpers.php');
+  const invoices = source('api/endpoints/sales-invoices.php');
+  const allData = source('api/endpoints/all-data.php');
+  const payments = source('api/endpoints/customer-payments.php');
+
+  assert.match(helpers, /function reconcileCustomerPaymentLedger\(PDO \$pdo\): void/);
+  assert.match(helpers, /NOT EXISTS \(SELECT 1 FROM customer_payments existing WHERE existing\.invoice_id=i\.id\)/);
+  assert.match(helpers, /COALESCE\(SUM\(amount\),0\) paid/);
+  assert.match(helpers, /i\.status=CASE WHEN COALESCE\(ledger\.paid,0\)>=i\.total/);
+  assert.match(invoices, /reconcileCustomerPaymentLedger\(\$pdo\)/);
+  assert.match(allData, /reconcileCustomerPaymentLedger\(\$pdo\)/);
+  assert.match(payments, /reconcileCustomerPaymentLedger\(\$pdo\)/);
+  assert.doesNotMatch(invoices, /max\(\$recordedPayment,\(float\)\$current\['payment'\]\)/);
+  assert.match(invoices, /\$recordInitialCustomerPayment\([\s\S]*?\$cashPayment,'Tunai'/);
+  assert.match(invoices, /\$recordInitialCustomerPayment\([\s\S]*?\$transferPayment,'Transfer'/);
+});
+
+test('Closed dan status lama selalu memakai label baku Lost Sales', () => {
+  const status = source('src/lib/workOrderStatus.ts');
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  const timeline = source('src/pages/WorkOrderTimeline.tsx');
+  const report = source('src/pages/WorkOrderReport.tsx');
+  const assistant = source('src/pages/AIAssistant.tsx');
+
+  assert.match(status, /status === 'Closed' \|\| status === 'Batal'\) return 'Lost Sales'/);
+  assert.match(workOrders, /const statusLabel = workOrderStatusLabel/);
+  assert.match(timeline, /label: workOrderStatusLabel\('Closed'\)/);
+  assert.match(report, /const statusLabel = workOrderStatusLabel/);
+  assert.match(assistant, /const woStatusLabel = workOrderStatusLabel/);
+  assert.doesNotMatch(timeline, /Lost Sales \/ Batal/);
+  assert.doesNotMatch(assistant, /\$\{w\.status\}/);
+});

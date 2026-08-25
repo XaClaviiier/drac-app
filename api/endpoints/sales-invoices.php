@@ -73,6 +73,7 @@ $journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        reconcileCustomerPaymentLedger($pdo);
         $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
         $rows = array_values(array_filter(
             $pdo->query("SELECT * FROM sales_invoices ORDER BY date DESC, invoice_number DESC")->fetchAll(),
@@ -337,7 +338,7 @@ switch ($method) {
             }
 
             $paymentMethod = (string)($d['paymentMethod'] ?? 'Tunai');
-            if (!in_array($paymentMethod, ['Tunai', 'Transfer'], true)) throw new Exception('Metode pembayaran tidak valid');
+            if (!in_array($paymentMethod, ['Tunai', 'Transfer', 'Campuran'], true)) throw new Exception('Metode pembayaran tidak valid');
             $invoiceDate = (string)($d['date'] ?? date('Y-m-d'));
             $paymentDate = (float)($d['payment'] ?? 0) > 0 ? ($d['paymentDate'] ?? $invoiceDate) : null;
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
@@ -353,9 +354,15 @@ switch ($method) {
 
             $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,isset($d['items'])&&is_array($d['items'])?$d['items']:[]);
             $items=$normalizedInvoice['items'];$total=$normalizedInvoice['total'];
-            $recordedPaymentStmt=$pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE invoice_id=?");$recordedPaymentStmt->execute([$id]);$recordedPayment=(float)$recordedPaymentStmt->fetchColumn();
-            $payment=max($recordedPayment,(float)$current['payment']);
-            if($payment>$total)throw new InvalidArgumentException('Total faktur baru lebih kecil dari pembayaran yang sudah tercatat');
+            $recordedPaymentStmt=$pdo->prepare("SELECT COALESCE(SUM(amount),0) paid,MIN(date) first_date,MAX(date) latest_date,COUNT(DISTINCT payment_method) method_count FROM customer_payments WHERE invoice_id=?");
+            $recordedPaymentStmt->execute([$id]);$paymentLedger=$recordedPaymentStmt->fetch();
+            $recordedPayment=(float)($paymentLedger['paid']??0);$payment=min($recordedPayment,$total);
+            $latestMethodStmt=$pdo->prepare("SELECT payment_method FROM customer_payments WHERE invoice_id=? ORDER BY date DESC,created_at DESC,id DESC LIMIT 1");
+            $latestMethodStmt->execute([$id]);$latestMethod=(string)($latestMethodStmt->fetchColumn()?:'Tunai');
+            $paymentDate=$recordedPayment>0?($paymentLedger['latest_date']??null):null;
+            $paymentMethod=(int)($paymentLedger['method_count']??0)>1?'Campuran':($latestMethod==='Tunai'?'Tunai':'Transfer');
+            if(!empty($paymentLedger['first_date'])&&$paymentLedger['first_date']<$invoiceDate)throw new InvalidArgumentException('Tanggal faktur tidak boleh setelah tanggal pembayaran yang sudah tercatat');
+            if($recordedPayment>$total)throw new InvalidArgumentException('Total faktur baru lebih kecil dari pembayaran yang sudah tercatat');
             $status = $payment >= $total ? 'Lunas' : 'Belum Lunas';
 
             // Invoice dari WO mengunci pelanggan, kendaraan, cabang, dan referensi WO.

@@ -9,6 +9,7 @@ import { useApp } from '../context/AppContext';
 import type { LegacyWOStatus, SalesInvoice, WorkOrder, WOStatus } from '../types';
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import { workOrderStatusLabel } from '../lib/workOrderStatus';
 
 type StageKey = 'register' | 'diagnosis' | 'approval' | 'parts' | 'working' | 'done' | 'lost';
 type Segment = { key: StageKey; label: string; start: Date; end: Date; duration: number };
@@ -20,7 +21,7 @@ const STAGES: Record<StageKey, { label: string; short: string; bar: string; colo
   parts: { label: 'Tunggu Parts', short: 'Parts', bar: 'bg-violet-500', color: '#8b5cf6', soft: 'border-violet-300 bg-violet-50', text: 'text-violet-700', icon: Package },
   working: { label: 'Dikerjakan', short: 'Dikerjakan', bar: 'bg-blue-600', color: '#2563eb', soft: 'border-blue-400 bg-blue-50', text: 'text-blue-700', icon: Wrench },
   done: { label: 'Selesai', short: 'Selesai', bar: 'bg-green-600', color: '#16a34a', soft: 'border-green-400 bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
-  lost: { label: 'Lost Sales / Batal', short: 'Lost Sales', bar: 'bg-red-600', color: '#dc2626', soft: 'border-red-300 bg-red-50', text: 'text-red-700', icon: XCircle },
+  lost: { label: workOrderStatusLabel('Closed'), short: workOrderStatusLabel('Closed'), bar: 'bg-red-600', color: '#dc2626', soft: 'border-red-300 bg-red-50', text: 'text-red-700', icon: XCircle },
 };
 
 const AXIS_START_HOUR = 8;

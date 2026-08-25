@@ -7,6 +7,7 @@ import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WOStatus, WorkOrder } from '../types';
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import { workOrderStatusLabel } from '../lib/workOrderStatus';
 
 const statuses: Array<WOStatus | ''> = ['', 'Register', 'Proses', 'Selesai', 'Closed'];
 const rupiah = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
@@ -20,7 +21,7 @@ const statusTone: Record<WOStatus, string> = {
   Selesai: 'bg-emerald-100 text-emerald-800',
   Closed: 'bg-rose-100 text-rose-800',
 };
-const statusLabel = (status: WOStatus) => status === 'Closed' ? 'Lost Sales' : status === 'Proses' ? 'Dikerjakan' : status;
+const statusLabel = workOrderStatusLabel;
 
 type ReportRow = WorkOrder & { invoice?: SalesInvoice; branchName: string; customerPhone: string };
 

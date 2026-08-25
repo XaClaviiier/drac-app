@@ -1026,6 +1026,47 @@ if (!function_exists('nextCustomerPaymentNumber')) {
     }
 }
 
+if (!function_exists('reconcileCustomerPaymentLedger')) {
+    /**
+     * Customer payments are the accounting source of truth. Legacy invoices that
+     * only carried a payment total receive one traceable migration row, then every
+     * invoice summary is recalculated from the ledger.
+     */
+    function reconcileCustomerPaymentLedger(PDO $pdo): void {
+        if (!$pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()
+            || !$pdo->query("SHOW TABLES LIKE 'customer_payments'")->fetch()) return;
+
+        $pdo->exec("INSERT IGNORE INTO customer_payments
+            (id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by_name)
+            SELECT CONCAT('legacy-',i.id),CONCAT('PAY-',i.invoice_number),i.id,
+                   COALESCE(i.payment_date,i.date),i.payment,
+                   CASE WHEN i.payment_method='Tunai' THEN 'Tunai' ELSE 'Transfer' END,
+                   a.id,a.name,'Migrasi pembayaran faktur lama',i.branch_id,'Migrasi Sistem'
+            FROM sales_invoices i
+            LEFT JOIN branch_account_settings s ON s.branch_id COLLATE utf8mb4_unicode_ci=i.branch_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN cash_accounts a ON a.id COLLATE utf8mb4_unicode_ci=(CASE
+                WHEN i.payment_method='Tunai' THEN s.cash_account_id ELSE s.bank_account_id END) COLLATE utf8mb4_unicode_ci
+            WHERE i.payment>0
+              AND NOT EXISTS (SELECT 1 FROM customer_payments existing WHERE existing.invoice_id=i.id)");
+
+        $pdo->exec("UPDATE sales_invoices i
+            LEFT JOIN (
+                SELECT invoice_id,COALESCE(SUM(amount),0) paid,MAX(date) latest_date,
+                       COUNT(DISTINCT payment_method) method_count,
+                       SUBSTRING_INDEX(GROUP_CONCAT(payment_method ORDER BY date DESC,created_at DESC,id DESC),',',1) latest_method
+                FROM customer_payments GROUP BY invoice_id
+            ) ledger ON ledger.invoice_id=i.id
+            SET i.payment=LEAST(i.total,COALESCE(ledger.paid,0)),
+                i.payment_date=ledger.latest_date,
+                i.payment_method=CASE
+                    WHEN COALESCE(ledger.method_count,0)=0 THEN 'Tunai'
+                    WHEN COALESCE(ledger.method_count,0)>1 THEN 'Campuran'
+                    WHEN ledger.latest_method='Tunai' THEN 'Tunai'
+                    ELSE 'Transfer' END,
+                i.status=CASE WHEN COALESCE(ledger.paid,0)>=i.total AND i.total>0 THEN 'Lunas' ELSE 'Belum Lunas' END");
+    }
+}
+
 if (!function_exists('adjustBranchStock')) {
     function adjustBranchStock(PDO $pdo, string $branchId, string $itemId, int $delta): void {
         $itemStmt = $pdo->prepare("SELECT type FROM items WHERE id = ?");

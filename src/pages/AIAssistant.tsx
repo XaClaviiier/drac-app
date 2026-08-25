@@ -7,6 +7,7 @@ import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
 import type { WorkOrder, WorkOrderService } from '../types';
+import { workOrderStatusLabel } from '../lib/workOrderStatus';
 
 const GROQ_URL = `${window.location.origin}/api/ai-chat`;
 const GROQ_MODELS = [
@@ -121,7 +122,7 @@ const readAISession = (key: string): AISessionSnapshot | null => {
     return null;
   }
 };
-const woStatusLabel = (status: WorkOrder['status']) => status === 'Closed' ? 'Lost Sales' : status;
+const woStatusLabel = workOrderStatusLabel;
 const localDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
@@ -960,7 +961,7 @@ export default function AIAssistant() {
         `   ${[vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ') || '-'} · ${vehicle.color || '-'}`,
         `   Riwayat yang dapat diakses: ${visibleWOs.length} WO`,
         latest
-          ? `   Terakhir: ${latest.date} · ${latest.woNumber} · ${cabangName(latest.branchId)} · ${latest.status}`
+          ? `   Terakhir: ${latest.date} · ${latest.woNumber} · ${cabangName(latest.branchId)} · ${woStatusLabel(latest.status)}`
           : '   Terakhir: belum ada riwayat pada cabang yang dapat diakses',
       );
       if (allWOs.length > visibleWOs.length && !canSeeAllBranches) {
@@ -1241,7 +1242,7 @@ export default function AIAssistant() {
       data.vehicles.filter(v => foundVehicleIds.has(v.id)).forEach(v => {
         parts.push(`- ${v.plateNumber} | ${v.brand} ${v.model} ${v.year} ${v.color} | Pemilik: ${v.customerName} (${v.phone}) | ${v.notes || ''}`);
         const wos = data.workOrders.filter(w => w.plateNumber === v.plateNumber).slice(-5);
-        if (wos.length) parts.push(`  Riwayat WO (${wos.length}): ${wos.map(w => `${w.woNumber} ${w.date} ${w.status}`).join(' | ')}`);
+        if (wos.length) parts.push(`  Riwayat WO (${wos.length}): ${wos.map(w => `${w.woNumber} ${w.date} ${woStatusLabel(w.status)}`).join(' | ')}`);
       });
     } else if (wantsVehicleList) {
       parts.push(`\nKENDARAAN (30 dari ${data.vehicles.length}):`);
@@ -1274,7 +1275,7 @@ export default function AIAssistant() {
     if (wantsWOList) {
       const recent = data.workOrders.slice(-15);
       parts.push(`\nWO TERAKHIR (${recent.length} dari ${data.workOrders.length}):`);
-      recent.forEach(w => parts.push(`- ${w.woNumber} ${w.date} | ${w.customerName} ${w.plateNumber} | ${w.status} | ${fmt(w.total)} | ${cabangName(w.branchId)}`));
+      recent.forEach(w => parts.push(`- ${w.woNumber} ${w.date} | ${w.customerName} ${w.plateNumber} | ${woStatusLabel(w.status)} | ${fmt(w.total)} | ${cabangName(w.branchId)}`));
     }
 
     // FAKTUR

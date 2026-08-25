@@ -14,19 +14,9 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payment_audit_logs (
     INDEX idx_payment_audit_invoice (invoice_id), INDEX idx_payment_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-// Pertahankan pembayaran faktur lama sekaligus petakan akun tujuannya dengan benar.
-$pdo->exec("INSERT IGNORE INTO customer_payments
-    (id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by_name)
-    SELECT CONCAT('legacy-',i.id),CONCAT('PAY-',i.invoice_number),i.id,
-           COALESCE(i.payment_date,i.date),i.payment,COALESCE(i.payment_method,'Tunai'),a.id,a.name,
-           'Pembayaran awal faktur',i.branch_id,'Migrasi Sistem'
-    FROM sales_invoices i
-    LEFT JOIN branch_account_settings s ON s.branch_id COLLATE utf8mb4_unicode_ci=i.branch_id COLLATE utf8mb4_unicode_ci
-    LEFT JOIN cash_accounts a ON a.id COLLATE utf8mb4_unicode_ci=(CASE
-        WHEN COALESCE(i.payment_method,'Tunai')='Tunai' THEN s.cash_account_id
-        ELSE s.bank_account_id END) COLLATE utf8mb4_unicode_ci
-    WHERE i.payment>0
-      AND NOT EXISTS (SELECT 1 FROM customer_payments existing WHERE existing.invoice_id=i.id)");
+// Pertahankan pembayaran faktur lama dan pastikan ringkasan faktur selalu sama
+// dengan ledger sebelum data pembayaran ditampilkan.
+reconcileCustomerPaymentLedger($pdo);
 
 function paymentUserCanAccessBranch(PDO $pdo, array $user, string $branchId): bool {
     if (!empty($user['is_owner'])) return true;
