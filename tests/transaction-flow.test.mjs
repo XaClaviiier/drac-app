@@ -606,7 +606,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /form: 'work-order-entry-form'/);
   assert.match(page, /void handleSubmit\(\)/);
   assert.match(page, /setEditingWO\(created\);[\s\S]*?setIsAutoRegisteredDraft\(true\);[\s\S]*?setShowServiceForm\(true\)/);
-  assert.match(page, /<FileText className="h-4 w-4" \/>\s*\{editingWO\.woNumber\}/);
+  assert.match(page, /\{editingWO \? editingWO\.woNumber : 'Data Baru'\}/);
   assert.match(page, /disabled=\{!editingWO \|\| !customerVehicleReady \|\| isAutoRegistering\}/);
   assert.match(page, /Hapus barang atau jasa terpilih/);
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
@@ -707,6 +707,19 @@ test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accura
   assert.match(workOrders, />Diskon</);
   assert.match(workOrders, />Total</);
   assert.match(workOrders, /Rp \{totalServices\.toLocaleString\('id-ID'\)\}/);
+});
+
+test('WO baru edit diagnosis selesai faktur dan lost sales memakai satu kerangka dokumen', () => {
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.match(workOrders, /showModal && \(editingWO \|\| hasPermission\('wo:create'\)\)/);
+  assert.match(workOrders, /<thead className="bg-slate-600 text-xs uppercase text-white">/);
+  assert.doesNotMatch(workOrders, /<thead className=\{editingWO \?/);
+  assert.doesNotMatch(workOrders, /diagnosisMode && editingWO \? \(\s*<div className="space-y-3">/);
+  assert.doesNotMatch(workOrders, /formData\.services\.length > 0 \|\| !editingWO \?/);
+  assert.doesNotMatch(workOrders, /editingWO && !isAutoRegisteredDraft \? 'mb-3'/);
+  assert.match(workOrders, /editingWO && diagnosisMode && <div className="grid grid-cols-3 gap-2 border border-blue-200 bg-blue-50 p-2">/);
+  assert.match(workOrders, /documentTab === 'info'/);
+  assert.match(workOrders, /documentTab === 'payment'/);
 });
 
 test('daftar WO selalu menampilkan nama cabang pada desktop dan HP', () => {
