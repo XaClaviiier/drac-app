@@ -718,7 +718,10 @@ test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accura
   assert.match(workOrders, /work-order-entry-form[^>]*lg:bg-\[#eeeeee\]/);
   assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:bg-\[#eeeeee\]/);
   assert.match(workOrders, /data-wo-items-table/);
-  assert.match(workOrders, /showQuickServices \? 'lg:h-\[calc\(100dvh-570px\)\]' : 'lg:h-\[calc\(100dvh-490px\)\]'/);
+  assert.match(workOrders, /const \[showQuickServices, setShowQuickServices\] = useState\(false\)/);
+  assert.doesNotMatch(workOrders, /dokterac_wo_quick_services/);
+  assert.match(workOrders, /const handleOpenModal = \(wo\?: WorkOrder, servicesOnly = false, viewOnly = false\) => \{\s+setShowQuickServices\(false\)/);
+  assert.match(workOrders, /lg:h-\[calc\(100dvh-490px\)\]/);
   assert.match(workOrders, /lg:min-h-\[240px\]/);
   assert.match(workOrders, /border-gray-400 bg-white shadow-\[0_2px_7px_rgba\(15,23,42,0\.18\)\]/);
   assert.match(workOrders, /data-wo-total-summary/);

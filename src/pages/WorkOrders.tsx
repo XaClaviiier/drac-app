@@ -575,7 +575,7 @@ export default function WorkOrders() {
   const [serviceSearch, setServiceSearch] = useState('');
   const [serviceSearchFocused, setServiceSearchFocused] = useState(false);
   const [isServiceSearching, setIsServiceSearching] = useState(false);
-  const [showQuickServices, setShowQuickServices] = useState(() => localStorage.getItem('dokterac_wo_quick_services') === 'open');
+  const [showQuickServices, setShowQuickServices] = useState(false);
   const isLegacyFreeInspection = (item: typeof data.items[number]) => {
     const label = `${item.code} ${item.name} ${item.receiptDescription || ''}`.toUpperCase();
     return item.sellingPrice <= 0 && (/PENGECEKAN\s+GRATIS/.test(label) || /(^|\s)CEK[\s-]*AC($|\s)/.test(label));
@@ -633,17 +633,12 @@ export default function WorkOrders() {
   }, [serviceSearch]);
 
   const toggleQuickServices = () => {
-    setShowQuickServices(previous => {
-      const next = !previous;
-      localStorage.setItem('dokterac_wo_quick_services', next ? 'open' : 'closed');
-      return next;
-    });
+    setShowQuickServices(previous => !previous);
   };
 
   const selectQuickService = (itemId: string) => {
     handleUseItem(itemId);
     setShowQuickServices(false);
-    localStorage.setItem('dokterac_wo_quick_services', 'closed');
   };
 
   const handleQuickAddItem = async () => {
@@ -1049,6 +1044,7 @@ export default function WorkOrders() {
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false, viewOnly = false) => {
+    setShowQuickServices(false);
     setDetailWO(null);
     setWorkOrderViewOnly(Boolean(wo && viewOnly));
     setDiagnosisMode(false);
@@ -3762,7 +3758,7 @@ export default function WorkOrders() {
                   </div>
                   <div
                     data-wo-items-table
-                    className={`hidden overflow-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[240px] ${showQuickServices ? 'lg:h-[calc(100dvh-570px)]' : 'lg:h-[calc(100dvh-490px)]'}`}
+                    className="hidden overflow-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:h-[calc(100dvh-490px)] lg:min-h-[240px]"
                   >
                     <table className="min-w-[920px] w-full text-sm">
                       <thead className="bg-slate-600 text-xs uppercase text-white">
