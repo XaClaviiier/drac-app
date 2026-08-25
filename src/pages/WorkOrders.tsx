@@ -1098,12 +1098,12 @@ export default function WorkOrders() {
     setServiceEditMode(false);
   };
 
-  // New WO adalah standar tunggal editor. Klik nomor/ikon WO yang masih dapat
-  // diubah harus membuka editor yang sama, sedangkan dokumen terkunci tetap
-  // memakai tampilan detail read-only.
+  // Form Data Baru adalah standar tunggal tampilan WO. Membuka maupun mengedit
+  // WO dari cabang aktif selalu memakai kanvas yang sama; status transaksi tetap
+  // menentukan field dan aksi mana yang dikunci.
   const openWorkOrderStandard = (wo: WorkOrder) => {
     const sameBranch = wo.branchId === resolveBranchId();
-    const readOnly = !sameBranch || !hasPermission('wo:edit') || Boolean(wo.invoiceId) || statusLabel(wo.status) === 'Lost Sales';
+    const readOnly = !sameBranch || !hasPermission('wo:edit');
     if (readOnly) {
       openDetailTab(wo);
       return;
@@ -1151,7 +1151,8 @@ export default function WorkOrders() {
     }
 
     const lockedByInvoice = Boolean(targetWO.invoiceId);
-    if (requestedViewWO || lockedByInvoice || !hasPermission('wo:edit')) {
+    const sameBranch = targetWO.branchId === resolveBranchId();
+    if (!sameBranch || !hasPermission('wo:edit')) {
       openDetailTab(targetWO);
       if (lockedByInvoice && requestedEditWO) {
         showAccurateNotice(`WO ${targetWO.woNumber} sudah memiliki faktur dan dibuka dalam mode lihat.`);
@@ -1160,6 +1161,9 @@ export default function WorkOrders() {
     }
 
     handleOpenModal(targetWO, true);
+    if (lockedByInvoice && requestedEditWO) {
+      showAccurateNotice(`WO ${targetWO.woNumber} sudah memiliki faktur. Tampilan mengikuti form WO, tetapi transaksi tetap terkunci.`);
+    }
   }, [requestedNewWO, requestedEditWO, requestedViewWO, isLoading, data.workOrders]);
 
   const handleCloseModal = () => {
@@ -3164,10 +3168,10 @@ export default function WorkOrders() {
               </div>
             </div>
 
-            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[88px]">
+            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:p-2 lg:pr-[104px]">
               <AccurateFormActionRail
                 ariaLabel="Aksi Work Order"
-                className="absolute bottom-2 right-2 top-2 z-50 hidden gap-1.5 lg:flex [&>div]:mt-1.5"
+                className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
                 save={{
                   type: 'button',
                   form: 'work-order-entry-form',
@@ -3175,7 +3179,9 @@ export default function WorkOrders() {
                     diagnosisSubmitAction.current = 'save';
                     void handleSubmit();
                   },
-                  disabled: editingWO ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked) : isAutoRegistering,
+                  disabled: editingWO
+                    ? Boolean(editingWO.invoiceId) || (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)
+                    : isAutoRegistering,
                   title: editingWO ? 'Simpan Work Order' : 'Register Work Order',
                 }}
                 document={{
