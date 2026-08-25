@@ -557,6 +557,7 @@ test('identitas dan aksi daftar Faktur Penjualan mengikuti daftar Order Kerja', 
   assert.match(page, /invoicePaid = invoice\.total > 0 && invoice\.payment >= invoice\.total/);
   assert.match(page, /title=\{`Faktur dibuat dari \$\{invoice\.woNumber\}`\}>\{invoice\.woNumber\}<\/span>/);
   assert.match(page, /\{invoicePaid \? 'Lunas' : 'Belum Lunas'\}/);
+  assert.match(page, /No\. Nota Asli:[\s\S]*?\{invoice\.manualReceiptNumber\}/);
   assert.match(page, /invoiceCustomerPhone\(invoice\)[\s\S]*?vehicleSummary\.detail/);
   assert.match(page, /shareInvoiceToWhatsApp\(invoice\)/);
   assert.match(page, /aria-label=\{`Buka Faktur \$\{invoice\.invoiceNumber\}`\}/);

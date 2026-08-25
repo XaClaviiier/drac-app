@@ -950,7 +950,7 @@ export default function SalesInvoice() {
                       </div>
                       {invoice.woNumber && <span className="mt-0.5 block font-mono text-[11px] font-medium text-gray-600" title={`Faktur dibuat dari ${invoice.woNumber}`}>{invoice.woNumber}</span>}
                       {invoice.manualReceiptNumber && (
-                        <span className="mt-0.5 block text-[11px] font-medium text-gray-500">Nota fisik: {invoice.manualReceiptNumber}</span>
+                        <span className="mt-0.5 block text-[11px] font-medium text-gray-500">No. Nota Asli: <strong className="font-mono font-semibold text-gray-700">{invoice.manualReceiptNumber}</strong></span>
                       )}
                       {!invoicePaid && <span className="mt-0.5 block text-[10px] font-medium text-amber-700">Belum dibayar {invoice.age} hari</span>}
                     </td>}
