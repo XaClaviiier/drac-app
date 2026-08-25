@@ -57,6 +57,43 @@ const formatPlateNumber = (value?: string) => {
   return [match[1], match[2], match[3]].filter(Boolean).join(' ');
 };
 
+const WorkOrderEstimateAmount = ({ amount, isLostSales }: { amount: number; isLostSales: boolean }) => (
+  <span className="inline-flex flex-col items-end leading-tight">
+    <span className={`font-bold ${isLostSales ? 'text-gray-400 line-through decoration-gray-400 decoration-1' : 'text-gray-900'}`}>
+      Rp {amount.toLocaleString('id-ID')}
+    </span>
+    {isLostSales && <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-400">Estimasi Lost Sales</span>}
+  </span>
+);
+
+const WorkOrderCustomerVehicleIdentity = ({
+  customerName,
+  phone,
+  plateNumber,
+  vehicleInfo,
+  driverName,
+  driverPhone,
+  className = '',
+}: {
+  customerName: string;
+  phone: string;
+  plateNumber: string;
+  vehicleInfo: string;
+  driverName?: string;
+  driverPhone?: string;
+  className?: string;
+}) => (
+  <span className={`block min-w-0 ${className}`}>
+    <span className="flex min-w-0 items-baseline gap-1.5 text-sm font-bold text-gray-900">
+      <span className="truncate">{customerName}</span><span aria-hidden="true" className="text-gray-400">—</span><span className="flex-shrink-0 font-mono">{formatPlateNumber(plateNumber)}</span>
+    </span>
+    <span className="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-xs text-gray-600">
+      <span className="truncate">{phone || '-'}</span><span aria-hidden="true" className="text-gray-300">—</span><span className="truncate text-gray-500">{vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span>
+    </span>
+    {driverName && <span className="mt-0.5 block truncate text-xs font-medium text-amber-700">Dibawa oleh: {driverName}{driverPhone ? ` · ${driverPhone}` : ''}</span>}
+  </span>
+);
+
 type WorkOrderColumnKey = 'number' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'attention' | 'createdBy' | 'actions';
 const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
   { key: 'number', label: 'No. WO / Tanggal', locked: true },
@@ -2342,9 +2379,15 @@ export default function WorkOrders() {
                       )}
                     </td>}
                     {isColumnVisible('customer') && <td className="px-4 py-3">
-                      <span className="flex max-w-[320px] items-center justify-between gap-4 text-sm font-bold text-gray-900"><span className="truncate">{customerIdentityForWO(wo).title}</span><span className="flex-shrink-0 font-mono">{formatPlateNumber(wo.plateNumber)}</span></span>
-                      <span className="mt-0.5 flex max-w-[320px] items-center justify-between gap-4 text-xs text-gray-600"><span className="truncate">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone}</span><span className="truncate text-right text-gray-500">{wo.vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span></span>
-                      {customerIdentityForWO(wo).driverName && <span className="mt-0.5 block max-w-[210px] truncate text-xs font-medium text-amber-700">Dibawa oleh: {customerIdentityForWO(wo).driverName}{customerIdentityForWO(wo).driverPhone ? ` · ${customerIdentityForWO(wo).driverPhone}` : ''}</span>}
+                      <WorkOrderCustomerVehicleIdentity
+                        className="max-w-[320px]"
+                        customerName={customerIdentityForWO(wo).title}
+                        phone={`${customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}${customerIdentityForWO(wo).phone}`}
+                        plateNumber={wo.plateNumber}
+                        vehicleInfo={wo.vehicleInfo}
+                        driverName={customerIdentityForWO(wo).driverName}
+                        driverPhone={customerIdentityForWO(wo).driverPhone}
+                      />
                     </td>}
                     {isColumnVisible('services') && <td className="px-4 py-3">
                       <span className="block max-w-[230px] truncate text-sm text-gray-800">
@@ -2352,8 +2395,8 @@ export default function WorkOrders() {
                       </span>
                       <span className="block text-xs text-gray-500">{wo.services.length} item layanan</span>
                     </td>}
-                    {isColumnVisible('total') && <td className={`whitespace-nowrap px-4 py-3 text-right text-sm font-bold ${statusLabel(wo.status) === 'Lost Sales' ? 'text-gray-400' : 'text-gray-900'}`}>
-                      Rp {wo.total.toLocaleString('id-ID')}
+                    {isColumnVisible('total') && <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                      <WorkOrderEstimateAmount amount={wo.total} isLostSales={statusLabel(wo.status) === 'Lost Sales'} />
                     </td>}
                     {isColumnVisible('createdBy') && <td className="px-4 py-3">
                       <span className="block max-w-[170px] truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
@@ -2429,9 +2472,15 @@ export default function WorkOrders() {
                     {formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
                   </span>
                 </div>
-                <p className="mt-1 flex items-center justify-between gap-3 text-sm font-semibold text-gray-900"><span className="truncate">{customerIdentityForWO(wo).title}</span><span className="flex-shrink-0 font-mono">{formatPlateNumber(wo.plateNumber)}</span></p>
-                <p className="mt-0.5 flex items-center justify-between gap-3 text-xs text-gray-600"><span className="truncate">{customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}{customerIdentityForWO(wo).phone || '-'}</span><span className="truncate text-right">{wo.vehicleInfo.replace(/\s+-\s+/g, ' · ')}</span></p>
-                {customerIdentityForWO(wo).driverName && <p className="truncate text-xs text-amber-700">Dibawa oleh: {customerIdentityForWO(wo).driverName}{customerIdentityForWO(wo).driverPhone ? ` · ${customerIdentityForWO(wo).driverPhone}` : ''}</p>}
+                <WorkOrderCustomerVehicleIdentity
+                  className="mt-1"
+                  customerName={customerIdentityForWO(wo).title}
+                  phone={`${customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}${customerIdentityForWO(wo).phone}`}
+                  plateNumber={wo.plateNumber}
+                  vehicleInfo={wo.vehicleInfo}
+                  driverName={customerIdentityForWO(wo).driverName}
+                  driverPhone={customerIdentityForWO(wo).driverPhone}
+                />
                 {wo.description && <p className="mt-1 line-clamp-2 text-xs text-gray-600"><span className="font-semibold text-gray-700">Keluhan:</span> {wo.description}</p>}
                 <p className="mt-1 truncate text-xs text-gray-500">
                   <span className="font-semibold text-gray-700">Layanan:</span>{' '}
@@ -2447,7 +2496,9 @@ export default function WorkOrders() {
                 )}
                 <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
-                <span className="ml-auto text-xs font-bold text-gray-800">Rp {wo.total.toLocaleString('id-ID')}</span>
+                <span className="ml-auto text-xs">
+                  <WorkOrderEstimateAmount amount={wo.total} isLostSales={statusLabel(wo.status) === 'Lost Sales'} />
+                </span>
                 <button type="button" onClick={() => openWorkOrderStandard(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Buka ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
                 {canShowAdminRowActions && hasPermission('wo:edit') && !wo.invoiceId && (
                   <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>

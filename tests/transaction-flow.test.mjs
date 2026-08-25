@@ -729,7 +729,13 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.match(workOrders, /CircleAlert className="h-5 w-5"/);
   assert.match(workOrders, /AlertTriangle className="h-5 w-5"/);
   assert.match(workOrders, />Pelanggan \/ Kendaraan</);
-  assert.match(workOrders, /customerIdentityForWO\(wo\)\.title[\s\S]*?formatPlateNumber\(wo\.plateNumber\)/);
+  assert.match(workOrders, /const WorkOrderCustomerVehicleIdentity/);
+  assert.match(workOrders, /customerName=\{customerIdentityForWO\(wo\)\.title\}[\s\S]*?plateNumber=\{wo\.plateNumber\}/);
+  assert.match(workOrders, /formatPlateNumber\(plateNumber\)/);
+  assert.match(workOrders, /const WorkOrderEstimateAmount/);
+  assert.match(workOrders, /line-through decoration-gray-400 decoration-1/);
+  assert.match(workOrders, />Estimasi Lost Sales</);
+  assert.match(workOrders, /<WorkOrderEstimateAmount amount=\{wo\.total\} isLostSales=\{statusLabel\(wo\.status\) === 'Lost Sales'\}/);
   assert.doesNotMatch(workOrders, /listMode === 'attention'/);
   assert.match(help, /Register hanya antrean sementara pada hari transaksi/);
 });
