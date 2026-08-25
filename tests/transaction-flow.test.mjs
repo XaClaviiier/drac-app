@@ -695,6 +695,7 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
 
 test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accurate', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.match(workOrders, /work-order-entry-form[^>]*lg:bg-\[#eeeeee\]/);
   assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:bg-\[#eeeeee\]/);
   assert.match(workOrders, /data-wo-items-table/);
   assert.match(workOrders, /lg:min-h-\[calc\(100dvh-520px\)\]/);
