@@ -715,6 +715,7 @@ test('form Faktur Penjualan mengikuti kerangka padat Data Baru Order Kerja', () 
 test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang sama', () => {
   const rules = source('src/lib/workOrderAttention.ts');
   const layout = source('src/components/Layout.tsx');
+  const mobileDashboard = source('src/components/MobileDashboard.tsx');
   const workOrders = source('src/pages/WorkOrders.tsx');
   const help = source('src/data/helpArticles.ts');
 
@@ -727,6 +728,11 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.match(layout, /buildWorkOrderAttentionItems/);
   assert.match(layout, /aria-label=\{`Notifikasi, \$\{workOrderAttentionItems\.length\} perlu tindakan`\}/);
   assert.match(layout, /navigate\('\/workorders\?attention=1'\)/);
+  assert.match(mobileDashboard, /buildWorkOrderAttentionItems/);
+  assert.match(mobileDashboard, /aria-label=\{`Notifikasi, \$\{attentionItems\.length\} perlu tindakan`\}/);
+  assert.match(mobileDashboard, /navigate\('\/workorders\?attention=1'\)/);
+  assert.match(mobileDashboard, /Register Mengambang/);
+  assert.doesNotMatch(mobileDashboard, /right-2 top-2 h-2 w-2 rounded-full bg-red-500/);
   assert.match(workOrders, /Aktif — Register &amp; Dikerjakan/);
   assert.match(workOrders, /Nonaktif — Selesai &amp; Lost Sales/);
   assert.match(workOrders, /<option value="attention">Butuh Tindakan<\/option>/);
