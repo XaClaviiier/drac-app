@@ -573,8 +573,10 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   const tabs = source('src/components/AccurateDocumentSideTabs.tsx');
   assert.match(page, /Pelanggan <span className="text-red-500">\*<\/span>/);
   assert.match(page, /Kendaraan <span className="text-red-500">\*<\/span>/);
-  assert.match(page, /Baris utama Accurate: pelanggan \+ kendaraan, lalu tanggal\/waktu; keluhan selebar kedua isian/);
-  assert.match(page, /lg:max-w-\[980px\] lg:grid-cols-\[85px_minmax\(0,1fr\)_minmax\(0,\.8fr\)_64px_130px_112px\] lg:gap-x-1/);
+  assert.match(page, /kelompok tanggal dirapatkan ke kanan dengan urutan tanggal, edit, waktu/);
+  assert.match(page, /lg:w-full lg:grid-cols-\[85px_minmax\(0,1fr\)_minmax\(0,\.8fr\)_64px_142px_132px\] lg:gap-x-1/);
+  assert.match(page, /grid-cols-\[42px_82px\] justify-end gap-2 lg:grid/);
+  assert.match(page, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
   assert.doesNotMatch(page, /<span>Nomor: <strong className="text-gray-900">\{editingWO\?\.woNumber/);
   assert.doesNotMatch(page, /<span>Cabang: <strong className="text-gray-900">\{data\.branches\.find\(branch/);
   assert.match(page, /ariaLabel="Aksi Work Order"/);

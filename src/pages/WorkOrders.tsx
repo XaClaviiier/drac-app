@@ -3225,8 +3225,8 @@ export default function WorkOrders() {
                   </div>
                 </div>
               ) : <>
-              {/* Baris utama Accurate: pelanggan + kendaraan, lalu tanggal/waktu; keluhan selebar kedua isian. */}
-              <div className="grid grid-cols-1 items-start gap-2 lg:max-w-[980px] lg:grid-cols-[85px_minmax(0,1fr)_minmax(0,.8fr)_64px_130px_112px] lg:gap-x-1">
+              {/* Baris utama Accurate: pelanggan + kendaraan; kelompok tanggal dirapatkan ke kanan dengan urutan tanggal, edit, waktu. */}
+              <div className="grid grid-cols-1 items-start gap-2 lg:w-full lg:grid-cols-[85px_minmax(0,1fr)_minmax(0,.8fr)_64px_142px_132px] lg:gap-x-1">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:self-center">
                   <User className="h-4 w-4 text-blue-600 lg:hidden" />
                   Pelanggan <span className="text-red-500">*</span>
@@ -3260,16 +3260,7 @@ export default function WorkOrders() {
                 <div className="hidden lg:block">
                   <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-[42px] w-full text-sm"/>
                 </div>
-                <div className="hidden grid-cols-[82px_42px] gap-2 lg:grid">
-                  <input
-                    type="time"
-                    required
-                    disabled={!woDateUnlocked}
-                    value={formData.transactionTime}
-                    onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
-                    className="h-[42px] w-full rounded-lg border border-gray-300 px-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                    aria-label="Waktu WO desktop"
-                  />
+                <div className="hidden grid-cols-[42px_82px] justify-end gap-2 lg:grid">
                   <button
                     type="button"
                     onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(value => {
@@ -3283,6 +3274,15 @@ export default function WorkOrders() {
                   >
                     {woDateUnlocked ? <LockKeyhole className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
                   </button>
+                  <input
+                    type="time"
+                    required
+                    disabled={!woDateUnlocked}
+                    value={formData.transactionTime}
+                    onChange={(e) => setFormData({ ...formData, transactionTime: e.target.value })}
+                    className="h-[42px] w-full rounded-lg border border-gray-300 px-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                    aria-label="Waktu WO desktop"
+                  />
                 </div>
                 {!isAutoRegisteredDraft && (
                   <>
