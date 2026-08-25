@@ -698,9 +698,10 @@ test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accura
   assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:bg-\[#eeeeee\]/);
   assert.match(workOrders, /data-wo-items-table/);
   assert.match(workOrders, /lg:min-h-\[calc\(100dvh-520px\)\]/);
+  assert.match(workOrders, /min-height:820px.*min-h-\[calc\(100dvh-400px\)\]/);
   assert.match(workOrders, /border-gray-400 bg-white shadow-\[0_2px_7px_rgba\(15,23,42,0\.18\)\]/);
   assert.match(workOrders, /data-wo-total-summary/);
-  assert.match(workOrders, /mt-3 hidden w-full max-w-\[700px\]/);
+  assert.match(workOrders, /mt-2 hidden w-full max-w-\[700px\]/);
   assert.match(workOrders, />Sub Total</);
   assert.match(workOrders, />Diskon</);
   assert.match(workOrders, />Total</);

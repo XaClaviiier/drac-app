@@ -3143,37 +3143,37 @@ export default function WorkOrders() {
       )}
       {processingIssues.length > 0 && entryGuidanceOnly && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="wo-entry-guidance-title">
-          <div className="w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl">
-            <header className="flex items-center justify-between bg-[#0d3264] px-6 py-4 text-white">
-              <div className="flex items-center gap-3"><ClipboardList className="h-7 w-7"/><h3 id="wo-entry-guidance-title" className="text-xl font-semibold">Lengkapi Data Servis</h3></div>
-              <button type="button" onClick={closeProcessingIssues} className="rounded p-1 hover:bg-white/10" aria-label="Tutup arahan"><X className="h-7 w-7"/></button>
+          <div className="w-full max-w-2xl overflow-hidden rounded-md bg-white shadow-2xl">
+            <header className="flex items-center justify-between bg-[#0d3264] px-5 py-3 text-white">
+              <div className="flex items-center gap-3"><ClipboardList className="h-5 w-5"/><h3 id="wo-entry-guidance-title" className="font-semibold">Lengkapi Data Servis</h3></div>
+              <button type="button" onClick={closeProcessingIssues} className="rounded p-1 hover:bg-white/10" aria-label="Tutup arahan"><X className="h-5 w-5"/></button>
             </header>
-            <div className="grid gap-6 px-6 py-7 sm:grid-cols-[150px_minmax(0,1fr)] sm:px-10">
+            <div className="grid gap-5 px-6 py-5 sm:grid-cols-[88px_minmax(0,1fr)]">
               <div className="flex items-start justify-center">
-                <div className="flex h-32 w-32 items-center justify-center rounded-full bg-amber-50 text-amber-500"><AlertTriangle className="h-20 w-20 stroke-[2.25]"/></div>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-amber-500"><AlertTriangle className="h-11 w-11 stroke-[2.25]"/></div>
               </div>
               <div>
-                <p className="text-xl font-medium text-slate-900">Sebelum melanjutkan, silakan lengkapi data berikut:</p>
-                <ol className="relative mt-5 space-y-3 before:absolute before:bottom-5 before:left-5 before:top-5 before:border-l-2 before:border-dashed before:border-blue-200">
+                <p className="text-base font-medium text-slate-900">Sebelum melanjutkan, silakan lengkapi data berikut:</p>
+                <ol className="relative mt-3 space-y-2 before:absolute before:bottom-4 before:left-4 before:top-4 before:border-l-2 before:border-dashed before:border-blue-200">
                   {[
                     { issue: 'Pelanggan harus diisi', label: 'Pilih Pelanggan', complete: Boolean(formData.customerRefId) },
                     { issue: 'Kendaraan harus diisi', label: 'Pilih Kendaraan', complete: Boolean(formData.vehicleRefId) },
                     { issue: 'Keluhan pelanggan harus diisi', label: 'Isi Keluhan Pelanggan', complete: Boolean(formData.description.trim()) },
                   ].map((step, index) => (
-                    <li key={step.issue} className="relative flex items-center gap-4">
-                      <span className={`relative z-10 grid h-10 w-10 flex-shrink-0 place-items-center rounded-full border text-base font-bold ${step.complete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : processingIssues.includes(step.issue) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-400'}`}>{step.complete ? <CheckCircle2 className="h-5 w-5"/> : index + 1}</span>
-                      <span className={`text-lg ${step.complete ? 'text-emerald-700' : 'text-slate-900'}`}>{step.label}</span>
+                    <li key={step.issue} className="relative flex items-center gap-3">
+                      <span className={`relative z-10 grid h-8 w-8 flex-shrink-0 place-items-center rounded-full border text-sm font-bold ${step.complete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : processingIssues.includes(step.issue) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-400'}`}>{step.complete ? <CheckCircle2 className="h-4 w-4"/> : index + 1}</span>
+                      <span className={`text-base ${step.complete ? 'text-emerald-700' : 'text-slate-900'}`}>{step.label}</span>
                     </li>
                   ))}
                 </ol>
-                <div className="mt-6 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-base font-medium text-slate-900">
-                  <CircleAlert className="h-6 w-6 flex-shrink-0 text-amber-500" />
+                <div className="mt-4 flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-slate-900">
+                  <CircleAlert className="h-5 w-5 flex-shrink-0 text-amber-500" />
                   <span>{entryGuidanceMessage}</span>
                 </div>
               </div>
             </div>
-            <footer className="flex justify-end border-t border-gray-200 px-6 py-4">
-              <button type="button" autoFocus onClick={closeProcessingIssues} className="h-11 min-w-32 rounded border border-blue-500 bg-white px-6 font-semibold text-blue-700 hover:bg-blue-50">Tutup</button>
+            <footer className="flex justify-end border-t border-gray-200 px-5 py-3">
+              <button type="button" autoFocus onClick={closeProcessingIssues} className="h-9 min-w-24 rounded border border-blue-500 bg-white px-5 text-sm font-semibold text-blue-700 hover:bg-blue-50">Tutup</button>
             </footer>
           </div>
         </div>
@@ -3811,7 +3811,7 @@ export default function WorkOrders() {
                       <span className="text-base font-bold text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</span>
                     </div>}
                   </div>
-                  <div data-wo-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)]">
+                  <div data-wo-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
                     <table className="min-w-[920px] w-full text-sm">
                       <thead className={editingWO ? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'}>
                         <tr>
@@ -3910,7 +3910,7 @@ export default function WorkOrders() {
                   </div>
                 )}
 
-                <div data-wo-total-summary className="ml-auto mt-3 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
+                <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
                   <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">
                     <span className="text-sm font-medium text-gray-900">Sub Total</span>
                     <strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {totalServices.toLocaleString('id-ID')}</strong>
