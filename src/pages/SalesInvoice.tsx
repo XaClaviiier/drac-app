@@ -18,7 +18,7 @@ import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../component
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
-type InvoiceColumnKey = 'date' | 'number' | 'customer' | 'vehicle' | 'total' | 'branch' | 'actions';
+type InvoiceColumnKey = 'date' | 'number' | 'customer' | 'total' | 'branch' | 'actions';
 type InvoicePaymentHistory = {
   id: string;
   paymentNumber: string;
@@ -33,8 +33,7 @@ type InvoicePaymentHistory = {
 const SALES_INVOICE_COLUMNS: Array<{ key: InvoiceColumnKey; label: string; locked?: boolean }> = [
   { key: 'date', label: 'Tanggal' },
   { key: 'number', label: 'Nomor Faktur / Status', locked: true },
-  { key: 'customer', label: 'Pelanggan' },
-  { key: 'vehicle', label: 'Data Kendaraan' },
+  { key: 'customer', label: 'Pelanggan / Kendaraan' },
   { key: 'total', label: 'Total / Pembayaran' },
   { key: 'branch', label: 'Cabang' },
   { key: 'actions', label: 'Aksi', locked: true },
@@ -895,7 +894,7 @@ export default function SalesInvoice() {
                   ))}
                   <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3">
                     <button type="button" onClick={() => updateVisibleInvoiceColumns(DEFAULT_SALES_INVOICE_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button>
-                    <button type="button" onClick={() => updateVisibleInvoiceColumns(['number', 'customer', 'vehicle', 'total', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
+                    <button type="button" onClick={() => updateVisibleInvoiceColumns(['number', 'customer', 'total', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
                   </div>
                 </div>
               )}
@@ -908,14 +907,13 @@ export default function SalesInvoice() {
       {/* Table */}
       <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
         <div className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
-          <table className="w-full min-w-[1160px] border-collapse">
+          <table className="w-full min-w-[1040px] border-collapse">
             <thead className="sticky top-0 z-20 bg-blue-800 text-white">
               <tr>
                 {isInvoiceColumnVisible('date') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Tanggal</th>}
-                {isInvoiceColumnVisible('number') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Nomor #</th>}
-                {isInvoiceColumnVisible('customer') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Pelanggan</th>}
-                {isInvoiceColumnVisible('vehicle') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Data Kendaraan</th>}
-                {isInvoiceColumnVisible('total') && <th className="px-4 text-right text-xs font-semibold uppercase tracking-wide">Total</th>}
+                {isInvoiceColumnVisible('number') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Nomor Faktur / Status</th>}
+                {isInvoiceColumnVisible('customer') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Pelanggan / Kendaraan</th>}
+                {isInvoiceColumnVisible('total') && <th className="px-4 text-right text-xs font-semibold uppercase tracking-wide">Total / Pembayaran</th>}
                 {currentBranchId === 'ALL' && isInvoiceColumnVisible('branch') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Cabang</th>}
                 {isInvoiceColumnVisible('actions') && <th className="sticky right-0 bg-blue-800 px-4 text-center text-xs font-semibold uppercase tracking-wide">Aksi</th>}
               </tr>
@@ -930,8 +928,11 @@ export default function SalesInvoice() {
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((invoice) => (
-                  <tr key={invoice.id} className="hover:bg-blue-50/50 transition-colors">
+                filteredInvoices.map((invoice) => {
+                  const vehicleSummary = invoiceVehicleSummary(invoice);
+                  const invoicePaid = invoice.total > 0 && invoice.payment >= invoice.total;
+                  return (
+                  <tr key={invoice.id} className="group transition-colors even:bg-gray-50 hover:bg-blue-50/50">
                     {isInvoiceColumnVisible('date') && <td className="whitespace-nowrap border-r border-gray-200 px-3 py-2.5 text-sm text-gray-900">{formatShareDate(invoice.date)}</td>}
                     {isInvoiceColumnVisible('number') && <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
@@ -944,7 +945,7 @@ export default function SalesInvoice() {
                           {invoice.invoiceNumber}
                         </button>
                         {invoice.woNumber && (
-                          <span className="inline-flex items-center rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700" title={`Dari ${invoice.woNumber}`}>
+                          <span className="inline-flex items-center rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700" title={`Faktur dibuat dari ${invoice.woNumber}`}>
                             WO
                           </span>
                         )}
@@ -952,24 +953,19 @@ export default function SalesInvoice() {
                       {invoice.manualReceiptNumber && (
                         <span className="mt-0.5 block text-[11px] font-medium text-gray-500">Nota fisik: {invoice.manualReceiptNumber}</span>
                       )}
-                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoice.status === 'Lunas' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                        {invoice.status === 'Lunas' ? 'Lunas' : `Belum Lunas (${invoice.age} hr)`}
+                      {invoice.woNumber && <span className="mt-0.5 block text-[11px] text-gray-500">Sumber: <strong className="font-mono font-medium text-gray-700">{invoice.woNumber}</strong></span>}
+                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {invoicePaid ? 'Lunas' : `Belum Lunas (${invoice.age} hr)`}
                       </span>
                     </td>}
-                    {isInvoiceColumnVisible('customer') && <td className="min-w-[190px] px-4 py-2.5 text-sm text-gray-900">
-                      <strong className="block truncate font-semibold">{invoice.customerName}</strong>
-                      <span className="mt-0.5 block whitespace-nowrap text-xs text-gray-500">
-                        {invoiceCustomerPhone(invoice)} - {invoice.customerId}
-                      </span>
-                    </td>}
-                    {isInvoiceColumnVisible('vehicle') && <td className="min-w-[210px] max-w-xs px-4 py-2.5 text-sm text-gray-900">
-                      <strong className="block truncate font-semibold">{invoiceVehicleSummary(invoice).plateNumber}</strong>
-                      <span className="mt-0.5 block truncate text-xs text-gray-500">{invoiceVehicleSummary(invoice).detail}</span>
+                    {isInvoiceColumnVisible('customer') && <td className="min-w-[310px] max-w-md px-4 py-2.5 text-sm text-gray-900">
+                      <strong className="block truncate font-semibold">{invoice.customerName} <span className="font-normal text-gray-400">—</span> <span className="font-mono">{vehicleSummary.plateNumber}</span></strong>
+                      <span className="mt-0.5 block truncate text-xs text-gray-500">{invoiceCustomerPhone(invoice)} <span className="text-gray-300">—</span> {vehicleSummary.detail}</span>
                     </td>}
                     {isInvoiceColumnVisible('total') && <td className="min-w-[150px] whitespace-nowrap px-4 py-2.5 text-right text-sm text-gray-900">
                       <strong className="block font-semibold tabular-nums">Rp {invoice.total.toLocaleString('id-ID')}</strong>
                       <span className="mt-0.5 block text-[11px] text-gray-500">Bayar Rp {invoice.payment.toLocaleString('id-ID')}</span>
-                      {invoice.payment >= invoice.total ? (
+                      {invoicePaid ? (
                         <span className="block text-[10px] font-semibold text-emerald-700">Lunas</span>
                       ) : (
                         <span className="block text-[10px] font-semibold text-amber-700">Sisa Rp {Math.max(0, invoice.total - invoice.payment).toLocaleString('id-ID')}</span>
@@ -982,15 +978,34 @@ export default function SalesInvoice() {
                         </span>
                       </td>
                     )}
-                    {isInvoiceColumnVisible('actions') && <td className="sticky right-0 bg-white group-hover:bg-blue-50 px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)]">
+                    {isInvoiceColumnVisible('actions') && <td className="sticky right-0 bg-inherit px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] group-hover:bg-blue-50">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => void copyInvoice(invoice)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                          title="Salin invoice"
+                          onClick={() => setViewingInvoice(invoice)}
+                          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700"
+                          title={`Buka Faktur ${invoice.invoiceNumber}`}
+                          aria-label={`Buka Faktur ${invoice.invoiceNumber}`}
                         >
-                          <Copy className="h-3.5 w-3.5" /><span className="lg:hidden">Salin</span>
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => shareInvoiceToWhatsApp(invoice)}
+                          className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                          title={`Bagikan Faktur ${invoice.invoiceNumber} ke WhatsApp`}
+                          aria-label={`Bagikan Faktur ${invoice.invoiceNumber} ke WhatsApp`}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copyInvoice(invoice)}
+                          className="rounded-lg p-2 text-blue-600 hover:bg-blue-100"
+                          title={`Salin Faktur ${invoice.invoiceNumber}`}
+                          aria-label={`Salin Faktur ${invoice.invoiceNumber}`}
+                        >
+                          <Copy className="h-4 w-4" />
                         </button>
                         {hasPermission('invoice:delete') && invoice.payment <= 0 && (
                           <button
@@ -1004,7 +1019,8 @@ export default function SalesInvoice() {
                       </div>
                     </td>}
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

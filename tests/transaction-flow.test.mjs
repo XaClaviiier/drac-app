@@ -549,6 +549,20 @@ test('daftar Faktur Penjualan mengikuti kepadatan dan perataan Order Kerja', () 
   assert.doesNotMatch(page, /<th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Tanggal<\/th>/);
 });
 
+test('identitas dan aksi daftar Faktur Penjualan mengikuti daftar Order Kerja', () => {
+  const page = source('src/pages/SalesInvoice.tsx');
+
+  assert.match(page, />Pelanggan \/ Kendaraan<\/th>/);
+  assert.match(page, />Nomor Faktur \/ Status<\/th>/);
+  assert.match(page, /invoicePaid = invoice\.total > 0 && invoice\.payment >= invoice\.total/);
+  assert.match(page, /Sumber: <strong className="font-mono font-medium text-gray-700">\{invoice\.woNumber\}<\/strong>/);
+  assert.match(page, /invoiceCustomerPhone\(invoice\)[\s\S]*?vehicleSummary\.detail/);
+  assert.match(page, /shareInvoiceToWhatsApp\(invoice\)/);
+  assert.match(page, /aria-label=\{`Buka Faktur \$\{invoice\.invoiceNumber\}`\}/);
+  assert.doesNotMatch(page, /\{invoiceCustomerPhone\(invoice\)\} - \{invoice\.customerId\}/);
+  assert.doesNotMatch(page, /isInvoiceColumnVisible\('vehicle'\)/);
+});
+
 test('daftar Pembayaran Pelanggan mengikuti kepadatan dan perataan Order Kerja', () => {
   const page = source('src/pages/CustomerPayments.tsx');
   assert.match(page, /space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
