@@ -25,6 +25,7 @@ import { workOrderStatusLabel } from '../lib/workOrderStatus';
 const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
 const COMPLAINT_TEMPLATE_VERSION_KEY = 'dokterac_complaint_templates_version';
 const COMPLAINT_TEMPLATE_VERSION = '2';
+const DEFAULT_WORK_ORDER_DOCUMENT_TAB: AccurateDocumentTab = 'details';
 const WO_ENTRY_GUIDANCE_ISSUES = ['Pelanggan harus diisi', 'Kendaraan harus diisi', 'Keluhan pelanggan harus diisi'] as const;
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
@@ -300,7 +301,7 @@ export default function WorkOrders() {
     return DEFAULT_COMPLAINT_TEMPLATES;
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
-  const [documentTab, setDocumentTab] = useState<AccurateDocumentTab>('details');
+  const [documentTab, setDocumentTab] = useState<AccurateDocumentTab>(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [openActionRailMenu, setOpenActionRailMenu] = useState<'print' | 'more' | ''>('');
 
@@ -1039,12 +1040,13 @@ export default function WorkOrders() {
     setWoBackdateReason('');
     setCustomerVehicleCorrectionUnlocked(false);
     setCustomerVehicleCorrectionReason('');
-    setDocumentTab('details');
+    setDocumentTab(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
     setSelectedServiceId('');
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false, viewOnly = false) => {
     setShowQuickServices(false);
+    setDocumentTab(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
     setDetailWO(null);
     setWorkOrderViewOnly(Boolean(wo && viewOnly));
     setDiagnosisMode(false);

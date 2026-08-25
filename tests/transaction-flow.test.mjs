@@ -747,6 +747,14 @@ test('tab samping WO menyatu satu piksel dengan lembar dokumen putih', () => {
   assert.match(tabs, /lg:-mr-px/);
 });
 
+test('kanvas WO saat baru, dibuka, dan diedit selalu mulai dari tampilan baku Rincian', () => {
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.match(workOrders, /const DEFAULT_WORK_ORDER_DOCUMENT_TAB: AccurateDocumentTab = 'details'/);
+  assert.match(workOrders, /useState<AccurateDocumentTab>\(DEFAULT_WORK_ORDER_DOCUMENT_TAB\)/);
+  assert.match(workOrders, /const handleOpenModal = \(wo\?: WorkOrder, servicesOnly = false, viewOnly = false\) => \{\s+setShowQuickServices\(false\);\s+setDocumentTab\(DEFAULT_WORK_ORDER_DOCUMENT_TAB\);/);
+  assert.ok((workOrders.match(/setDocumentTab\(DEFAULT_WORK_ORDER_DOCUMENT_TAB\)/g) || []).length >= 2);
+});
+
 test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
   assert.match(workOrders, /showModal && \(/);
