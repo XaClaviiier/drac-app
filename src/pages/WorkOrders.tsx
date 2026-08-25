@@ -3981,54 +3981,58 @@ export default function WorkOrders() {
                     </label>
                     <div className="grid gap-1 sm:grid-cols-[145px_minmax(0,1fr)]">
                       <span className="font-medium text-gray-700">Teknisi Pendamping</span>
-                      <div className="grid max-h-36 grid-cols-1 gap-1 overflow-y-auto border border-gray-400 bg-white p-2 sm:grid-cols-2">
-                        {data.users.filter(user => user.isActive && !user.isOwner && user.id !== formData.technicianId && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => {
-                          const checked = formData.assistantTechnicianIds.includes(user.id);
-                          return <label key={user.id} className="flex cursor-pointer items-center gap-2 px-1 py-1 hover:bg-blue-50">
-                            <input type="checkbox" checked={checked} onChange={() => setFormData(previous => {
-                              const nextIds = checked ? previous.assistantTechnicianIds.filter(id => id !== user.id) : [...previous.assistantTechnicianIds, user.id];
-                              const nextNames = checked ? previous.assistantTechnicianNames.filter(name => name !== user.name) : [...previous.assistantTechnicianNames, user.name];
-                              return { ...previous, assistantTechnicianIds: nextIds, assistantTechnicianNames: nextNames };
-                            })} />
-                            <span className="truncate">{user.name}</span>
-                          </label>;
-                        })}
-                      </div>
+                      <details data-wo-action-menu onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown} className="relative">
+                        <summary className="flex h-9 cursor-pointer list-none items-center justify-between border border-gray-500 bg-white px-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
+                          <span className={`truncate ${formData.assistantTechnicianNames.length ? 'text-gray-900' : 'text-gray-400'}`}>{formData.assistantTechnicianNames.length ? formData.assistantTechnicianNames.join(', ') : 'Pilih teknisi pendamping'}</span>
+                          <span className="ml-2 text-xs text-gray-500">▼</span>
+                        </summary>
+                        <div className="absolute left-0 right-0 z-40 mt-1 max-h-44 overflow-y-auto border border-gray-400 bg-white py-1 shadow-lg">
+                          {data.users.filter(user => user.isActive && !user.isOwner && user.id !== formData.technicianId && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => {
+                            const checked = formData.assistantTechnicianIds.includes(user.id);
+                            return <label key={user.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-blue-50">
+                              <input type="checkbox" checked={checked} onChange={() => setFormData(previous => {
+                                const nextIds = checked ? previous.assistantTechnicianIds.filter(id => id !== user.id) : [...previous.assistantTechnicianIds, user.id];
+                                const nextNames = checked ? previous.assistantTechnicianNames.filter(name => name !== user.name) : [...previous.assistantTechnicianNames, user.name];
+                                return { ...previous, assistantTechnicianIds: nextIds, assistantTechnicianNames: nextNames };
+                              })} />
+                              <span className="truncate">{user.name}</span>
+                            </label>;
+                          })}
+                        </div>
+                      </details>
                     </div>
                     <p className="border-t border-gray-200 pt-2 text-xs text-gray-500">No. WO: <strong>{editingWO?.woNumber || 'Otomatis saat Register'}</strong> · Cabang: <strong>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || '-'}</strong></p>
-                    <div className="border-t border-gray-200 pt-3">
-                      <div className="mb-3 flex items-center gap-2">
-                        <Clock3 className="h-4 w-4 text-blue-600" />
-                        <h5 className="font-semibold text-gray-900">Timeline WO</h5>
-                        {financialTimelineLoading && <span className="ml-auto text-xs text-gray-400">Memuat transaksi…</span>}
-                      </div>
-                      {!editingWO ? (
-                        <div className="border border-dashed border-gray-300 bg-gray-50 px-3 py-8 text-center text-sm text-gray-500">Timeline tersedia setelah WO diregister.</div>
-                      ) : (
-                        <div className="relative ml-2 max-h-64 overflow-y-auto border-l-2 border-gray-200 pl-5 pr-2">
-                          {workOrderAuditTimeline(editingWO).map((event, index) => (
-                            <div key={`${event.at}-${event.title}-${index}`} className="relative pb-4 last:pb-0">
-                              <span className={`absolute -left-[26px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${event.tone}`} />
-                              <div className="flex items-start gap-2">
-                                {event.continuation && <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />}
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-gray-900">{event.title}</p>
-                                  <p className="text-xs leading-5 text-gray-600">{event.description}</p>
-                                  <p className="text-[11px] text-gray-400">{formatAuditTime(event.at)}</p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                  <section className="space-y-3">
                     <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keluhan dan hasil kerja</h4>
                     <label className="block"><span className="mb-1 block font-medium text-gray-700">Keluhan Asli</span><div className="min-h-9 border border-gray-300 bg-gray-100 px-3 py-2 text-gray-700">{formData.description || '-'}</div></label>
                     <label className="block"><span className="mb-1 block font-medium text-gray-700">Komentar / Diagnosis Keluhan</span><textarea value={formData.complaintComment} onChange={event => setFormData(previous => ({ ...previous, complaintComment: event.target.value }))} rows={2} placeholder="Hasil pemeriksaan atas keluhan pelanggan..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
                     <label className="block"><span className="mb-1 block font-medium text-gray-700">Hasil Kerja</span><textarea value={formData.findings} onChange={event => setFormData(previous => ({ ...previous, findings: event.target.value }))} rows={2} placeholder="Pekerjaan yang dilakukan dan hasil pengujian akhir..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
                     <label className="block"><span className="mb-1 block font-medium text-gray-700">Keterangan Internal</span><textarea value={formData.notes} onChange={event => setFormData(previous => ({ ...previous, notes: event.target.value }))} rows={1} placeholder="Keterangan internal (opsional)..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
+                  </section>
+                  <section className="flex min-h-[420px] flex-col border-gray-300 lg:border-l lg:pl-4">
+                    <div className="mb-3 flex items-center gap-2 border-b border-gray-300 pb-2">
+                      <Clock3 className="h-4 w-4 text-blue-600" />
+                      <h4 className="text-base font-medium text-blue-600">Timeline WO</h4>
+                      {financialTimelineLoading && <span className="ml-auto text-xs text-gray-400">Memuat transaksi…</span>}
+                    </div>
+                    {!editingWO ? (
+                      <div className="flex flex-1 items-center justify-center border border-dashed border-gray-300 bg-gray-50 px-3 py-8 text-center text-sm text-gray-500">Timeline tersedia setelah WO diregister.</div>
+                    ) : (
+                      <div className="relative ml-2 flex-1 overflow-y-auto border-l-2 border-gray-200 pl-5 pr-2">
+                        {workOrderAuditTimeline(editingWO).map((event, index) => (
+                          <div key={`${event.at}-${event.title}-${index}`} className="relative pb-5 last:pb-0">
+                            <span className={`absolute -left-[26px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${event.tone}`} />
+                            <div className="flex items-start gap-2">
+                              {event.continuation && <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />}
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-900">{event.title}</p>
+                                <p className="text-xs leading-5 text-gray-600">{event.description}</p>
+                                <p className="text-[11px] text-gray-400">{formatAuditTime(event.at)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
                 </div>
               )}

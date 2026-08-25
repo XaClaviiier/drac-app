@@ -986,6 +986,8 @@ test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger fa
   assert.match(types, /assistantTechnicianIds\?: string\[\]/);
   assert.match(page, />Teknisi Utama/);
   assert.match(page, />Teknisi Pendamping/);
+  assert.match(page, /assistantTechnicianNames\.join\(', '\)/);
+  assert.match(page, /Pilih teknisi pendamping/);
   assert.match(page, />Komentar \/ Diagnosis Keluhan/);
   assert.match(page, />Hasil Kerja/);
   assert.match(page, /documentTab === 'payment'/);
@@ -995,6 +997,7 @@ test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger fa
   assert.match(page, />Timeline WO</);
   assert.match(page, /workOrderAuditTimeline\(editingWO\)\.map/);
   assert.match(page, /Timeline tersedia setelah WO diregister/);
+  assert.match(page, /flex min-h-\[420px\] flex-col border-gray-300 lg:border-l lg:pl-4/);
   assert.match(page, /customer-payments\?invoiceId=/);
   assert.doesNotMatch(page, /Pembayaran dikelola melalui faktur penjualan terkait/);
   assert.match(endpoint, /work_order_technicians/);
