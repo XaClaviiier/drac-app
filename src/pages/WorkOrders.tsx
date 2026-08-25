@@ -3850,7 +3850,7 @@ export default function WorkOrders() {
                   </div>
                   </>
 
-                <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
+                <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid lg:fixed lg:bottom-3 lg:right-[120px] lg:z-30 lg:mt-0 lg:w-[min(700px,calc(100vw-240px))]">
                   <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">
                     <span className="text-sm font-medium text-gray-900">Sub Total</span>
                     <strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {totalServices.toLocaleString('id-ID')}</strong>
