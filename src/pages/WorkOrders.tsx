@@ -3756,8 +3756,7 @@ export default function WorkOrders() {
                   </div>
                 )}
 
-                {formData.services.length > 0 || !editingWO ? (
-                  <>
+                <>
                   <div className="space-y-2 sm:hidden">
                     {formData.services.length === 0 && (
                       <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
@@ -3922,16 +3921,7 @@ export default function WorkOrders() {
                       </tbody>
                     </table>
                   </div>
-                  </>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center">
-                    <Wrench className="mx-auto mb-1.5 h-7 w-7 text-gray-400" />
-                    <p className="text-sm font-medium text-gray-700">Belum ada layanan</p>
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      Cari dan pilih layanan atau tambahkan layanan baru.
-                    </p>
-                  </div>
-                )}
+                </>
 
                 <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
                   <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">

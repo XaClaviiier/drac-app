@@ -767,12 +767,21 @@ test('panel Favorit WO langsung tertutup saat kehilangan fokus', () => {
   assert.match(workOrders, /<div ref=\{quickServicesRef\} className="relative z-20 mb-4">/);
 });
 
+test('WO tanpa layanan tetap menampilkan tabel rincian penuh dan panel total', () => {
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.doesNotMatch(workOrders, /formData\.services\.length > 0 \|\| !editingWO \? \(/);
+  assert.match(workOrders, /data-wo-items-table/);
+  assert.match(workOrders, /Belum ada layanan atau barang\./);
+  assert.match(workOrders, /data-wo-total-summary/);
+});
+
 test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
   assert.match(workOrders, /showModal && \(/);
   assert.match(workOrders, /<thead className="bg-\[var\(--app-table-head\)\] text-xs uppercase text-white">/);
   assert.match(workOrders, /diagnosisMode && editingWO \? \(\s*<div className="space-y-3">/);
-  assert.match(workOrders, /formData\.services\.length > 0 \|\| !editingWO \?/);
+  assert.doesNotMatch(workOrders, /formData\.services\.length > 0 \|\| !editingWO \?/);
+  assert.match(workOrders, /data-wo-items-table/);
   assert.doesNotMatch(workOrders, /editingWO && !isAutoRegisteredDraft \? 'mb-3'/);
   assert.match(workOrders, /editingWO && diagnosisMode && <div className="grid items-stretch justify-end gap-3/);
   assert.match(workOrders, /documentTab === 'info'/);
