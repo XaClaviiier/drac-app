@@ -944,19 +944,15 @@ export default function SalesInvoice() {
                         >
                           {invoice.invoiceNumber}
                         </button>
-                        {invoice.woNumber && (
-                          <span className="inline-flex items-center rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700" title={`Faktur dibuat dari ${invoice.woNumber}`}>
-                            WO
-                          </span>
-                        )}
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          {invoicePaid ? 'Lunas' : 'Belum Lunas'}
+                        </span>
                       </div>
+                      {invoice.woNumber && <span className="mt-0.5 block font-mono text-[11px] font-medium text-gray-600" title={`Faktur dibuat dari ${invoice.woNumber}`}>{invoice.woNumber}</span>}
                       {invoice.manualReceiptNumber && (
                         <span className="mt-0.5 block text-[11px] font-medium text-gray-500">Nota fisik: {invoice.manualReceiptNumber}</span>
                       )}
-                      {invoice.woNumber && <span className="mt-0.5 block text-[11px] text-gray-500">Sumber: <strong className="font-mono font-medium text-gray-700">{invoice.woNumber}</strong></span>}
-                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                        {invoicePaid ? 'Lunas' : `Belum Lunas (${invoice.age} hr)`}
-                      </span>
+                      {!invoicePaid && <span className="mt-0.5 block text-[10px] font-medium text-amber-700">Belum dibayar {invoice.age} hari</span>}
                     </td>}
                     {isInvoiceColumnVisible('customer') && <td className="min-w-[310px] max-w-md px-4 py-2.5 text-sm text-gray-900">
                       <strong className="block truncate font-semibold">{invoice.customerName} <span className="font-normal text-gray-400">—</span> <span className="font-mono">{vehicleSummary.plateNumber}</span></strong>
