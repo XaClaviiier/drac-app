@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, Filter, Printer, RefreshCw, Settings2, List } from 'lucide-react';
+import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, Printer, RefreshCw, Settings2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { GoodsReceipt, GoodsReceiptItem, PurchaseInvoice, PurchaseInvoiceItem } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { addLocalDays, localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 type ReceiptColumn = 'number' | 'date' | 'notes' | 'receivedBy' | 'itemCount' | 'warehouse' | 'status';
 const defaultReceiptColumns: ReceiptColumn[] = ['number','date','notes','receivedBy','itemCount','warehouse','status'];
@@ -25,6 +26,12 @@ export default function GoodsReceiptPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterInvoice, setFilterInvoice] = useState('');
   const [filterFromDate, setFilterFromDate] = useState('');
+  const receiptFiltersActive = Boolean(filterStatus || filterInvoice || filterFromDate);
+  const resetReceiptFilters = () => {
+    setFilterFromDate('');
+    setFilterStatus('');
+    setFilterInvoice('');
+  };
   const [receiptColumns, setReceiptColumns] = useState<ReceiptColumn[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(receiptColumnStorageKey) || '[]') as ReceiptColumn[];
@@ -341,7 +348,7 @@ export default function GoodsReceiptPage() {
           <div className="flex flex-wrap items-center gap-3">
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="h-9 rounded border border-slate-300 bg-white px-3 text-sm"><option value="">Status: Semua</option><option value="Draft">Draft</option><option value="Diterima">Diterima</option><option value="Batal">Batal</option></select>
             <div className="w-40 flex-shrink-0"><IndonesianDateInput value={filterFromDate} onChange={setFilterFromDate} title="Tampilkan mulai tanggal" className="h-9 w-full text-sm"/></div>
-            <button onClick={()=>{setFilterFromDate('');setFilterStatus('');setFilterInvoice('')}} className="flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50" title="Bersihkan filter"><Filter className="h-4 w-4"/></button>
+            <ActiveFilterResetButton active={receiptFiltersActive} onReset={resetReceiptFilters} className="w-11" />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={openNewReceipt} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>

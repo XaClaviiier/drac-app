@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  BarChart3, CheckCircle2, Download, FileText, FilterX,
+  BarChart3, CheckCircle2, Download, FileText,
   Printer, Search, Wallet, Wrench, XCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -8,6 +8,7 @@ import type { SalesInvoice, WOStatus, WorkOrder } from '../types';
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 const statuses: Array<WOStatus | ''> = ['', 'Register', 'Proses', 'Selesai', 'Closed'];
 const rupiah = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
@@ -92,9 +93,10 @@ export default function WorkOrderReport() {
   };
 
   const resetFilters = () => {
-    setSearch(''); setDateFrom(''); setDateTo(''); setStatus(''); setCreator('');
+    setDateFrom(''); setDateTo(''); setStatus(''); setCreator('');
     setBranchId(currentBranchId === 'ALL' ? '' : currentBranchId);
   };
+  const filtersActive = Boolean(dateFrom || dateTo || status || creator || (currentBranchId === 'ALL' && branchId));
 
   const exportCsv = () => {
     const header = ['No. WO', 'Tanggal', 'Cabang', 'Pelanggan', 'Telepon', 'Plat', 'Kendaraan', 'Keluhan', 'Layanan/Barang', 'Status', 'Estimasi WO', 'No. Invoice', 'Nilai Invoice', 'Pembayaran', 'Pembuat'];
@@ -151,7 +153,7 @@ export default function WorkOrderReport() {
           <select value={creator} onChange={event => setCreator(event.target.value)} className="h-9 rounded-lg border border-gray-300 px-2 text-sm outline-none focus:border-blue-500"><option value="">Semua Pembuat</option>{creators.map(name => <option key={name} value={name}>{name}</option>)}</select>
           <IndonesianDateInput ariaLabel="Dari tanggal" title="Dari tanggal" value={dateFrom} onChange={setDateFrom} className="h-9 w-36 text-sm" />
           <IndonesianDateInput ariaLabel="Sampai tanggal" title="Sampai tanggal" value={dateTo} onChange={setDateTo} className="h-9 w-36 text-sm" />
-          <button type="button" onClick={resetFilters} title="Reset filter" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"><FilterX className="h-4 w-4" /> Reset</button>
+          <ActiveFilterResetButton active={filtersActive} onReset={resetFilters} />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs"><span className="text-gray-500">Periode cepat:</span><button onClick={() => setPeriod('today')} className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50">Hari Ini</button><button onClick={() => setPeriod('week')} className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50">7 Hari</button><button onClick={() => setPeriod('month')} className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50">Bulan Ini</button></div>
       </div>

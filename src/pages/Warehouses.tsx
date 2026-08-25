@@ -3,6 +3,7 @@ import { Building2, Edit3, List, Plus, RotateCw, Save, Search, Warehouse as Ware
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import type { Warehouse } from '../types';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 type Tab = 'list' | 'form';
 const emptyForm = { code: '', name: '', address: '', branchId: '', isSellable: true, isActive: true };
@@ -60,7 +61,7 @@ export default function Warehouses() {
     {tab === 'list' ? <>
       <div className="space-y-3 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <select value={status} onChange={event => setStatus(event.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="all">Non Aktif: Semua</option><option value="active">Hanya Aktif</option><option value="inactive">Hanya Nonaktif</option></select>
+          <div className="flex items-center gap-2"><select value={status} onChange={event => setStatus(event.target.value)} className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"><option value="all">Non Aktif: Semua</option><option value="active">Hanya Aktif</option><option value="inactive">Hanya Nonaktif</option></select><ActiveFilterResetButton active={status !== 'all'} onReset={() => setStatus('all')} /></div>
           <div className="relative w-full sm:w-80"><Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-500"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Ketik dan [Enter]" className="w-full rounded border border-slate-300 px-3 py-2 pr-10 text-sm"/></div>
         </div>
         <div className="flex gap-2">{canCreate && <button onClick={openNew} title="Tambah Gudang" className="rounded bg-blue-700 px-5 py-2 text-white"><Plus className="h-5 w-5"/></button>}<button onClick={() => void load()} title="Refresh" className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700"><RotateCw className="h-4 w-4"/></button></div>

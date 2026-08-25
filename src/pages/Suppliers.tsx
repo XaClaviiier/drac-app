@@ -3,6 +3,7 @@ import { Building, Download, Edit, List, Mail, MapPin, Phone, Plus, Printer, Rot
 import { useApp } from '../context/AppContext';
 import type { Supplier } from '../types';
 import { localDateKey } from '../lib/date';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 type SupplierColumn = 'name' | 'contact' | 'phone' | 'email' | 'address' | 'status' | 'receipts' | 'invoices' | 'actions';
 const columns: Array<{ id: SupplierColumn; label: string; locked?: boolean }> = [
@@ -93,6 +94,7 @@ export default function Suppliers() {
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari kode, nama, kontak, telepon, email..." className="h-9 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500" /></div>
         <select value={filterActive} onChange={event => setFilterActive(event.target.value)} className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none"><option value="active">Aktif</option><option value="inactive">Nonaktif</option><option value="all">Semua</option></select>
+        <ActiveFilterResetButton active={filterActive !== 'active'} onReset={() => setFilterActive('active')} />
         <button onClick={printList} disabled={!filtered.length} className="hidden h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 sm:inline-flex"><Printer className="h-4 w-4" /><span className="hidden xl:inline">Print</span></button>
         <button onClick={exportCsv} disabled={!filtered.length} className="hidden h-9 items-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-40 sm:inline-flex"><Download className="h-4 w-4" /><span className="hidden xl:inline">Export</span></button>
         {hasPermission('supplier:create') && <button onClick={() => open()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"><Plus className="h-5 w-5" /><span className="hidden sm:inline">Tambah</span></button>}

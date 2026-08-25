@@ -15,6 +15,7 @@ import ComplaintMultiSelect from '../components/ComplaintMultiSelect';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
@@ -2214,12 +2215,12 @@ export default function WorkOrders() {
           </div>
           <div className="order-3 flex min-w-0 items-center gap-1 lg:order-1 lg:flex-shrink-0">
             <IndonesianDateInput value={selectedWorkOrderDate} onChange={setSelectedWorkOrderDate} ariaLabel="Filter satu tanggal WO" title="Pilih satu tanggal WO" className="h-9 min-w-0 w-full text-xs sm:text-sm lg:w-40" />
-            {selectedWorkOrderDate && <button type="button" onClick={() => setSelectedWorkOrderDate('')} className="hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 hover:border-blue-500 hover:text-blue-700 lg:inline-flex" title="Bersihkan tanggal — tampilkan semua tanggal" aria-label="Bersihkan tanggal"><X className="h-4 w-4" /></button>}
           </div>
           {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="order-1 inline-flex h-9 w-11 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700 lg:order-3 lg:w-14"><Plus className="h-5 w-5" /></button>}
           <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="order-2 inline-flex h-9 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50 lg:order-4" title="Refresh data">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
+          <ActiveFilterResetButton active={activeFilterCount > 0} onReset={resetWorkOrderFilters} className="order-4 lg:order-1" />
           <div className="order-4 relative flex-shrink-0 lg:order-1" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
             <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-1 rounded border px-2 text-xs font-semibold sm:gap-2 sm:px-3 sm:text-sm ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
             {showFilterPanel && <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-16px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl lg:left-0 lg:right-auto lg:w-[min(360px,calc(100vw-24px))]">

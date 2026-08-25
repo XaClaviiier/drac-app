@@ -399,7 +399,7 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   assert.match(list, /const totalQuantity=/);
   assert.match(list, /\{r\.receivedBy\|\|'-'\}/);
   assert.match(list, /\{r\.items\.length\} item \(\{totalQuantity\} pcs\)/);
-  assert.match(list, /Status: Semua[\s\S]*className="w-40 flex-shrink-0"[\s\S]*title="Tampilkan mulai tanggal"[\s\S]*title="Bersihkan filter"/);
+  assert.match(list, /Status: Semua[\s\S]*className="w-40 flex-shrink-0"[\s\S]*title="Tampilkan mulai tanggal"[\s\S]*ActiveFilterResetButton active=\{receiptFiltersActive\}/);
 });
 
 test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak thermal', () => {
@@ -457,12 +457,12 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.doesNotMatch(styles, /\.app-brand-header\s*\{[^}]*position:\s*relative/);
 });
 
-test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua tanggal', () => {
+test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua filter', () => {
   const page = source('src/pages/WorkOrders.tsx');
   assert.match(page, /selectedWorkOrderDate/);
   assert.match(page, /Filter satu tanggal WO/);
   assert.match(page, /absolute right-0 top-\[calc\(100%\+6px\)\] z-40 w-\[min\(360px,calc\(100vw-16px\)\)\]/);
-  assert.match(page, /Bersihkan tanggal — tampilkan semua tanggal/);
+  assert.match(page, /ActiveFilterResetButton active=\{activeFilterCount > 0\} onReset=\{resetWorkOrderFilters\}/);
   assert.match(page, /Kosongkan tanggal untuk menampilkan semua tanggal/);
   const toolbar = page.slice(page.indexOf('{\/\* Filters \*\/}'), page.indexOf('<div className="hidden px-3 py-0.5">'));
   assert.doesNotMatch(toolbar, /Status: Semua/);
@@ -471,6 +471,29 @@ test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua tangga
   assert.match(toolbar, /order-5 col-span-4 relative min-w-0 w-full/);
   assert.match(toolbar, /order-6 hidden flex-wrap items-center gap-2 lg:flex/);
   assert.match(toolbar, /order-6 hidden h-9 min-w-14/);
+});
+
+test('semua daftar utama memakai tombol X Clear Filter hanya saat filter aktif', () => {
+  const resetButton = source('src/components/ActiveFilterResetButton.tsx');
+  assert.match(resetButton, /if \(!active\) return null/);
+  assert.match(resetButton, /title="Clear Filter"/);
+  assert.match(resetButton, /aria-label="Clear Filter"/);
+  [
+    'src/pages/WorkOrders.tsx',
+    'src/pages/SalesInvoice.tsx',
+    'src/pages/CustomerPayments.tsx',
+    'src/pages/ItemsAndServices.tsx',
+    'src/pages/GoodsReceipt.tsx',
+    'src/pages/PurchaseInvoices.tsx',
+    'src/pages/WorkOrderTimeline.tsx',
+    'src/pages/Categories.tsx',
+    'src/pages/Suppliers.tsx',
+    'src/pages/VehicleRegister.tsx',
+    'src/pages/Warehouses.tsx',
+    'src/pages/WorkOrderReport.tsx',
+    'src/pages/SalesReport.tsx',
+    'src/pages/PurchaseReport.tsx',
+  ].forEach(file => assert.match(source(file), /ActiveFilterResetButton/, file));
 });
 
 test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { FolderTree, Plus, Edit, Trash2, X, Save, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { ItemCategory } from '../types';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 const emptyForm = { code: '', name: '', type: 'Semua' as ItemCategory['type'], description: '', isActive: true };
 
@@ -111,6 +112,7 @@ export default function Categories() {
           <option value="active">Aktif</option>
           <option value="inactive">Nonaktif</option>
         </select>
+        <ActiveFilterResetButton active={filterActive !== 'all'} onReset={() => setFilterActive('all')} className="h-10 w-10" />
       </div>
 
       {/* Table */}

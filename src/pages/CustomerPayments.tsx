@@ -17,6 +17,7 @@ import { api } from "../lib/apiClient";
 import { useApp } from "../context/AppContext";
 import IndonesianDateInput from "../components/IndonesianDateInput";
 import { ui } from "../components/ui/interfaceStandards";
+import ActiveFilterResetButton from "../components/ActiveFilterResetButton";
 
 type PaymentRow = {
   id: string;
@@ -407,6 +408,7 @@ export default function CustomerPayments() {
             <option key={name}>{name}</option>
           ))}
         </select>
+        <ActiveFilterResetButton active={activeFilterCount > 0} onReset={resetPaymentFilters} />
         <div className="relative" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
           <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? "border-blue-600 bg-blue-50 text-blue-700" : "border-blue-600 bg-white text-blue-700 hover:bg-blue-50"}`} title="Filter daftar pembayaran">
             <Filter className="h-4 w-4" /> Filter

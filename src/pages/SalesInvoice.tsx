@@ -11,6 +11,7 @@ import ItemSearchOption from '../components/ItemSearchOption';
 import { ui } from '../components/ui/interfaceStandards';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -825,8 +826,8 @@ export default function SalesInvoice() {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <div className="order-1 flex flex-shrink-0 items-center gap-1">
               <IndonesianDateInput value={filterDate} onChange={setFilterDate} ariaLabel="Filter satu tanggal faktur" title="Pilih satu tanggal faktur" className="h-9 w-40 text-sm" />
-              {filterDate && <button type="button" onClick={() => setFilterDate('')} className="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 hover:border-blue-500 hover:text-blue-700" title="Bersihkan tanggal — tampilkan semua tanggal" aria-label="Bersihkan tanggal faktur"><X className="h-4 w-4" /></button>}
             </div>
+            <ActiveFilterResetButton active={activeFilterCount > 0} onReset={resetInvoiceFilters} className="order-1" />
             <div className="order-1 relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
               <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar faktur"><Filter className="h-4 w-4"/> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
               {showFilterPanel && <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">

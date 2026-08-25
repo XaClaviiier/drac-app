@@ -10,6 +10,7 @@ import type { LegacyWOStatus, SalesInvoice, WorkOrder, WOStatus } from '../types
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 type StageKey = 'register' | 'diagnosis' | 'approval' | 'parts' | 'working' | 'done' | 'lost';
 type Segment = { key: StageKey; label: string; start: Date; end: Date; duration: number };
@@ -211,6 +212,7 @@ export default function WorkOrderTimeline() {
               ))}
             </select>
           </label>
+          <ActiveFilterResetButton active={Boolean(stageFilter)} onReset={() => { setStageFilter(null); setSelectedId(''); }} className="h-10 w-10" />
           {hasPermission('wo:create') && <button type="button" onClick={() => navigate('/workorders?new=1')} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4"/>New WO</button>}
           <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-semibold text-emerald-700"><FileText className="h-4 w-4"/>Faktur {invoicedCount}/{rowsWithSegments.length}</span>
           <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700"><Banknote className="h-4 w-4"/>Lunas {paidCount}/{invoicedCount}</span>

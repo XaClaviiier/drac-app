@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Download, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 const money = (value: number) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const localDate = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -15,6 +16,15 @@ export default function SalesReport() {
   const [status, setStatus] = useState('ALL');
   const [branchId, setBranchId] = useState(currentBranchId === 'ALL' ? '' : currentBranchId);
   const [search, setSearch] = useState('');
+  const defaultFrom = localDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  const defaultTo = localDate(now);
+  const filtersActive = Boolean(from !== defaultFrom || to !== defaultTo || status !== 'ALL' || (currentBranchId === 'ALL' && branchId));
+  const resetFilters = () => {
+    setFrom(defaultFrom);
+    setTo(defaultTo);
+    setStatus('ALL');
+    setBranchId(currentBranchId === 'ALL' ? '' : currentBranchId);
+  };
 
   const rows = useMemo(() => data.invoices.filter(invoice => {
     const effectiveBranch = currentBranchId === 'ALL' ? branchId : currentBranchId;
@@ -56,7 +66,7 @@ export default function SalesReport() {
       {currentBranchId === 'ALL' && <select value={branchId} onChange={e => setBranchId(e.target.value)} className="h-9 rounded-lg border px-3 text-sm"><option value="">Semua Cabang</option>{data.branches.filter(b => b.isActive).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>}
       <select value={status} onChange={e => setStatus(e.target.value)} className="h-9 rounded-lg border px-3 text-sm"><option value="ALL">Semua Status</option><option>Lunas</option><option>Belum Lunas</option></select>
       <IndonesianDateInput value={from} onChange={setFrom} className="h-9 w-36 text-sm"/><IndonesianDateInput value={to} onChange={setTo} className="h-9 w-36 text-sm"/>
-      <button onClick={() => setPeriod('today')} className="h-9 rounded-lg border px-3 text-xs">Hari Ini</button><button onClick={() => setPeriod('month')} className="h-9 rounded-lg border px-3 text-xs">Bulan Ini</button><button onClick={() => setPeriod('last')} className="h-9 rounded-lg border px-3 text-xs">Bulan Lalu</button>
+      <button onClick={() => setPeriod('today')} className="h-9 rounded-lg border px-3 text-xs">Hari Ini</button><button onClick={() => setPeriod('month')} className="h-9 rounded-lg border px-3 text-xs">Bulan Ini</button><button onClick={() => setPeriod('last')} className="h-9 rounded-lg border px-3 text-xs">Bulan Lalu</button><ActiveFilterResetButton active={filtersActive} onReset={resetFilters} />
     </div>
     <div className="overflow-hidden rounded-xl border bg-white"><div className="max-h-[calc(100vh-330px)] overflow-auto"><table className="w-full min-w-[1180px] text-sm"><thead className="sticky top-0 bg-blue-900 text-left text-xs uppercase text-white"><tr>{['Tanggal / Invoice','Cabang','Pelanggan','Kendaraan','WO','Nilai','Dibayar','Piutang','Status'].map(label => <th key={label} className="px-3 py-2.5">{label}</th>)}</tr></thead><tbody className="divide-y">{rows.map(row => { const due = Math.max(0, row.total - row.payment); return <tr key={row.id} className="hover:bg-blue-50/40"><td className="px-3 py-2"><b className="text-blue-700">{row.invoiceNumber}</b><small className="block text-gray-500">{row.date}</small></td><td className="px-3">{data.branches.find(b => b.id === row.branchId)?.name || '-'}</td><td className="px-3 font-semibold">{row.customerName}</td><td className="px-3">{row.vehicleInfo || '-'}</td><td className="px-3">{row.woNumber || '-'}</td><td className="px-3 font-semibold">{money(row.total)}</td><td className="px-3 font-semibold text-green-700">{money(row.payment)}</td><td className="px-3 font-semibold text-amber-700">{money(due)}</td><td className="px-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.status === 'Lunas' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{row.status}</span></td></tr>})}</tbody></table></div>{!rows.length && <div className="p-12 text-center text-gray-400">Tidak ada penjualan sesuai filter.</div>}</div>
   </div>;

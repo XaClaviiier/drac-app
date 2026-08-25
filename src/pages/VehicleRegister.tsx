@@ -6,6 +6,7 @@ import CustomerPicker from '../components/CustomerPicker';
 import { vehicleBrands, vehicleColors, vehicleModels, vehicleYears } from '../lib/vehicleCatalog';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 type CatalogGeneration = { id: string; modelId: string; name: string; aliases: string; yearFrom?: number | null; yearTo?: number | null; engineCcs: number[]; isActive: boolean };
 type CatalogModel = { id: string; name: string; isActive: boolean; brandId: string; sortOrder: number; usageCount: number; generations?: CatalogGeneration[] };
@@ -386,6 +387,7 @@ export default function VehicleRegister() {
             <option value="">Semua Tipe</option>
             {[...new Set(data.vehicles.filter(v => !filterBrand || v.brand === filterBrand).map(v => v.model))].sort().map(model => <option key={model} value={model}>{model}</option>)}
           </select>
+          <ActiveFilterResetButton active={Boolean(filterBrand || filterModel)} onReset={() => { setFilterBrand(''); setFilterModel(''); }} className="h-11 w-11" />
           <button
             onClick={() => {
               if (!canManageCatalog) {

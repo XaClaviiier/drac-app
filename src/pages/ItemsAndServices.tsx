@@ -11,6 +11,7 @@ import { childTabClass, ui } from '../components/ui/interfaceStandards';
 import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -127,6 +128,14 @@ export default function ItemsAndServices() {
   const [showPrintOptions, setShowPrintOptions] = useState(false);
   const [printGroupByCategory, setPrintGroupByCategory] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const itemFiltersActive = Boolean(filterActive !== 'all' || filterCategory || filterType || filterBrand || filterStock);
+  const resetItemFilters = () => {
+    setFilterActive('all');
+    setFilterType('');
+    setFilterCategory('');
+    setFilterBrand('');
+    setFilterStock('');
+  };
   const [itemListTab, setItemListTab] = useState<'list' | 'verification'>('list');
   const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [verifyingItemId, setVerifyingItemId] = useState('');
@@ -1276,7 +1285,8 @@ export default function ItemsAndServices() {
             <div className="relative min-w-0 flex-1"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari barang, kode, atau stok..." className={`${ui.search} w-full px-3 pr-9`} /><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" /></div>
             {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Barang Baru" aria-label="Barang Baru" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded bg-blue-700 text-white hover:bg-blue-800"><Plus className="h-5 w-5" /></button>}
             <button type="button" onClick={() => refreshData()} title="Refresh" aria-label="Refresh" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5" /></button>
-            <button type="button" onClick={() => setShowMobileFilters(value => !value)} title="Filter" aria-label="Filter" className={`relative flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border ${showMobileFilters || filterActive !== 'all' || filterBrand || filterCategory || filterType || filterStock ? 'border-blue-700 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}><Filter className="h-5 w-5" />{(filterActive !== 'all' || filterBrand || filterCategory || filterType || filterStock) && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600" />}</button>
+            <ActiveFilterResetButton active={itemFiltersActive} onReset={resetItemFilters} className="h-10 w-11" />
+            <button type="button" onClick={() => setShowMobileFilters(value => !value)} title="Filter" aria-label="Filter" className={`relative flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border ${showMobileFilters || itemFiltersActive ? 'border-blue-700 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}><Filter className="h-5 w-5" />{itemFiltersActive && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600" />}</button>
             <span className="flex h-10 min-w-12 flex-shrink-0 items-center justify-center rounded border border-slate-300 bg-white px-2 text-xs font-medium text-slate-600">{filteredItems.length}</span>
           </div>
           {showMobileFilters && <div className="grid grid-cols-2 gap-2 rounded border border-slate-200 bg-slate-50 p-2">
@@ -1286,7 +1296,7 @@ export default function ItemsAndServices() {
             <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua merek</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
             <select value={filterStock} onChange={(e) => setFilterStock(e.target.value)} className="col-span-2 h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua stok</option><option value="stok=0">Stok = 0</option><option value="stok!=0">Stok ≠ 0</option><option value="stok=1">Stok = 1</option><option value="stok>0">Stok &gt; 0</option><option value="stok<0">Stok &lt; 0</option><option value="stok<=1">Stok ≤ 1</option></select>
             {hasPermission('item:create') && <button type="button" onClick={() => openCategoryModal()} className="flex h-9 items-center justify-center gap-1 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700"><FolderTree className="h-4 w-4" /> Kelola Kategori</button>}
-            <button type="button" onClick={() => { setFilterActive('all'); setFilterType(''); setFilterCategory(''); setFilterBrand(''); setFilterStock(''); setSearch(''); }} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
+            <button type="button" onClick={resetItemFilters} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
           </div>}
         </div>
         <div className="hidden flex-wrap items-center gap-2 lg:flex">
@@ -1296,6 +1306,7 @@ export default function ItemsAndServices() {
           <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className={`${ui.field} px-3`}><option value="">Merek Barang: Semua</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
           <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className={`${ui.field} px-3`}><option value="">Kategori Barang: Semua</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={`${ui.field} px-3`}><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+          <ActiveFilterResetButton active={itemFiltersActive} onReset={resetItemFilters} />
           <button type="button" className="inline-flex h-9 items-center gap-2 rounded border border-blue-600 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50" title="Filter lanjutan"><Filter className="h-4 w-4" /> Filter</button>
         </div>
         <div className="mt-2 hidden flex-wrap items-center justify-between gap-2 lg:flex">

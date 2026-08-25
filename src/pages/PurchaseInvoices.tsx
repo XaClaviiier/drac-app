@@ -5,6 +5,7 @@ import type { PurchaseInvoice, PurchaseInvoiceItem, PurchasePayment, GoodsReceip
 import { addLocalDays, localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 
 type CashAccount = {
   id: string;
@@ -27,6 +28,13 @@ export default function PurchaseInvoicesPage() {
   const [periodFilter, setPeriodFilter] = useState<'this_month' | 'last_month' | '7_days' | '30_days' | 'custom' | 'all'>('this_month');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const purchaseFiltersActive = Boolean(periodFilter !== 'this_month' || filterStatus || dateFrom || dateTo);
+  const resetPurchaseFilters = () => {
+    setPeriodFilter('this_month');
+    setFilterStatus('');
+    setDateFrom('');
+    setDateTo('');
+  };
   const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
 
   const [showModal, setShowModal] = useState(false);
@@ -377,6 +385,7 @@ export default function PurchaseInvoicesPage() {
                 <option value="Lunas">Lunas</option>
                 <option value="Batal">Batal</option>
               </select>
+              <ActiveFilterResetButton active={purchaseFiltersActive} onReset={resetPurchaseFilters} className="h-10 w-10" />
             </div>
             {periodFilter === 'custom' && (
               <div className="flex items-center gap-2">
