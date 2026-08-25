@@ -149,6 +149,10 @@ export default function SalesInvoice() {
     return () => { cancelled = true; };
   }, [viewingInvoice?.id, viewingInvoice?.invoiceNumber]);
 
+  useEffect(() => {
+    if (viewingInvoice?.id) setInvoiceDocumentTab('details');
+  }, [viewingInvoice?.id]);
+
   const [formData, setFormData] = useState({
     date: localDateKey(),
     manualReceiptNumber: '',
@@ -1041,7 +1045,7 @@ export default function SalesInvoice() {
         const displayedDiscount = Math.max(0, displayedSubtotal - invoice.total);
         return (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-0 sm:p-3 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
-            <section className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50 shadow-2xl sm:h-[94vh] sm:max-w-6xl sm:rounded-xl sm:border sm:border-gray-300 lg:h-auto lg:max-w-none lg:rounded-md lg:shadow-sm" role="dialog" aria-modal="true" aria-label={`Detail faktur ${invoice.invoiceNumber}`}>
+            <section className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50 shadow-2xl sm:h-[94vh] sm:max-w-6xl sm:rounded-xl sm:border sm:border-gray-300 lg:h-auto lg:max-w-none lg:overflow-visible lg:rounded-md lg:border-gray-200 lg:bg-[var(--app-canvas)] lg:shadow-sm" role="dialog" aria-modal="true" aria-label={`Detail faktur ${invoice.invoiceNumber}`}>
               <header className="flex flex-shrink-0 items-center justify-between border-b border-blue-900 bg-slate-700 px-4 py-3 text-white sm:px-5 lg:hidden">
                 <div>
                   <h3 className="text-lg font-semibold">Faktur Penjualan {invoice.invoiceNumber}</h3>
@@ -1052,7 +1056,7 @@ export default function SalesInvoice() {
                 </button>
               </header>
 
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
                   <div className="order-first mr-auto flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
                     <span>Nomor: <strong className="text-gray-800">{invoice.invoiceNumber}</strong></span>
@@ -1073,26 +1077,28 @@ export default function SalesInvoice() {
                   {hasPermission('invoice:edit') ? <button type="button" onClick={() => { setViewingInvoice(null); handleOpenModal(invoice); }} className="inline-flex h-9 items-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800"><Edit className="h-4 w-4"/>Edit</button> : <button type="button" disabled className="inline-flex h-9 items-center gap-2 rounded bg-gray-300 px-4 text-sm font-semibold text-gray-500"><Save className="h-4 w-4"/>Terkunci</button>}
                 </div>
 
-                <section className="grid gap-3 border border-gray-300 bg-white p-3 lg:grid-cols-[1fr_1fr_190px_190px]">
+                <section className="grid gap-2 bg-[var(--app-canvas)] py-1 lg:grid-cols-[1fr_1fr_190px_190px]">
                   <div>
                     <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><User className="h-4 w-4 text-blue-600"/>Data Pelanggan</label>
-                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm text-gray-700"><span className="truncate font-semibold">{invoice.customerName}</span><span className="ml-2 truncate text-xs text-gray-500">{customer?.phone || invoice.customerId}</span></div>
+                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm text-gray-700"><span className="truncate font-semibold">{invoice.customerName}</span><span className="ml-2 truncate text-xs text-gray-500">{customer?.phone || invoice.customerId}</span></div>
                   </div>
                   <div>
                     <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><Car className="h-4 w-4 text-orange-600"/>Data Kendaraan</label>
-                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm font-semibold text-gray-700"><span className="truncate">{invoice.vehicleInfo || '-'}</span>{invoice.woNumber && <span className="ml-2 shrink-0 text-xs text-orange-700">· {invoice.woNumber}</span>}</div>
+                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm font-semibold text-gray-700"><span className="truncate">{invoice.vehicleInfo || '-'}</span>{invoice.woNumber && <span className="ml-2 shrink-0 text-xs text-orange-700">· {invoice.woNumber}</span>}</div>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal</label>
-                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm text-gray-600">{invoice.date}</div>
+                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm text-gray-700">{invoice.date}</div>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">No. Nota Fisik</label>
-                    <div className="flex h-10 items-center rounded border border-gray-300 bg-gray-100 px-3 text-sm font-semibold text-gray-700">{invoice.manualReceiptNumber || '-'}</div>
+                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm font-semibold text-gray-700">{invoice.manualReceiptNumber || '-'}</div>
                   </div>
                 </section>
 
-                <section className="relative min-h-[320px] space-y-2 border border-gray-300 bg-white p-3">
+                <div data-invoice-view-document-shell className="relative min-h-[430px] bg-white lg:ml-10 lg:border lg:border-gray-400 lg:shadow-[0_2px_7px_rgba(15,23,42,0.18)]">
+                  <AccurateDocumentSideTabs active={invoiceDocumentTab} onChange={setInvoiceDocumentTab} ariaLabel="Bagian detail Faktur Penjualan" />
+                <section className={`${invoiceDocumentTab === 'details' ? 'block' : 'hidden'} relative min-h-[360px] space-y-2 bg-white p-3`}>
                   <div className="flex items-center justify-between gap-4">
                     <div className="relative w-full max-w-xl"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300"/><input disabled placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 bg-gray-100 pl-9 pr-10 text-sm text-gray-400"/><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-300"/></div>
                     <strong className="shrink-0 text-sm text-gray-700">{visibleItems.length} Barang/Jasa</strong>
@@ -1123,7 +1129,7 @@ export default function SalesInvoice() {
                   </div>
                 </section>
 
-                <section className="grid overflow-hidden rounded border border-gray-300 bg-white shadow-sm lg:grid-cols-2">
+                <section className={`${invoiceDocumentTab === 'payment' ? 'grid' : 'hidden'} min-h-[380px] overflow-hidden bg-white p-3 lg:grid-cols-2`}>
                   <div className="border-b border-gray-200 p-3 lg:border-b-0 lg:border-r">
                     <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-blue-700"><FileText className="h-5 w-5" />Informasi Faktur</h3>
                     <dl className="overflow-hidden rounded border border-gray-300 text-sm">
@@ -1160,7 +1166,32 @@ export default function SalesInvoice() {
                   </div>
                 </section>
 
-                <section className="grid items-stretch gap-3 md:grid-cols-[minmax(280px,1fr)_minmax(460px,560px)]">
+                {invoiceDocumentTab === 'info' && <section className="grid min-h-[380px] gap-4 bg-white p-4 text-sm lg:grid-cols-2">
+                  <div>
+                    <h3 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Informasi Faktur</h3>
+                    <dl className="border border-gray-300 bg-white">
+                      <div className="flex justify-between border-b border-gray-300 px-3 py-2"><dt>Nomor Faktur</dt><dd className="font-semibold text-blue-700">{invoice.invoiceNumber}</dd></div>
+                      <div className="flex justify-between border-b border-gray-300 px-3 py-2"><dt>No. Nota Fisik</dt><dd className="font-semibold">{invoice.manualReceiptNumber || '-'}</dd></div>
+                      <div className="flex justify-between border-b border-gray-300 px-3 py-2"><dt>Cabang</dt><dd className="font-semibold">{branchName}</dd></div>
+                      <div className="flex justify-between px-3 py-2"><dt>Referensi WO</dt><dd className="font-semibold text-orange-700">{invoice.woNumber || '-'}</dd></div>
+                    </dl>
+                  </div>
+                  <div>
+                    <h3 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keterangan</h3>
+                    <div className="min-h-32 border border-gray-300 bg-white p-3 uppercase text-gray-700">{invoice.description || linkedWO?.description || 'TIDAK ADA KETERANGAN SERVICE'}</div>
+                  </div>
+                </section>}
+
+                {invoiceDocumentTab === 'estimate' && <section className="min-h-[380px] bg-white p-4">
+                  <h3 className="mb-4 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Biaya / Perhitungan Faktur</h3>
+                  <div className="ml-auto max-w-xl border border-gray-300 text-sm">
+                    <div className="flex justify-between border-b border-gray-300 px-4 py-3"><span>Sub Total</span><strong>Rp {displayedSubtotal.toLocaleString('id-ID')}</strong></div>
+                    <div className="flex justify-between border-b border-gray-300 px-4 py-3"><span>Diskon</span><strong>Rp {displayedDiscount.toLocaleString('id-ID')}</strong></div>
+                    <div className="flex justify-between px-4 py-3 text-base"><span>Total Faktur</span><strong className="text-blue-700">Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
+                  </div>
+                </section>}
+
+                <section className={`${invoiceDocumentTab === 'details' ? 'grid' : 'hidden'} items-stretch gap-3 border-t border-gray-200 bg-[var(--app-canvas)] p-3 md:grid-cols-[minmax(280px,1fr)_minmax(460px,560px)]`}>
                   <div className="h-[88px] rounded border border-gray-300 bg-white px-3 py-2"><p className="line-clamp-2 text-sm uppercase leading-5 text-gray-700">{invoice.description || linkedWO?.description || 'TIDAK ADA KETERANGAN SERVICE'}</p>{invoice.payment > 0 && <p className="mt-1 text-xs text-emerald-700">Dibayar {invoice.paymentMethod || 'Tunai'}: Rp {invoice.payment.toLocaleString('id-ID')} · Sisa Rp {remaining.toLocaleString('id-ID')}</p>}</div>
                   <div className="grid h-[88px] grid-cols-3 rounded border border-gray-300 bg-white p-2 shadow-sm">
                     <div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Sub Total</span><strong className="text-right text-lg tabular-nums">Rp {displayedSubtotal.toLocaleString('id-ID')}</strong></div>
@@ -1168,6 +1199,7 @@ export default function SalesInvoice() {
                     <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
                   </div>
                 </section>
+                </div>
               </div>
 
               <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 lg:hidden">

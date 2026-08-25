@@ -904,6 +904,18 @@ test('form Faktur Penjualan mengikuti kerangka padat Data Baru Order Kerja', () 
   assert.doesNotMatch(page, /order-first mr-auto flex flex-wrap gap-x-5/);
 });
 
+test('detail Faktur Penjualan mengikuti kanvas dokumen dan tab samping baku WO', () => {
+  const page = source('src/pages/SalesInvoice.tsx');
+
+  assert.match(page, /data-invoice-view-document-shell/);
+  assert.match(page, /ariaLabel="Bagian detail Faktur Penjualan"/);
+  assert.match(page, /lg:ml-10 lg:border lg:border-gray-400/);
+  assert.match(page, /app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white/);
+  assert.match(page, /invoiceDocumentTab === 'details'/);
+  assert.match(page, /invoiceDocumentTab === 'payment'/);
+  assert.match(page, /if \(viewingInvoice\?\.id\) setInvoiceDocumentTab\('details'\)/);
+});
+
 test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang sama', () => {
   const rules = source('src/lib/workOrderAttention.ts');
   const layout = source('src/components/Layout.tsx');
