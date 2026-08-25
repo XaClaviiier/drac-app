@@ -994,6 +994,11 @@ test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger fa
   assert.match(page, /documentTab === 'payment' \|\| documentTab === 'info'/);
   assert.match(page, /work-orders\/\$\{timelineTarget\.id\}\/timeline/);
   assert.match(page, /financialTimeline\.payments\.map/);
+  assert.match(page, />Informasi Faktur</);
+  assert.match(page, />Riwayat Pembayaran</);
+  assert.match(page, /\['Uang Muka', 'Rp 0'/);
+  assert.match(page, /\['Retur', 'Rp 0'/);
+  assert.match(page, /aria-label="Faktur lunas"/);
   assert.match(page, />Timeline WO</);
   assert.match(page, /workOrderAuditTimeline\(editingWO\)\.map/);
   assert.match(page, /Timeline tersedia setelah WO diregister/);
