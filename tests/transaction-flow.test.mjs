@@ -436,9 +436,9 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(styles, /\.app-control,[\s\S]*height: 36px/);
   assert.match(styles, /\.app-table-shell table thead th[\s\S]*height: 32px/);
   assert.match(page, /className=\{`\$\{ui\.search\} w-full pl-9 pr-3`\}/);
-  assert.match(page, /className="h-9 w-40 text-sm"/);
+  assert.match(page, /className="h-9 min-w-0 w-full text-xs sm:text-sm lg:w-40"/);
   assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
-  assert.match(page, /space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
+  assert.match(page, /space-y-2 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
   assert.match(layout, /app-brand-header/);
   assert.doesNotMatch(layout, /app-brand-header absolute left-0 top-0 flex h-12 w-\[320px\]/);
   assert.match(layout, /bg-\[#061a3a\] pt-12/);
@@ -457,19 +457,23 @@ test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua tangga
   const page = source('src/pages/WorkOrders.tsx');
   assert.match(page, /selectedWorkOrderDate/);
   assert.match(page, /Filter satu tanggal WO/);
-  assert.match(page, /absolute left-0 top-\[calc\(100%\+6px\)\] z-40 w-\[min\(360px,calc\(100vw-24px\)\)\]/);
+  assert.match(page, /absolute right-0 top-\[calc\(100%\+6px\)\] z-40 w-\[min\(360px,calc\(100vw-16px\)\)\]/);
   assert.match(page, /Bersihkan tanggal — tampilkan semua tanggal/);
   assert.match(page, /Kosongkan tanggal untuk menampilkan semua tanggal/);
   const toolbar = page.slice(page.indexOf('{\/\* Filters \*\/}'), page.indexOf('<div className="hidden px-3 py-0.5">'));
   assert.doesNotMatch(toolbar, /Status: Semua/);
   assert.doesNotMatch(toolbar, /Tanggal: Semua/);
+  assert.match(toolbar, /grid-cols-\[auto_auto_minmax\(0,1fr\)_auto\]/);
+  assert.match(toolbar, /order-5 col-span-4 relative min-w-0 w-full/);
+  assert.match(toolbar, /order-6 hidden flex-wrap items-center gap-2 lg:flex/);
+  assert.match(toolbar, /order-6 hidden h-9 min-w-14/);
 });
 
 test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
   const items = source('src/pages/ItemsAndServices.tsx');
-  assert.match(workOrders, /className="order-3 inline-flex h-9 w-14/);
-  assert.match(workOrders, /className="order-4 inline-flex h-9 w-11/);
+  assert.match(workOrders, /className="order-1 inline-flex h-9 w-11/);
+  assert.match(workOrders, /className="order-2 inline-flex h-9 w-11/);
   assert.match(items, /title="Data Baru" className="flex h-9 w-14/);
   assert.match(items, /title="Refresh" className="flex h-9 w-11/);
   assert.match(items, /title="Download \/ Export" className="flex h-9 w-9/);

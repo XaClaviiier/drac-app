@@ -2128,7 +2128,7 @@ export default function WorkOrders() {
   };
 
   return (
-    <div className="space-y-6 lg:-mx-6 lg:-mt-6 lg:space-y-0">
+    <div className="space-y-2 lg:-mx-6 lg:-mt-6 lg:space-y-0">
       <div className={`${ui.childBar} ${showModal ? '!hidden lg:!flex' : ''}`}>
         <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
@@ -2189,9 +2189,9 @@ export default function WorkOrders() {
       )}
 
       {/* Filters */}
-      <div className="border-y border-gray-300 bg-[#eeeeee] px-3 py-2 shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <div className="order-5 relative ml-auto min-w-[260px] flex-[0_1_360px] xl:min-w-[300px]">
+      <div className="border-y border-gray-300 bg-[#eeeeee] px-2 py-2 shadow-sm lg:px-3">
+        <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 lg:flex lg:flex-wrap lg:gap-x-2 lg:gap-y-1.5">
+          <div className="order-5 col-span-4 relative min-w-0 w-full lg:ml-auto lg:min-w-[260px] lg:flex-[0_1_360px] xl:min-w-[300px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -2201,17 +2201,17 @@ export default function WorkOrders() {
               className={`${ui.search} w-full pl-9 pr-3`}
             />
           </div>
-          <div className="order-1 flex flex-shrink-0 items-center gap-1">
-            <IndonesianDateInput value={selectedWorkOrderDate} onChange={setSelectedWorkOrderDate} ariaLabel="Filter satu tanggal WO" title="Pilih satu tanggal WO" className="h-9 w-40 text-sm" />
-            {selectedWorkOrderDate && <button type="button" onClick={() => setSelectedWorkOrderDate('')} className="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 hover:border-blue-500 hover:text-blue-700" title="Bersihkan tanggal — tampilkan semua tanggal" aria-label="Bersihkan tanggal"><X className="h-4 w-4" /></button>}
+          <div className="order-3 flex min-w-0 items-center gap-1 lg:order-1 lg:flex-shrink-0">
+            <IndonesianDateInput value={selectedWorkOrderDate} onChange={setSelectedWorkOrderDate} ariaLabel="Filter satu tanggal WO" title="Pilih satu tanggal WO" className="h-9 min-w-0 w-full text-xs sm:text-sm lg:w-40" />
+            {selectedWorkOrderDate && <button type="button" onClick={() => setSelectedWorkOrderDate('')} className="hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 hover:border-blue-500 hover:text-blue-700 lg:inline-flex" title="Bersihkan tanggal — tampilkan semua tanggal" aria-label="Bersihkan tanggal"><X className="h-4 w-4" /></button>}
           </div>
-          {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="order-3 inline-flex h-9 w-14 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700"><Plus className="h-5 w-5" /></button>}
-          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="order-4 inline-flex h-9 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50" title="Refresh data">
+          {hasPermission('wo:create') && <button type="button" onClick={openNewRegistration} className="order-1 inline-flex h-9 w-11 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700 lg:order-3 lg:w-14"><Plus className="h-5 w-5" /></button>}
+          <button type="button" onClick={() => void handleRefresh()} disabled={isLoading} className="order-2 inline-flex h-9 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50 lg:order-4" title="Refresh data">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
-          <div className="order-1 relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
-            <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-2 rounded border px-3 text-sm font-semibold ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
-            {showFilterPanel && <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+          <div className="order-4 relative flex-shrink-0 lg:order-1" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
+            <button type="button" onClick={() => setShowFilterPanel(value => !value)} className={`inline-flex h-9 items-center gap-1 rounded border px-2 text-xs font-semibold sm:gap-2 sm:px-3 sm:text-sm ${showFilterPanel || activeFilterCount > 0 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`} title="Filter daftar WO"><Filter className="h-4 w-4" /> Filter{activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}</button>
+            {showFilterPanel && <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-16px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl lg:left-0 lg:right-auto lg:w-[min(360px,calc(100vw-24px))]">
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Order Kerja</strong><button type="button" onClick={resetWorkOrderFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button></div>
               <label className="block text-xs font-semibold text-gray-600">Tanggal<IndonesianDateInput value={selectedWorkOrderDate} onChange={setSelectedWorkOrderDate} ariaLabel="Filter satu tanggal WO" className="mt-1 h-10 w-full text-sm font-normal" /></label>
               <p className="mt-2 text-xs text-gray-500">Kosongkan tanggal untuk menampilkan semua tanggal.</p>
@@ -2232,8 +2232,8 @@ export default function WorkOrders() {
               <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
             </div>}
           </div>
-          <div className="order-2 h-0 basis-full" />
-          <div className="order-6 flex flex-wrap items-center gap-2 xl:flex-nowrap">
+          <div className="order-2 hidden h-0 basis-full lg:block" />
+          <div className="order-6 hidden flex-wrap items-center gap-2 lg:flex xl:flex-nowrap">
           <button type="button" className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download"><Download className="h-4 w-4" /></button>
           <button type="button" className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Print"><Printer className="h-4 w-4" /></button>
           <div className="relative flex-shrink-0" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnPicker(false); }}>
@@ -2255,7 +2255,7 @@ export default function WorkOrders() {
             )}
           </div>
           </div>
-          <span className="order-6 flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredWOs.length}</span>
+          <span className="order-6 hidden h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 lg:flex">{filteredWOs.length}</span>
         </div>
       </div>
       <div className="hidden px-3 py-0.5">
