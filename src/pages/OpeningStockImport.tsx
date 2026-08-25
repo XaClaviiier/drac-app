@@ -652,12 +652,12 @@ export default function OpeningStockImport() {
                     onClick: () => void submit(false),
                     title: "Simpan Draft",
                   }}
-                  document={{ onClick: downloadTemplate, title: "Dokumen / Unduh Template" }}
+                  print={{ onClick: () => window.print(), title: "Cetak / simpan sebagai PDF" }}
                   attachment={{ onClick: () => inputRef.current?.click(), title: "Lampiran File" }}
                   more={{
                     disabled: !isAdmin || loading || !validRows.length || !!errorRows.length,
                     onClick: () => void submit(true),
-                    title: "Simpan dan Posting",
+                    title: "Lain-lain / simpan dan posting",
                   }}
                   remove={{ disabled: !editingId, title: editingId ? "Hapus penyesuaian" : "Hapus tersedia setelah data disimpan" }}
                 />

@@ -1,4 +1,4 @@
-import { CircleEllipsis, FileText, Paperclip, Save, Trash2 } from 'lucide-react';
+import { CircleEllipsis, Paperclip, Printer, Save, Trash2 } from 'lucide-react';
 import AccurateActionRailButton from './AccurateActionRailButton';
 
 type RailAction = {
@@ -11,7 +11,7 @@ type RailAction = {
 
 type AccurateFormActionRailProps = {
   save: RailAction;
-  document?: RailAction;
+  print?: RailAction;
   attachment?: RailAction;
   more?: RailAction;
   remove?: RailAction;
@@ -21,12 +21,12 @@ type AccurateFormActionRailProps = {
 
 /**
  * Panel aksi baku untuk form transaksi desktop.
- * Urutan dan warna tidak diubah per modul: Simpan, Dokumen, Lampiran,
+ * Urutan dan warna tidak diubah per modul: Simpan, Cetak, Lampiran,
  * Lainnya, lalu Hapus. Aksi yang belum berlaku tetap terlihat nonaktif.
  */
 export default function AccurateFormActionRail({
   save,
-  document,
+  print,
   attachment,
   more,
   remove,
@@ -46,10 +46,10 @@ export default function AccurateFormActionRail({
         icon={<Save className="h-7 w-7" />}
       />
       <AccurateActionRailButton
-        title={document?.title || 'Dokumen'}
-        disabled={!document?.onClick || document.disabled}
-        onClick={action(document)}
-        icon={<FileText className="h-7 w-7" />}
+        title={print?.title || 'Cetak'}
+        disabled={!print?.onClick || print.disabled}
+        onClick={action(print)}
+        icon={<Printer className="h-7 w-7" />}
       />
       <AccurateActionRailButton
         title={attachment?.title || 'Lampiran'}

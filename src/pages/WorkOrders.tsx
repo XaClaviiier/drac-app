@@ -301,6 +301,7 @@ export default function WorkOrders() {
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
   const [documentTab, setDocumentTab] = useState<AccurateDocumentTab>('details');
   const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [openActionRailMenu, setOpenActionRailMenu] = useState<'print' | 'more' | ''>('');
 
   const openDetailTab = (wo: WorkOrder) => {
     setDetailTabIds(previous => previous.includes(wo.id) ? previous : [...previous, wo.id]);
@@ -3230,17 +3231,17 @@ export default function WorkOrders() {
                     : isAutoRegistering,
                   title: editingWO ? 'Simpan Work Order' : 'Register Work Order',
                 }}
-                document={{
-                  onClick: () => setDocumentTab(documentTab === 'info' ? 'details' : 'info'),
-                  title: 'Info lainnya',
+                print={{
+                  onClick: () => setOpenActionRailMenu(openActionRailMenu === 'print' ? '' : 'print'),
+                  title: 'Cetak / simpan sebagai',
                 }}
                 attachment={{
                   disabled: true,
                   title: 'Lampiran belum tersedia untuk Work Order',
                 }}
                 more={{
-                  onClick: () => setDocumentTab(documentTab === 'payment' ? 'details' : 'payment'),
-                  title: 'Pembayaran dan pilihan lainnya',
+                  onClick: () => setOpenActionRailMenu(openActionRailMenu === 'more' ? '' : 'more'),
+                  title: 'Lain-lain',
                 }}
                 remove={{
                   onClick: selectedServiceId ? () => handleRemoveService(selectedServiceId) : undefined,
@@ -3248,6 +3249,20 @@ export default function WorkOrders() {
                   title: selectedServiceId ? 'Hapus barang atau jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu',
                 }}
               />
+              {openActionRailMenu && <button type="button" aria-label="Tutup menu aksi" onClick={() => setOpenActionRailMenu('')} className="fixed inset-0 z-[55] cursor-default" />}
+              {openActionRailMenu === 'print' && (
+                <div className="absolute right-[104px] top-[74px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl">
+                  <button type="button" onClick={() => { setOpenActionRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Cetak Work Order</button>
+                  <button type="button" onClick={() => { setOpenActionRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Simpan sebagai PDF</button>
+                  {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); shareWorkOrderToWhatsApp(editingWO); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Bagikan Work Order</button>}
+                </div>
+              )}
+              {openActionRailMenu === 'more' && (
+                <div className="absolute right-[104px] top-[196px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl">
+                  <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button>
+                  {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); void copyWorkOrder(editingWO); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Salin ringkasan WO</button>}
+                </div>
+              )}
               {/* Blok simpan jika masih Semua Cabang */}
               {currentBranchId === 'ALL' && !editingWO && (
                 <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 flex items-start gap-3">

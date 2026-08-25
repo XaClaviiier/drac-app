@@ -336,7 +336,9 @@ test('rail aksi penerimaan baru mengikuti ukuran dan split button Accurate', () 
   assert.match(railButton, /grid-cols-\[1fr_20px\]/);
   assert.match(railButton, /border-l border-black\/10 bg-black\/5/);
   assert.match(page, /AccurateFormActionRail/);
-  assert.match(rail, /Simpan, Dokumen, Lampiran/);
+  assert.match(rail, /Simpan, Cetak, Lampiran/);
+  assert.match(rail, /Printer/);
+  assert.doesNotMatch(rail, /FileText/);
   assert.match(rail, /tone="danger"/);
   assert.match(page, /disabled:saving,onClick:\(\)=>void submit\('Diterima'\)/);
   assert.doesNotMatch(page, /disabled=\{saving\|\|!form\.items\.length\}/);
@@ -351,6 +353,7 @@ test('rail aksi form baru dipakai bersama oleh penerimaan dan penyesuaian stok',
   assert.match(adjustment, /AccurateFormActionRail/);
   assert.match(rail, /ariaLabel = 'Aksi formulir'/);
   assert.match(rail, /title=\{remove\?\.title \|\| 'Hapus'\}/);
+  assert.match(rail, /title=\{print\?\.title \|\| 'Cetak'\}/);
 });
 
 test('ikon kalender tanggal Indonesia membuka native date picker secara eksplisit', () => {
@@ -602,6 +605,11 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /Pelanggan harus diisi/);
   assert.match(page, /Boolean\(editingWO\.invoiceId\) \|\| \(statusLabel\(editingWO\.status\) === 'Lost Sales' && !customerVehicleCorrectionUnlocked\)/);
   assert.match(page, /AccurateFormActionRail/);
+  assert.match(page, /title: 'Cetak \/ simpan sebagai'/);
+  assert.match(page, /title: 'Lain-lain'/);
+  assert.match(page, /Cetak Work Order/);
+  assert.match(page, /Simpan sebagai PDF/);
+  assert.doesNotMatch(page, /title: 'Pembayaran dan pilihan lainnya'/);
   assert.match(page, /lg:pr-\[104px\]/);
   assert.match(page, /form: 'work-order-entry-form'/);
   assert.match(page, /void handleSubmit\(\)/);
