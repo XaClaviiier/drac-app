@@ -989,8 +989,12 @@ test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger fa
   assert.match(page, />Komentar \/ Diagnosis Keluhan/);
   assert.match(page, />Hasil Kerja/);
   assert.match(page, /documentTab === 'payment'/);
+  assert.match(page, /documentTab === 'payment' \|\| documentTab === 'info'/);
   assert.match(page, /work-orders\/\$\{timelineTarget\.id\}\/timeline/);
   assert.match(page, /financialTimeline\.payments\.map/);
+  assert.match(page, />Timeline WO</);
+  assert.match(page, /workOrderAuditTimeline\(editingWO\)\.map/);
+  assert.match(page, /Timeline tersedia setelah WO diregister/);
   assert.match(page, /customer-payments\?invoiceId=/);
   assert.doesNotMatch(page, /Pembayaran dikelola melalui faktur penjualan terkait/);
   assert.match(endpoint, /work_order_technicians/);

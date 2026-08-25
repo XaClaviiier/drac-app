@@ -411,7 +411,7 @@ export default function WorkOrders() {
 
   useEffect(() => {
     let cancelled = false;
-    const timelineTarget = detailWO || (documentTab === 'payment' ? editingWO : null);
+    const timelineTarget = detailWO || (documentTab === 'payment' || documentTab === 'info' ? editingWO : null);
     if (!timelineTarget) {
       setFinancialTimeline(EMPTY_FINANCIAL_TIMELINE);
       setFinancialTimelineLoading(false);
@@ -3996,6 +3996,32 @@ export default function WorkOrders() {
                       </div>
                     </div>
                     <p className="border-t border-gray-200 pt-2 text-xs text-gray-500">No. WO: <strong>{editingWO?.woNumber || 'Otomatis saat Register'}</strong> · Cabang: <strong>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || '-'}</strong></p>
+                    <div className="border-t border-gray-200 pt-3">
+                      <div className="mb-3 flex items-center gap-2">
+                        <Clock3 className="h-4 w-4 text-blue-600" />
+                        <h5 className="font-semibold text-gray-900">Timeline WO</h5>
+                        {financialTimelineLoading && <span className="ml-auto text-xs text-gray-400">Memuat transaksi…</span>}
+                      </div>
+                      {!editingWO ? (
+                        <div className="border border-dashed border-gray-300 bg-gray-50 px-3 py-8 text-center text-sm text-gray-500">Timeline tersedia setelah WO diregister.</div>
+                      ) : (
+                        <div className="relative ml-2 max-h-64 overflow-y-auto border-l-2 border-gray-200 pl-5 pr-2">
+                          {workOrderAuditTimeline(editingWO).map((event, index) => (
+                            <div key={`${event.at}-${event.title}-${index}`} className="relative pb-4 last:pb-0">
+                              <span className={`absolute -left-[26px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${event.tone}`} />
+                              <div className="flex items-start gap-2">
+                                {event.continuation && <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />}
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-gray-900">{event.title}</p>
+                                  <p className="text-xs leading-5 text-gray-600">{event.description}</p>
+                                  <p className="text-[11px] text-gray-400">{formatAuditTime(event.at)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </section>
                   <section className="space-y-3">
                     <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keluhan dan hasil kerja</h4>
