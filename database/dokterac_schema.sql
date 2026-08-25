@@ -236,6 +236,7 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   `plate_number` VARCHAR(20),
   `vehicle_info` VARCHAR(200),
   `description` TEXT,
+  `complaint_comment` TEXT,
   `findings` TEXT,
   `diagnosis_temperature` DECIMAL(6,2) DEFAULT NULL,
   `diagnosis_lp` DECIMAL(8,2) DEFAULT NULL,
@@ -274,6 +275,17 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   KEY `idx_status` (`status`),
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `work_order_technicians` (
+  `wo_id` VARCHAR(64) NOT NULL,
+  `user_id` VARCHAR(64) NOT NULL,
+  `user_name` VARCHAR(150) NOT NULL,
+  `assignment_role` ENUM('primary', 'assistant') NOT NULL DEFAULT 'assistant',
+  `sort_order` INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (`wo_id`, `user_id`),
+  KEY `idx_work_order_technicians_user` (`user_id`),
+  KEY `idx_work_order_technicians_role` (`wo_id`, `assignment_role`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ==========================================================

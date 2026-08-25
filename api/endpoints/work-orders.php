@@ -38,6 +38,37 @@ $resolveWorkOrderContacts = static function(PDO $pdo,string $customerId,array $d
         'billingContactId'=>$billing['id']??null,'billingContactName'=>$billing['name']??trim((string)($data['billingContactName']??'')),'billingContactPhone'=>$billing['phone']??trim((string)($data['billingContactPhone']??'')),
     ];
 };
+$syncWorkOrderTechnicians = static function(PDO $pdo, string $woId, string $branchId, ?string $primaryId, array $assistantIds): array {
+    $primaryId = trim((string)$primaryId);
+    $orderedIds = [];
+    if ($primaryId !== '') $orderedIds[] = $primaryId;
+    foreach ($assistantIds as $assistantId) {
+        $assistantId = trim((string)$assistantId);
+        if ($assistantId !== '' && $assistantId !== $primaryId && !in_array($assistantId, $orderedIds, true)) $orderedIds[] = $assistantId;
+    }
+
+    $pdo->prepare("DELETE FROM work_order_technicians WHERE wo_id=?")->execute([$woId]);
+    if (!$orderedIds) return ['primaryName' => '', 'assistantIds' => [], 'assistantNames' => []];
+
+    $loadUser = $pdo->prepare("SELECT u.id,u.name FROM users u WHERE u.id=? AND u.is_active=1 AND (u.branch_id=? OR EXISTS (SELECT 1 FROM user_branch_access uba WHERE uba.user_id=u.id AND uba.branch_id=?)) LIMIT 1");
+    $insert = $pdo->prepare("INSERT INTO work_order_technicians(wo_id,user_id,user_name,assignment_role,sort_order) VALUES(?,?,?,?,?)");
+    $primaryName = '';
+    $assistantNames = [];
+    foreach ($orderedIds as $index => $userId) {
+        $loadUser->execute([$userId, $branchId, $branchId]);
+        $user = $loadUser->fetch();
+        if (!$user) throw new InvalidArgumentException('Teknisi yang dipilih tidak ditemukan atau sudah nonaktif.');
+        $role = $userId === $primaryId ? 'primary' : 'assistant';
+        $insert->execute([$woId, $userId, (string)$user['name'], $role, $index]);
+        if ($role === 'primary') $primaryName = (string)$user['name'];
+        else $assistantNames[] = (string)$user['name'];
+    }
+    return [
+        'primaryName' => $primaryName,
+        'assistantIds' => array_values(array_filter($orderedIds, fn($userId) => $userId !== $primaryId)),
+        'assistantNames' => $assistantNames,
+    ];
+};
 
 switch ($method) {
     case 'GET':
@@ -137,6 +168,7 @@ switch ($method) {
             $r['createdByName']           = $r['created_by_name'] ?? null;
             $r['technicianId']            = $r['technician_id'] ?? null;
             $r['technicianName']          = $r['technician_name'] ?? null;
+            $r['complaintComment']        = $r['complaint_comment'] ?? null;
             $r['backdateReason']          = $r['backdate_reason'] ?? null;
             $r['invoiceId']               = $r['invoice_id'];
             $r['invoiceNumber']           = $r['invoice_number'];
@@ -182,6 +214,11 @@ switch ($method) {
                     'qty'         => (int)$s['qty'],
                 ];
             }, $stmt->fetchAll());
+            $technicianStmt = $pdo->prepare("SELECT user_id,user_name,assignment_role FROM work_order_technicians WHERE wo_id=? ORDER BY sort_order,user_name");
+            $technicianStmt->execute([$r['id']]);
+            $assignments = $technicianStmt->fetchAll();
+            $r['assistantTechnicianIds'] = array_values(array_map(static fn($row) => (string)$row['user_id'], array_filter($assignments, static fn($row) => $row['assignment_role'] === 'assistant')));
+            $r['assistantTechnicianNames'] = array_values(array_map(static fn($row) => (string)$row['user_name'], array_filter($assignments, static fn($row) => $row['assignment_role'] === 'assistant')));
         }
         respondSuccess($rows);
         break;
@@ -269,6 +306,11 @@ switch ($method) {
                 $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
                 $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
             ]);
+            $pdo->prepare("UPDATE work_orders SET complaint_comment=? WHERE id=?")->execute([($d['complaintComment'] ?? '') ?: null, $woId]);
+            $technicianAssignment = $syncWorkOrderTechnicians($pdo, $woId, $branchId, ($d['technicianId'] ?? '') ?: null, is_array($d['assistantTechnicianIds'] ?? null) ? $d['assistantTechnicianIds'] : []);
+            if ($technicianAssignment['primaryName'] !== '') {
+                $pdo->prepare("UPDATE work_orders SET technician_name=? WHERE id=?")->execute([$technicianAssignment['primaryName'], $woId]);
+            }
 
             if (!empty($normalizedServices['services'])) {
                 $sStmt = $pdo->prepare("INSERT INTO work_order_services (wo_id, item_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
@@ -344,6 +386,9 @@ switch ($method) {
                         : 'WO tidak dapat diselesaikan. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0.'
                 );
             }
+            if (in_array($nextStatus, ['Proses', 'Selesai'], true) && trim((string)($d['technicianId'] ?? '')) === '') {
+                throw new InvalidArgumentException('Teknisi utama wajib dipilih sebelum WO dikerjakan atau diselesaikan.');
+            }
             if ($nextStatus === 'Selesai') {
                 $hasMeasurementSet = static function (array $keys) use ($d): bool {
                     foreach ($keys as $key) {
@@ -355,7 +400,7 @@ switch ($method) {
                 };
                 $hasDiagnosisMeasurements = $hasMeasurementSet(['diagnosisTemperature', 'diagnosisLp', 'diagnosisHp']);
                 $hasFinalMeasurements = $hasMeasurementSet(['finalTemperature', 'finalLp', 'finalHp']);
-                $hasCompletionNote = trim((string)($d['findings'] ?? '')) !== '' || trim((string)($d['notes'] ?? '')) !== '';
+                $hasCompletionNote = trim((string)($d['findings'] ?? '')) !== '';
                 if (!$hasDiagnosisMeasurements && !$hasFinalMeasurements && !$hasCompletionNote) {
                     throw new InvalidArgumentException('WO belum dapat diselesaikan. Isi Suhu, LP, dan HP secara lengkap atau tuliskan catatan hasil pekerjaan.');
                 }
@@ -494,6 +539,9 @@ switch ($method) {
                 $continuedAt, $continuedBy, $continuedByName, $continuedBranchId,
                 $id
             ]);
+            $pdo->prepare("UPDATE work_orders SET complaint_comment=? WHERE id=?")->execute([($d['complaintComment'] ?? '') ?: null, $id]);
+            $technicianAssignment = $syncWorkOrderTechnicians($pdo, $id, (string)$currentWorkOrder['branch_id'], ($d['technicianId'] ?? '') ?: null, is_array($d['assistantTechnicianIds'] ?? null) ? $d['assistantTechnicianIds'] : []);
+            $pdo->prepare("UPDATE work_orders SET technician_name=? WHERE id=?")->execute([$technicianAssignment['primaryName'] ?: null, $id]);
 
             $pdo->prepare("DELETE FROM work_order_services WHERE wo_id = ?")->execute([$id]);
             if (!empty($normalizedServices['services'])) {

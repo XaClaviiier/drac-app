@@ -137,6 +137,7 @@ export interface WorkOrder {
   billingContactPhone?: string;
   correctionReason?: string;
   description?: string;       // keluhan pelanggan
+  complaintComment?: string;  // komentar/diagnosis atas keluhan pelanggan
   findings?: string;          // hasil pemeriksaan teknisi
   diagnosisTemperature?: number;
   diagnosisLp?: number;
@@ -163,6 +164,8 @@ export interface WorkOrder {
   createdByName?: string;
   technicianId?: string;
   technicianName?: string;
+  assistantTechnicianIds?: string[];
+  assistantTechnicianNames?: string[];
   // Lintas cabang: WO ini lanjutan dari WO lain
   continuedFromWoId?: string;
   continuedFromWoNumber?: string;

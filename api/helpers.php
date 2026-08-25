@@ -166,6 +166,17 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('created_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD created_by_name VARCHAR(150) NULL AFTER created_by");
     if (!in_array('technician_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_id VARCHAR(64) NULL AFTER created_by_name");
     if (!in_array('technician_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_name VARCHAR(150) NULL AFTER technician_id");
+    if (!in_array('complaint_comment', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD complaint_comment TEXT NULL AFTER description");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS work_order_technicians (
+        wo_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        user_name VARCHAR(150) NOT NULL,
+        assignment_role ENUM('primary','assistant') NOT NULL DEFAULT 'assistant',
+        sort_order INT NOT NULL DEFAULT 0,
+        PRIMARY KEY (wo_id,user_id),
+        KEY idx_work_order_technicians_user (user_id),
+        KEY idx_work_order_technicians_role (wo_id,assignment_role,sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     if (!in_array('continued_at', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_at DATETIME NULL AFTER continued_to_branch_name");
     if (!in_array('continued_by', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_by VARCHAR(64) NULL AFTER continued_at");
     if (!in_array('continued_by_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD continued_by_name VARCHAR(150) NULL AFTER continued_by");

@@ -406,20 +406,21 @@ export default function WorkOrders() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!detailWO) {
+    const timelineTarget = detailWO || (documentTab === 'payment' ? editingWO : null);
+    if (!timelineTarget) {
       setFinancialTimeline(EMPTY_FINANCIAL_TIMELINE);
       setFinancialTimelineLoading(false);
       return () => { cancelled = true; };
     }
     setFinancialTimeline(EMPTY_FINANCIAL_TIMELINE);
     setFinancialTimelineLoading(true);
-    void api.get<WorkOrderFinancialTimeline>(`work-orders/${detailWO.id}/timeline`).then(result => {
+    void api.get<WorkOrderFinancialTimeline>(`work-orders/${timelineTarget.id}/timeline`).then(result => {
       if (cancelled) return;
       if (result.success && result.data) setFinancialTimeline(result.data);
       setFinancialTimelineLoading(false);
     });
     return () => { cancelled = true; };
-  }, [detailWO?.id]);
+  }, [detailWO?.id, documentTab, editingWO?.id]);
 
   const workOrderColumnStorageKey = `dokterac_wo_columns_${currentUser?.id || currentUser?.username || 'default'}`;
   useEffect(() => {
@@ -466,6 +467,7 @@ export default function WorkOrders() {
     approvalContactId: '',
     billingContactId: '',
     description: '',
+    complaintComment: '',
     diagnosisTemperature: undefined as number | undefined,
     diagnosisLp: undefined as number | undefined,
     diagnosisHp: undefined as number | undefined,
@@ -477,6 +479,8 @@ export default function WorkOrders() {
     notes: '',
     technicianId: '',
     technicianName: '',
+    assistantTechnicianIds: [] as string[],
+    assistantTechnicianNames: [] as string[],
     status: 'Register' as WorkOrder['status'],
   });
 
@@ -1009,6 +1013,7 @@ export default function WorkOrders() {
       vehicleInfo: '',
       driverContactId: '', driverName: '', driverPhone: '', approvalContactId: '', billingContactId: '',
       description: '',
+      complaintComment: '',
       diagnosisTemperature: undefined,
       diagnosisLp: undefined,
       diagnosisHp: undefined,
@@ -1020,6 +1025,8 @@ export default function WorkOrders() {
       notes: '',
       technicianId: '',
       technicianName: '',
+      assistantTechnicianIds: [],
+      assistantTechnicianNames: [],
       status: 'Register',
     });
     setShowServiceForm(true);
@@ -1060,6 +1067,7 @@ export default function WorkOrders() {
         approvalContactId: wo.approvalContactId || '',
         billingContactId: wo.billingContactId || '',
         description: wo.description || '',
+        complaintComment: wo.complaintComment || '',
         diagnosisTemperature: wo.diagnosisTemperature,
         diagnosisLp: wo.diagnosisLp,
         diagnosisHp: wo.diagnosisHp,
@@ -1071,6 +1079,8 @@ export default function WorkOrders() {
         notes: wo.notes || '',
         technicianId: wo.technicianId || '',
         technicianName: wo.technicianName || '',
+        assistantTechnicianIds: wo.assistantTechnicianIds || [],
+        assistantTechnicianNames: wo.assistantTechnicianNames || [],
         status: wo.status,
       });
       setWoDateUnlocked(wo.date !== localDateKey());
@@ -1320,6 +1330,7 @@ export default function WorkOrders() {
     if (!formData.description.trim()) issues.push('Keluhan pelanggan harus diisi');
     if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length === 0) issues.push('Rincian Barang / Jasa harus diisi');
     if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length > 0 && totalServices <= 0) issues.push('Total estimasi harus lebih dari Rp0');
+    if ((shouldProcessNew || shouldProcessEditing || shouldCreateInvoice) && !formData.technicianId) issues.push('Teknisi utama harus dipilih pada tab Info lainnya');
     const diagnosisMeasurements = [formData.diagnosisTemperature, formData.diagnosisLp, formData.diagnosisHp];
     const hasAnyMeasurement = diagnosisMeasurements.some(value => value !== undefined && value !== null);
     const hasCompleteMeasurements = diagnosisMeasurements
@@ -1327,7 +1338,7 @@ export default function WorkOrders() {
     if (diagnosisMode && hasAnyMeasurement && !hasCompleteMeasurements) issues.push('Suhu, LP, dan HP harus diisi lengkap');
     if (shouldCreateInvoice) {
       const hasCompletionNote = Boolean(formData.findings.trim());
-      if (!hasCompleteMeasurements && !hasCompletionNote) issues.push('Hasil pengukuran atau catatan hasil pekerjaan harus diisi');
+      if (!hasCompleteMeasurements && !hasCompletionNote) issues.push('Hasil pengukuran atau Hasil Kerja pada tab Info lainnya harus diisi');
     }
     if (issues.length > 0) {
       setSuccessMsg('');
@@ -3829,27 +3840,8 @@ export default function WorkOrders() {
                 )}
               </div>
 
-              {/* Ringkasan dua baris dalam tiga kelompok yang terpisah */}
-              <div className={!editingWO ? 'hidden' : `grid items-stretch gap-3 ${diagnosisMode ? 'lg:grid-cols-[minmax(0,55fr)_minmax(210px,25fr)_minmax(190px,20fr)]' : 'lg:grid-cols-[minmax(0,1fr)_300px]'}`}>
-                <div className="grid min-h-[148px] grid-rows-2 gap-2 rounded-xl border border-cyan-200 bg-cyan-50 p-3">
-                  <div className="grid grid-cols-1 gap-2">
-                    <label className="text-[11px] font-semibold text-slate-600">
-                      Teknisi penanggung jawab <span className="text-red-500">*</span>
-                      <select required value={formData.technicianId} onChange={(event) => {
-                        const technician = data.users.find(user => user.id === event.target.value);
-                        setFormData(previous => ({ ...previous, technicianId: event.target.value, technicianName: technician?.name || '' }));
-                      }} className="mt-1 h-9 w-full rounded-lg border border-cyan-200 bg-white px-2 text-xs font-normal outline-none focus:border-blue-500">
-                        <option value="">Pilih teknisi</option>
-                        {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO?.branchId || '') || user.branchId === editingWO?.branchId)).map(user => (
-                          <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <label className="flex min-h-0 flex-col text-[11px] font-semibold text-slate-600">Catatan hasil pekerjaan
-                    <textarea value={diagnosisMode ? formData.findings : formData.notes} onChange={(event) => setFormData(previous => diagnosisMode ? { ...previous, findings: event.target.value } : { ...previous, notes: event.target.value })} placeholder={diagnosisMode ? 'Catatan hasil pekerjaan...' : 'Catatan internal teknisi...'} rows={1} className="mt-1 min-h-0 flex-1 resize-none rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
-                  </label>
-                </div>
+              {/* Pengukuran dan total; teknisi serta hasil kerja berada di tab Info lainnya. */}
+              <div className={!editingWO ? 'hidden' : `grid items-stretch justify-end gap-3 ${diagnosisMode ? 'lg:grid-cols-[minmax(210px,1fr)_300px]' : 'lg:grid-cols-[300px]'}`}>
                 {diagnosisMode && <div className="grid min-h-[148px] grid-rows-2 gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3">
                   <div className="grid grid-cols-2 gap-2">
                     <label className="text-[11px] font-semibold text-slate-600">LP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
@@ -3866,18 +3858,50 @@ export default function WorkOrders() {
 
               {documentTab === 'info' && (
                 <div className="grid gap-4 p-4 text-sm lg:grid-cols-2">
-                  <section>
-                    <h4 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Info lainnya</h4>
-                    <div className="grid grid-cols-[130px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-                      <span className="text-gray-600">No. WO</span><strong>{editingWO?.woNumber || 'Otomatis saat Register'}</strong>
-                      <span className="text-gray-600">Cabang</span><strong>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || '-'}</strong>
-                      <span className="text-gray-600">Pelanggan</span><span>{formData.customerName || '-'}</span>
-                      <span className="text-gray-600">Kendaraan</span><span>{formData.vehicleInfo || '-'}</span>
+                  <section className="space-y-3">
+                    <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Teknisi yang mengerjakan</h4>
+                    <label className="grid items-center gap-1 sm:grid-cols-[145px_minmax(0,1fr)]">
+                      <span className="font-medium text-gray-700">Teknisi Utama <span className="text-red-500">*</span></span>
+                      <select value={formData.technicianId} onChange={(event) => {
+                        const technician = data.users.find(user => user.id === event.target.value);
+                        setFormData(previous => ({
+                          ...previous,
+                          technicianId: event.target.value,
+                          technicianName: technician?.name || '',
+                          assistantTechnicianIds: previous.assistantTechnicianIds.filter(id => id !== event.target.value),
+                          assistantTechnicianNames: previous.assistantTechnicianNames.filter(name => name !== technician?.name),
+                        }));
+                      }} className="h-9 w-full border border-gray-500 bg-white px-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
+                        <option value="">Pilih teknisi utama</option>
+                        {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => (
+                          <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="grid gap-1 sm:grid-cols-[145px_minmax(0,1fr)]">
+                      <span className="font-medium text-gray-700">Teknisi Pendamping</span>
+                      <div className="grid max-h-36 grid-cols-1 gap-1 overflow-y-auto border border-gray-400 bg-white p-2 sm:grid-cols-2">
+                        {data.users.filter(user => user.isActive && !user.isOwner && user.id !== formData.technicianId && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => {
+                          const checked = formData.assistantTechnicianIds.includes(user.id);
+                          return <label key={user.id} className="flex cursor-pointer items-center gap-2 px-1 py-1 hover:bg-blue-50">
+                            <input type="checkbox" checked={checked} onChange={() => setFormData(previous => {
+                              const nextIds = checked ? previous.assistantTechnicianIds.filter(id => id !== user.id) : [...previous.assistantTechnicianIds, user.id];
+                              const nextNames = checked ? previous.assistantTechnicianNames.filter(name => name !== user.name) : [...previous.assistantTechnicianNames, user.name];
+                              return { ...previous, assistantTechnicianIds: nextIds, assistantTechnicianNames: nextNames };
+                            })} />
+                            <span className="truncate">{user.name}</span>
+                          </label>;
+                        })}
+                      </div>
                     </div>
+                    <p className="border-t border-gray-200 pt-2 text-xs text-gray-500">No. WO: <strong>{editingWO?.woNumber || 'Otomatis saat Register'}</strong> · Cabang: <strong>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || '-'}</strong></p>
                   </section>
-                  <section>
-                    <h4 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keterangan tambahan</h4>
-                    <textarea value={formData.notes} onChange={event => setFormData(previous => ({ ...previous, notes: event.target.value }))} rows={5} placeholder="Keterangan internal Work Order..." className="w-full resize-none border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                  <section className="space-y-3">
+                    <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keluhan dan hasil kerja</h4>
+                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Keluhan Asli</span><div className="min-h-9 border border-gray-300 bg-gray-100 px-3 py-2 text-gray-700">{formData.description || '-'}</div></label>
+                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Komentar / Diagnosis Keluhan</span><textarea value={formData.complaintComment} onChange={event => setFormData(previous => ({ ...previous, complaintComment: event.target.value }))} rows={2} placeholder="Hasil pemeriksaan atas keluhan pelanggan..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
+                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Hasil Kerja</span><textarea value={formData.findings} onChange={event => setFormData(previous => ({ ...previous, findings: event.target.value }))} rows={2} placeholder="Pekerjaan yang dilakukan dan hasil pengujian akhir..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
+                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Keterangan Internal</span><textarea value={formData.notes} onChange={event => setFormData(previous => ({ ...previous, notes: event.target.value }))} rows={1} placeholder="Keterangan internal (opsional)..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
                   </section>
                 </div>
               )}
@@ -3900,9 +3924,25 @@ export default function WorkOrders() {
               {documentTab === 'payment' && (
                 <div className="p-4">
                   <h4 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Pembayaran</h4>
-                  <div className="border border-dashed border-gray-300 bg-gray-50 px-4 py-12 text-center text-sm text-gray-500">
-                    {editingWO?.invoiceId ? 'Pembayaran dikelola melalui faktur penjualan terkait.' : 'Pembayaran tersedia setelah pekerjaan selesai dan faktur dibuat.'}
-                  </div>
+                  {financialTimelineLoading ? <div className="border border-gray-300 bg-gray-50 px-4 py-12 text-center text-sm text-gray-500">Memuat faktur dan pembayaran…</div> : (() => {
+                    const invoice = financialTimeline.woId === editingWO?.id ? financialTimeline.invoice : null;
+                    if (!invoice) return <div className="border border-dashed border-gray-300 bg-gray-50 px-4 py-10 text-center text-sm text-gray-500"><p>WO ini belum memiliki faktur penjualan.</p>{editingWO?.status === 'Selesai' && hasPermission('invoice:create') && <button type="button" onClick={() => { const target = editingWO; handleCloseModal(); if (target) handleOpenInvoiceModal(target); }} className="mt-3 border border-emerald-700 bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700">Buat Faktur</button>}</div>;
+                    const remaining = Math.max(0, invoice.total - invoice.payment);
+                    return <div className="space-y-3">
+                      <div className="grid border border-gray-300 bg-gray-50 sm:grid-cols-4">
+                        <div className="border-b border-gray-300 px-3 py-2 sm:border-b-0 sm:border-r"><span className="block text-xs text-gray-500">No. Faktur</span><strong className="text-blue-700">{invoice.invoiceNumber}</strong></div>
+                        <div className="border-b border-gray-300 px-3 py-2 sm:border-b-0 sm:border-r"><span className="block text-xs text-gray-500">Total Faktur</span><strong>Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
+                        <div className="border-b border-gray-300 px-3 py-2 sm:border-b-0 sm:border-r"><span className="block text-xs text-gray-500">Sudah Dibayar</span><strong className="text-emerald-700">Rp {invoice.payment.toLocaleString('id-ID')}</strong></div>
+                        <div className="px-3 py-2"><span className="block text-xs text-gray-500">Sisa Tagihan</span><strong className={remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}>Rp {remaining.toLocaleString('id-ID')}</strong></div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {hasPermission('invoice:view') && <button type="button" onClick={() => window.location.assign(`/invoices?view=${encodeURIComponent(invoice.id)}`)} className="border border-blue-600 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-50">Lihat Faktur</button>}
+                        {financialTimeline.canViewPayments && <button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(invoice.id)}`)} className="border border-blue-600 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-50">Riwayat Pembayaran</button>}
+                        {remaining > 0 && hasPermission('payment:create') && <button type="button" onClick={() => window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(invoice.id)}`)} className="border border-emerald-700 bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700">+ Pembayaran</button>}
+                      </div>
+                      {financialTimeline.canViewPayments ? <div className="overflow-hidden border border-gray-300"><table className="w-full text-left text-sm"><thead className="bg-slate-600 text-white"><tr><th className="px-3 py-2">Tanggal</th><th className="px-3 py-2">No. Pembayaran</th><th className="px-3 py-2">Metode / Akun</th><th className="px-3 py-2">Input Oleh</th><th className="px-3 py-2 text-right">Jumlah</th></tr></thead><tbody>{financialTimeline.payments.map(payment => <tr key={payment.id} className="border-t border-gray-200"><td className="px-3 py-2">{payment.date}</td><td className="px-3 py-2 font-medium text-blue-700">{payment.paymentNumber}</td><td className="px-3 py-2">{payment.paymentMethod}{payment.accountName ? ` · ${payment.accountName}` : ''}</td><td className="px-3 py-2">{payment.createdByName || '-'}</td><td className="px-3 py-2 text-right font-semibold text-emerald-700">Rp {payment.amount.toLocaleString('id-ID')}</td></tr>)}{financialTimeline.payments.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Belum ada pembayaran untuk faktur ini.</td></tr>}</tbody></table></div> : <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">Anda tidak memiliki hak akses untuk melihat rincian pembayaran.</div>}
+                    </div>;
+                  })()}
                 </div>
               )}
               </div>

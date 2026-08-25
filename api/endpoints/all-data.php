@@ -69,6 +69,12 @@ try {
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_until DATETIME NULL AFTER pending_at");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_reason VARCHAR(255) NULL AFTER pending_until");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_temperature DECIMAL(6,2) NULL AFTER findings");
+    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS complaint_comment TEXT NULL AFTER description");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS work_order_technicians (
+        wo_id VARCHAR(64) NOT NULL, user_id VARCHAR(64) NOT NULL, user_name VARCHAR(150) NOT NULL,
+        assignment_role ENUM('primary','assistant') NOT NULL DEFAULT 'assistant', sort_order INT NOT NULL DEFAULT 0,
+        PRIMARY KEY(wo_id,user_id), KEY idx_work_order_technicians_user(user_id), KEY idx_work_order_technicians_role(wo_id,assignment_role,sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_lp DECIMAL(8,2) NULL AFTER diagnosis_temperature");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_hp DECIMAL(8,2) NULL AFTER diagnosis_lp");
     $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_temperature DECIMAL(6,2) NULL AFTER diagnosis_hp");
@@ -317,7 +323,9 @@ try {
     // Work Orders
     $rows = $pdo->query("SELECT * FROM work_orders ORDER BY date DESC, wo_number DESC")->fetchAll();
     $allServices = $pdo->query("SELECT * FROM work_order_services")->fetchAll();
+    $allTechnicianAssignments = $pdo->query("SELECT * FROM work_order_technicians ORDER BY wo_id,sort_order,user_name")->fetchAll();
     $servicesByWO = [];
+    $techniciansByWO = [];
     foreach ($allServices as $s) {
         $servicesByWO[$s['wo_id']][] = [
             'id' => (string)$s['id'],
@@ -328,6 +336,9 @@ try {
             'price' => (float)$s['price'],
             'qty' => (int)$s['qty'],
         ];
+    }
+    foreach ($allTechnicianAssignments as $assignment) {
+        $techniciansByWO[$assignment['wo_id']][] = $assignment;
     }
     foreach ($rows as &$r) {
         $r['woNumber'] = $r['wo_number'];
@@ -352,6 +363,7 @@ try {
         $r['createdByName'] = $r['created_by_name'] ?? null;
         $r['technicianId'] = $r['technician_id'] ?? null;
         $r['technicianName'] = $r['technician_name'] ?? null;
+        $r['complaintComment'] = $r['complaint_comment'] ?? null;
         $r['backdateReason'] = $r['backdate_reason'] ?? null;
         $r['invoiceId'] = $r['invoice_id'];
         $r['invoiceNumber'] = $r['invoice_number'];
@@ -385,6 +397,9 @@ try {
         $r['createdAt']               = $r['created_at'] ?? null;
         $r['updatedAt']               = $r['updated_at'] ?? null;
         $r['services']                = $servicesByWO[$r['id']] ?? [];
+        $assignments = $techniciansByWO[$r['id']] ?? [];
+        $r['assistantTechnicianIds'] = array_values(array_map(static fn($row) => (string)$row['user_id'], array_filter($assignments, static fn($row) => $row['assignment_role'] === 'assistant')));
+        $r['assistantTechnicianNames'] = array_values(array_map(static fn($row) => (string)$row['user_name'], array_filter($assignments, static fn($row) => $row['assignment_role'] === 'assistant')));
     }
     $data['workOrders'] = $canUseWorkOrders ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];
 

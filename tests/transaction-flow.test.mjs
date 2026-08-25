@@ -803,3 +803,31 @@ test('Closed dan status lama selalu memakai label baku Lost Sales', () => {
   assert.doesNotMatch(timeline, /Lost Sales \/ Batal/);
   assert.doesNotMatch(assistant, /\$\{w\.status\}/);
 });
+
+test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger faktur', () => {
+  const types = source('src/types/index.ts');
+  const page = source('src/pages/WorkOrders.tsx');
+  const endpoint = source('api/endpoints/work-orders.php');
+  const helpers = source('api/helpers.php');
+  const allData = source('api/endpoints/all-data.php');
+  const schema = source('database/dokterac_schema.sql');
+
+  assert.match(types, /complaintComment\?: string/);
+  assert.match(types, /assistantTechnicianIds\?: string\[\]/);
+  assert.match(page, />Teknisi Utama/);
+  assert.match(page, />Teknisi Pendamping/);
+  assert.match(page, />Komentar \/ Diagnosis Keluhan/);
+  assert.match(page, />Hasil Kerja/);
+  assert.match(page, /documentTab === 'payment'/);
+  assert.match(page, /work-orders\/\$\{timelineTarget\.id\}\/timeline/);
+  assert.match(page, /financialTimeline\.payments\.map/);
+  assert.match(page, /customer-payments\?invoiceId=/);
+  assert.doesNotMatch(page, /Pembayaran dikelola melalui faktur penjualan terkait/);
+  assert.match(endpoint, /work_order_technicians/);
+  assert.match(endpoint, /Teknisi utama wajib dipilih/);
+  assert.match(endpoint, /\$hasCompletionNote = trim\(\(string\)\(\$d\['findings'\]/);
+  assert.doesNotMatch(endpoint, /\$hasCompletionNote = [^;]*\$d\['notes'\]/);
+  assert.match(allData, /assistantTechnicianIds/);
+  assert.match(helpers, /CREATE TABLE IF NOT EXISTS work_order_technicians/);
+  assert.match(schema, /`complaint_comment` TEXT/);
+});
