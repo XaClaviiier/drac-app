@@ -2128,7 +2128,7 @@ export default function WorkOrders() {
   };
 
   return (
-    <div className="space-y-2 lg:-mx-6 lg:-mt-6 lg:space-y-0">
+    <div className="space-y-0 lg:-mx-6 lg:-mt-6">
       <div className={`${ui.childBar} ${showModal ? '!hidden lg:!flex' : ''}`}>
         <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
@@ -2189,7 +2189,7 @@ export default function WorkOrders() {
       )}
 
       {/* Filters */}
-      <div className="border-y border-gray-300 bg-[#eeeeee] px-2 py-2 shadow-sm lg:px-3">
+      <div className="app-workorder-mobile-toolbar border-y border-gray-300 bg-[#eeeeee] px-2 py-2 shadow-sm lg:px-3">
         <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 lg:flex lg:flex-wrap lg:gap-x-2 lg:gap-y-1.5">
           <div className="order-5 col-span-4 relative min-w-0 w-full lg:ml-auto lg:min-w-[260px] lg:flex-[0_1_360px] xl:min-w-[300px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -2543,7 +2543,7 @@ export default function WorkOrders() {
       )}
 
       {/* Ringkasan WO mobile: padat, urutan informasi mengikuti alur operasional. */}
-      <div className="space-y-2 px-2 pb-3 lg:hidden">
+      <div className="space-y-2 px-2 pb-3 pt-2 lg:hidden">
         {filteredWOs.length === 0 ? (
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center shadow-sm">
             <Wrench className="mx-auto mb-2 h-9 w-9 text-gray-300" />

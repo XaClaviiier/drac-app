@@ -264,6 +264,19 @@ body { margin: 0; background: #f3f4f6; }
   color: #fff;
 }
 
+/* Pada HP, tab dan toolbar WO adalah satu header dua tingkat. Keduanya tetap
+   terlihat ketika daftar digulir dan tidak saling menimpa. */
+.app-workorder-mobile-toolbar {
+  position: sticky;
+  top: calc(var(--app-child-sticky-top, 0px) + 42px);
+  z-index: 50;
+}
+@media (min-width: 1024px) {
+  .app-workorder-mobile-toolbar {
+    position: static;
+  }
+}
+
 /* Accurate mempertahankan kemampuan scroll halaman tanpa menampilkan rel
    scrollbar browser yang mengurangi lebar kanvas dan menggeser posisi tab. */
 .app-page-scroll {

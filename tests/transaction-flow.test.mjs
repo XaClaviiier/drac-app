@@ -438,7 +438,11 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(page, /className=\{`\$\{ui\.search\} w-full pl-9 pr-3`\}/);
   assert.match(page, /className="h-9 min-w-0 w-full text-xs sm:text-sm lg:w-40"/);
   assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
-  assert.match(page, /space-y-2 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
+  assert.match(page, /space-y-0 lg:-mx-6 lg:-mt-6/);
+  assert.match(page, /app-workorder-mobile-toolbar border-y/);
+  assert.match(page, /space-y-2 px-2 pb-3 pt-2 lg:hidden/);
+  assert.match(styles, /\.app-workorder-mobile-toolbar[\s\S]*?position: sticky;[\s\S]*?top: calc\(var\(--app-child-sticky-top, 0px\) \+ 42px\);[\s\S]*?z-index: 50;/);
+  assert.match(styles, /@media \(min-width: 1024px\)[\s\S]*?\.app-workorder-mobile-toolbar[\s\S]*?position: static;/);
   assert.match(layout, /app-brand-header/);
   assert.doesNotMatch(layout, /app-brand-header absolute left-0 top-0 flex h-12 w-\[320px\]/);
   assert.match(layout, /bg-\[#061a3a\] pt-12/);
