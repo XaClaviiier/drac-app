@@ -574,9 +574,9 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /Pelanggan <span className="text-red-500">\*<\/span>/);
   assert.match(page, /Kendaraan <span className="text-red-500">\*<\/span>/);
   assert.match(page, /kelompok tanggal dirapatkan ke kanan dengan urutan tanggal, edit, waktu/);
-  assert.match(page, /lg:w-full lg:grid-cols-\[85px_minmax\(0,1fr\)_minmax\(0,\.8fr\)_64px_142px_132px\] lg:gap-x-1/);
-  assert.match(page, /grid-cols-\[42px_82px\] justify-end gap-2 lg:grid/);
-  assert.match(page, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
+  assert.match(page, /lg:w-full lg:grid-cols-\[85px_minmax\(0,324px\)_minmax\(0,260px\)_minmax\(16px,1fr\)_64px_142px_132px\] lg:gap-x-1/);
+  assert.match(page, /grid-cols-\[42px_82px\] justify-end gap-2 lg:col-start-7 lg:row-start-1 lg:grid/);
+  assert.match(page, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex"/);
   assert.doesNotMatch(page, /<span>Nomor: <strong className="text-gray-900">\{editingWO\?\.woNumber/);
   assert.doesNotMatch(page, /<span>Cabang: <strong className="text-gray-900">\{data\.branches\.find\(branch/);
   assert.match(page, /ariaLabel="Aksi Work Order"/);
@@ -612,7 +612,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
   assert.match(page, /setSelectedServiceId\(service\.id\)/);
   assert.match(page, /Waktu WO desktop/);
-  assert.match(page, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
+  assert.match(page, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex"/);
   assert.match(page, /Register WO terlebih dahulu/);
   assert.match(page, /ComplaintMultiSelect/);
   assert.match(page, /selectedAction=\{!customerVehicleLocked/);
@@ -690,7 +690,7 @@ test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yan
   assert.match(invoices, /disabled title="Simpan faktur terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
   assert.ok((workOrders.match(/ui\.documentAction/g) || []).length >= 4);
   assert.ok((invoices.match(/ui\.documentAction/g) || []).length >= 4);
-  assert.match(workOrders, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:flex"/);
+  assert.match(workOrders, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex"/);
 });
 
 test('daftar WO selalu menampilkan nama cabang pada desktop dan HP', () => {

@@ -3226,11 +3226,12 @@ export default function WorkOrders() {
                 </div>
               ) : <>
               {/* Baris utama Accurate: pelanggan + kendaraan; kelompok tanggal dirapatkan ke kanan dengan urutan tanggal, edit, waktu. */}
-              <div className="grid grid-cols-1 items-start gap-2 lg:w-full lg:grid-cols-[85px_minmax(0,1fr)_minmax(0,.8fr)_64px_142px_132px] lg:gap-x-1">
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:self-center">
+              <div className="grid grid-cols-1 items-start gap-2 lg:w-full lg:grid-cols-[85px_minmax(0,324px)_minmax(0,260px)_minmax(16px,1fr)_64px_142px_132px] lg:gap-x-1">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:col-start-1 lg:row-start-1 lg:self-center">
                   <User className="h-4 w-4 text-blue-600 lg:hidden" />
                   Pelanggan <span className="text-red-500">*</span>
                 </label>
+                <div className="min-w-0 lg:col-start-2 lg:row-start-1">
                 <CustomerPicker
                   value={formData.customerRefId}
                   onChange={handleCustomerSelect}
@@ -3243,10 +3244,12 @@ export default function WorkOrders() {
                     </button>
                   ) : undefined}
                 />
+                </div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:hidden">
                   <Car className="h-4 w-4 text-orange-600" />
                   Kendaraan <span className="text-red-500">*</span>
                 </label>
+                <div className="min-w-0 lg:col-start-3 lg:row-start-1">
                 <VehiclePicker
                   customer={selectedCustomer}
                   value={formData.vehicleRefId}
@@ -3254,13 +3257,14 @@ export default function WorkOrders() {
                   onNewVehicleCreated={handleNewVehicleCreated}
                   locked={customerVehicleLocked}
                 />
-                <label className="hidden self-center text-right text-sm font-medium text-gray-700 lg:block">
+                </div>
+                <label className="hidden self-center text-right text-sm font-medium text-gray-700 lg:col-start-5 lg:row-start-1 lg:block">
                   Tanggal <span className="text-red-500">*</span>
                 </label>
-                <div className="hidden lg:block">
+                <div className="hidden lg:col-start-6 lg:row-start-1 lg:block">
                   <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-[42px] w-full text-sm"/>
                 </div>
-                <div className="hidden grid-cols-[42px_82px] justify-end gap-2 lg:grid">
+                <div className="hidden grid-cols-[42px_82px] justify-end gap-2 lg:col-start-7 lg:row-start-1 lg:grid">
                   <button
                     type="button"
                     onClick={() => hasPermission('wo:backdate') ? setWoDateUnlocked(value => {
@@ -3286,10 +3290,10 @@ export default function WorkOrders() {
                 </div>
                 {!isAutoRegisteredDraft && (
                   <>
-                    <label className="self-center text-sm font-medium text-gray-700">
+                    <label className="self-center text-sm font-medium text-gray-700 lg:col-start-1 lg:row-start-2">
                       Keluhan <span className="text-red-500">*</span>
                     </label>
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-2 lg:col-start-2 lg:row-start-2">
                       <ComplaintMultiSelect
                         value={formData.description}
                         options={complaintTemplates}
@@ -3297,7 +3301,7 @@ export default function WorkOrders() {
                         onEditOptions={openComplaintEditor}
                       />
                     </div>
-                    <div data-wo-inline-actions className="hidden items-center justify-end gap-1.5 lg:col-span-3 lg:flex">
+                    <div data-wo-inline-actions className="hidden items-center justify-end gap-1.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex">
                       <details data-wo-action-menu className={`group relative ${editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
                         <summary aria-disabled={Boolean(editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId))} tabIndex={editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>
                           Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
