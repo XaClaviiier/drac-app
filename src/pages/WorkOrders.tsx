@@ -2174,9 +2174,23 @@ export default function WorkOrders() {
         <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
-        {showModal && (editingWO || hasPermission('wo:create')) ? (
+        {showModal && diagnosisMode && editingWO ? (
+          <button
+            type="button"
+            className={`${ui.childTabActive} gap-2 px-5 text-sm`}
+          >
+            <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+          </button>
+        ) : showModal && editingWO ? (
           <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
-            {editingWO ? editingWO.woNumber : 'Data Baru'}
+            <FileText className="h-4 w-4" />
+            {editingWO.woNumber}
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+          </button>
+        ) : showModal && hasPermission('wo:create') ? (
+          <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
+            Data Baru
             <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); requestCloseEditor(); }} />
           </button>
         ) : null}
@@ -3278,6 +3292,16 @@ export default function WorkOrders() {
                   </div>
                 </div>
               )}
+              {diagnosisMode && editingWO ? (
+                <div className="space-y-3">
+                  <div className="relative grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
+                    <div className="md:col-span-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"><span className="block text-xs font-semibold uppercase text-blue-600">Keluhan awal</span><strong className="mt-0.5 block whitespace-pre-wrap text-slate-900">{editingWO.description || '-'}</strong></div>
+                  </div>
+                </div>
+              ) : <>
               {/* Baris utama Accurate: pelanggan + kendaraan; kelompok tanggal dirapatkan ke kanan dengan urutan tanggal, edit, waktu. */}
               <div className="grid grid-cols-1 items-start gap-2 lg:w-full lg:grid-cols-[85px_minmax(0,324px)_minmax(0,260px)_minmax(16px,1fr)_64px_142px_132px] lg:gap-x-1">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 lg:col-start-1 lg:row-start-1 lg:self-center">
@@ -3341,7 +3365,8 @@ export default function WorkOrders() {
                     aria-label="Waktu WO desktop"
                   />
                 </div>
-                <>
+                {!isAutoRegisteredDraft && (
+                  <>
                     <label className="self-center text-sm font-medium text-gray-700 lg:col-start-1 lg:row-start-2">
                       Keluhan <span className="text-red-500">*</span>
                     </label>
@@ -3376,6 +3401,7 @@ export default function WorkOrders() {
                       </details> : <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button>}
                     </div>
                   </>
+                )}
                 <div className="lg:hidden">
                   <div className="grid gap-1 lg:grid-cols-[130px_minmax(0,1fr)] lg:items-center">
                     <label className="block text-sm font-medium text-gray-700">
@@ -3409,6 +3435,45 @@ export default function WorkOrders() {
                   </div>
                 </div>
               </div>
+              {editingWO && <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                customerVehicleLocked
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : customerVehicleReady
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-amber-200 bg-amber-50 text-amber-700'
+              }`}>
+                {customerVehicleLocked ? <LockKeyhole className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                {customerVehicleLocked
+                  ? `Pelanggan dan kendaraan sudah teregister${editingWO ? ` pada ${editingWO.woNumber}` : ''}.`
+                  : customerVehicleReady
+                    ? formData.description.trim()
+                      ? 'Data siap. Tekan Register untuk membuat nomor WO.'
+                      : 'Isi keluhan/keterangan service sebelum Register.'
+                    : 'Pilih atau daftarkan pelanggan dan kendaraan sebelum Register.'}
+                {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => setShowCustomerVehicleCorrectionForm(true)} className="ml-auto flex-shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Ubah Customer/Kendaraan</button>}
+                {customerVehicleCorrectionUnlocked && <span className="ml-auto flex-shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-amber-800">Mode koreksi aktif</span>}
+              </div>}
+              {showCustomerVehicleCorrectionForm && !customerVehicleCorrectionUnlocked && (
+                <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 md:flex-row md:items-center">
+                  <input
+                    autoFocus
+                    value={customerVehicleCorrectionReason}
+                    onChange={(event) => setCustomerVehicleCorrectionReason(event.target.value)}
+                    placeholder="Alasan koreksi customer/kendaraan *"
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-amber-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  />
+                  <button type="button" onClick={() => {
+                    if (!customerVehicleCorrectionReason.trim()) return;
+                    setCustomerVehicleCorrectionReason(customerVehicleCorrectionReason.trim());
+                    setCustomerVehicleCorrectionUnlocked(true);
+                    setShowCustomerVehicleCorrectionForm(false);
+                  }} disabled={!customerVehicleCorrectionReason.trim()} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300">Aktifkan Koreksi</button>
+                  <button type="button" onClick={() => {
+                    setShowCustomerVehicleCorrectionForm(false);
+                    setCustomerVehicleCorrectionReason('');
+                  }} className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-600 hover:bg-gray-50">Batal</button>
+                </div>
+              )}
               {customerVehicleReady && !customerVehicleLocked && (selectedCustomerPeople.length > 1 || showQuickContact) && (
                 <div className="space-y-2 lg:ml-[89px] lg:max-w-[891px]">
                   {selectedCustomerPeople.length > 1 && <div className="flex flex-wrap gap-2">
@@ -3428,11 +3493,17 @@ export default function WorkOrders() {
                 <div className="grid grid-cols-1 md:grid-cols-2"><span /><input required value={woBackdateReason} onChange={(e) => setWoBackdateReason(e.target.value)} placeholder="Alasan tanggal WO dimundurkan" className="w-full px-4 py-2.5 border border-amber-400 bg-amber-50 rounded-lg" /></div>
               )}
 
+              </>}
+
               <div className="relative min-h-[320px] bg-white lg:ml-10 lg:bg-[#eeeeee]">
               <AccurateDocumentSideTabs active={documentTab} onChange={setDocumentTab} />
               {documentTab === 'details' && <div className="p-3">
               {/* Layanan langsung tersedia pada WO baru; tetap dipakai saat diagnosa/edit pekerjaan. */}
               <div>
+                <div className={editingWO && !isAutoRegisteredDraft ? 'mb-3' : 'hidden'}>
+                  <label className="text-sm font-medium text-gray-700">{diagnosisMode ? 'Estimasi Layanan' : 'Pekerjaan / Layanan WO'}</label>
+                </div>
+
                 {showServiceForm && (
                   <div className="relative z-20 mb-4">
                     <div className="flex items-center gap-2">
@@ -3679,7 +3750,8 @@ export default function WorkOrders() {
                   </div>
                 )}
 
-                <>
+                {formData.services.length > 0 || !editingWO ? (
+                  <>
                   <div className="space-y-2 sm:hidden">
                     {formData.services.length === 0 && (
                       <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
@@ -3751,17 +3823,14 @@ export default function WorkOrders() {
                         </div>
                       );
                     })}
-                    <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
+                    {editingWO && <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
                       <span className="text-xs font-semibold text-gray-700">TOTAL ESTIMASI</span>
                       <span className="text-base font-bold text-blue-700">Rp {totalServices.toLocaleString('id-ID')}</span>
-                    </div>
+                    </div>}
                   </div>
-                  <div
-                    data-wo-items-table
-                    className="hidden overflow-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:h-[calc(100dvh-490px)] lg:min-h-[240px]"
-                  >
+                  <div data-wo-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
                     <table className="min-w-[920px] w-full text-sm">
-                      <thead className="bg-slate-600 text-xs uppercase text-white">
+                      <thead className={editingWO ? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'}>
                         <tr>
                           <th className="w-10 px-3 py-2.5 text-center font-medium">No</th>
                           <th className="px-3 py-2.5 text-left font-medium">Nama Barang/Jasa</th>
@@ -3848,8 +3917,17 @@ export default function WorkOrders() {
                     </table>
                   </div>
                   </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center">
+                    <Wrench className="mx-auto mb-1.5 h-7 w-7 text-gray-400" />
+                    <p className="text-sm font-medium text-gray-700">Belum ada layanan</p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      Cari dan pilih layanan atau tambahkan layanan baru.
+                    </p>
+                  </div>
+                )}
 
-                <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid lg:fixed lg:bottom-3 lg:right-[120px] lg:z-30 lg:mt-0 lg:w-[min(700px,calc(100vw-240px))]">
+                <div data-wo-total-summary className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
                   <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5">
                     <span className="text-sm font-medium text-gray-900">Sub Total</span>
                     <strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {totalServices.toLocaleString('id-ID')}</strong>
@@ -3871,30 +3949,20 @@ export default function WorkOrders() {
                 </div>
               </div>
 
+              {/* Pengukuran dan total; teknisi serta hasil kerja berada di tab Info lainnya. */}
+              {editingWO && diagnosisMode && <div className="grid items-stretch justify-end gap-3 lg:grid-cols-[minmax(210px,1fr)]">
+                <div className="grid min-h-[148px] grid-rows-2 gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[11px] font-semibold text-slate-600">LP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                    <label className="text-[11px] font-semibold text-slate-600">HP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                  </div>
+                  <label className="text-[11px] font-semibold text-slate-600">Suhu (°C)<input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500" /></label>
+                </div>
+              </div>}
               </div>}
 
               {documentTab === 'info' && (
                 <div className="grid gap-4 p-4 text-sm lg:grid-cols-2">
-                  {editingWO && <section className="flex flex-wrap items-center gap-2 border border-gray-300 bg-gray-50 px-3 py-2 lg:col-span-2">
-                    <span className={`rounded px-2 py-1 text-xs font-semibold ${statusColors[editingWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(editingWO.status)}</span>
-                    <span className="font-mono font-semibold text-blue-700">{editingWO.woNumber}</span>
-                    <span className="text-gray-500">Pelanggan dan kendaraan sudah teregister.</span>
-                    {customerVehicleCorrectionUnlocked && <span className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Mode koreksi aktif</span>}
-                    {!editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => setShowCustomerVehicleCorrectionForm(true)} className="ml-auto border border-blue-400 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">Ubah Customer/Kendaraan</button>}
-                  </section>}
-                  {showCustomerVehicleCorrectionForm && !customerVehicleCorrectionUnlocked && <section className="flex flex-col gap-2 border border-amber-300 bg-amber-50 p-3 md:flex-row md:items-center lg:col-span-2">
-                    <input autoFocus value={customerVehicleCorrectionReason} onChange={(event) => setCustomerVehicleCorrectionReason(event.target.value)} placeholder="Alasan koreksi customer/kendaraan *" className="h-10 min-w-0 flex-1 border border-gray-500 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
-                    <button type="button" onClick={() => {
-                      if (!customerVehicleCorrectionReason.trim()) return;
-                      setCustomerVehicleCorrectionReason(customerVehicleCorrectionReason.trim());
-                      setCustomerVehicleCorrectionUnlocked(true);
-                      setShowCustomerVehicleCorrectionForm(false);
-                    }} disabled={!customerVehicleCorrectionReason.trim()} className="h-10 bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300">Aktifkan Koreksi</button>
-                    <button type="button" onClick={() => {
-                      setShowCustomerVehicleCorrectionForm(false);
-                      setCustomerVehicleCorrectionReason('');
-                    }} className="h-10 border border-gray-400 bg-white px-4 text-sm font-semibold text-gray-600 hover:bg-gray-50">Batal</button>
-                  </section>}
                   <section className="space-y-3">
                     <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Teknisi yang mengerjakan</h4>
                     <label className="grid items-center gap-1 sm:grid-cols-[145px_minmax(0,1fr)]">
@@ -3935,11 +4003,6 @@ export default function WorkOrders() {
                   </section>
                   <section className="space-y-3">
                     <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keluhan dan hasil kerja</h4>
-                    {editingWO && diagnosisMode && <div className="grid grid-cols-3 gap-2 border border-blue-200 bg-blue-50 p-2">
-                      <label className="text-[11px] font-semibold text-slate-600">LP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisLp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisLp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="35" className="mt-1 h-9 w-full border border-gray-500 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
-                      <label className="text-[11px] font-semibold text-slate-600">HP (PSI)<input type="number" step="0.1" min="0" value={formData.diagnosisHp ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisHp: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="180" className="mt-1 h-9 w-full border border-gray-500 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
-                      <label className="text-[11px] font-semibold text-slate-600">Suhu (°C)<input type="number" step="0.1" value={formData.diagnosisTemperature ?? ''} onChange={(event) => setFormData(prev => ({ ...prev, diagnosisTemperature: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="8" className="mt-1 h-9 w-full border border-gray-500 bg-white px-2 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
-                    </div>}
                     <label className="block"><span className="mb-1 block font-medium text-gray-700">Keluhan Asli</span><div className="min-h-9 border border-gray-300 bg-gray-100 px-3 py-2 text-gray-700">{formData.description || '-'}</div></label>
                     <label className="block"><span className="mb-1 block font-medium text-gray-700">Komentar / Diagnosis Keluhan</span><textarea value={formData.complaintComment} onChange={event => setFormData(previous => ({ ...previous, complaintComment: event.target.value }))} rows={2} placeholder="Hasil pemeriksaan atas keluhan pelanggan..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
                     <label className="block"><span className="mb-1 block font-medium text-gray-700">Hasil Kerja</span><textarea value={formData.findings} onChange={event => setFormData(previous => ({ ...previous, findings: event.target.value }))} rows={2} placeholder="Pekerjaan yang dilakukan dan hasil pengujian akhir..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>

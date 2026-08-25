@@ -626,7 +626,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /form: 'work-order-entry-form'/);
   assert.match(page, /void handleSubmit\(\)/);
   assert.match(page, /setEditingWO\(created\);[\s\S]*?setIsAutoRegisteredDraft\(true\);[\s\S]*?setShowServiceForm\(true\)/);
-  assert.match(page, /\{editingWO \? editingWO\.woNumber : 'Data Baru'\}/);
+  assert.match(page, /diagnosisMode && editingWO \? `DIAGNOSA \$\{editingWO\.woNumber\}` : editingWO \? editingWO\.woNumber : 'Data Baru'/);
   assert.match(page, /disabled=\{!editingWO \|\| !customerVehicleReady \|\| isAutoRegistering\}/);
   assert.match(page, /Hapus barang atau jasa terpilih/);
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
@@ -721,27 +721,26 @@ test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accura
   assert.match(workOrders, /const \[showQuickServices, setShowQuickServices\] = useState\(false\)/);
   assert.doesNotMatch(workOrders, /dokterac_wo_quick_services/);
   assert.match(workOrders, /const handleOpenModal = \(wo\?: WorkOrder, servicesOnly = false, viewOnly = false\) => \{\s+setShowQuickServices\(false\)/);
-  assert.match(workOrders, /lg:h-\[calc\(100dvh-490px\)\]/);
-  assert.match(workOrders, /lg:min-h-\[240px\]/);
+  assert.match(workOrders, /lg:min-h-\[calc\(100dvh-520px\)\]/);
+  assert.match(workOrders, /min-height:820px/);
   assert.match(workOrders, /border-gray-400 bg-white shadow-\[0_2px_7px_rgba\(15,23,42,0\.18\)\]/);
   assert.match(workOrders, /data-wo-total-summary/);
   assert.match(workOrders, /mt-2 hidden w-full max-w-\[700px\]/);
-  assert.match(workOrders, /lg:fixed lg:bottom-3 lg:right-\[120px\] lg:z-30/);
+  assert.doesNotMatch(workOrders, /lg:fixed lg:bottom-3 lg:right-\[120px\] lg:z-30/);
   assert.match(workOrders, />Sub Total</);
   assert.match(workOrders, />Diskon</);
   assert.match(workOrders, />Total</);
   assert.match(workOrders, /Rp \{totalServices\.toLocaleString\('id-ID'\)\}/);
 });
 
-test('WO baru edit diagnosis selesai faktur dan lost sales memakai satu kerangka dokumen', () => {
+test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () => {
   const workOrders = source('src/pages/WorkOrders.tsx');
-  assert.match(workOrders, /showModal && \(editingWO \|\| hasPermission\('wo:create'\)\)/);
-  assert.match(workOrders, /<thead className="bg-slate-600 text-xs uppercase text-white">/);
-  assert.doesNotMatch(workOrders, /<thead className=\{editingWO \?/);
-  assert.doesNotMatch(workOrders, /diagnosisMode && editingWO \? \(\s*<div className="space-y-3">/);
-  assert.doesNotMatch(workOrders, /formData\.services\.length > 0 \|\| !editingWO \?/);
-  assert.doesNotMatch(workOrders, /editingWO && !isAutoRegisteredDraft \? 'mb-3'/);
-  assert.match(workOrders, /editingWO && diagnosisMode && <div className="grid grid-cols-3 gap-2 border border-blue-200 bg-blue-50 p-2">/);
+  assert.match(workOrders, /showModal && \(/);
+  assert.match(workOrders, /<thead className=\{editingWO \? 'bg-slate-100 text-xs text-slate-600' : 'bg-slate-600 text-xs uppercase text-white'\}>/);
+  assert.match(workOrders, /diagnosisMode && editingWO \? \(\s*<div className="space-y-3">/);
+  assert.match(workOrders, /formData\.services\.length > 0 \|\| !editingWO \?/);
+  assert.match(workOrders, /editingWO && !isAutoRegisteredDraft \? 'mb-3'/);
+  assert.match(workOrders, /editingWO && diagnosisMode && <div className="grid items-stretch justify-end gap-3/);
   assert.match(workOrders, /documentTab === 'info'/);
   assert.match(workOrders, /documentTab === 'payment'/);
 });
