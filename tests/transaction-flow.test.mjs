@@ -822,7 +822,7 @@ test('tampilan WO kembali ke kanvas 4d59431 tanpa mengubah alur transaksi', () =
 
 test('daftar WO selalu menampilkan nama cabang pada desktop dan HP', () => {
   const page = source('src/pages/WorkOrders.tsx');
-  assert.match(page, /\{' · '\}\{data\.branches\.find\(b => b\.id === wo\.branchId\)\?\.name\.replace\('CABANG ', ''\) \|\| wo\.branchId\}/);
+  assert.match(page, /wo\.transactionTime \? wo\.transactionTime\.slice\(0, 5\) : '—'\} · \{data\.branches\.find\(b => b\.id === wo\.branchId\)\?\.name\.replace\('CABANG ', ''\) \|\| wo\.branchId\}/);
   assert.match(page, /const branchName = data\.branches\.find\(branch => branch\.id === wo\.branchId\)\?\.name\.replace\('CABANG ', ''\) \|\| wo\.branchId;/);
   assert.match(page, /<span className="text-\[10px\] font-semibold text-gray-400">\{branchName\}<\/span>/);
   assert.doesNotMatch(page, /\{canViewAllBranches && \(isAllBranchDropdown \|\| !activeBranchOnly\) && \(\s*<> ·/);
@@ -943,7 +943,10 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.match(workOrders, /<option value="overdue">Terlambat \/ Kritis<\/option>/);
   assert.match(workOrders, /key: 'attention', label: 'Perhatian', locked: true/);
   assert.doesNotMatch(workOrders, /key: 'status', label: 'Status'/);
-  assert.match(workOrders, />No\. WO \/ Status \/ Tanggal</);
+  assert.match(workOrders, />No\. WO \/ Status</);
+  assert.match(workOrders, /isColumnVisible\('date'\)[\s\S]*?>Tanggal</);
+  assert.match(workOrders, /formatBusinessDate\(wo\.date\)/);
+  assert.doesNotMatch(workOrders, />No\. WO \/ Status \/ Tanggal</);
   assert.match(workOrders, /CircleAlert className="h-5 w-5"/);
   assert.match(workOrders, /AlertTriangle className="h-5 w-5"/);
   assert.match(workOrders, />Pelanggan \/ Kendaraan</);

@@ -98,9 +98,10 @@ const WorkOrderCustomerVehicleIdentity = ({
   </span>
 );
 
-type WorkOrderColumnKey = 'number' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'attention' | 'createdBy' | 'actions';
+type WorkOrderColumnKey = 'number' | 'date' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'attention' | 'createdBy' | 'actions';
 const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
-  { key: 'number', label: 'No. WO / Tanggal', locked: true },
+  { key: 'number', label: 'No. WO / Status', locked: true },
+  { key: 'date', label: 'Tanggal', locked: true },
   { key: 'customer', label: 'Pelanggan / Kendaraan' },
   { key: 'services', label: 'Layanan' },
   { key: 'total', label: 'Total' },
@@ -437,7 +438,7 @@ export default function WorkOrders() {
       }
       const parsed = JSON.parse(saved) as WorkOrderColumnKey[];
       const valid = parsed.filter(key => WORK_ORDER_COLUMNS.some(column => column.key === key));
-      setVisibleColumns(Array.from(new Set<WorkOrderColumnKey>(['number', ...valid, 'attention', 'actions'])));
+      setVisibleColumns(Array.from(new Set<WorkOrderColumnKey>(['number', 'date', ...valid, 'attention', 'actions'])));
     } catch {
       setVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS);
     }
@@ -445,7 +446,7 @@ export default function WorkOrders() {
 
   const isColumnVisible = (key: WorkOrderColumnKey) => visibleColumns.includes(key);
   const updateVisibleColumns = (columns: WorkOrderColumnKey[]) => {
-    const next = Array.from(new Set<WorkOrderColumnKey>(['number', ...columns, 'attention', 'actions']));
+    const next = Array.from(new Set<WorkOrderColumnKey>(['number', 'date', ...columns, 'attention', 'actions']));
     setVisibleColumns(next);
     localStorage.setItem(workOrderColumnStorageKey, JSON.stringify(next));
   };
@@ -2350,7 +2351,7 @@ export default function WorkOrders() {
                     {column.locked && <span className="ml-auto text-[10px] font-semibold uppercase text-gray-400">Wajib</span>}
                   </label>
                 ))}
-                <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3"><button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button><button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'attention', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button></div>
+                <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3"><button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button><button type="button" onClick={() => updateVisibleColumns(['number', 'date', 'customer', 'attention', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button></div>
               </div>
             )}
           </div>
@@ -2472,7 +2473,7 @@ export default function WorkOrders() {
                   </div>
                   <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3">
                     <button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Tampilkan Semua</button>
-                    <button type="button" onClick={() => updateVisibleColumns(['number', 'customer', 'attention', 'createdBy', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
+                    <button type="button" onClick={() => updateVisibleColumns(['number', 'date', 'customer', 'attention', 'createdBy', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
                   </div>
                 </div>
               )}
@@ -2526,10 +2527,11 @@ export default function WorkOrders() {
       {filteredWOs.length > 0 && (
         <div className={`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`}>
           <div className="max-h-[calc(100vh-238px)] overflow-auto">
-            <table className="w-full min-w-[1100px] text-left">
+            <table className="w-full min-w-[1200px] text-left">
               <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
-                  {isColumnVisible('number') && <th className="font-semibold">No. WO / Status / Tanggal</th>}
+                  {isColumnVisible('number') && <th className="font-semibold">No. WO / Status</th>}
+                  {isColumnVisible('date') && <th className="whitespace-nowrap font-semibold">Tanggal</th>}
                   {isColumnVisible('attention') && <th className="w-12 text-center font-semibold" title="Butuh tindakan">!</th>}
                   {isColumnVisible('customer') && <th className="font-semibold">Pelanggan / Kendaraan</th>}
                   {isColumnVisible('services') && <th className="font-semibold">Layanan</th>}
@@ -2544,11 +2546,13 @@ export default function WorkOrders() {
                     {isColumnVisible('number') && <td className="px-4 py-3">
                       <button type="button" onClick={() => openWorkOrderStandard(wo)} className="text-left">
                         <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
-                        <span className="mt-0.5 block text-xs text-gray-500">
-                          {wo.date}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
-                          {' · '}{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}
-                        </span>
                       </button>
+                    </td>}
+                    {isColumnVisible('date') && <td className="whitespace-nowrap px-4 py-3">
+                      <span className="block text-sm text-gray-800">{formatBusinessDate(wo.date)}</span>
+                      <span className="mt-0.5 block text-xs text-gray-500">
+                        {wo.transactionTime ? wo.transactionTime.slice(0, 5) : '—'} · {data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}
+                      </span>
                     </td>}
                     {isColumnVisible('attention') && <td className="w-12 px-2 py-3 text-center">
                       {attentionByWorkOrderId.has(wo.id) && (
