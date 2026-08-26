@@ -1877,30 +1877,10 @@ export default function WorkOrders() {
       showAccurateNotice(`WO ${wo.woNumber} masih berstatus ${statusLabel(wo.status)}. Ubah status menjadi Selesai sebelum membuat faktur.`);
       return;
     }
-    const warehouses = data.warehouses.filter(warehouse => warehouse.branchId === wo.branchId && warehouse.isActive && warehouse.isSellable && !warehouse.isSystem);
-    const remaining = new Map<string, number>();
-    for (const warehouse of warehouses) for (const stock of data.warehouseStocks.filter(row => row.warehouseId === warehouse.id)) remaining.set(`${warehouse.id}|${stock.itemId}`, stock.quantity);
-    const selections:Record<string,string>={};
-    for (const service of wo.services) {
-      const item=data.items.find(candidate=>candidate.id===service.itemId);
-      if(item?.type!=='Persediaan')continue;
-      const preferred=warehouses.filter(warehouse=>warehouse.id===service.warehouseId||warehouse.isDefault);
-      const candidates=[...preferred,...warehouses.filter(warehouse=>!preferred.some(entry=>entry.id===warehouse.id))];
-      const selected=candidates.find(warehouse=>(remaining.get(`${warehouse.id}|${item.id}`)||0)>=service.qty)||candidates[0];
-      if(selected){selections[service.id]=selected.id;const key=`${selected.id}|${item.id}`;remaining.set(key,(remaining.get(key)||0)-service.qty)}
-    }
-    setInvoiceItemWarehouses(selections);
-    setInvoiceStockError('');
-    setInvoiceWO(wo);
-    setInvoiceCashPayment(wo.total);
-    setInvoiceTransferPayment(0);
-    const today = localDateKey();
-    setInvoiceDate(today);
-    setInvoicePaymentDate(today);
-    setInvoiceDateUnlocked(false);
-    setInvoicePaymentDateUnlocked(false);
-    setInvoiceBackdateReason('');
-    setInvoiceManualReceiptNumber('');
+    // Pembuatan faktur memakai satu alur baku di modul Faktur Penjualan.
+    // Parameter woId langsung membuka subtab Data Baru dan memilih WO ini,
+    // sehingga tidak ada lagi formulir modal duplikat yang melayang di atas daftar WO.
+    window.location.assign(`/invoices?woId=${encodeURIComponent(wo.id)}`);
   };
 
   const openActiveWorkOrder = async (wo: WorkOrder) => {
