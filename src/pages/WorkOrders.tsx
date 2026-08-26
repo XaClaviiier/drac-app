@@ -16,6 +16,7 @@ import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../component
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
+import { ConfigurableTableHeaderCell, useConfigurableTable } from '../components/ConfigurableTable';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
@@ -98,18 +99,29 @@ const WorkOrderCustomerVehicleIdentity = ({
   </span>
 );
 
-type WorkOrderColumnKey = 'number' | 'date' | 'customer' | 'vehicle' | 'services' | 'total' | 'status' | 'attention' | 'createdBy' | 'actions';
+type WorkOrderColumnKey = 'number' | 'date' | 'customer' | 'services' | 'total' | 'attention' | 'createdBy' | 'actions';
 const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
   { key: 'number', label: 'No. WO / Status', locked: true },
   { key: 'date', label: 'Tanggal', locked: true },
+  { key: 'attention', label: 'Perhatian', locked: true },
   { key: 'customer', label: 'Pelanggan / Kendaraan' },
   { key: 'services', label: 'Layanan' },
   { key: 'total', label: 'Total' },
-  { key: 'attention', label: 'Perhatian', locked: true },
   { key: 'createdBy', label: 'Dibuat Oleh' },
   { key: 'actions', label: 'Aksi', locked: true },
 ];
 const DEFAULT_WORK_ORDER_COLUMNS = WORK_ORDER_COLUMNS.map(column => column.key);
+const WORK_ORDER_SORTABLE_COLUMNS: WorkOrderColumnKey[] = ['number', 'date', 'customer', 'total', 'createdBy', 'attention'];
+const WORK_ORDER_COLUMN_WIDTHS: Record<WorkOrderColumnKey, number> = {
+  number: 190,
+  date: 155,
+  customer: 330,
+  services: 260,
+  total: 150,
+  attention: 92,
+  createdBy: 165,
+  actions: 150,
+};
 type WorkOrderPeriod = 'all' | 'today' | '7days' | 'thisMonth' | 'lastMonth' | 'custom';
 type WorkOrderFinancialTimeline = {
   woId: string;
@@ -429,6 +441,14 @@ export default function WorkOrders() {
   }, [detailWO?.id, documentTab, editingWO?.id]);
 
   const workOrderColumnStorageKey = `dokterac_wo_columns_${currentUser?.id || currentUser?.username || 'default'}`;
+  const workOrderLayoutStorageKey = `${workOrderColumnStorageKey}_layout_v1`;
+  const workOrderTable = useConfigurableTable<WorkOrderColumnKey>({
+    storageKey: workOrderLayoutStorageKey,
+    defaultOrder: DEFAULT_WORK_ORDER_COLUMNS,
+    defaultWidths: WORK_ORDER_COLUMN_WIDTHS,
+    sortableKeys: WORK_ORDER_SORTABLE_COLUMNS,
+    fixedRightKeys: ['actions'],
+  });
   useEffect(() => {
     try {
       const saved = localStorage.getItem(workOrderColumnStorageKey);
@@ -659,6 +679,7 @@ export default function WorkOrders() {
   const toggleQuickServices = () => {
     setShowQuickServices(previous => !previous);
   };
+  const orderedVisibleWorkOrderColumns = (workOrderTable.isDesktop ? workOrderTable.order : DEFAULT_WORK_ORDER_COLUMNS).filter(isColumnVisible);
 
   const selectQuickService = (itemId: string) => {
     handleUseItem(itemId);
@@ -1001,6 +1022,28 @@ export default function WorkOrders() {
     selectedBranchId,
     periodRange,
   ]);
+
+  const desktopWOs = useMemo(() => {
+    if (!workOrderTable.sort) return filteredWOs;
+    const { key, direction } = workOrderTable.sort;
+    const factor = direction === 'asc' ? 1 : -1;
+    const attentionRank = (workOrder: WorkOrder) => {
+      const kind = attentionByWorkOrderId.get(workOrder.id)?.kind;
+      if (kind === 'register' || kind === 'process') return 2;
+      if (kind === 'invoice' || kind === 'payment') return 1;
+      return 0;
+    };
+    return [...filteredWOs].sort((left, right) => {
+      let comparison = 0;
+      if (key === 'number') comparison = `${left.woNumber}|${statusLabel(left.status)}`.localeCompare(`${right.woNumber}|${statusLabel(right.status)}`, 'id', { numeric: true });
+      if (key === 'date') comparison = `${left.date} ${left.transactionTime || ''}`.localeCompare(`${right.date} ${right.transactionTime || ''}`);
+      if (key === 'customer') comparison = `${left.customerName}|${left.plateNumber}|${left.vehicleInfo}`.localeCompare(`${right.customerName}|${right.plateNumber}|${right.vehicleInfo}`, 'id', { numeric: true });
+      if (key === 'total') comparison = left.total - right.total;
+      if (key === 'createdBy') comparison = (left.createdByName || '').localeCompare(right.createdByName || '', 'id');
+      if (key === 'attention') comparison = attentionRank(left) - attentionRank(right);
+      return comparison * factor || right.date.localeCompare(left.date) || right.woNumber.localeCompare(left.woNumber);
+    });
+  }, [filteredWOs, workOrderTable.sort, attentionByWorkOrderId]);
 
   const selectedWorkOrderDate = periodFilter === 'custom' && dateFrom === dateTo ? dateFrom : '';
   const setSelectedWorkOrderDate = (value: string) => {
@@ -2352,6 +2395,7 @@ export default function WorkOrders() {
                   </label>
                 ))}
                 <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3"><button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button><button type="button" onClick={() => updateVisibleColumns(['number', 'date', 'customer', 'attention', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button></div>
+                <button type="button" onClick={workOrderTable.resetLayout} className="mt-2 w-full rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Reset Urutan &amp; Lebar</button>
               </div>
             )}
           </div>
@@ -2475,6 +2519,7 @@ export default function WorkOrders() {
                     <button type="button" onClick={() => updateVisibleColumns(DEFAULT_WORK_ORDER_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Tampilkan Semua</button>
                     <button type="button" onClick={() => updateVisibleColumns(['number', 'date', 'customer', 'attention', 'createdBy', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
                   </div>
+                  <button type="button" onClick={workOrderTable.resetLayout} className="mt-2 w-full rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Reset Urutan &amp; Lebar</button>
                 </div>
               )}
             </div>
@@ -2527,34 +2572,46 @@ export default function WorkOrders() {
       {filteredWOs.length > 0 && (
         <div className={`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`}>
           <div className="max-h-[calc(100vh-238px)] overflow-auto">
-            <table className="w-full min-w-[1200px] text-left">
+            <table className="w-full min-w-[1200px] table-fixed text-left" style={{ minWidth: Math.max(1200, orderedVisibleWorkOrderColumns.reduce((sum, key) => sum + (workOrderTable.isDesktop ? workOrderTable.widths[key] : WORK_ORDER_COLUMN_WIDTHS[key]), 0)) }}>
+              <colgroup>
+                {orderedVisibleWorkOrderColumns.map(key => <col key={key} style={{ width: workOrderTable.isDesktop ? workOrderTable.widths[key] : WORK_ORDER_COLUMN_WIDTHS[key] }} />)}
+              </colgroup>
               <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
-                  {isColumnVisible('number') && <th className="font-semibold">No. WO / Status</th>}
-                  {isColumnVisible('date') && <th className="whitespace-nowrap font-semibold">Tanggal</th>}
-                  {isColumnVisible('attention') && <th className="w-12 text-center font-semibold" title="Butuh tindakan">!</th>}
-                  {isColumnVisible('customer') && <th className="font-semibold">Pelanggan / Kendaraan</th>}
-                  {isColumnVisible('services') && <th className="font-semibold">Layanan</th>}
-                  {isColumnVisible('total') && <th className="text-right font-semibold">Total</th>}
-                  {isColumnVisible('createdBy') && <th className="font-semibold">Dibuat Oleh</th>}
-                  {isColumnVisible('actions') && <th className="text-right font-semibold">Aksi</th>}
+                  {orderedVisibleWorkOrderColumns.map(key => (
+                    <ConfigurableTableHeaderCell
+                      key={key}
+                      columnKey={key}
+                      label={key === 'attention' ? '!' : WORK_ORDER_COLUMNS.find(column => column.key === key)?.label || key}
+                      sortable={workOrderTable.isDesktop && WORK_ORDER_SORTABLE_COLUMNS.includes(key)}
+                      movable={workOrderTable.isDesktop && key !== 'actions'}
+                      sort={workOrderTable.sort}
+                      align={key === 'total' || key === 'actions' ? 'right' : key === 'attention' ? 'center' : 'left'}
+                      stickyRight={key === 'actions'}
+                      onMove={workOrderTable.moveColumn}
+                      onSort={workOrderTable.toggleSort}
+                      onResize={workOrderTable.beginResize}
+                      onResetWidth={workOrderTable.resetWidth}
+                    />
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredWOs.map((wo) => (
+                {desktopWOs.map((wo) => (
                   <tr key={wo.id} className="transition-colors hover:bg-blue-50/50">
-                    {isColumnVisible('number') && <td className="px-4 py-3">
+                    {orderedVisibleWorkOrderColumns.map(key => {
+                      if (key === 'number') return <td key={key} className="overflow-hidden px-4 py-3">
                       <button type="button" onClick={() => openWorkOrderStandard(wo)} className="text-left">
                         <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
                       </button>
-                    </td>}
-                    {isColumnVisible('date') && <td className="whitespace-nowrap px-4 py-3">
+                    </td>;
+                      if (key === 'date') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3">
                       <span className="block text-sm text-gray-800">{formatBusinessDate(wo.date)}</span>
                       <span className="mt-0.5 block text-xs text-gray-500">
                         {wo.transactionTime ? wo.transactionTime.slice(0, 5) : '—'} · {data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}
                       </span>
-                    </td>}
-                    {isColumnVisible('attention') && <td className="w-12 px-2 py-3 text-center">
+                    </td>;
+                      if (key === 'attention') return <td key={key} className="overflow-hidden px-2 py-3 text-center">
                       {attentionByWorkOrderId.has(wo.id) && (
                         <button
                           type="button"
@@ -2571,10 +2628,10 @@ export default function WorkOrders() {
                           {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
                         </button>
                       )}
-                    </td>}
-                    {isColumnVisible('customer') && <td className="px-4 py-3">
+                    </td>;
+                      if (key === 'customer') return <td key={key} className="overflow-hidden px-4 py-3">
                       <WorkOrderCustomerVehicleIdentity
-                        className="max-w-[320px]"
+                        className="w-full"
                         customerName={customerIdentityForWO(wo).title}
                         phone={`${customerIdentityForWO(wo).isCompany ? `PIC: ${customerIdentityForWO(wo).picName} · ` : ''}${customerIdentityForWO(wo).phone}`}
                         plateNumber={wo.plateNumber}
@@ -2582,22 +2639,22 @@ export default function WorkOrders() {
                         driverName={customerIdentityForWO(wo).driverName}
                         driverPhone={customerIdentityForWO(wo).driverPhone}
                       />
-                    </td>}
-                    {isColumnVisible('services') && <td className="px-4 py-3">
-                      <span className="block max-w-[230px] truncate text-sm text-gray-800">
+                    </td>;
+                      if (key === 'services') return <td key={key} className="overflow-hidden px-4 py-3">
+                      <span className="block w-full truncate text-sm text-gray-800">
                         {wo.services.map(service => service.name).join(', ') || 'Belum ada layanan'}
                       </span>
                       <span className="block text-xs text-gray-500">{wo.services.length} item layanan</span>
-                    </td>}
-                    {isColumnVisible('total') && <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                    </td>;
+                      if (key === 'total') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3 text-right text-sm">
                       <WorkOrderEstimateAmount amount={wo.total} isLostSales={statusLabel(wo.status) === 'Lost Sales'} />
-                    </td>}
-                    {isColumnVisible('createdBy') && <td className="px-4 py-3">
-                      <span className="block max-w-[170px] truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
+                    </td>;
+                      if (key === 'createdBy') return <td key={key} className="overflow-hidden px-4 py-3">
+                      <span className="block w-full truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
                         {wo.createdByName || '—'}
                       </span>
-                    </td>}
-                    {isColumnVisible('actions') && <td className="px-4 py-3">
+                    </td>;
+                      if (key === 'actions') return <td key={key} className="sticky right-0 overflow-hidden bg-inherit px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)]">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
@@ -2622,7 +2679,9 @@ export default function WorkOrders() {
                           </button>
                         )}
                       </div>
-                    </td>}
+                    </td>;
+                      return null;
+                    })}
                   </tr>
                 ))}
               </tbody>

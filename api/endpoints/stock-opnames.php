@@ -3,6 +3,26 @@ $actor = $requestUser ?? requireAuthenticatedUser($pdo);
 $hasOpnamePermission=static function(PDO $pdo,array $actor,string $permission,string $fallback):bool{
     return !empty($actor['is_owner'])||authenticatedUserHasPermission($pdo,$actor,$permission)||authenticatedUserHasPermission($pdo,$actor,$fallback);
 };
+$loadCategoryUsage=static function(PDO $pdo):array{
+    $usage=[];
+    $rows=$pdo->query("SELECT COALESCE(NULLIF(TRIM(i.category_name),''),'Tanpa Kategori') category_name,
+        COALESCE(SUM(ABS(d.qty)),0) usage_count
+        FROM sales_invoice_items d JOIN items i ON i.id=d.item_id COLLATE utf8mb4_unicode_ci
+        WHERE i.type='Persediaan'
+        GROUP BY COALESCE(NULLIF(TRIM(i.category_name),''),'Tanpa Kategori')")->fetchAll();
+    foreach($rows as $row)$usage[(string)$row['category_name']]=(int)$row['usage_count'];
+    return $usage;
+};
+$sortByCategoryUsage=static function(array &$rows,array $usage):void{
+    usort($rows,static function(array $left,array $right)use($usage):int{
+        $leftCategory=(string)(($left['category_name']??'')?:'Tanpa Kategori');
+        $rightCategory=(string)(($right['category_name']??'')?:'Tanpa Kategori');
+        return (($usage[$rightCategory]??0)<=>($usage[$leftCategory]??0))
+            ?:strcasecmp($leftCategory,$rightCategory)
+            ?:strcasecmp((string)($left['item_name']??$left['name']??''),(string)($right['item_name']??$right['name']??''))
+            ?:strcasecmp((string)($left['item_code']??$left['code']??''),(string)($right['item_code']??$right['code']??''));
+    });
+};
 
 $loadOrder = static function(PDO $pdo, string $id): ?array {
     $stmt=$pdo->prepare("SELECT o.*,w.code warehouse_code,w.name warehouse_name,b.name branch_name,
@@ -25,15 +45,16 @@ $mapOrder = static function(array $row): array {
             'status'=>(string)$row['result_status'],'adjustmentId'=>$row['adjustment_id']?:null,'adjustmentNumber'=>$row['adjustment_number']?:null,'notes'=>(string)($row['result_notes']??'')] : null,
     ];
 };
-$orderRows = static function(PDO $pdo, string $resultId): array {
-    $stmt=$pdo->prepare("SELECT * FROM stock_count_result_items WHERE result_id=? ORDER BY category_name,item_name,item_code");
+$orderRows = static function(PDO $pdo, string $resultId) use ($loadCategoryUsage,$sortByCategoryUsage): array {
+    $stmt=$pdo->prepare("SELECT * FROM stock_count_result_items WHERE result_id=?");
     $stmt->execute([$resultId]);
+    $storedRows=$stmt->fetchAll();$usage=$loadCategoryUsage($pdo);$sortByCategoryUsage($storedRows,$usage);
     return array_map(static fn($row)=>[
         'id'=>(int)$row['id'],'itemId'=>(string)$row['item_id'],'code'=>(string)$row['item_code'],'name'=>(string)$row['item_name'],
-        'categoryName'=>(string)($row['category_name']?:'Tanpa Kategori'),'unit'=>(string)$row['unit'],'systemQuantity'=>(int)$row['system_quantity'],
+        'categoryName'=>(string)($row['category_name']?:'Tanpa Kategori'),'categoryUsageCount'=>(int)($usage[(string)($row['category_name']?:'Tanpa Kategori')]??0),'unit'=>(string)$row['unit'],'systemQuantity'=>(int)$row['system_quantity'],
         'count1'=>$row['count_1']===null?null:(int)$row['count_1'],'count2'=>$row['count_2']===null?null:(int)$row['count_2'],
         'finalQuantity'=>$row['final_quantity']===null?null:(int)$row['final_quantity'],'variance'=>$row['variance']===null?null:(int)$row['variance'],
-    ],$stmt->fetchAll());
+    ],$storedRows);
 };
 
 if($method==='GET') {
@@ -86,7 +107,7 @@ if($method==='PUT'&&$id) {
             $period=date('ym');$seq=$pdo->prepare("SELECT result_number FROM stock_count_results WHERE result_number LIKE ? ORDER BY result_number DESC LIMIT 1 FOR UPDATE");$seq->execute(['HSO-'.$period.'-%']);$last=(string)($seq->fetchColumn()?:'');$next=preg_match('/(\d{4})$/',$last,$m)?(int)$m[1]+1:1;$resultNumber='HSO-'.$period.'-'.str_pad((string)$next,4,'0',STR_PAD_LEFT);$resultId='SCR-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);
             $pdo->prepare("INSERT INTO stock_count_results(id,result_number,order_id,result_date,status,created_by) VALUES(?,?,?,?, 'Draft',?)")->execute([$resultId,$resultNumber,$id,date('Y-m-d'),$actor['id']]);
             $sql="SELECT i.id,i.code,i.name,i.category_name,i.unit,COALESCE(s.quantity,0) system_qty,COALESCE(s.stock_version,0) system_version FROM items i LEFT JOIN warehouse_stocks s ON s.item_id=i.id COLLATE utf8mb4_unicode_ci AND s.warehouse_id=? WHERE i.type='Persediaan' AND i.is_active=1";
-            $params=[$row['warehouse_id']];if($row['category_id']){$sql.=" AND i.category_id=?";$params[]=$row['category_id'];}$sql.=" ORDER BY i.category_name,i.name,i.code";$items=$pdo->prepare($sql);$items->execute($params);$insert=$pdo->prepare("INSERT INTO stock_count_result_items(result_id,item_id,item_code,item_name,category_name,unit,system_quantity,system_version) VALUES(?,?,?,?,?,?,?,?)");$count=0;foreach($items->fetchAll()as$item){$insert->execute([$resultId,$item['id'],$item['code'],$item['name'],$item['category_name']?:'Tanpa Kategori',$item['unit']??'',(int)$item['system_qty'],(int)$item['system_version']]);$count++;}if(!$count)throw new InvalidArgumentException('Tidak ada barang untuk dihitung');
+            $params=[$row['warehouse_id']];if($row['category_id']){$sql.=" AND i.category_id=?";$params[]=$row['category_id'];}$items=$pdo->prepare($sql);$items->execute($params);$itemRows=$items->fetchAll();$sortByCategoryUsage($itemRows,$loadCategoryUsage($pdo));$insert=$pdo->prepare("INSERT INTO stock_count_result_items(result_id,item_id,item_code,item_name,category_name,unit,system_quantity,system_version) VALUES(?,?,?,?,?,?,?,?)");$count=0;foreach($itemRows as$item){$insert->execute([$resultId,$item['id'],$item['code'],$item['name'],$item['category_name']?:'Tanpa Kategori',$item['unit']??'',(int)$item['system_qty'],(int)$item['system_version']]);$count++;}if(!$count)throw new InvalidArgumentException('Tidak ada barang untuk dihitung');
             $pdo->prepare("UPDATE stock_count_orders SET status='Dalam Penghitungan' WHERE id=?")->execute([$id]);$pdo->commit();respondSuccess(['resultId'=>$resultId,'resultNumber'=>$resultNumber],'Hasil Stok Opname dibuat');
         }
         if(!$row['result_id']||$row['result_status']!=='Draft')throw new InvalidArgumentException('Hasil Stok Opname tidak dapat diubah');

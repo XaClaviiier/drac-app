@@ -15,6 +15,7 @@ type ReportRow = {
   unit: string;
   categoryId: string;
   categoryName: string;
+  categoryUsageCount: number;
   brand: string;
   quantity: number;
 };
@@ -93,7 +94,10 @@ export default function StockCountSheetPrintReport() {
   const groupedRows = useMemo(() => {
     const grouped = new Map<string, ReportRow[]>();
     filteredRows.forEach(row => grouped.set(row.categoryName || 'Tanpa Kategori', [...(grouped.get(row.categoryName || 'Tanpa Kategori') || []), row]));
-    return [...grouped.entries()];
+    return [...grouped.entries()].sort(([leftCategory, leftRows], [rightCategory, rightRows]) => {
+      const usageDifference = (rightRows[0]?.categoryUsageCount || 0) - (leftRows[0]?.categoryUsageCount || 0);
+      return usageDifference || leftCategory.localeCompare(rightCategory, 'id-ID');
+    });
   }, [filteredRows]);
 
   const showReport = async () => {

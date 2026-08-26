@@ -21,6 +21,23 @@ if ($branchId !== 'ALL' && $branchId !== (string)$warehouse['branch_id']) respon
 $items = $pdo->query("SELECT id,code,name,unit,category_id,category_name,brand
     FROM items WHERE type='Persediaan' AND is_active=1
     ORDER BY category_name,name,code")->fetchAll();
+$categoryUsage = [];
+$usageRows = $pdo->query("SELECT COALESCE(NULLIF(TRIM(i.category_name),''),'Tanpa Kategori') category_name,
+        COALESCE(SUM(ABS(d.qty)),0) usage_count
+    FROM sales_invoice_items d
+    JOIN items i ON i.id=d.item_id COLLATE utf8mb4_unicode_ci
+    WHERE i.type='Persediaan'
+    GROUP BY COALESCE(NULLIF(TRIM(i.category_name),''),'Tanpa Kategori')")->fetchAll();
+foreach ($usageRows as $usageRow) $categoryUsage[(string)$usageRow['category_name']] = (int)$usageRow['usage_count'];
+usort($items, static function(array $left, array $right) use ($categoryUsage): int {
+    $leftCategory = (string)($left['category_name'] ?: 'Tanpa Kategori');
+    $rightCategory = (string)($right['category_name'] ?: 'Tanpa Kategori');
+    $usageComparison = ($categoryUsage[$rightCategory] ?? 0) <=> ($categoryUsage[$leftCategory] ?? 0);
+    return $usageComparison
+        ?: strcasecmp($leftCategory, $rightCategory)
+        ?: strcasecmp((string)$left['name'], (string)$right['name'])
+        ?: strcasecmp((string)$left['code'], (string)$right['code']);
+});
 $quantities = array_fill_keys(array_map(fn($row) => (string)$row['id'], $items), 0);
 $currentStmt = $pdo->prepare('SELECT item_id,quantity FROM warehouse_stocks WHERE warehouse_id=?');
 $currentStmt->execute([$warehouseId]);
@@ -87,11 +104,13 @@ foreach ($stmt->fetchAll() as $row) {
     if ((string)$row['destination_warehouse_id'] === $warehouseId) $rollback((string)$row['item_id'], -(int)$row['quantity']);
 }
 
-$rows = array_map(function($item) use ($quantities) {
+$rows = array_map(function($item) use ($quantities, $categoryUsage) {
+    $categoryName = (string)($item['category_name'] ?: 'Tanpa Kategori');
     return [
         'id' => (string)$item['id'], 'code' => (string)$item['code'], 'name' => (string)$item['name'],
         'unit' => (string)($item['unit'] ?? ''), 'categoryId' => (string)($item['category_id'] ?? ''),
-        'categoryName' => (string)($item['category_name'] ?: 'Tanpa Kategori'), 'brand' => (string)($item['brand'] ?? ''),
+        'categoryName' => $categoryName, 'categoryUsageCount' => (int)($categoryUsage[$categoryName] ?? 0),
+        'brand' => (string)($item['brand'] ?? ''),
         'quantity' => (int)($quantities[(string)$item['id']] ?? 0),
     ];
 }, $items);

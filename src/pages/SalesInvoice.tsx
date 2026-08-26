@@ -14,11 +14,12 @@ import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
+import { ConfigurableTableHeaderCell, useConfigurableTable } from '../components/ConfigurableTable';
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 
-type InvoiceColumnKey = 'date' | 'number' | 'customer' | 'total' | 'branch' | 'actions';
+type InvoiceColumnKey = 'date' | 'number' | 'customer' | 'attention' | 'total' | 'branch' | 'actions';
 type InvoicePaymentHistory = {
   id: string;
   paymentNumber: string;
@@ -34,11 +35,22 @@ const SALES_INVOICE_COLUMNS: Array<{ key: InvoiceColumnKey; label: string; locke
   { key: 'date', label: 'Tanggal' },
   { key: 'number', label: 'Nomor Faktur / Status', locked: true },
   { key: 'customer', label: 'Pelanggan / Kendaraan' },
+  { key: 'attention', label: 'Perhatian', locked: true },
   { key: 'total', label: 'Total / Pembayaran' },
   { key: 'branch', label: 'Cabang' },
   { key: 'actions', label: 'Aksi', locked: true },
 ];
 const DEFAULT_SALES_INVOICE_COLUMNS = SALES_INVOICE_COLUMNS.map(column => column.key);
+const SALES_INVOICE_SORTABLE_COLUMNS: InvoiceColumnKey[] = ['date', 'number', 'customer', 'attention', 'total', 'branch'];
+const SALES_INVOICE_COLUMN_WIDTHS: Record<InvoiceColumnKey, number> = {
+  date: 145,
+  number: 245,
+  customer: 330,
+  attention: 150,
+  total: 185,
+  branch: 140,
+  actions: 180,
+};
 
 export default function SalesInvoice() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -112,6 +124,14 @@ export default function SalesInvoice() {
   };
 
   const invoiceColumnStorageKey = `dokterac_invoice_columns_${currentUser?.id || currentUser?.username || 'default'}`;
+  const invoiceLayoutStorageKey = `${invoiceColumnStorageKey}_layout_v1`;
+  const invoiceTable = useConfigurableTable<InvoiceColumnKey>({
+    storageKey: invoiceLayoutStorageKey,
+    defaultOrder: DEFAULT_SALES_INVOICE_COLUMNS,
+    defaultWidths: SALES_INVOICE_COLUMN_WIDTHS,
+    sortableKeys: SALES_INVOICE_SORTABLE_COLUMNS,
+    fixedRightKeys: ['actions'],
+  });
   useEffect(() => {
     try {
       const saved = localStorage.getItem(invoiceColumnStorageKey);
@@ -121,7 +141,7 @@ export default function SalesInvoice() {
       }
       const parsed = JSON.parse(saved) as InvoiceColumnKey[];
       const valid = parsed.filter(key => SALES_INVOICE_COLUMNS.some(column => column.key === key));
-      setVisibleColumns(Array.from(new Set<InvoiceColumnKey>(['number', ...valid, 'actions'])));
+      setVisibleColumns(Array.from(new Set<InvoiceColumnKey>(['number', ...valid, 'attention', 'actions'])));
     } catch {
       setVisibleColumns(DEFAULT_SALES_INVOICE_COLUMNS);
     }
@@ -129,7 +149,7 @@ export default function SalesInvoice() {
 
   const isInvoiceColumnVisible = (key: InvoiceColumnKey) => visibleColumns.includes(key);
   const updateVisibleInvoiceColumns = (columns: InvoiceColumnKey[]) => {
-    const next = Array.from(new Set<InvoiceColumnKey>(['number', ...columns, 'actions']));
+    const next = Array.from(new Set<InvoiceColumnKey>(['number', ...columns, 'attention', 'actions']));
     setVisibleColumns(next);
     localStorage.setItem(invoiceColumnStorageKey, JSON.stringify(next));
   };
@@ -340,6 +360,23 @@ export default function SalesInvoice() {
         return b.invoiceNumber.localeCompare(a.invoiceNumber);
       });
   }, [data.invoices, searchTerm, filterStatus, filterDate, filterCustomer, currentBranchId]);
+
+  const desktopInvoices = useMemo(() => {
+    if (!invoiceTable.sort) return filteredInvoices;
+    const { key, direction } = invoiceTable.sort;
+    const factor = direction === 'asc' ? 1 : -1;
+    const attentionRank = (invoice: SalesInvoice) => invoice.payment >= invoice.total ? 0 : invoice.age >= 7 ? 2 : 1;
+    return [...filteredInvoices].sort((left, right) => {
+      let comparison = 0;
+      if (key === 'date') comparison = left.date.localeCompare(right.date);
+      if (key === 'number') comparison = `${left.invoiceNumber}|${left.payment >= left.total ? 'Lunas' : 'Belum Lunas'}`.localeCompare(`${right.invoiceNumber}|${right.payment >= right.total ? 'Lunas' : 'Belum Lunas'}`, 'id', { numeric: true });
+      if (key === 'customer') comparison = `${left.customerName}|${left.vehicleInfo}`.localeCompare(`${right.customerName}|${right.vehicleInfo}`, 'id', { numeric: true });
+      if (key === 'attention') comparison = attentionRank(left) - attentionRank(right);
+      if (key === 'total') comparison = left.total - right.total || left.payment - right.payment;
+      if (key === 'branch') comparison = (data.branches.find(branch => branch.id === left.branchId)?.name || left.branchId).localeCompare(data.branches.find(branch => branch.id === right.branchId)?.name || right.branchId, 'id');
+      return comparison * factor || right.date.localeCompare(left.date) || right.invoiceNumber.localeCompare(left.invoiceNumber);
+    });
+  }, [filteredInvoices, invoiceTable.sort, data.branches]);
 
   const invoiceCustomers = useMemo(() => Array.from(new Set(
     data.invoices
@@ -615,6 +652,7 @@ export default function SalesInvoice() {
     }
     window.requestAnimationFrame(() => woPickerPanelRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
   };
+  const orderedVisibleInvoiceColumns = (invoiceTable.isDesktop ? invoiceTable.order : DEFAULT_SALES_INVOICE_COLUMNS).filter(column => isInvoiceColumnVisible(column) && (column !== 'branch' || currentBranchId === 'ALL'));
 
   useEffect(() => {
     const woId = searchParams.get('woId');
@@ -928,6 +966,7 @@ export default function SalesInvoice() {
                     <button type="button" onClick={() => updateVisibleInvoiceColumns(DEFAULT_SALES_INVOICE_COLUMNS)} className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Semua</button>
                     <button type="button" onClick={() => updateVisibleInvoiceColumns(['number', 'customer', 'total', 'actions'])} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Ringkas</button>
                   </div>
+                  <button type="button" onClick={invoiceTable.resetLayout} className="mt-2 w-full rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Reset Urutan &amp; Lebar</button>
                 </div>
               )}
             </div>
@@ -939,34 +978,48 @@ export default function SalesInvoice() {
       {/* Table */}
       <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
         <div className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
-          <table className="w-full min-w-[1040px] border-collapse">
+          <table className="w-full min-w-[1040px] table-fixed border-collapse" style={{ minWidth: Math.max(1040, orderedVisibleInvoiceColumns.reduce((sum, key) => sum + (invoiceTable.isDesktop ? invoiceTable.widths[key] : SALES_INVOICE_COLUMN_WIDTHS[key]), 0)) }}>
+            <colgroup>
+              {orderedVisibleInvoiceColumns.map(key => <col key={key} style={{ width: invoiceTable.isDesktop ? invoiceTable.widths[key] : SALES_INVOICE_COLUMN_WIDTHS[key] }} />)}
+            </colgroup>
             <thead className="sticky top-0 z-20 bg-blue-800 text-white">
               <tr>
-                {isInvoiceColumnVisible('date') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Tanggal</th>}
-                {isInvoiceColumnVisible('number') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Nomor Faktur / Status</th>}
-                {isInvoiceColumnVisible('customer') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Pelanggan / Kendaraan</th>}
-                {isInvoiceColumnVisible('total') && <th className="px-4 text-right text-xs font-semibold uppercase tracking-wide">Total / Pembayaran</th>}
-                {currentBranchId === 'ALL' && isInvoiceColumnVisible('branch') && <th className="px-4 text-left text-xs font-semibold uppercase tracking-wide">Cabang</th>}
-                {isInvoiceColumnVisible('actions') && <th className="sticky right-0 bg-blue-800 px-4 text-center text-xs font-semibold uppercase tracking-wide">Aksi</th>}
+                {orderedVisibleInvoiceColumns.map(key => (
+                  <ConfigurableTableHeaderCell
+                    key={key}
+                    columnKey={key}
+                    label={SALES_INVOICE_COLUMNS.find(column => column.key === key)?.label || key}
+                    sortable={invoiceTable.isDesktop && SALES_INVOICE_SORTABLE_COLUMNS.includes(key)}
+                    movable={invoiceTable.isDesktop && key !== 'actions'}
+                    sort={invoiceTable.sort}
+                    align={key === 'total' ? 'right' : key === 'actions' || key === 'attention' ? 'center' : 'left'}
+                    stickyRight={key === 'actions'}
+                    onMove={invoiceTable.moveColumn}
+                    onSort={invoiceTable.toggleSort}
+                    onResize={invoiceTable.beginResize}
+                    onResetWidth={invoiceTable.resetWidth}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={visibleColumns.filter(column => column !== 'branch' || currentBranchId === 'ALL').length} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={orderedVisibleInvoiceColumns.length} className="px-6 py-12 text-center text-gray-500">
                     <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p className="text-lg font-medium">Tidak ada data faktur</p>
                     <p className="text-sm">Silakan buat faktur baru atau pilih cabang lain</p>
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((invoice) => {
+                (invoiceTable.isDesktop ? desktopInvoices : filteredInvoices).map((invoice) => {
                   const vehicleSummary = invoiceVehicleSummary(invoice);
                   const invoicePaid = invoice.total > 0 && invoice.payment >= invoice.total;
                   return (
                   <tr key={invoice.id} className="group transition-colors even:bg-gray-50 hover:bg-blue-50/50">
-                    {isInvoiceColumnVisible('date') && <td className="whitespace-nowrap border-r border-gray-200 px-3 py-2.5 text-sm text-gray-900">{formatShareDate(invoice.date)}</td>}
-                    {isInvoiceColumnVisible('number') && <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                    {orderedVisibleInvoiceColumns.map(key => {
+                      if (key === 'date') return <td key={key} className="overflow-hidden whitespace-nowrap border-r border-gray-200 px-3 py-2.5 text-sm text-gray-900">{formatShareDate(invoice.date)}</td>;
+                      if (key === 'number') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
@@ -985,12 +1038,20 @@ export default function SalesInvoice() {
                         <span className="mt-0.5 block text-[11px] font-medium text-gray-500">No. Nota Asli: <strong className="font-mono font-semibold text-gray-700">{invoice.manualReceiptNumber}</strong></span>
                       )}
                       {!invoicePaid && <span className="mt-0.5 block text-[10px] font-medium text-amber-700">Belum dibayar {invoice.age} hari</span>}
-                    </td>}
-                    {isInvoiceColumnVisible('customer') && <td className="min-w-[310px] max-w-md px-4 py-2.5 text-sm text-gray-900">
+                    </td>;
+                      if (key === 'customer') return <td key={key} className="overflow-hidden px-4 py-2.5 text-sm text-gray-900">
                       <strong className="block truncate font-semibold">{invoice.customerName} <span className="font-normal text-gray-400">—</span> <span className="font-mono">{vehicleSummary.plateNumber}</span></strong>
                       <span className="mt-0.5 block truncate text-xs text-gray-500">{invoiceCustomerPhone(invoice)} <span className="text-gray-300">—</span> {vehicleSummary.detail}</span>
-                    </td>}
-                    {isInvoiceColumnVisible('total') && <td className="min-w-[150px] whitespace-nowrap px-4 py-2.5 text-right text-sm text-gray-900">
+                    </td>;
+                      if (key === 'attention') return <td key={key} className="overflow-hidden px-3 py-2.5 text-center">
+                      {!invoicePaid && (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${invoice.age >= 7 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`} title={`Sisa tagihan Rp ${Math.max(0, invoice.total - invoice.payment).toLocaleString('id-ID')}`}>
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : invoice.age > 0 ? `${invoice.age} hari` : 'Belum lunas'}
+                        </span>
+                      )}
+                    </td>;
+                      if (key === 'total') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-2.5 text-right text-sm text-gray-900">
                       <strong className="block font-semibold tabular-nums">Rp {invoice.total.toLocaleString('id-ID')}</strong>
                       <span className="mt-0.5 block text-[11px] text-gray-500">Bayar Rp {invoice.payment.toLocaleString('id-ID')}</span>
                       {invoicePaid ? (
@@ -998,15 +1059,13 @@ export default function SalesInvoice() {
                       ) : (
                         <span className="block text-[10px] font-semibold text-amber-700">Sisa Rp {Math.max(0, invoice.total - invoice.payment).toLocaleString('id-ID')}</span>
                       )}
-                    </td>}
-                    {currentBranchId === 'ALL' && isInvoiceColumnVisible('branch') && (
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    </td>;
+                      if (key === 'branch') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3 text-xs">
                         <span className="rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700">
                           {data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}
                         </span>
-                      </td>
-                    )}
-                    {isInvoiceColumnVisible('actions') && <td className="sticky right-0 bg-inherit px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] group-hover:bg-blue-50">
+                      </td>;
+                      if (key === 'actions') return <td key={key} className="sticky right-0 overflow-hidden bg-inherit px-4 py-3 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] group-hover:bg-blue-50">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
@@ -1045,7 +1104,9 @@ export default function SalesInvoice() {
                           </button>
                         )}
                       </div>
-                    </td>}
+                    </td>;
+                      return null;
+                    })}
                   </tr>
                   );
                 })

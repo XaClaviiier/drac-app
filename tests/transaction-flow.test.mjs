@@ -568,8 +568,8 @@ test('daftar Faktur Penjualan mengikuti kepadatan dan perataan Order Kerja', () 
 test('identitas dan aksi daftar Faktur Penjualan mengikuti daftar Order Kerja', () => {
   const page = source('src/pages/SalesInvoice.tsx');
 
-  assert.match(page, />Pelanggan \/ Kendaraan<\/th>/);
-  assert.match(page, />Nomor Faktur \/ Status<\/th>/);
+  assert.match(page, /key: 'customer', label: 'Pelanggan \/ Kendaraan'/);
+  assert.match(page, /key: 'number', label: 'Nomor Faktur \/ Status'/);
   assert.match(page, /invoicePaid = invoice\.total > 0 && invoice\.payment >= invoice\.total/);
   assert.match(page, /title=\{`Faktur dibuat dari \$\{invoice\.woNumber\}`\}>\{invoice\.woNumber\}<\/span>/);
   assert.match(page, /\{invoicePaid \? 'Lunas' : 'Belum Lunas'\}/);
@@ -579,6 +579,25 @@ test('identitas dan aksi daftar Faktur Penjualan mengikuti daftar Order Kerja', 
   assert.match(page, /aria-label=\{`Buka Faktur \$\{invoice\.invoiceNumber\}`\}/);
   assert.doesNotMatch(page, /\{invoiceCustomerPhone\(invoice\)\} - \{invoice\.customerId\}/);
   assert.doesNotMatch(page, /isInvoiceColumnVisible\('vehicle'\)/);
+});
+
+test('kolom desktop WO dan Faktur dapat diurutkan dipindah dan diubah lebarnya', () => {
+  const shared = source('src/components/ConfigurableTable.tsx');
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  const invoices = source('src/pages/SalesInvoice.tsx');
+
+  assert.match(shared, /text\/x-drac-column/);
+  assert.match(shared, /cursor-col-resize/);
+  assert.match(shared, /current\.direction === 'asc'[\s\S]*?direction: 'desc'[\s\S]*?: null/);
+  assert.match(shared, /localStorage\.setItem\(storageKey/);
+  assert.match(shared, /fixedRightKeys\.includes\(source\) \|\| fixedRightKeys\.includes\(target\)/);
+  assert.match(workOrders, /WORK_ORDER_SORTABLE_COLUMNS[^\n]*'number'[^\n]*'date'[^\n]*'customer'[^\n]*'total'[^\n]*'createdBy'[^\n]*'attention'/);
+  assert.doesNotMatch(workOrders, /WORK_ORDER_SORTABLE_COLUMNS[^\n]*'services'/);
+  assert.match(invoices, /SALES_INVOICE_SORTABLE_COLUMNS[^\n]*'date'[^\n]*'number'[^\n]*'customer'[^\n]*'attention'[^\n]*'total'[^\n]*'branch'/);
+  assert.doesNotMatch(invoices, /SALES_INVOICE_SORTABLE_COLUMNS[^\n]*'actions'/);
+  assert.match(invoices, /key: 'attention', label: 'Perhatian'/);
+  assert.match(workOrders, /Reset Urutan &amp; Lebar/);
+  assert.match(invoices, /Reset Urutan &amp; Lebar/);
 });
 
 test('daftar Pembayaran Pelanggan mengikuti kepadatan dan perataan Order Kerja', () => {
@@ -943,13 +962,13 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.match(workOrders, /<option value="overdue">Terlambat \/ Kritis<\/option>/);
   assert.match(workOrders, /key: 'attention', label: 'Perhatian', locked: true/);
   assert.doesNotMatch(workOrders, /key: 'status', label: 'Status'/);
-  assert.match(workOrders, />No\. WO \/ Status</);
-  assert.match(workOrders, /isColumnVisible\('date'\)[\s\S]*?>Tanggal</);
+  assert.match(workOrders, /key: 'number', label: 'No\. WO \/ Status'/);
+  assert.match(workOrders, /key: 'date', label: 'Tanggal'/);
   assert.match(workOrders, /formatBusinessDate\(wo\.date\)/);
   assert.doesNotMatch(workOrders, />No\. WO \/ Status \/ Tanggal</);
   assert.match(workOrders, /CircleAlert className="h-5 w-5"/);
   assert.match(workOrders, /AlertTriangle className="h-5 w-5"/);
-  assert.match(workOrders, />Pelanggan \/ Kendaraan</);
+  assert.match(workOrders, /key: 'customer', label: 'Pelanggan \/ Kendaraan'/);
   assert.match(workOrders, /const WorkOrderCustomerVehicleIdentity/);
   assert.match(workOrders, /customerName=\{customerIdentityForWO\(wo\)\.title\}[\s\S]*?plateNumber=\{wo\.plateNumber\}/);
   assert.match(workOrders, /formatPlateNumber\(plateNumber\)/);
