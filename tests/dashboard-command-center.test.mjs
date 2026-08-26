@@ -9,11 +9,11 @@ test('dashboard menjadi pusat kendali yang dapat membuka daftar terfilter', () =
 
   assert.match(dashboard, /buildWorkOrderAttentionItems\(visibleWOs, visibleInvoices, todayKey\)/);
   assert.match(dashboard, /countWorkOrderAttentionByKind\(attentionItems\)/);
-  assert.match(dashboard, /to=\{`\/invoices\?date=\$\{todayKey\}`\}/);
-  assert.match(dashboard, /value=\{`\$\{todayInvoices\.length\} Faktur`\}/);
-  assert.match(dashboard, /to="\/workorders\?status=Proses"/);
-  assert.match(dashboard, /to="\/workorders\?status=Selesai&attention=1"/);
-  assert.match(dashboard, /label="Pembayaran Hari Ini"/);
+  assert.doesNotMatch(dashboard, /label="WO Hari Ini"/);
+  assert.doesNotMatch(dashboard, /label="Sedang Dikerjakan"/);
+  assert.doesNotMatch(dashboard, /label="Selesai Belum Faktur"/);
+  assert.doesNotMatch(dashboard, /label="Kas Masuk · 10 Hari"/);
+  assert.doesNotMatch(dashboard, /function KpiCard/);
   assert.match(dashboard, /data\.warehouseStocks/);
   assert.match(dashboard, /negativeStockCount/);
   assert.match(dashboard, /pendingVerificationCount/);
@@ -23,6 +23,12 @@ test('dashboard menjadi pusat kendali yang dapat membuka daftar terfilter', () =
   assert.match(dashboard, /title="Tren Penjualan"/);
   assert.match(dashboard, /title="Beban Perusahaan"/);
   assert.match(dashboard, /invoice\.payments \|\| \[\]/);
+  assert.match(dashboard, /Ringkasan Operasional Cabang/);
+  assert.match(dashboard, /currentMonthWOs/);
+  assert.match(dashboard, /currentMonthCash/);
+  assert.match(dashboard, /currentMonthNonCash/);
+  assert.match(dashboard, /projectedMonthSales/);
+  assert.match(dashboard, /Tunai belum disetor/);
 });
 
 test('daftar faktur dan WO membaca filter tanggal dari tautan dashboard', () => {

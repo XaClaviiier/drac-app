@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Banknote,
-  CalendarDays, CheckCircle2, CircleDollarSign, Clock3, FileText,
-  Gauge, Landmark, PackageSearch, RefreshCw, TrendingUp, WalletCards, Wrench,
+  AlertTriangle, ArrowRight, Banknote, CalendarDays, CircleDollarSign,
+  Clock3, FileText, Landmark, PackageSearch, RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
@@ -13,7 +12,6 @@ import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../
 type CustomerPayment = { id: string; date: string; amount: number; paymentMethod: string; branchId: string; invoiceNumber: string; customerName: string };
 type CashAccount = { id: string; name: string; accountType: 'cash' | 'bank' | 'qris'; branchId?: string; balance: number; unsubmitted: number; isActive: boolean };
 type DepositSummary = { branchId: string; branchName: string; cashReceived: number; deposited: number; unsubmitted: number };
-type TrendDay = { date: string; label: string; cashIn: number; cashOut: number; wo: number; converted: number };
 type MonthMetric = { key: string; label: string; from: string; to: string; sales: number; invoices: number; cashIn: number; cashOut: number; net: number };
 
 const rupiah = (value: number) => `Rp ${Math.round(Number(value || 0)).toLocaleString('id-ID')}`;
@@ -66,42 +64,33 @@ export default function Dashboard() {
   const today = new Date();
   const todayKey = dateKey(today);
   const tenDaysAgo = dateKey(addDays(today, -9));
-  const previousStart = dateKey(addDays(today, -19));
-  const previousEnd = dateKey(addDays(today, -10));
-
-  const trends = useMemo<TrendDay[]>(() => Array.from({ length: 10 }, (_, index) => {
-    const date = addDays(today, index - 9);
-    const key = dateKey(date);
-    const dayWOs = visibleWOs.filter(wo => wo.date === key);
-    const converted = dayWOs.filter(wo => wo.invoiceId || data.invoices.some(invoice => invoice.woId === wo.id || invoice.woNumber === wo.woNumber)).length;
-    const cashIn = visiblePayments.filter(payment => payment.date === key).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const cashOut = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).flatMap(invoice => invoice.payments || []).filter(payment => payment.date === key).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    return { date: key, label: `${date.getDate()}/${date.getMonth() + 1}`, cashIn, cashOut, wo: dayWOs.length, converted };
-  }), [data.workOrders, data.invoices, data.purchaseInvoices, payments, currentBranchId]);
-
-  const cashIn10 = trends.reduce((sum, item) => sum + item.cashIn, 0);
-  const cashOut10 = trends.reduce((sum, item) => sum + item.cashOut, 0);
-  const netCash10 = cashIn10 - cashOut10;
-  const previousCashIn = visiblePayments.filter(payment => payment.date >= previousStart && payment.date <= previousEnd).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const cashGrowth = previousCashIn > 0 ? Math.round(((cashIn10 - previousCashIn) / previousCashIn) * 100) : cashIn10 > 0 ? 100 : 0;
   const receivables = visibleInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - Number(invoice.payment)), 0);
   const cashBalance = visibleAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
   const unsubmitted = visibleDeposits.reduce((sum, row) => sum + Number(row.unsubmitted || 0), 0);
-  const todayInvoices = visibleInvoices.filter(invoice => invoice.date === todayKey);
-  const todayInvoiceTotal = todayInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-  const todayPayments = visiblePayments.filter(payment => payment.date === todayKey);
-  const todayPaymentTotal = todayPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const currentMonthStart = monthStartKey(today);
   const currentMonthEnd = monthEndKey(today);
   const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const previousMonthStart = monthStartKey(previousMonth);
   const previousMonthEnd = monthEndKey(previousMonth);
   const currentMonthInvoices = visibleInvoices.filter(invoice => invoice.date >= currentMonthStart && invoice.date <= currentMonthEnd);
+  const currentMonthWOs = visibleWOs.filter(wo => wo.date >= currentMonthStart && wo.date <= currentMonthEnd);
   const currentMonthSales = currentMonthInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
   const currentMonthPaid = currentMonthInvoices.reduce((sum, invoice) => sum + Math.min(Number(invoice.total || 0), Number(invoice.payment || 0)), 0);
   const currentMonthUnpaid = currentMonthInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
   const currentMonthNotDue = currentMonthInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) <= 7).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
   const currentMonthOverdue = currentMonthInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
+  const currentMonthPayments = visiblePayments.filter(payment => payment.date >= currentMonthStart && payment.date <= currentMonthEnd);
+  const currentMonthCash = currentMonthPayments.filter(payment => payment.paymentMethod.toLowerCase().includes('tunai')).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const currentMonthNonCash = currentMonthPayments.filter(payment => !payment.paymentMethod.toLowerCase().includes('tunai')).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const invoicedMonthWOs = currentMonthWOs.filter(wo => wo.invoiceId || visibleInvoices.some(invoice => invoice.woId === wo.id || invoice.woNumber === wo.woNumber));
+  const completedMonthWOs = currentMonthWOs.filter(wo => wo.status === 'Selesai').length;
+  const activeMonthWOs = currentMonthWOs.filter(wo => wo.status === 'Register' || wo.status === 'Proses').length;
+  const awaitingInvoiceMonthWOs = currentMonthWOs.filter(wo => wo.status === 'Selesai' && !(wo.invoiceId || visibleInvoices.some(invoice => invoice.woId === wo.id || invoice.woNumber === wo.woNumber))).length;
+  const monthConversion = percent(invoicedMonthWOs.length, currentMonthWOs.length);
+  const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const elapsedMonthDays = Math.max(1, Math.min(today.getDate(), daysInCurrentMonth));
+  const averageDailySales = currentMonthSales / elapsedMonthDays;
+  const projectedMonthSales = Math.round(averageDailySales * daysInCurrentMonth);
 
   const monthlyMetrics = useMemo<MonthMetric[]>(() => Array.from({ length: 6 }, (_, index) => {
     const month = new Date(today.getFullYear(), today.getMonth() + index - 5, 1);
@@ -150,12 +139,6 @@ export default function Dashboard() {
   const emptyStockCount = inventoryItems.filter(item => inventoryQuantity(item.id) === 0).length;
   const pendingVerificationCount = inventoryItems.filter(item => item.verificationStatus === 'Pending').length;
 
-  const statusCounts = {
-    register: visibleWOs.filter(wo => wo.status === 'Register').length,
-    lost: visibleWOs.filter(wo => wo.status === 'Closed').length,
-    process: visibleWOs.filter(wo => wo.status === 'Proses').length,
-    completed: visibleWOs.filter(wo => wo.status === 'Selesai').length,
-  };
   const overdueInvoices = visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7);
 
   const branchPerformance = data.branches.filter(branch => branch.isActive && (currentBranchId === 'ALL' || branch.id === currentBranchId)).map(branch => {
@@ -188,20 +171,23 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className={`grid grid-cols-2 gap-3 ${canViewFinancial ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-        <KpiCard to={`/workorders?date=${todayKey}`} label="WO Hari Ini" value={`${visibleWOs.filter(wo => wo.date === todayKey).length} WO`} note="Semua WO tanggal hari ini" icon={Wrench} tone="blue" />
-        <KpiCard to="/workorders?status=Proses" label="Sedang Dikerjakan" value={`${statusCounts.process} WO`} note={`${attentionCounts.process} melewati hari transaksi`} icon={Gauge} tone={attentionCounts.process > 0 ? 'amber' : 'blue'} />
-        <KpiCard to="/workorders?status=Selesai&attention=1" label="Selesai Belum Faktur" value={`${attentionCounts.invoice} WO`} note="Perlu dibuatkan faktur" icon={CheckCircle2} tone={attentionCounts.invoice > 0 ? 'amber' : 'emerald'} />
-        <KpiCard to={`/invoices?date=${todayKey}`} label={`Faktur ${today.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`} value={`${todayInvoices.length} Faktur`} note={`Total ${compactMoney(todayInvoiceTotal)}`} icon={FileText} tone="emerald" />
-        {canViewFinancial && <KpiCard to="/customer-payments" label="Pembayaran Hari Ini" value={compactMoney(todayPaymentTotal)} note={`${todayPayments.length} transaksi`} icon={Banknote} tone="emerald" />}
-      </section>
-
-      {canViewFinancial && <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <KpiCard to="/customer-payments" label="Kas Masuk · 10 Hari" value={compactMoney(cashIn10)} note={`${cashGrowth >= 0 ? '+' : ''}${cashGrowth}% dibanding periode sebelumnya`} icon={ArrowDownRight} tone="emerald" />
-        <KpiCard to="/cash-accounts" label="Arus Kas Bersih" value={compactMoney(netCash10)} note={`Kas keluar ${compactMoney(cashOut10)}`} icon={netCash10 >= 0 ? TrendingUp : ArrowUpRight} tone={netCash10 >= 0 ? 'blue' : 'red'} />
-        <KpiCard to="/invoices" label="Piutang Pelanggan" value={compactMoney(receivables)} note={`${visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas').length} faktur belum lunas`} icon={WalletCards} tone="amber" />
-        <KpiCard to="/branch-deposits" label="Tunai Belum Disetor" value={compactMoney(unsubmitted)} note="Perlu diperiksa per cabang" icon={Landmark} tone={unsubmitted > 0 ? 'amber' : 'emerald'} />
-      </section>}
+      {canViewFinancial && <BranchOperationalCard
+        branchName={branchName}
+        period={today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+        sales={currentMonthSales}
+        workOrders={currentMonthWOs.length}
+        completedWorkOrders={completedMonthWOs}
+        activeWorkOrders={activeMonthWOs}
+        invoices={currentMonthInvoices.length}
+        awaitingInvoices={awaitingInvoiceMonthWOs}
+        conversion={monthConversion}
+        cash={currentMonthCash}
+        nonCash={currentMonthNonCash}
+        unpaid={currentMonthUnpaid}
+        unsubmitted={unsubmitted}
+        dailyAverage={averageDailySales}
+        projection={projectedMonthSales}
+      />}
 
       {canViewFinancial && <>
         <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,1fr)]">
@@ -272,6 +258,45 @@ export default function Dashboard() {
   </>;
 }
 
+function BranchOperationalCard({ branchName, period, sales, workOrders, completedWorkOrders, activeWorkOrders, invoices, awaitingInvoices, conversion, cash, nonCash, unpaid, unsubmitted, dailyAverage, projection }: {
+  branchName: string; period: string; sales: number; workOrders: number; completedWorkOrders: number; activeWorkOrders: number; invoices: number; awaitingInvoices: number; conversion: number; cash: number; nonCash: number; unpaid: number; unsubmitted: number; dailyAverage: number; projection: number;
+}) {
+  return <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+    <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+      <div><p className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Ringkasan Operasional Cabang</p><h2 className="text-lg font-bold text-slate-900">{branchName}</h2></div>
+      <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">{period}</span>
+    </header>
+    <div className="grid xl:grid-cols-[minmax(260px,0.9fr)_minmax(480px,1.6fr)_minmax(280px,0.9fr)]">
+      <Link to="/invoices" className="group border-b border-slate-200 p-5 hover:bg-blue-50/30 xl:border-b-0 xl:border-r">
+        <span className="text-sm text-slate-500">Penjualan bulan berjalan</span>
+        <strong className="mt-1 block text-3xl text-slate-950 group-hover:text-blue-700">{rupiah(sales)}</strong>
+        <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600">Lihat daftar faktur <ArrowRight className="h-3.5 w-3.5" /></span>
+      </Link>
+
+      <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-4 sm:divide-y-0">
+        <OperationalMetric to="/workorders" label="Order Kerja" value={`${workOrders} WO`} note={`${completedWorkOrders} selesai · ${activeWorkOrders} aktif`} />
+        <OperationalMetric to="/invoices" label="Faktur" value={`${invoices} Faktur`} note={`${awaitingInvoices} WO belum faktur`} warning={awaitingInvoices > 0} />
+        <OperationalMetric to="/customer-payments" label="Tunai diterima" value={compactMoney(cash)} note="Pembayaran tunai" />
+        <OperationalMetric to="/customer-payments" label="Transfer / non-tunai" value={compactMoney(nonCash)} note="Transfer, QRIS, lainnya" />
+      </div>
+
+      <div className="border-t border-slate-200 p-5 xl:border-l xl:border-t-0">
+        <div className="flex items-end justify-between"><div><span className="text-xs text-slate-500">Proyeksi omzet</span><strong className="block text-xl text-blue-700">{rupiah(projection)}</strong></div><span className="rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{conversion}%</span></div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(100, conversion)}%` }} /></div>
+        <div className="mt-2 flex justify-between text-[11px] text-slate-500"><span>WO → Faktur</span><span>Rata-rata {compactMoney(dailyAverage)}/hari</span></div>
+      </div>
+    </div>
+    <footer className="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2">
+      <Link to="/invoices?status=Belum%20Lunas" className="flex items-center justify-between gap-3 px-5 py-2.5 text-xs hover:bg-amber-50"><span className="text-slate-500">Belum dibayar</span><b className={unpaid > 0 ? 'text-amber-700' : 'text-emerald-700'}>{rupiah(unpaid)}</b></Link>
+      <Link to="/branch-deposits" className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-2.5 text-xs hover:bg-red-50 sm:border-l sm:border-t-0"><span className="text-slate-500">Tunai belum disetor</span><b className={unsubmitted > 0 ? 'text-red-600' : 'text-emerald-700'}>{rupiah(unsubmitted)}</b></Link>
+    </footer>
+  </section>;
+}
+
+function OperationalMetric({ to, label, value, note, warning = false }: { to: string; label: string; value: string; note: string; warning?: boolean }) {
+  return <Link to={to} className="group min-w-0 p-4 hover:bg-blue-50/30"><span className="block truncate text-xs text-slate-500">{label}</span><b className="mt-1 block truncate text-lg text-slate-900 group-hover:text-blue-700">{value}</b><small className={warning ? 'block truncate text-[10px] font-semibold text-amber-600' : 'block truncate text-[10px] text-slate-400'}>{note}</small></Link>;
+}
+
 function DashboardPanel({ title, subtitle, onRefresh, refreshing, action, children }: { title: string; subtitle: string; onRefresh: () => void; refreshing: boolean; action?: React.ReactNode; children: React.ReactNode }) {
   return <article className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
     <header className="flex min-h-12 items-center justify-between border-b border-slate-200 px-4 py-2.5">
@@ -321,16 +346,6 @@ function SalesSummaryLink({ to, label, value, tone }: { to: string; label: strin
 const salesBarTones = { amber: 'bg-amber-400', red: 'bg-red-500' };
 function SalesBarLink({ to, label, value, total, tone }: { to: string; label: string; value: number; total: number; tone: keyof typeof salesBarTones }) {
   return <Link to={to} className="group"><div className="mb-1 flex justify-between gap-2 text-[11px]"><span className="truncate text-slate-500">{label}</span><b className={tone === 'red' ? 'text-red-600' : 'text-amber-600'}>{compactMoney(value)}</b></div><div className="h-2 overflow-hidden bg-slate-100"><div className={`h-full transition group-hover:opacity-80 ${salesBarTones[tone]}`} style={{ width: `${percent(value, total)}%` }} /></div></Link>;
-}
-
-const kpiTones = {
-  emerald: 'bg-emerald-50 text-emerald-600 ring-emerald-100', blue: 'bg-blue-50 text-blue-600 ring-blue-100',
-  amber: 'bg-amber-50 text-amber-600 ring-amber-100', red: 'bg-red-50 text-red-600 ring-red-100',
-};
-function KpiCard({ label, value, note, icon: Icon, tone, to }: { label: string; value: string; note: string; icon: any; tone: keyof typeof kpiTones; to?: string }) {
-  const content = <><span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ring-1 ${kpiTones[tone]}`}><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-500">{label}</p><p className="truncate text-xl font-bold text-slate-900">{value}</p><p className="truncate text-[11px] text-slate-400">{note}</p></div>{to && <ArrowRight className="ml-auto h-4 w-4 flex-shrink-0 text-slate-300 transition group-hover:text-blue-500" />}</>;
-  const className = "group flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md";
-  return to ? <Link to={to} className={className}>{content}</Link> : <article className={className}>{content}</article>;
 }
 
 const attentionTones = { amber: 'bg-amber-50 text-amber-600', red: 'bg-red-50 text-red-600', blue: 'bg-blue-50 text-blue-600', emerald: 'bg-emerald-50 text-emerald-600' };
