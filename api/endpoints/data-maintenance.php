@@ -3,6 +3,7 @@ $owner = requireOwner($pdo);
 $from = (string)($_GET['from'] ?? '');
 $to = (string)($_GET['to'] ?? '');
 $branchId = trim((string)($_GET['branchId'] ?? ''));
+$cleanupOrphans = filter_var($_GET['cleanupOrphans'] ?? false, FILTER_VALIDATE_BOOLEAN);
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) || $from > $to) {
     respondError('Periode tidak valid', 422);
 }
@@ -70,17 +71,37 @@ if ($invoiceIds) {
     $paymentParams = array_merge($paymentParams, $invoiceIds);
 }
 $paymentIds = maintenanceIds($pdo, $paymentSql, $paymentParams);
-// Pelanggan dan kendaraan adalah master global lintas cabang. Pemeliharaan
-// transaksi tidak boleh menghapusnya otomatis.
+// Opsi terpisah untuk membuang master yang benar-benar tidak lagi mempunyai
+// transaksi setelah periode terpilih dihapus. Master yang masih dipakai WO,
+// faktur, atau kendaraan lain selalu dipertahankan.
 $vehicleIds = [];
 $customerIds = [];
+if ($cleanupOrphans) {
+    $vehicleSql = 'SELECT v.id FROM vehicles v WHERE NOT EXISTS (SELECT 1 FROM work_orders w WHERE w.vehicle_ref_id=v.id';
+    $vehicleParams = [];
+    if ($woIds) { $vehicleSql .= ' AND w.id NOT IN (' . maintenancePlaceholders($woIds) . ')'; $vehicleParams = $woIds; }
+    $vehicleSql .= ')';
+    $vehicleIds = maintenanceIds($pdo, $vehicleSql, $vehicleParams);
+
+    $customerSql = 'SELECT c.id FROM customers c
+        WHERE NOT EXISTS (SELECT 1 FROM work_orders w WHERE w.customer_ref_id=c.id';
+    $customerParams = [];
+    if ($woIds) { $customerSql .= ' AND w.id NOT IN (' . maintenancePlaceholders($woIds) . ')'; $customerParams = array_merge($customerParams, $woIds); }
+    $customerSql .= ') AND NOT EXISTS (SELECT 1 FROM sales_invoices i WHERE i.customer_ref_id=c.id';
+    if ($invoiceIds) { $customerSql .= ' AND i.id NOT IN (' . maintenancePlaceholders($invoiceIds) . ')'; $customerParams = array_merge($customerParams, $invoiceIds); }
+    $customerSql .= ') AND NOT EXISTS (SELECT 1 FROM vehicles v WHERE v.customer_id=c.id';
+    if ($vehicleIds) { $customerSql .= ' AND v.id NOT IN (' . maintenancePlaceholders($vehicleIds) . ')'; $customerParams = array_merge($customerParams, $vehicleIds); }
+    $customerSql .= ')';
+    $customerIds = maintenanceIds($pdo, $customerSql, $customerParams);
+}
 
 $preview = [
     'from' => $from,
     'to' => $to,
     'branchId' => $allBranches ? 'ALL' : $branchId,
     'branchName' => $branchName,
-    'masterDataPreserved' => true,
+    'masterDataPreserved' => !$cleanupOrphans,
+    'cleanupOrphans' => $cleanupOrphans,
     'workOrders' => count($woIds),
     'workOrderServices' => $woIds ? maintenanceCount($pdo, 'work_order_services', 'wo_id IN (' . maintenancePlaceholders($woIds) . ')', $woIds) : 0,
     'invoices' => count($invoiceIds),
@@ -94,6 +115,8 @@ if ($method === 'GET') respondSuccess($preview);
 if ($method !== 'POST') respondError('Method not allowed', 405);
 
 $input = getInput();
+$requestedCleanupOrphans = !empty($input['cleanupOrphans']);
+if ($requestedCleanupOrphans !== $cleanupOrphans) respondError('Pilihan pembersihan master berubah. Periksa ulang data sebelum menghapus.', 422);
 $expectedConfirmation = $allBranches ? 'HAPUS SEMUA CABANG' : 'HAPUS ' . strtoupper($branchName);
 if (trim((string)($input['confirmation'] ?? '')) !== $expectedConfirmation) respondError('Konfirmasi penghapusan tidak sesuai', 422);
 
@@ -130,6 +153,7 @@ try {
     $paymentRows = $paymentIds ? $snapshotRows('customer_payments', 'customer_payment', 'id IN (' . maintenancePlaceholders($paymentIds) . ')', $paymentIds) : [];
     $invoiceRows = $invoiceIds ? $snapshotRows('sales_invoices', 'sales_invoice', 'id IN (' . maintenancePlaceholders($invoiceIds) . ')', $invoiceIds) : [];
     $invoiceItemRows = $invoiceIds ? $snapshotRows('sales_invoice_items', 'sales_invoice_item', 'invoice_id IN (' . maintenancePlaceholders($invoiceIds) . ')', $invoiceIds) : [];
+    if ($invoiceIds) $snapshotRows('stock_movements', 'stock_movement', "reference_type='sales_invoice' AND reference_id IN (" . maintenancePlaceholders($invoiceIds) . ')', $invoiceIds);
     if ($woIds) $snapshotRows('work_order_services', 'work_order_service', 'wo_id IN (' . maintenancePlaceholders($woIds) . ')', $woIds);
     if ($woIds) $snapshotRows('work_orders', 'work_order', 'id IN (' . maintenancePlaceholders($woIds) . ')', $woIds);
     if ($vehicleIds) $snapshotRows('vehicles', 'vehicle', 'id IN (' . maintenancePlaceholders($vehicleIds) . ')', $vehicleIds);
@@ -154,6 +178,8 @@ try {
         $pdo->prepare('DELETE FROM customer_payments WHERE id IN (' . maintenancePlaceholders($paymentIds) . ')')->execute($paymentIds);
     }
     if ($invoiceIds) {
+        $voidMovement = $pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason=? WHERE reference_type='sales_invoice' AND reference_id IN (" . maintenancePlaceholders($invoiceIds) . ') AND is_voided=0');
+        $voidMovement->execute(array_merge([$owner['id'] ?? null, 'Pemeliharaan data transaksi ' . $purgeId], $invoiceIds));
         $pdo->prepare('DELETE FROM customer_payment_audit_logs WHERE invoice_id IN (' . maintenancePlaceholders($invoiceIds) . ')')->execute($invoiceIds);
         $pdo->prepare('DELETE FROM sales_invoice_items WHERE invoice_id IN (' . maintenancePlaceholders($invoiceIds) . ')')->execute($invoiceIds);
         $pdo->prepare('DELETE FROM sales_invoices WHERE id IN (' . maintenancePlaceholders($invoiceIds) . ')')->execute($invoiceIds);
@@ -182,6 +208,7 @@ try {
         $vehiclePlaceholders = maintenancePlaceholders($vehicleIds);
         $snapshotRows('work_orders', 'work_order_before_vehicle_unlink', "vehicle_ref_id IN ({$vehiclePlaceholders})", $vehicleIds);
         $pdo->prepare("UPDATE work_orders SET vehicle_ref_id=NULL WHERE vehicle_ref_id IN ({$vehiclePlaceholders})")->execute($vehicleIds);
+        $pdo->prepare("DELETE FROM vehicle_people WHERE vehicle_id IN ({$vehiclePlaceholders})")->execute($vehicleIds);
         $delete = $pdo->prepare("DELETE FROM vehicles WHERE id IN ({$vehiclePlaceholders})");
         $delete->execute($vehicleIds);
         $deletedVehicles = $delete->rowCount();
@@ -195,6 +222,15 @@ try {
         $pdo->prepare("UPDATE work_orders SET customer_ref_id=NULL WHERE customer_ref_id IN ({$customerPlaceholders})")->execute($customerIds);
         $pdo->prepare("UPDATE sales_invoices SET customer_ref_id=NULL WHERE customer_ref_id IN ({$customerPlaceholders})")->execute($customerIds);
         $pdo->prepare("UPDATE vehicles SET customer_id=NULL WHERE customer_id IN ({$customerPlaceholders})")->execute($customerIds);
+        $personIds = maintenanceIds($pdo, "SELECT id FROM customer_people WHERE customer_id IN ({$customerPlaceholders})", $customerIds);
+        if ($personIds) {
+            $personPlaceholders = maintenancePlaceholders($personIds);
+            $pdo->prepare("UPDATE customers SET primary_contact_id=NULL WHERE primary_contact_id IN ({$personPlaceholders})")->execute($personIds);
+            $pdo->prepare("UPDATE customers SET billing_contact_id=NULL WHERE billing_contact_id IN ({$personPlaceholders})")->execute($personIds);
+            $pdo->prepare("DELETE FROM vehicle_people WHERE person_id IN ({$personPlaceholders})")->execute($personIds);
+            $pdo->prepare("DELETE FROM customer_person_roles WHERE person_id IN ({$personPlaceholders})")->execute($personIds);
+            $pdo->prepare("DELETE FROM customer_people WHERE id IN ({$personPlaceholders})")->execute($personIds);
+        }
         $delete = $pdo->prepare("DELETE FROM customers WHERE id IN ({$customerPlaceholders})");
         $delete->execute($customerIds);
         $deletedCustomers = $delete->rowCount();

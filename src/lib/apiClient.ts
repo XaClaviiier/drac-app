@@ -92,11 +92,11 @@ export const api = {
     request('/ai-chat', { method: 'POST', body: JSON.stringify({ messages }) }),
   readReceipt: (image: string) =>
     request('/receipt-ocr', { method: 'POST', body: JSON.stringify({ image }) }),
-  previewDataMaintenance: (from: string, to: string, branchId: string) =>
-    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}`, { method: 'GET' }),
-  purgeDataMaintenance: (from: string, to: string, branchId: string, confirmation: string) =>
-    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}`, {
-      method: 'POST', body: JSON.stringify({ confirmation }),
+  previewDataMaintenance: (from: string, to: string, branchId: string, cleanupOrphans = false) =>
+    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}&cleanupOrphans=${cleanupOrphans ? '1' : '0'}`, { method: 'GET' }),
+  purgeDataMaintenance: (from: string, to: string, branchId: string, confirmation: string, cleanupOrphans = false) =>
+    request(`/data-maintenance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branchId=${encodeURIComponent(branchId)}&cleanupOrphans=${cleanupOrphans ? '1' : '0'}`, {
+      method: 'POST', body: JSON.stringify({ confirmation, cleanupOrphans }),
     }),
   exportTransactionBackup: () => request('/transaction-backup', { method: 'GET' }),
   previewTransactionRestore: (sheets: Record<string, any[]>) => request('/transaction-backup/preview', { method: 'POST', body: JSON.stringify({ sheets }) }),

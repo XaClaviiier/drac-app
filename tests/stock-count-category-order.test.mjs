@@ -17,3 +17,16 @@ test('lembar penghitungan stok mengurutkan kategori berdasarkan pemakaian transa
   assert.match(printPage, /categoryUsageCount/);
   assert.match(printPage, /leftCategory\.localeCompare\(rightCategory, 'id-ID'\)/);
 });
+
+test('pemeliharaan periode dapat membersihkan master tanpa transaksi secara eksplisit', () => {
+  const endpoint = read('api/endpoints/data-maintenance.php');
+  const client = read('src/lib/apiClient.ts');
+  const settings = read('src/pages/SettingsPage.tsx');
+
+  assert.match(endpoint, /cleanupOrphans/);
+  assert.match(endpoint, /NOT EXISTS \(SELECT 1 FROM work_orders/);
+  assert.match(endpoint, /data_purge_snapshots/);
+  assert.match(endpoint, /UPDATE stock_movements SET is_voided=1/);
+  assert.match(client, /cleanupOrphans=/);
+  assert.match(settings, /Hapus pelanggan dan kendaraan tanpa transaksi tersisa/);
+});

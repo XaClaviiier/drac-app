@@ -43,12 +43,13 @@ export default function SettingsPage() {
   const [cashAccounts, setCashAccounts] = useState<any[]>([]);
   const [ledgerAccounts, setLedgerAccounts] = useState<any[]>([]);
   const [branchAccountSettings, setBranchAccountSettings] = useState<any[]>([]);
-  const [maintenanceFrom, setMaintenanceFrom] = useState('2026-08-01');
-  const [maintenanceTo, setMaintenanceTo] = useState('2026-08-31');
+  const [maintenanceFrom, setMaintenanceFrom] = useState('2000-01-01');
+  const [maintenanceTo, setMaintenanceTo] = useState('2026-07-31');
   const [maintenanceBranchId, setMaintenanceBranchId] = useState('');
   const [maintenancePreview, setMaintenancePreview] = useState<any>(null);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const [maintenanceConfirmation, setMaintenanceConfirmation] = useState('');
+  const [maintenanceCleanupOrphans, setMaintenanceCleanupOrphans] = useState(false);
   const [maintenanceResult, setMaintenanceResult] = useState<any>(null);
   const [restoreSheets, setRestoreSheets] = useState<Record<string, any[]> | null>(null);
   const [restoreFileName, setRestoreFileName] = useState('');
@@ -157,7 +158,7 @@ export default function SettingsPage() {
     setMaintenanceLoading(true);
     setMaintenanceResult(null);
     try {
-      const result = await api.previewDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceBranchId);
+      const result = await api.previewDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceBranchId, maintenanceCleanupOrphans);
       if (!result.success) throw new Error(result.message || 'Gagal memeriksa data');
       setMaintenancePreview(result.data);
     } catch (error: any) {
@@ -169,10 +170,11 @@ export default function SettingsPage() {
   const purgeMaintenance = async () => {
     if (!maintenanceBranchId || maintenanceConfirmation !== maintenanceExpectedConfirmation) return;
     const targetName = maintenanceBranchId === 'ALL' ? 'SEMUA CABANG' : maintenanceBranch?.name;
-    if (!window.confirm(`Hapus permanen transaksi ${targetName} untuk periode ${maintenanceFrom} sampai ${maintenanceTo}? Master pelanggan dan kendaraan tetap dipertahankan.`)) return;
+    const masterMessage = maintenanceCleanupOrphans ? 'Pelanggan dan kendaraan tanpa transaksi tersisa juga akan dihapus.' : 'Master pelanggan dan kendaraan tetap dipertahankan.';
+    if (!window.confirm(`Hapus permanen transaksi ${targetName} untuk periode ${maintenanceFrom} sampai ${maintenanceTo}? ${masterMessage}`)) return;
     setMaintenanceLoading(true);
     try {
-      const result = await api.purgeDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceBranchId, maintenanceConfirmation);
+      const result = await api.purgeDataMaintenance(maintenanceFrom, maintenanceTo, maintenanceBranchId, maintenanceConfirmation, maintenanceCleanupOrphans);
       if (!result.success) throw new Error(result.message || 'Gagal menghapus data');
       setMaintenanceResult(result.data);
       setMaintenancePreview(null);
@@ -509,6 +511,7 @@ export default function SettingsPage() {
                 <label className={labelClass}><span>Dari tanggal</span><IndonesianDateInput className="h-10 w-full" value={maintenanceFrom} onChange={value => { setMaintenanceFrom(value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
                 <label className={labelClass}><span>Sampai tanggal</span><IndonesianDateInput className="h-10 w-full" value={maintenanceTo} onChange={value => { setMaintenanceTo(value); setMaintenancePreview(null); setMaintenanceConfirmation(''); }} /></label>
               </div>
+              <label className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><input type="checkbox" checked={maintenanceCleanupOrphans} onChange={event => { setMaintenanceCleanupOrphans(event.target.checked); setMaintenancePreview(null); setMaintenanceResult(null); setMaintenanceConfirmation(''); }} className="mt-0.5 h-4 w-4" /><span><strong>Hapus pelanggan dan kendaraan tanpa transaksi tersisa</strong><br/><span className="text-xs">Master yang masih terhubung ke WO atau faktur di luar periode tetap dipertahankan.</span></span></label>
               {maintenanceBranchId === 'ALL' && <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800"><AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" /> Pilihan ini mencakup transaksi seluruh cabang dalam periode. Gunakan hanya jika benar-benar diperlukan.</div>}
               <button type="button" onClick={previewMaintenance} disabled={maintenanceLoading || !maintenanceBranchId} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">{maintenanceLoading ? 'Memeriksa...' : 'Periksa Data Periode'}</button>
 
@@ -521,9 +524,10 @@ export default function SettingsPage() {
                       ['Order Kerja', maintenancePreview.workOrders], ['Layanan WO', maintenancePreview.workOrderServices],
                       ['Invoice', maintenancePreview.invoices], ['Detail Invoice', maintenancePreview.invoiceItems],
                       ['Pembayaran', maintenancePreview.payments],
+                      ['Kendaraan tanpa transaksi', maintenancePreview.vehicles], ['Pelanggan tanpa transaksi', maintenancePreview.customers],
                     ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-amber-200 bg-white p-3"><p className="text-xs text-gray-500">{label}</p><p className="text-2xl font-bold text-gray-900">{value}</p></div>)}
                   </div>
-                  <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Pelanggan dan kendaraan merupakan master global dan tidak ikut dihapus.</p>
+                  <p className={`mt-4 rounded-lg border p-3 text-sm font-medium ${maintenancePreview.cleanupOrphans ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{maintenancePreview.cleanupOrphans ? 'Pelanggan dan kendaraan yang tidak memiliki transaksi tersisa ikut dihapus.' : 'Pelanggan dan kendaraan merupakan master global dan tidak ikut dihapus.'}</p>
                   <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
                     <p className="text-sm font-semibold text-red-800">Ketik <span className="font-mono">{maintenanceExpectedConfirmation}</span> untuk mengaktifkan tombol penghapusan.</p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -539,7 +543,7 @@ export default function SettingsPage() {
                   <h3 className="flex items-center gap-2 font-bold"><CheckCircle2 className="h-5 w-5" /> Penghapusan selesai</h3>
                   <p className="mt-1 text-sm">ID snapshot: <code className="font-bold">{maintenanceResult.purgeId}</code></p>
                   <p className="mt-2 text-sm">Cabang: <strong>{maintenanceResult.branchName}</strong>. Dihapus: {maintenanceResult.workOrders} WO, {maintenanceResult.invoices} invoice, dan {maintenanceResult.payments} pembayaran.</p>
-                  <p className="mt-2 text-xs text-emerald-700">Master pelanggan dan kendaraan tetap dipertahankan.</p>
+                  <p className="mt-2 text-xs text-emerald-700">Kendaraan dihapus: {maintenanceResult.vehiclesDeleted || 0}. Pelanggan dihapus: {maintenanceResult.customersDeleted || 0}.</p>
                 </div>
               )}
             </div>
