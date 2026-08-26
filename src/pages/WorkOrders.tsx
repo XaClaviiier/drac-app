@@ -921,6 +921,9 @@ export default function WorkOrders() {
   const selectedBranchLabel = selectedBranch?.name.replace('CABANG ', '') || 'Cabang Aktif';
   const toLocalDate = (date: Date) => localDateKey(date);
   const todayDate = toLocalDate(new Date());
+  // Dipakai oleh memo sortir di bawah. Harus diinisialisasi sebelum useMemo
+  // dijalankan, terutama ketika konfigurasi sort tersimpan di browser.
+  const statusLabel = workOrderStatusLabel;
 
   const isAllBranchDropdown = currentBranchId === 'ALL';
   const branchScopeLabel = isAllBranchDropdown ? 'Semua Cabang' : selectedBranchLabel;
@@ -2005,7 +2008,6 @@ export default function WorkOrders() {
     Selesai: 'bg-green-100 text-green-800',
     Closed: 'bg-rose-100 text-rose-800',
   };
-  const statusLabel = workOrderStatusLabel;
   const diagnosisMeasurementLabel = (wo: WorkOrder) => [
     wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
     wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',

@@ -876,6 +876,16 @@ test('Semua Cabang menampilkan seluruh WO yang sudah dibatasi oleh server', () =
   assert.doesNotMatch(page, /activeBranchIds\.includes\(workOrder\.branchId\)/);
 });
 
+test('sortir WO tersimpan tidak memakai statusLabel sebelum diinisialisasi', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const initialization = page.indexOf('const statusLabel = workOrderStatusLabel;');
+  const desktopSorting = page.indexOf('const desktopWOs = useMemo');
+  assert.ok(initialization >= 0);
+  assert.ok(desktopSorting >= 0);
+  assert.ok(initialization < desktopSorting);
+  assert.equal(page.indexOf('const statusLabel = workOrderStatusLabel;', initialization + 1), -1);
+});
+
 test('data awal WO yang belum lengkap tampil sebagai arahan dan memfokuskan field pertama', () => {
   const page = source('src/pages/WorkOrders.tsx');
   assert.match(page, /WO_ENTRY_GUIDANCE_ISSUES/);
