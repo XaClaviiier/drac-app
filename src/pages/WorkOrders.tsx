@@ -922,10 +922,19 @@ export default function WorkOrders() {
   const toLocalDate = (date: Date) => localDateKey(date);
   const todayDate = toLocalDate(new Date());
 
-  const activeBranchIds = data.branches.filter(branch => branch.isActive).map(branch => branch.id);
-
   const isAllBranchDropdown = currentBranchId === 'ALL';
   const branchScopeLabel = isAllBranchDropdown ? 'Semua Cabang' : selectedBranchLabel;
+
+  // API sudah membatasi work order sesuai cabang yang boleh diakses pengguna.
+  // Saat header memilih "Semua Cabang", jangan menyaring lagi melalui master
+  // cabang aktif: riwayat WO dari cabang nonaktif atau master cabang yang belum
+  // tersinkron dapat ikut hilang walaupun datanya sudah dikirim oleh server.
+  const branchScopedWorkOrders = useMemo(
+    () => isAllBranchDropdown
+      ? data.workOrders
+      : data.workOrders.filter(workOrder => workOrder.branchId === selectedBranchId),
+    [data.workOrders, isAllBranchDropdown, selectedBranchId],
+  );
 
   const periodRange = useMemo(() => {
     const now = new Date();
@@ -949,26 +958,18 @@ export default function WorkOrders() {
   }, [periodFilter, todayDate, dateFrom, dateTo]);
 
   const attentionItems = useMemo(() => buildWorkOrderAttentionItems(
-    data.workOrders.filter(workOrder => isAllBranchDropdown
-      ? activeBranchIds.includes(workOrder.branchId)
-      : workOrder.branchId === selectedBranchId),
+    branchScopedWorkOrders,
     data.invoices,
     todayDate,
-  ), [data.workOrders, data.invoices, isAllBranchDropdown, activeBranchIds, selectedBranchId, todayDate]);
+  ), [branchScopedWorkOrders, data.invoices, todayDate]);
   const attentionByWorkOrderId = useMemo(
     () => new Map(attentionItems.map(item => [item.workOrder.id, item])),
     [attentionItems],
   );
 
   const filteredWOs = useMemo(() => {
-    return data.workOrders
+    return branchScopedWorkOrders
       .filter((wo) => {
-        // Cabang selalu otomatis mengikuti dropdown cabang pada header.
-        const branchMatch = isAllBranchDropdown
-          ? activeBranchIds.includes(wo.branchId)
-          : wo.branchId === selectedBranchId;
-        if (!branchMatch) return false;
-
         const dateMatch = (!periodRange.from || wo.date >= periodRange.from) && (!periodRange.to || wo.date <= periodRange.to);
         if (!dateMatch) return false;
 
@@ -1011,15 +1012,12 @@ export default function WorkOrders() {
         return b.woNumber.localeCompare(a.woNumber);
       });
   }, [
-    data.workOrders,
+    branchScopedWorkOrders,
     data.customers,
     searchTerm,
     filterStatus,
     filterAttention,
     attentionByWorkOrderId,
-    isAllBranchDropdown,
-    activeBranchIds,
-    selectedBranchId,
     periodRange,
   ]);
 

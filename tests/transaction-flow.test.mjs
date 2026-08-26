@@ -866,6 +866,16 @@ test('seluruh notifikasi dan konfirmasi WO memakai modal Accurate, bukan dialog 
   assert.match(dialog, /busy \? 'Memproses…' : confirmLabel/);
 });
 
+test('Semua Cabang menampilkan seluruh WO yang sudah dibatasi oleh server', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  assert.match(page, /const branchScopedWorkOrders = useMemo/);
+  assert.match(page, /isAllBranchDropdown\s*\? data\.workOrders\s*:\s*data\.workOrders\.filter/);
+  assert.match(page, /buildWorkOrderAttentionItems\(\s*branchScopedWorkOrders/);
+  assert.match(page, /return branchScopedWorkOrders\s*\.filter/);
+  assert.doesNotMatch(page, /activeBranchIds\.includes\(wo\.branchId\)/);
+  assert.doesNotMatch(page, /activeBranchIds\.includes\(workOrder\.branchId\)/);
+});
+
 test('data awal WO yang belum lengkap tampil sebagai arahan dan memfokuskan field pertama', () => {
   const page = source('src/pages/WorkOrders.tsx');
   assert.match(page, /WO_ENTRY_GUIDANCE_ISSUES/);
