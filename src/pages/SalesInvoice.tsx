@@ -1145,8 +1145,8 @@ export default function SalesInvoice() {
                 </button>
               </header>
 
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:p-4 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
-                <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-3 sm:p-4 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
+                <div data-invoice-view-summary className="flex flex-wrap items-center justify-end gap-1.5">
                   <div className="order-first mr-auto flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
                     <span>Nomor: <strong className="text-gray-800">{invoice.invoiceNumber}</strong></span>
                     {invoice.manualReceiptNumber && <span>Nota fisik: <strong className="text-gray-800">{invoice.manualReceiptNumber}</strong></span>}
@@ -1166,39 +1166,29 @@ export default function SalesInvoice() {
                   {hasPermission('invoice:edit') ? <button type="button" onClick={() => { setViewingInvoice(null); handleOpenModal(invoice); }} className="inline-flex h-9 items-center gap-2 rounded bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800"><Edit className="h-4 w-4"/>Edit</button> : <button type="button" disabled className="inline-flex h-9 items-center gap-2 rounded bg-gray-300 px-4 text-sm font-semibold text-gray-500"><Save className="h-4 w-4"/>Terkunci</button>}
                 </div>
 
-                <section className="grid gap-2 bg-[var(--app-canvas)] py-1 lg:grid-cols-[1fr_1fr_190px_190px]">
-                  <div>
-                    <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><User className="h-4 w-4 text-blue-600"/>Data Pelanggan</label>
-                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm text-gray-700"><span className="truncate font-semibold">{invoice.customerName}</span><span className="ml-2 truncate text-xs text-gray-500">{customer?.phone || invoice.customerId}</span></div>
-                  </div>
-                  <div>
-                    <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><Car className="h-4 w-4 text-orange-600"/>Data Kendaraan</label>
-                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm font-semibold text-gray-700"><span className="truncate">{invoice.vehicleInfo || '-'}</span>{invoice.woNumber && <span className="ml-2 shrink-0 text-xs text-orange-700">· {invoice.woNumber}</span>}</div>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Tanggal</label>
-                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm text-gray-700">{invoice.date}</div>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">No. Nota Fisik</label>
-                    <div className="app-locked-field flex h-10 items-center rounded border border-gray-500 bg-white px-3 text-sm font-semibold text-gray-700">{invoice.manualReceiptNumber || '-'}</div>
-                  </div>
+                <section data-invoice-view-identity className="grid gap-1.5 bg-[var(--app-canvas)] py-1 lg:grid-cols-[76px_minmax(260px,1fr)_minmax(240px,1fr)_58px_150px_180px] lg:items-center">
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-gray-800"><User className="h-4 w-4 text-blue-600"/>Pelanggan</label>
+                  <div className="app-locked-field flex h-9 min-w-0 items-center rounded border border-gray-500 bg-white px-2.5 text-sm text-gray-700"><span className="truncate font-semibold">{invoice.customerName}</span><span className="ml-2 truncate text-xs text-gray-500">{customer?.phone || invoice.customerId}</span></div>
+                  <div className="app-locked-field flex h-9 min-w-0 items-center rounded border border-gray-500 bg-white px-2.5 text-sm font-semibold text-gray-700" title="Data Kendaraan"><Car className="mr-1.5 h-4 w-4 shrink-0 text-orange-600"/><span className="truncate">{invoice.vehicleInfo || '-'}</span>{invoice.woNumber && <span className="ml-2 shrink-0 text-xs text-orange-700">· {invoice.woNumber}</span>}</div>
+                  <label className="text-sm font-medium text-gray-800">Tanggal</label>
+                  <div className="app-locked-field flex h-9 items-center rounded border border-gray-500 bg-white px-2.5 text-sm text-gray-700">{invoice.date}</div>
+                  <div className="app-locked-field flex h-9 min-w-0 items-center rounded border border-gray-500 bg-white px-2.5 text-sm text-gray-700" title="Nomor nota fisik"><span className="mr-1.5 shrink-0 text-xs text-gray-500">Nota:</span><strong className="truncate">{invoice.manualReceiptNumber || '-'}</strong></div>
                 </section>
 
                 <div data-invoice-view-document-shell className="relative min-h-[430px] bg-white lg:ml-10 lg:border lg:border-gray-400 lg:shadow-[0_2px_7px_rgba(15,23,42,0.18)]">
                   <AccurateDocumentSideTabs active={invoiceDocumentTab} onChange={setInvoiceDocumentTab} ariaLabel="Bagian detail Faktur Penjualan" />
-                <section className={`${invoiceDocumentTab === 'details' ? 'block' : 'hidden'} relative min-h-[360px] space-y-2 bg-white p-3`}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="relative w-full max-w-xl"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300"/><input disabled placeholder="Cari/Pilih Barang & Jasa..." className="h-10 w-full rounded border border-gray-300 bg-gray-100 pl-9 pr-10 text-sm text-gray-400"/><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-300"/></div>
+                <section className={`${invoiceDocumentTab === 'details' ? 'block' : 'hidden'} relative min-h-[360px] space-y-1.5 bg-white p-2`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="relative w-full max-w-xl"><Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"/><input disabled placeholder="Cari/Pilih Barang & Jasa..." className="app-locked-field h-9 w-full rounded border border-gray-400 bg-white pl-8 pr-9 text-sm text-gray-400"/><Search className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"/></div>
                     <strong className="shrink-0 text-sm text-gray-700">{visibleItems.length} Barang/Jasa</strong>
                   </div>
-                  <div className="hidden min-w-[980px] grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] bg-slate-600 px-2 py-2 text-xs font-semibold uppercase text-white lg:grid"><span className="text-center">No</span><span>Nama Barang/Jasa</span><span>Barcode / Kode</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span></div>
-                  <div className="max-h-[350px] min-h-[240px] space-y-1 overflow-auto border border-gray-200 p-1">
+                  <div className="hidden min-w-[980px] grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] bg-[var(--app-table-head)] px-2 py-2 text-xs font-semibold uppercase text-white lg:grid"><span className="text-center">No</span><span>Nama Barang/Jasa</span><span>Barcode / Kode</span><span className="text-center">Qty</span><span className="text-right">Harga</span><span className="text-right">Total Harga</span><span className="text-center">Aksi</span></div>
+                  <div data-invoice-view-items className="max-h-[calc(100dvh-430px)] min-h-[300px] overflow-auto border border-gray-300 bg-white lg:min-h-[calc(100dvh-500px)]">
                     {items.length > 0 ? items.map((item, index) => {
                       if (isPackageMemberItem(item)) return null;
                       const members = isPackageHeaderItem(item) ? packageMembersAfter(items, index) : [];
                       return (
-                        <div key={`${item.id}-${index}`} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b p-2 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'bg-white'}`}>
+                        <div key={`${item.id}-${index}`} className={`grid grid-cols-[minmax(0,1fr)_56px_92px_64px] items-center gap-2 border-b px-2 py-1.5 text-sm lg:min-w-[980px] lg:grid-cols-[44px_minmax(260px,1fr)_160px_80px_130px_150px_72px] ${members.length ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-white'}`}>
                           <div className="hidden text-center text-xs text-gray-400 lg:block">{items.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1}</div>
                           <div className="min-w-0">
                             <p className="truncate font-medium">{invoiceItemReceiptName(item)}</p>
@@ -1206,8 +1196,8 @@ export default function SalesInvoice() {
                             {members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <p key={member.id}><span className="font-mono text-purple-500">{invoiceItemCode(member)}</span> · {invoiceItemReceiptName(member)} ×{member.qty}</p>)}</div>}
                           </div>
                           <div className="hidden truncate font-mono text-xs text-gray-600 lg:block" title={invoiceItemBarcodeOrCode(item)}>{invoiceItemBarcodeOrCode(item)}</div>
-                          <div className="rounded border border-gray-200 bg-gray-100 px-2 py-1 text-center text-gray-600">{item.qty}</div>
-                          <div className="rounded border border-gray-200 bg-gray-100 px-2 py-1 text-right text-gray-600">{item.price.toLocaleString('id-ID')}</div>
+                          <div className="rounded border border-gray-300 bg-white px-2 py-1 text-center text-gray-700">{item.qty}</div>
+                          <div className="rounded border border-gray-300 bg-white px-2 py-1 text-right text-gray-700">{item.price.toLocaleString('id-ID')}</div>
                           <strong className="hidden text-right tabular-nums lg:block">{(item.price * item.qty).toLocaleString('id-ID')}</strong>
                           <div className="flex justify-center"><span className="rounded p-1 text-gray-400" title="Rincian terkunci pada mode lihat"><Eye className="h-4 w-4"/></span></div>
                         </div>
@@ -1280,12 +1270,12 @@ export default function SalesInvoice() {
                   </div>
                 </section>}
 
-                <section className={`${invoiceDocumentTab === 'details' ? 'grid' : 'hidden'} items-stretch gap-3 border-t border-gray-200 bg-[var(--app-canvas)] p-3 md:grid-cols-[minmax(280px,1fr)_minmax(460px,560px)]`}>
-                  <div className="h-[88px] rounded border border-gray-300 bg-white px-3 py-2"><p className="line-clamp-2 text-sm uppercase leading-5 text-gray-700">{invoice.description || linkedWO?.description || 'TIDAK ADA KETERANGAN SERVICE'}</p>{invoice.payment > 0 && <p className="mt-1 text-xs text-emerald-700">Dibayar {invoice.paymentMethod || 'Tunai'}: Rp {invoice.payment.toLocaleString('id-ID')} · Sisa Rp {remaining.toLocaleString('id-ID')}</p>}</div>
-                  <div className="grid h-[88px] grid-cols-3 rounded border border-gray-300 bg-white p-2 shadow-sm">
-                    <div className="flex flex-col justify-between px-3 py-1"><span className="text-sm text-gray-600">Sub Total</span><strong className="text-right text-lg tabular-nums">Rp {displayedSubtotal.toLocaleString('id-ID')}</strong></div>
-                    <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Diskon</span><div className="flex h-9 items-center rounded border border-gray-300 bg-gray-100"><span className="border-r border-gray-200 px-2 text-gray-400">Rp</span><span className="min-w-0 flex-1 px-2 text-right font-semibold tabular-nums text-gray-600">{displayedDiscount.toLocaleString('id-ID')}</span></div></div>
-                    <div className="flex flex-col justify-between border-l border-gray-200 px-3 py-1"><span className="text-sm text-gray-600">Total</span><strong className="text-right text-lg tabular-nums text-blue-700">Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
+                <section className={`${invoiceDocumentTab === 'details' ? 'grid' : 'hidden'} items-end gap-2 border-t border-gray-200 bg-[var(--app-canvas)] p-2 md:grid-cols-[minmax(280px,1fr)_minmax(460px,700px)]`}>
+                  <div className="min-h-[72px] border border-gray-300 bg-white px-3 py-2"><p className="line-clamp-2 text-sm uppercase leading-5 text-gray-700">{invoice.description || linkedWO?.description || 'TIDAK ADA KETERANGAN SERVICE'}</p>{invoice.payment > 0 && <p className="mt-1 text-xs text-emerald-700">Dibayar {invoice.paymentMethod || 'Tunai'}: Rp {invoice.payment.toLocaleString('id-ID')} · Sisa Rp {remaining.toLocaleString('id-ID')}</p>}</div>
+                  <div data-invoice-view-total-summary className="grid min-h-[72px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)]">
+                    <div className="flex flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Sub Total</span><strong className="text-right text-base tabular-nums text-gray-950">Rp {displayedSubtotal.toLocaleString('id-ID')}</strong></div>
+                    <div className="flex flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Diskon</span><div className="flex h-8 items-center border border-gray-400 bg-white"><span className="border-r border-gray-300 px-2 text-gray-500">Rp</span><span className="min-w-0 flex-1 px-2 text-right font-semibold tabular-nums text-gray-700">{displayedDiscount.toLocaleString('id-ID')}</span></div></div>
+                    <div className="flex flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Total</span><strong className="text-right text-base tabular-nums text-gray-950">Rp {invoice.total.toLocaleString('id-ID')}</strong></div>
                   </div>
                 </section>
                 </div>
