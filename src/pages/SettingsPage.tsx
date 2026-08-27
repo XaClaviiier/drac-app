@@ -222,25 +222,30 @@ export default function SettingsPage() {
     setBackupBusy(true);
     setRestorePreview(null);
     try {
-      const ExcelJS = await import('exceljs');
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(await file.arrayBuffer());
+      const { default: readXlsxFile, readSheetNames } = await import('read-excel-file');
+      const availableSheetNames = await readSheetNames(file);
+      const missingSheetNames = backupSheetNames.filter(name => !availableSheetNames.includes(name));
+      if (missingSheetNames.length > 0) {
+        const available = availableSheetNames.length > 0 ? availableSheetNames.join(', ') : 'tidak ada';
+        throw new Error(
+          `File ini bukan backup transaksi aplikasi. Sheet wajib yang belum ada: ${missingSheetNames.join(', ')}. ` +
+          `Sheet dalam file: ${available}. Gunakan file hasil tombol Download Backup XLSX, bukan file ekspor laporan Accurate.`,
+        );
+      }
       const sheets: Record<string, any[]> = {};
       for (const name of backupSheetNames) {
-        const sheet = workbook.getWorksheet(name);
-        if (!sheet) throw new Error(`Sheet ${name} tidak ditemukan.`);
-        const headers = (sheet.getRow(1).values as any[]).slice(1).map(value => String(value || '').trim());
-        sheets[name] = [];
-        sheet.eachRow((row, rowNumber) => {
-          if (rowNumber === 1) return;
+        const rows = await readXlsxFile(file, { sheet: name });
+        const headers = (rows[0] || []).map(value => String(value ?? '').trim());
+        sheets[name] = rows.slice(1).reduce<any[]>((records, row) => {
           const record: Record<string, any> = {};
           headers.forEach((header, index) => {
             if (!header) return;
-            const cellValue: any = row.getCell(index + 1).value;
-            record[header] = cellValue && typeof cellValue === 'object' && 'text' in cellValue ? cellValue.text : (cellValue ?? '');
+            const cellValue = row[index];
+            record[header] = cellValue instanceof Date ? cellValue.toISOString() : (cellValue ?? '');
           });
-          if (Object.values(record).some(value => value !== '')) sheets[name].push(record);
-        });
+          if (Object.values(record).some(value => value !== '')) records.push(record);
+          return records;
+        }, []);
       }
       const result = await api.previewTransactionRestore(sheets);
       if (!result.success) throw new Error(result.message || 'Validasi file gagal');
@@ -483,6 +488,7 @@ export default function SettingsPage() {
                 <section className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                   <div className="flex gap-3"><Upload className="h-6 w-6 text-blue-700" /><div><h3 className="font-bold text-blue-900">Restore dari Excel</h3><p className="mt-1 text-sm text-blue-700">Validasi dahulu, lalu restore secara atomik.</p></div></div>
                   <label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-blue-300 bg-white px-4 py-5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><FileSpreadsheet className="h-5 w-5" />{restoreFileName || 'Pilih file backup .xlsx'}<input type="file" accept=".xlsx" className="hidden" disabled={backupBusy} onChange={event => selectRestoreFile(event.target.files?.[0])} /></label>
+                  <p className="mt-2 text-xs leading-5 text-blue-700">Khusus file dari <strong>Download Backup XLSX</strong> dengan 7 sheet di atas. Ekspor laporan Accurate memakai menu impor faktur, bukan Restore.</p>
                 </section>
               </div>
               {restorePreview && (
