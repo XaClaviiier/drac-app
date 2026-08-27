@@ -3802,7 +3802,7 @@ export default function WorkOrders() {
                     <label className="block text-sm font-medium text-gray-700">
                       Tanggal &amp; Waktu <span className="text-red-500">*</span>
                     </label>
-                    <div className="grid grid-cols-[minmax(0,1fr)_78px_40px] gap-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_92px_40px] gap-2">
                     <IndonesianDateInput required max={localDateKey()} disabled={!woDateUnlocked} lockedAppearance={!woDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-10 w-full text-sm"/>
                     <input
                       type="time"
