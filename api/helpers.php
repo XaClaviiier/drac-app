@@ -877,7 +877,7 @@ function getUserPermissions(PDO $pdo, array $user): array {
     if ($roleCode === 'TKN' || str_contains($roleName, 'teknisi') || str_contains($roleName, 'technician')) {
         $permissions = array_merge($permissions, [
             'ai:view',
-            'wo:view', 'wo:create',
+            'wo:view', 'wo:create', 'wo:edit',
             'customer:view', 'customer:create', 'customer:edit',
             'vehicle:view', 'vehicle:create', 'vehicle:edit',
             'item:view',

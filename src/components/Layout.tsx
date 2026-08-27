@@ -609,6 +609,9 @@ export default function Layout() {
   } = useApp();
 
   const isAll = currentBranchId === "ALL";
+  const activeBranches = data.branches.filter((branch) => branch.isActive);
+  const canSelectAllBranches = hasPermission("all_branches");
+  const canSwitchBranches = canSelectAllBranches || activeBranches.length > 1;
   const currentBranch = isAll
     ? null
     : data.branches.find((b) => b.id === currentBranchId);
@@ -913,7 +916,7 @@ export default function Layout() {
       <div className="flex flex-1 flex-col overflow-hidden lg:pt-12">
         {/* Header */}
         <header
-          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} app-brand-header relative flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:fixed lg:inset-x-0 lg:top-0 lg:z-[75] lg:h-12 lg:py-1`}
+          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} ${branchMenuOpen ? "z-[80]" : ""} app-brand-header relative flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:fixed lg:inset-x-0 lg:top-0 lg:z-[75] lg:h-12 lg:py-1`}
         >
           <div className="hidden items-center gap-2.5 lg:flex">
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
@@ -954,7 +957,7 @@ export default function Layout() {
 
           <div className="ml-auto flex flex-shrink-0 items-center gap-1.5 sm:gap-3">
             {/* Branch switcher */}
-            {hasPermission("all_branches") && (
+            {canSwitchBranches && (
               <div className="relative">
                 <button
                   onClick={() => setBranchMenuOpen(!branchMenuOpen)}
@@ -980,18 +983,19 @@ export default function Layout() {
                 {branchMenuOpen && (
                   <>
                     <div
-                      className="fixed inset-0 z-40"
+                      className="fixed inset-0 z-[80]"
                       onClick={() => setBranchMenuOpen(false)}
                     />
-                    <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-gray-200 bg-white p-2 shadow-xl">
-                      <button
-                        onClick={() => handleBranchChange("ALL")}
-                        className={`w-full rounded-lg px-3 py-2 text-left text-sm ${isAll ? "bg-blue-50 font-medium text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
-                      >
-                        Semua Cabang
-                      </button>
-                      {data.branches
-                        .filter((b) => b.isActive)
+                    <div className="fixed left-3 right-3 top-[60px] z-[90] max-h-[min(60dvh,360px)] overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-56">
+                      {canSelectAllBranches && (
+                        <button
+                          onClick={() => handleBranchChange("ALL")}
+                          className={`w-full rounded-lg px-3 py-2 text-left text-sm ${isAll ? "bg-blue-50 font-medium text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
+                        >
+                          Semua Cabang
+                        </button>
+                      )}
+                      {activeBranches
                         .map((b) => (
                           <button
                             key={b.id}
@@ -1392,20 +1396,21 @@ export default function Layout() {
             </div>
 
             {/* Cabang aktif selalu terlihat di bagian atas menu HP */}
-            {hasPermission("all_branches") && (
+            {canSwitchBranches && (
               <div className="mx-5 mb-4">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-blue-300">
                   Cabang aktif
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1">
-                  <button
-                    onClick={() => handleBranchChange("ALL")}
-                    className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${isAll ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-200"}`}
-                  >
-                    <Building2 className="h-4 w-4" /> Semua Cabang
-                  </button>
-                  {data.branches
-                    .filter((b) => b.isActive)
+                  {canSelectAllBranches && (
+                    <button
+                      onClick={() => handleBranchChange("ALL")}
+                      className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${isAll ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-200"}`}
+                    >
+                      <Building2 className="h-4 w-4" /> Semua Cabang
+                    </button>
+                  )}
+                  {activeBranches
                     .map((b) => (
                       <button
                         key={b.id}

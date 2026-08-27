@@ -300,7 +300,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       || normalizedRoleName.includes('technician');
     const technicianBaseline: Permission[] = [
       'ai:view',
-      'wo:view', 'wo:create',
+      'wo:view', 'wo:create', 'wo:edit',
       'customer:view', 'customer:create', 'customer:edit',
       'vehicle:view', 'vehicle:create', 'vehicle:edit',
       'item:view',
@@ -634,6 +634,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const now = new Date().toISOString();
+    const normalizedRoleName = (currentUser?.roleName || '').trim().toLowerCase();
+    const currentRole = data.roles.find(role => role.id === currentUser?.roleId);
+    const currentUserIsTechnician = currentRole?.code?.toUpperCase() === 'TKN'
+      || normalizedRoleName.includes('teknisi')
+      || normalizedRoleName.includes('technician');
     const log = [
       ...(wo.statusLog || []),
       {
@@ -660,6 +665,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       estimateTotal: (wo.status === 'Register' || wo.status === 'Closed') && nextStatus === 'Proses'
         ? positiveTotal
         : wo.estimateTotal,
+      technicianId: nextStatus === 'Proses' && !wo.technicianId && currentUserIsTechnician
+        ? currentUser?.id
+        : wo.technicianId,
+      technicianName: nextStatus === 'Proses' && !wo.technicianName && currentUserIsTechnician
+        ? currentUser?.name
+        : wo.technicianName,
     };
 
     await updateWorkOrder(woId, patch);

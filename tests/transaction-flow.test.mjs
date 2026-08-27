@@ -633,6 +633,26 @@ test('dashboard HP tidak menampilkan kartu ringkasan transaksi', () => {
   assert.match(page, /<section className="mt-5 grid grid-cols-3 gap-3">/);
 });
 
+test('pemilih cabang HP terlihat untuk akses multi cabang dan tidak tertutup halaman', () => {
+  const layout = source('src/components/Layout.tsx');
+  assert.match(layout, /const canSwitchBranches = canSelectAllBranches \|\| activeBranches\.length > 1/);
+  assert.match(layout, /\{canSwitchBranches && \(/);
+  assert.match(layout, /fixed left-3 right-3 top-\[60px\] z-\[90\]/);
+  assert.match(layout, /canSelectAllBranches && \(/);
+});
+
+test('Teknisi dapat menyimpan layanan dan melanjutkan Register menjadi Dikerjakan', () => {
+  const context = source('src/context/AppContext.tsx');
+  const helpers = source('api/helpers.php');
+  const workOrders = source('src/pages/WorkOrders.tsx');
+  assert.match(context, /'wo:view', 'wo:create', 'wo:edit'/);
+  assert.match(helpers, /'wo:view', 'wo:create', 'wo:edit'/);
+  assert.match(workOrders, /currentUserIsTechnician \? currentUser\?\.id \|\| '' : ''/);
+  assert.match(context, /nextStatus === 'Proses' && !wo\.technicianId && currentUserIsTechnician/);
+  assert.match(workOrders, /const latest = data\.workOrders\.find\(\(workOrder\) => workOrder\.id === detailWO\.id\)/);
+  assert.match(workOrders, /onClick=\{\(\) => requestStatusChange\(detailWO, 'Proses'\)\}/);
+});
+
 test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const complaints = source('src/components/ComplaintMultiSelect.tsx');

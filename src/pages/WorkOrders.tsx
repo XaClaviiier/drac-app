@@ -294,6 +294,7 @@ export default function WorkOrders() {
   const canShowAdminRowActions = Boolean(
     currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
   );
+  const currentUserIsTechnician = /teknisi|technician/i.test((currentUser?.roleName || '').trim());
   const [showComplaintEditor, setShowComplaintEditor] = useState(false);
   const [newComplaintTemplate, setNewComplaintTemplate] = useState('');
   const [complaintTemplates, setComplaintTemplates] = useState<string[]>(() => {
@@ -331,6 +332,14 @@ export default function WorkOrders() {
     const fallbackId = remainingTabs[Math.min(Math.max(closingIndex - 1, 0), remainingTabs.length - 1)];
     setDetailWO(data.workOrders.find(wo => wo.id === fallbackId) || null);
   };
+
+  // Detail HP harus mengikuti hasil simpan/refresh terbaru. Tanpa sinkronisasi
+  // ini tombol status masih membaca layanan dan total lama setelah Register.
+  useEffect(() => {
+    if (!detailWO) return;
+    const latest = data.workOrders.find((workOrder) => workOrder.id === detailWO.id);
+    if (latest && latest !== detailWO) setDetailWO(latest);
+  }, [data.workOrders, detailWO?.id]);
 
   const previousWorkOrderFor = (wo: WorkOrder) => data.workOrders
     .filter(candidate => candidate.id !== wo.id && (
@@ -503,8 +512,8 @@ export default function WorkOrders() {
     services: [] as WorkOrderService[],
     findings: '',
     notes: '',
-    technicianId: '',
-    technicianName: '',
+    technicianId: currentUserIsTechnician ? currentUser?.id || '' : '',
+    technicianName: currentUserIsTechnician ? currentUser?.name || '' : '',
     assistantTechnicianIds: [] as string[],
     assistantTechnicianNames: [] as string[],
     status: 'Register' as WorkOrder['status'],
@@ -1097,8 +1106,8 @@ export default function WorkOrders() {
       services: [],
       findings: '',
       notes: '',
-      technicianId: '',
-      technicianName: '',
+      technicianId: currentUserIsTechnician ? currentUser?.id || '' : '',
+      technicianName: currentUserIsTechnician ? currentUser?.name || '' : '',
       assistantTechnicianIds: [],
       assistantTechnicianNames: [],
       status: 'Register',
@@ -1155,8 +1164,8 @@ export default function WorkOrders() {
         services: wo.services,
         findings: wo.findings || '',
         notes: wo.notes || '',
-        technicianId: wo.technicianId || '',
-        technicianName: wo.technicianName || '',
+        technicianId: wo.technicianId || (currentUserIsTechnician ? currentUser?.id || '' : ''),
+        technicianName: wo.technicianName || (currentUserIsTechnician ? currentUser?.name || '' : ''),
         assistantTechnicianIds: wo.assistantTechnicianIds || [],
         assistantTechnicianNames: wo.assistantTechnicianNames || [],
         status: wo.status,
@@ -3120,7 +3129,7 @@ export default function WorkOrders() {
               {hasPermission('wo:edit') && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
                 <>
                   <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{detailWO.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
-                  {detailWO.services.length > 0 && detailWO.total > 0 && <button onClick={() => { requestStatusChange(detailWO, 'Proses'); setDetailWO(null); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Setuju · Dikerjakan</button>}
+                  {detailWO.services.length > 0 && detailWO.total > 0 && <button onClick={() => requestStatusChange(detailWO, 'Proses')} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Setuju · Dikerjakan</button>}
                 </>
               )}
               {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
