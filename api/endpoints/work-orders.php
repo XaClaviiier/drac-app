@@ -480,7 +480,7 @@ switch ($method) {
                 'at' => date('c'),
                 'byUserId' => $actor['id'] ?? '-',
                 'byUserName' => $actor['name'] ?? 'System',
-                'reason' => 'WO diregister',
+                'reason' => '[WO_TIMELINE_STAGE:diagnosis] WO diregister',
             ]];
             $stmt = $pdo->prepare("
                 INSERT INTO work_orders (
@@ -570,6 +570,56 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        if ($action === 'timeline-stage') {
+            $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+            $allowedStages = ['diagnosis', 'approval', 'parts', 'working'];
+            $stage = strtolower(trim((string)($d['stage'] ?? '')));
+            if (!in_array($stage, $allowedStages, true)) {
+                respondError('Tahap timeline tidak valid.', 422);
+            }
+            $pdo->beginTransaction();
+            try {
+                $stageStmt = $pdo->prepare("SELECT id,status,branch_id,invoice_id,status_log FROM work_orders WHERE id=? LIMIT 1 FOR UPDATE");
+                $stageStmt->execute([$id]);
+                $stageWorkOrder = $stageStmt->fetch();
+                if (!$stageWorkOrder) throw new InvalidArgumentException('WO tidak ditemukan.');
+                assertActiveBranch($pdo, (string)$stageWorkOrder['branch_id']);
+                requireAccessibleBranch($pdo, $actor, (string)$stageWorkOrder['branch_id']);
+                $coreStatus = (string)$stageWorkOrder['status'];
+                if (in_array($coreStatus, ['Selesai', 'Closed', 'Batal'], true) || !empty($stageWorkOrder['invoice_id'])) {
+                    throw new DomainException('Tahap WO yang sudah selesai, Lost Sales, atau difakturkan tidak dapat diubah.');
+                }
+                if ($stage === 'working' && $coreStatus !== 'Proses') {
+                    throw new DomainException('Mulai Dikerjakan melalui aksi status WO agar estimasi dan teknisi tetap tervalidasi.');
+                }
+                $statusLog = json_decode((string)($stageWorkOrder['status_log'] ?? '[]'), true);
+                if (!is_array($statusLog)) $statusLog = [];
+                $note = trim((string)($d['note'] ?? ''));
+                $statusLog[] = [
+                    'from' => $coreStatus,
+                    'to' => $coreStatus,
+                    'at' => date('c'),
+                    'byUserId' => $actor['id'] ?? '-',
+                    'byUserName' => $actor['name'] ?? 'System',
+                    'reason' => '[WO_TIMELINE_STAGE:' . $stage . ']' . ($note !== '' ? ' ' . $note : ''),
+                ];
+                $pendingStage = in_array($stage, ['approval', 'parts'], true);
+                $pdo->prepare("UPDATE work_orders SET status_log=?,pending_at=?,pending_reason=?,updated_at=CURRENT_TIMESTAMP(6) WHERE id=?")
+                    ->execute([json_encode($statusLog), $pendingStage ? date('Y-m-d H:i:s') : null, $pendingStage ? ($note ?: null) : null, $id]);
+                $versionStmt = $pdo->prepare('SELECT updated_at FROM work_orders WHERE id=?');
+                $versionStmt->execute([$id]);
+                $updatedAt = $formatWorkOrderVersion($versionStmt->fetchColumn());
+                $pdo->commit();
+                respondSuccess(['id' => $id, 'stage' => $stage, 'updatedAt' => $updatedAt], 'Tahap timeline diperbarui');
+            } catch (InvalidArgumentException | DomainException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError($e->getMessage(), 422);
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $reference = $logWorkOrderFailure('timeline stage', $e);
+                respondError('Gagal mengubah tahap timeline. Referensi: ' . $reference, 500);
+            }
+        }
         $pdo->beginTransaction();
         try {
             $normalizedServices = $normalizeWorkOrderServices($pdo, is_array($d['services'] ?? null) ? $d['services'] : []);

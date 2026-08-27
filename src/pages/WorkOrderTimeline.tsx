@@ -1,98 +1,128 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Activity, Banknote, Check, CheckCircle2, ChevronRight,
-  FileText, Gauge, Package, Plus, RefreshCw, Settings2, Stethoscope, Thermometer,
-  UserRound, Wrench, XCircle,
+  Activity, Banknote, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3,
+  FileText, Package, RefreshCw, Settings2, Stethoscope, UserRound, Wrench, XCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { LegacyWOStatus, SalesInvoice, WorkOrder, WOStatus } from '../types';
+import type { SalesInvoice, WorkOrder, WorkOrderTimelineStage } from '../types';
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
+import {
+  timelineStageFromReason, timelineStageFromWorkOrder, type TimelineStageKey,
+} from '../lib/workOrderTimeline';
 
-type StageKey = 'register' | 'diagnosis' | 'approval' | 'parts' | 'working' | 'done' | 'lost';
-type Segment = { key: StageKey; label: string; start: Date; end: Date; duration: number };
+type BoardStageKey = TimelineStageKey | 'done';
+type Segment = { key: TimelineStageKey; start: Date; end: Date; duration: number; active: boolean };
+type TimelineRow = { wo: WorkOrder; invoice?: SalesInvoice; stage: BoardStageKey; segments: Segment[] };
 
-const STAGES: Record<StageKey, { label: string; short: string; bar: string; color: string; soft: string; text: string; icon: typeof Wrench }> = {
-  register: { label: 'Register', short: 'Register', bar: 'bg-slate-500', color: '#64748b', soft: 'border-slate-300 bg-slate-50', text: 'text-slate-700', icon: FileText },
-  diagnosis: { label: 'Diagnosa', short: 'Diagnosa', bar: 'bg-orange-500', color: '#f97316', soft: 'border-orange-300 bg-orange-50', text: 'text-orange-700', icon: Stethoscope },
-  approval: { label: 'Tunggu Persetujuan', short: 'Persetujuan', bar: 'bg-amber-400', color: '#fbbf24', soft: 'border-amber-300 bg-amber-50', text: 'text-amber-700', icon: UserRound },
-  parts: { label: 'Tunggu Parts', short: 'Parts', bar: 'bg-violet-500', color: '#8b5cf6', soft: 'border-violet-300 bg-violet-50', text: 'text-violet-700', icon: Package },
-  working: { label: 'Dikerjakan', short: 'Dikerjakan', bar: 'bg-blue-600', color: '#2563eb', soft: 'border-blue-400 bg-blue-50', text: 'text-blue-700', icon: Wrench },
-  done: { label: 'Selesai', short: 'Selesai', bar: 'bg-green-600', color: '#16a34a', soft: 'border-green-400 bg-green-50', text: 'text-green-700', icon: CheckCircle2 },
-  lost: { label: workOrderStatusLabel('Closed'), short: workOrderStatusLabel('Closed'), bar: 'bg-red-600', color: '#dc2626', soft: 'border-red-300 bg-red-50', text: 'text-red-700', icon: XCircle },
+const STAGES: Record<TimelineStageKey, {
+  label: string; short: string; color: string; bar: string; soft: string; text: string; icon: typeof Wrench; warningMinutes?: number;
+}> = {
+  diagnosis: { label: 'Diagnosa', short: 'Diagnosa', color: '#f97316', bar: 'bg-orange-500', soft: 'border-orange-200 bg-orange-50', text: 'text-orange-700', icon: Stethoscope, warningMinutes: 45 },
+  approval: { label: 'Tunggu Persetujuan', short: 'Tunggu Setuju', color: '#eab308', bar: 'bg-yellow-500', soft: 'border-yellow-200 bg-yellow-50', text: 'text-yellow-800', icon: UserRound, warningMinutes: 60 },
+  parts: { label: 'Tunggu Parts', short: 'Tunggu Parts', color: '#8b5cf6', bar: 'bg-violet-500', soft: 'border-violet-200 bg-violet-50', text: 'text-violet-700', icon: Package, warningMinutes: 120 },
+  working: { label: 'Dikerjakan', short: 'Dikerjakan', color: '#2563eb', bar: 'bg-blue-600', soft: 'border-blue-200 bg-blue-50', text: 'text-blue-700', icon: Wrench },
+  lost: { label: workOrderStatusLabel('Closed'), short: workOrderStatusLabel('Closed'), color: '#dc2626', bar: 'bg-red-600', soft: 'border-red-200 bg-red-50', text: 'text-red-700', icon: XCircle },
 };
 
-const AXIS_START_HOUR = 8;
-const AXIS_END_HOUR = 19;
+const AXIS_START_MINUTE = 8 * 60;
+const DEFAULT_AXIS_END_MINUTE = 17 * 60 + 30;
+const HALF_HOUR = 30;
 
-function parseDateTime(value: string | undefined, fallbackDate: string, fallbackHour = AXIS_START_HOUR) {
-  const fallback = new Date(`${fallbackDate}T${String(fallbackHour).padStart(2, '0')}:00:00`);
+function parseDateTime(value: string | undefined, fallbackDate: string, fallbackTime = '08:00') {
+  const fallback = new Date(`${fallbackDate}T${fallbackTime}:00`);
   if (!value) return fallback;
   const parsed = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
   return Number.isNaN(parsed.getTime()) ? fallback : parsed;
 }
 
 function durationLabel(milliseconds: number) {
-  const minutes = Math.max(0, Math.round(milliseconds / 60000));
+  const minutes = Math.max(1, Math.round(milliseconds / 60000));
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return `${hours}j${rest ? ` ${rest}m` : ''}`;
 }
 
-function stageForStatus(status: WOStatus | LegacyWOStatus, reason = ''): StageKey {
-  if (status === 'Register') return 'register';
-  if (status === 'Pengecekan') return 'diagnosis';
-  if (status === 'Pending') return /part|spare|stok|komponen/i.test(reason) ? 'parts' : 'approval';
-  if (status === 'Proses') return 'working';
-  if (status === 'Closed' || status === 'Batal') return 'lost';
-  return 'done';
+function minuteOfDay(value: Date) {
+  return value.getHours() * 60 + value.getMinutes() + value.getSeconds() / 60;
 }
 
-function buildSegments(wo: WorkOrder, invoice: SalesInvoice | undefined, now: Date): Segment[] {
-  const logs = [...(wo.statusLog || [])].sort((a, b) => parseDateTime(a.at, wo.date).getTime() - parseDateTime(b.at, wo.date).getTime());
-  let status: WOStatus | LegacyWOStatus = logs[0]?.from || wo.status;
-  let reason = '';
-  let cursor = parseDateTime(wo.createdAt, wo.date);
+function buildSegments(wo: WorkOrder, now: Date): Segment[] {
+  const fallbackTime = wo.transactionTime || '08:00';
+  const startedAt = parseDateTime(wo.createdAt, wo.date, fallbackTime);
+  const logs = [...(wo.statusLog || [])]
+    .map(log => ({ ...log, parsedAt: parseDateTime(log.at, wo.date, fallbackTime) }))
+    .filter(log => log.parsedAt.getTime() >= startedAt.getTime())
+    .sort((a, b) => a.parsedAt.getTime() - b.parsedAt.getTime());
+  let stage: TimelineStageKey = 'diagnosis';
+  let cursor = startedAt;
   const segments: Segment[] = [];
-  const add = (until: Date) => {
-    const end = until.getTime() <= cursor.getTime() ? new Date(cursor.getTime() + 60000) : until;
-    const key = stageForStatus(status, reason);
-    segments.push({ key, label: STAGES[key].label, start: cursor, end, duration: end.getTime() - cursor.getTime() });
-    cursor = until;
+  const pushSegment = (end: Date, key = stage, active = false) => {
+    if (end.getTime() <= cursor.getTime()) return;
+    segments.push({ key, start: cursor, end, duration: end.getTime() - cursor.getTime(), active });
+    cursor = end;
   };
-  logs.forEach(log => {
-    const at = parseDateTime(log.at, wo.date);
-    if (at.getTime() >= cursor.getTime()) add(at);
-    status = log.to;
-    reason = log.reason || (log.to === 'Pending' ? wo.pendingReason || '' : '');
-  });
 
-  const selectedDayEnd = new Date(`${wo.date}T${AXIS_END_HOUR}:00:00`);
-  let endpoint = now;
-  if (wo.date !== localDateKey(now)) endpoint = selectedDayEnd;
-  if (invoice?.createdAt) endpoint = parseDateTime(invoice.createdAt, invoice.date, AXIS_END_HOUR);
-  if (wo.status === 'Closed') endpoint = parseDateTime(wo.updatedAt, wo.date, AXIS_END_HOUR);
-  if (endpoint.getTime() <= cursor.getTime()) endpoint = new Date(cursor.getTime() + 5 * 60000);
-  add(endpoint);
+  for (const log of logs) {
+    const markedStage = timelineStageFromReason(log.reason || '');
+    const nextStage: TimelineStageKey | null = markedStage
+      || (log.to === 'Proses' ? 'working' : null)
+      || (log.to === 'Closed' || log.to === 'Batal' ? 'lost' : null);
+    const isComplete = log.to === 'Selesai' || log.to === 'Dibayar' || log.to === 'Invoiced';
+    if (!nextStage && !isComplete) continue;
+    if (log.parsedAt.getTime() > cursor.getTime()) pushSegment(log.parsedAt);
+    if (isComplete) return segments;
+    stage = nextStage || stage;
+    cursor = log.parsedAt;
+    if (stage === 'lost') {
+      pushSegment(new Date(cursor.getTime() + 10 * 60000), 'lost');
+      return segments;
+    }
+  }
+
+  if (wo.status === 'Selesai') {
+    if (!segments.length) {
+      const recordedEnd = parseDateTime(wo.updatedAt, wo.date, fallbackTime);
+      const visibleEnd = recordedEnd.getTime() > cursor.getTime()
+        ? recordedEnd
+        : new Date(cursor.getTime() + 30 * 60000);
+      pushSegment(visibleEnd, 'working');
+    }
+    return segments;
+  }
+  if (wo.status === 'Closed') {
+    const closedAt = parseDateTime(wo.updatedAt, wo.date, fallbackTime);
+    if (closedAt.getTime() > cursor.getTime()) pushSegment(closedAt);
+    pushSegment(new Date(cursor.getTime() + 10 * 60000), 'lost');
+    return segments;
+  }
+  const endpoint = wo.date === localDateKey(now) ? now : new Date(`${wo.date}T17:30:00`);
+  if (endpoint.getTime() > cursor.getTime()) pushSegment(endpoint, timelineStageFromWorkOrder(wo), true);
   return segments;
 }
 
 function selectedDateLabel(value: string) {
-  return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(`${value}T00:00:00`));
+  return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
+    .format(new Date(`${value}T00:00:00`));
+}
+
+function formatClock(value: Date) {
+  return value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
 }
 
 export default function WorkOrderTimeline() {
   const navigate = useNavigate();
   const {
-    data, currentBranchId, currentUser, hasPermission, isLoading, refreshData, changeWorkOrderStatus,
+    data, currentBranchId, currentUser, hasPermission, isLoading, refreshData,
+    changeWorkOrderStatus, changeWorkOrderTimelineStage,
   } = useApp();
   const [date, setDate] = useState(localDateKey());
   const [selectedId, setSelectedId] = useState('');
-  const [stageFilter, setStageFilter] = useState<StageKey | null>(null);
+  const [stageFilter, setStageFilter] = useState<BoardStageKey | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showCompleted, setShowCompleted] = useState(true);
   const [showLost, setShowLost] = useState(true);
@@ -100,260 +130,241 @@ export default function WorkOrderTimeline() {
   const [clock, setClock] = useState(() => new Date());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setClock(new Date()), 30000);
+    const timer = window.setInterval(() => setClock(new Date()), 15000);
     const reload = window.setInterval(() => { void refreshData(); }, 120000);
     return () => { window.clearInterval(timer); window.clearInterval(reload); };
-  }, []);
+  }, [refreshData]);
 
-  const branch = currentBranchId === 'ALL' ? null : data.branches.find(item => item.id === currentBranchId);
-  const invoicesByWo = useMemo(() => new Map(data.invoices.filter(item => item.woId).map(item => [item.woId!, item])), [data.invoices]);
-  const dayRows = useMemo(() => data.workOrders.filter(wo => (
-    wo.date === date
-    && (currentBranchId === 'ALL' || wo.branchId === currentBranchId)
-    && (showCompleted || wo.status !== 'Selesai')
-    && (showLost || wo.status !== 'Closed')
-  )), [data.workOrders, date, currentBranchId, showCompleted, showLost]);
+  const invoicesByWo = useMemo(() => new Map(
+    data.invoices.filter(invoice => invoice.woId).map(invoice => [invoice.woId!, invoice]),
+  ), [data.invoices]);
+  const rows = useMemo<TimelineRow[]>(() => data.workOrders
+    .filter(wo => wo.date === date && (currentBranchId === 'ALL' || wo.branchId === currentBranchId))
+    .map<TimelineRow>(wo => ({
+      wo,
+      invoice: invoicesByWo.get(wo.id),
+      stage: wo.status === 'Selesai' ? 'done' : timelineStageFromWorkOrder(wo),
+      segments: buildSegments(wo, clock),
+    }))
+    .filter(row => (showCompleted || row.stage !== 'done') && (showLost || row.stage !== 'lost'))
+    .sort((a, b) => {
+      const priority: Record<BoardStageKey, number> = { working: 0, parts: 1, approval: 2, diagnosis: 3, done: 4, lost: 5 };
+      return priority[a.stage] - priority[b.stage]
+        || parseDateTime(a.wo.createdAt, a.wo.date, a.wo.transactionTime).getTime() - parseDateTime(b.wo.createdAt, b.wo.date, b.wo.transactionTime).getTime();
+    }), [data.workOrders, date, currentBranchId, invoicesByWo, clock, showCompleted, showLost]);
 
-  const rowsWithSegments = useMemo(() => dayRows.map(wo => ({
-    wo,
-    invoice: invoicesByWo.get(wo.id),
-    segments: buildSegments(wo, invoicesByWo.get(wo.id), clock),
-  })), [dayRows, invoicesByWo, clock]);
-
-  const currentStage = (wo: WorkOrder) => stageForStatus(wo.status, wo.pendingReason || wo.cancelReason || '');
-  const stageCounts = useMemo(() => rowsWithSegments.reduce((result, row) => {
-    const key = currentStage(row.wo);
-    result[key] = (result[key] || 0) + 1;
+  const counts = useMemo(() => rows.reduce((result, row) => {
+    result[row.stage] = (result[row.stage] || 0) + 1;
     return result;
-  }, {} as Partial<Record<StageKey, number>>), [rowsWithSegments]);
-  const visibleRows = stageFilter ? rowsWithSegments.filter(row => currentStage(row.wo) === stageFilter) : rowsWithSegments;
+  }, {} as Partial<Record<BoardStageKey, number>>), [rows]);
+  const visibleRows = stageFilter ? rows.filter(row => row.stage === stageFilter) : rows;
+  const selectedRow = visibleRows.find(row => row.wo.id === selectedId);
+  const selected = selectedRow?.wo;
 
   useEffect(() => {
     if (selectedId && !visibleRows.some(row => row.wo.id === selectedId)) setSelectedId('');
   }, [selectedId, visibleRows]);
 
-  const selectedRow = visibleRows.find(row => row.wo.id === selectedId) || visibleRows[0];
-  const selected = selectedRow?.wo;
-  const selectedStage = selected ? currentStage(selected) : null;
-  const selectedInvoice = selectedRow?.invoice;
-  const selectedReadOnly = Boolean(selectedInvoice || selected?.invoiceId || selected?.status === 'Closed');
-  const selectedStages = useMemo(() => {
-    if (!selectedRow) return [];
-    const totals = new Map<StageKey, { duration: number; start: Date; end: Date }>();
-    selectedRow.segments.forEach(segment => {
-      const previous = totals.get(segment.key);
-      totals.set(segment.key, previous
-        ? { duration: previous.duration + segment.duration, start: previous.start, end: segment.end }
-        : { duration: segment.duration, start: segment.start, end: segment.end });
-    });
-    return Array.from(totals.entries()).map(([key, value]) => ({ key, ...value }));
-  }, [selectedRow]);
-
-  const axisStart = new Date(`${date}T${String(AXIS_START_HOUR).padStart(2, '0')}:00:00`);
-  const axisEnd = new Date(`${date}T${AXIS_END_HOUR}:00:00`);
-  const position = (value: Date) => ((value.getTime() - axisStart.getTime()) / (axisEnd.getTime() - axisStart.getTime())) * 100;
+  const latestObservedMinute = useMemo(() => {
+    let latest = DEFAULT_AXIS_END_MINUTE;
+    visibleRows.forEach(row => row.segments.forEach(segment => { latest = Math.max(latest, minuteOfDay(segment.end)); }));
+    if (date === localDateKey(clock)) latest = Math.max(latest, minuteOfDay(clock));
+    return Math.ceil(latest / HALF_HOUR) * HALF_HOUR;
+  }, [visibleRows, date, clock]);
+  const axisEndMinute = Math.max(DEFAULT_AXIS_END_MINUTE, latestObservedMinute);
+  const axisSpan = axisEndMinute - AXIS_START_MINUTE;
+  const timelineWidth = Math.max(760, Math.round(axisSpan * 1.45));
+  const position = (value: Date) => ((minuteOfDay(value) - AXIS_START_MINUTE) / axisSpan) * 100;
   const nowPosition = position(clock);
   const showNowLine = date === localDateKey(clock) && nowPosition >= 0 && nowPosition <= 100;
-  const invoicedCount = rowsWithSegments.filter(row => !!row.invoice).length;
-  const paidCount = rowsWithSegments.filter(row => row.invoice?.status === 'Lunas').length;
+  const axisLabels = useMemo(() => {
+    const labels: number[] = [];
+    for (let minute = AXIS_START_MINUTE; minute <= axisEndMinute; minute += 60) labels.push(minute);
+    if (labels[labels.length - 1] !== axisEndMinute) labels.push(axisEndMinute);
+    return labels;
+  }, [axisEndMinute]);
 
-  const moveStatus = async (next: WOStatus, reason?: string) => {
+  const setCoreStatus = async (next: 'Proses' | 'Selesai' | 'Closed', reason?: string) => {
     if (!selected || actionBusy) return;
     setActionBusy(true);
     const result = await changeWorkOrderStatus(selected.id, next, reason);
     setActionBusy(false);
-    if (!result.ok) return window.alert(result.message || 'Status WO gagal diubah.');
-    await refreshData();
+    if (!result.ok) window.alert(result.message || 'Status WO gagal diubah.');
   };
-  const setWaiting = (kind: 'approval' | 'parts') => {
-    const label = kind === 'parts' ? 'Menunggu parts' : 'Menunggu persetujuan pelanggan';
-    const detail = window.prompt(`${label}. Tambahkan keterangan (opsional):`, '');
-    if (detail === null) return;
-    void moveStatus('Register', `${label}${detail.trim() ? `: ${detail.trim()}` : ''}`);
+  const setStage = async (next: WorkOrderTimelineStage, promptLabel?: string) => {
+    if (!selected || actionBusy) return;
+    let note = '';
+    if (promptLabel) {
+      const entered = window.prompt(`${promptLabel}. Keterangan (opsional):`, selected.pendingReason || '');
+      if (entered === null) return;
+      note = entered.trim();
+    }
+    setActionBusy(true);
+    const result = next === 'working' && selected.status === 'Register'
+      ? await changeWorkOrderStatus(selected.id, 'Proses')
+      : await changeWorkOrderTimelineStage(selected.id, next, note);
+    setActionBusy(false);
+    if (!result.ok) window.alert(result.message || 'Tahap WO gagal diubah.');
   };
   const setLostSales = () => {
-    const reason = window.prompt('Alasan Lost Sales / batal:');
-    if (!reason?.trim()) return;
-    void moveStatus('Closed', reason.trim());
+    const reason = window.prompt('Alasan Lost Sales:')?.trim();
+    if (reason) void setCoreStatus('Closed', reason);
   };
 
-  const timelineHours = Array.from({ length: AXIS_END_HOUR - AXIS_START_HOUR + 1 }, (_, index) => AXIS_START_HOUR + index);
-  const totalSelectedDuration = selectedRow?.segments.reduce((sum, segment) => sum + segment.duration, 0) || 0;
-  const completionLog = selected?.statusLog ? [...selected.statusLog].reverse().find(log => log.to === 'Selesai') : undefined;
-  const hasFinalMeasurements = [selected?.finalTemperature, selected?.finalLp, selected?.finalHp]
-    .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
-  const completionNote = selected?.findings?.trim() || selected?.notes?.trim() || '';
+  const branchName = currentBranchId === 'ALL'
+    ? 'Semua Cabang'
+    : data.branches.find(branch => branch.id === currentBranchId)?.name || '-';
+  const activeCount = rows.filter(row => !['done', 'lost'].includes(row.stage)).length;
+  const selectedStage = selectedRow?.stage;
+  const selectedInvoice = selectedRow?.invoice;
+  const selectedPaid = selectedInvoice?.status === 'Lunas';
+
+  const renderAction = (label: string, onClick: () => void, tone: 'neutral' | 'warning' | 'primary' | 'danger' | 'success', Icon: typeof Wrench) => {
+    const colors = {
+      neutral: 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+      warning: 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100',
+      primary: 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700',
+      danger: 'border-red-200 bg-white text-red-700 hover:bg-red-50',
+      success: 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700',
+    };
+    return <button type="button" disabled={actionBusy} onClick={onClick} className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 ${colors[tone]}`}><Icon className="h-3.5 w-3.5"/>{label}</button>;
+  };
 
   return (
     <div className="min-w-0 space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="mb-1 flex items-center gap-2 text-xs font-medium text-gray-500">
-            <span>SERVIS ORDER</span><ChevronRight className="h-3.5 w-3.5"/><span className="text-blue-700">WO Timeline</span>
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            <span>Servis Order</span><ChevronRight className="h-3 w-3"/><span className="text-blue-700">WO Timeline</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-950">WO Timeline Control Board</h1>
-          <p className="text-sm text-gray-500">Pemantauan proses servis dan durasi setiap tahap secara real-time.</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-950 sm:text-2xl">WO Timeline Control Board</h1>
+          <p className="mt-0.5 text-xs text-gray-500">{branchName} · {selectedDateLabel(date)}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <label className={`relative inline-flex h-10 min-w-[210px] items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors ${stageFilter ? 'border-blue-400 bg-blue-50 text-blue-800' : 'border-gray-300 bg-white text-gray-700'}`}>
-            <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${stageFilter ? 'animate-pulse bg-blue-600' : 'bg-gray-300'}`}/>
-            <select
-              aria-label="Filter status WO"
-              value={stageFilter || ''}
-              onChange={event => {
-                setStageFilter((event.target.value || null) as StageKey | null);
-                setSelectedId('');
-              }}
-              className="min-w-0 flex-1 cursor-pointer bg-transparent py-2 font-semibold outline-none"
-            >
-              <option value="">Semua Status ({rowsWithSegments.length})</option>
-              {(Object.keys(STAGES) as StageKey[]).map(key => (
-                <option key={key} value={key}>{STAGES[key].label} ({stageCounts[key] || 0})</option>
-              ))}
-            </select>
-          </label>
-          <ActiveFilterResetButton active={Boolean(stageFilter)} onReset={() => { setStageFilter(null); setSelectedId(''); }} className="h-10 w-10" />
-          {hasPermission('wo:create') && <button type="button" onClick={() => navigate('/workorders?new=1')} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4"/>New WO</button>}
-          <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-semibold text-emerald-700"><FileText className="h-4 w-4"/>Faktur {invoicedCount}/{rowsWithSegments.length}</span>
-          <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-rose-50 px-3 text-sm font-semibold text-rose-700"><Banknote className="h-4 w-4"/>Lunas {paidCount}/{invoicedCount}</span>
-          <button type="button" onClick={() => void refreshData()} className="inline-flex h-10 items-center gap-2 rounded-lg border bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"><RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}/>Refresh</button>
-          <IndonesianDateInput value={date} max={localDateKey()} onChange={value=>{setDate(value);setSelectedId('')}} className="h-10 w-40 text-sm"/>
+          <span className="rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-gray-600"><b className="text-blue-700">{activeCount}</b> Aktif · <b className="text-emerald-700">{counts.done || 0}</b> Selesai · <b className="text-red-700">{counts.lost || 0}</b> Lost Sales</span>
+          <IndonesianDateInput value={date} max={localDateKey()} onChange={value => { setDate(value); setSelectedId(''); }} className="h-9 w-40 text-xs"/>
+          <button type="button" onClick={() => void refreshData()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-bold text-gray-600 hover:bg-gray-50"><RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}/>Refresh</button>
           <div className="relative">
-          <button type="button" onClick={() => setShowSettings(current => !current)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 font-semibold text-gray-600"><Settings2 className="h-4 w-4"/>Pengaturan Tampilan</button>
-          {showSettings && <div className="absolute right-0 z-30 mt-2 w-56 rounded-xl border bg-white p-3 shadow-xl">
-            <label className="flex items-center justify-between gap-3 py-2 text-sm"><span>Tampilkan WO selesai</span><input type="checkbox" checked={showCompleted} onChange={event => setShowCompleted(event.target.checked)}/></label>
-            <label className="flex items-center justify-between gap-3 py-2 text-sm"><span>Tampilkan Lost Sales</span><input type="checkbox" checked={showLost} onChange={event => setShowLost(event.target.checked)}/></label>
-          </div>}
+            <button type="button" aria-label="Pengaturan tampilan" onClick={() => setShowSettings(value => !value)} className="grid h-9 w-9 place-items-center rounded-lg border bg-white text-gray-600 hover:bg-gray-50"><Settings2 className="h-4 w-4"/></button>
+            {showSettings && <div className="absolute right-0 z-40 mt-2 w-56 rounded-xl border bg-white p-3 text-sm shadow-xl">
+              <label className="flex items-center justify-between gap-3 py-2"><span>Tampilkan WO selesai</span><input type="checkbox" checked={showCompleted} onChange={event => setShowCompleted(event.target.checked)}/></label>
+              <label className="flex items-center justify-between gap-3 py-2"><span>Tampilkan Lost Sales</span><input type="checkbox" checked={showLost} onChange={event => setShowLost(event.target.checked)}/></label>
+            </div>}
           </div>
         </div>
-      </div>
+      </header>
+
+      {selected && selectedRow && <section className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={`grid h-10 w-10 flex-none place-items-center rounded-lg border ${selectedStage === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : STAGES[selectedStage as TimelineStageKey].soft + ' ' + STAGES[selectedStage as TimelineStageKey].text}`}>
+            {selectedStage === 'done' ? <CheckCircle2 className="h-5 w-5"/> : (() => { const Icon = STAGES[selectedStage as TimelineStageKey].icon; return <Icon className="h-5 w-5"/>; })()}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><b className="truncate text-sm text-gray-950">{selected.plateNumber}</b><span className="text-xs text-gray-400">{selected.woNumber}</span></div>
+            <p className="truncate text-xs text-gray-500">{selected.vehicleInfo || '-'} · {selected.customerName} · {selected.technicianName || 'Teknisi belum dipilih'}</p>
+          </div>
+          <span className={`hidden rounded-md border px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex ${selectedStage === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : STAGES[selectedStage as TimelineStageKey].soft + ' ' + STAGES[selectedStage as TimelineStageKey].text}`}>{selectedStage === 'done' ? 'Selesai' : STAGES[selectedStage as TimelineStageKey].label}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          {hasPermission('wo:edit') && selectedStage === 'diagnosis' && <>
+            {renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
+            {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
+            {renderAction('Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
+            {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
+          </>}
+          {hasPermission('wo:edit') && selectedStage === 'approval' && <>
+            {renderAction('Kembali Diagnosa', () => void setStage('diagnosis'), 'neutral', Stethoscope)}
+            {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
+            {renderAction('Disetujui · Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
+            {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
+          </>}
+          {hasPermission('wo:edit') && selectedStage === 'parts' && <>
+            {selected.status === 'Register' && renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
+            {renderAction('Parts Tersedia · Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
+            {selected.status === 'Proses' && renderAction('Selesai', () => void setCoreStatus('Selesai'), 'success', Check)}
+            {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
+          </>}
+          {hasPermission('wo:edit') && selectedStage === 'working' && selected.status === 'Proses' && <>
+            {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
+            {renderAction('Selesai', () => void setCoreStatus('Selesai'), 'success', Check)}
+          </>}
+          {hasPermission('invoice:create') && selectedStage === 'done' && !selectedInvoice && (selected.total > 0
+            ? renderAction('Buat Faktur', () => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`), 'primary', FileText)
+            : <span className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500">Lengkapi layanan &amp; harga</span>)}
+          {hasPermission('payment:create') && selectedInvoice && !selectedPaid && renderAction('Pembayaran', () => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`), 'success', Banknote)}
+          {selectedPaid && <span className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
+          <button type="button" onClick={() => navigate(`/workorders?${selectedInvoice || selected.status === 'Closed' ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)} className="h-9 rounded-lg border px-3 text-xs font-bold text-gray-600 hover:bg-gray-50">Detail WO</button>
+        </div>
+      </section>}
 
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50/80 px-3 py-2">
+          <label className={`inline-flex h-8 min-w-[190px] items-center gap-2 rounded-lg border px-2.5 text-xs font-semibold ${stageFilter ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-200 bg-white text-gray-600'}`}>
+            <span className={`h-2 w-2 rounded-full ${stageFilter ? 'bg-blue-600' : 'bg-gray-300'}`}/>
+            <select value={stageFilter || ''} onChange={event => { setStageFilter((event.target.value || null) as BoardStageKey | null); setSelectedId(''); }} className="min-w-0 flex-1 bg-transparent outline-none">
+              <option value="">Semua status ({rows.length})</option>
+              {(Object.keys(STAGES) as TimelineStageKey[]).map(key => <option key={key} value={key}>{STAGES[key].label} ({counts[key] || 0})</option>)}
+              <option value="done">Selesai ({counts.done || 0})</option>
+            </select>
+          </label>
+          <ActiveFilterResetButton active={Boolean(stageFilter)} onReset={() => { setStageFilter(null); setSelectedId(''); }} className="h-8 w-8"/>
+          <div className="ml-auto hidden flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500 md:flex">
+            {(Object.keys(STAGES) as TimelineStageKey[]).map(key => <span key={key} className="inline-flex items-center gap-1"><i className={`h-2 w-2 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}</span>)}
+          </div>
+        </div>
         <div className="overflow-x-auto">
-          <div className="md:min-w-[1240px]">
-            <div className="grid grid-cols-1 border-b bg-gray-50 text-xs font-bold text-gray-800 md:grid-cols-[380px_minmax(850px,1fr)]">
-              <div className="px-4 py-3">Kendaraan / Customer / Status</div>
-              <div className="relative hidden md:grid" style={{ gridTemplateColumns: `repeat(${timelineHours.length - 1}, minmax(0, 1fr))` }}>
-                {timelineHours.slice(0, -1).map(hour => <span key={hour} className="border-l px-1 py-3 text-center">{String(hour).padStart(2, '0')}:00</span>)}
-                {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute -top-0.5 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-semibold not-italic text-red-600">Sekarang</i></span>}
+          <div style={{ minWidth: `${260 + timelineWidth + 112}px` }}>
+            <div className="grid border-b bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns: `260px ${timelineWidth}px 112px` }}>
+              <div className="flex items-end px-3 py-2.5">Kendaraan / Customer</div>
+              <div className="relative h-11 border-x border-slate-200">
+                {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
+                {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
               </div>
+              <div className="flex items-end justify-center px-2 py-2.5">Selesai · INV · Rp</div>
             </div>
-            {visibleRows.map(({ wo, invoice, segments }) => {
-              const selectedRowActive = selected?.id === wo.id;
-              const stage = STAGES[currentStage(wo)];
-              return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full grid-cols-1 border-b text-left last:border-b-0 md:grid-cols-[380px_minmax(850px,1fr)] ${selectedRowActive ? 'bg-blue-50/70 shadow-[inset_4px_0_0_#2563eb]' : 'hover:bg-gray-50'}`}>
-                <div className="flex min-w-0 flex-col justify-center px-4 py-3" title={`${wo.woNumber} · Teknisi: ${wo.technicianName || wo.createdByName || '-'}`}>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <b className="min-w-0 flex-1 truncate text-base font-bold text-gray-950">{wo.plateNumber} / {wo.customerName}</b>
-                    <span className={`flex-shrink-0 rounded-md border px-2 py-1 text-[9px] font-bold uppercase ${stage.soft} ${stage.text}`}>{stage.short}</span>
-                  </div>
-                  <div className="mt-1 flex min-w-0 items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate text-xs text-gray-500">{wo.vehicleInfo || '-'}</span>
-                    {invoice ? <>
-                      <span className="flex-shrink-0 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">{invoice.invoiceNumber}</span>
-                      <span className={`flex-shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase ${invoice.status === 'Lunas' ? 'border-green-200 bg-green-50 text-green-700' : 'border-orange-200 bg-orange-50 text-orange-700'}`}>{invoice.status}</span>
-                    </> : wo.status === 'Selesai' ? <span className="flex-shrink-0 rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-gray-500">Belum Faktur</span> : null}
-                  </div>
+            {visibleRows.map(row => {
+              const { wo, invoice, segments, stage } = row;
+              const isSelected = selectedId === wo.id;
+              const isDone = stage === 'done';
+              const currentConfig = isDone ? null : STAGES[stage as TimelineStageKey];
+              const activeSegment = [...segments].reverse().find(segment => segment.active);
+              const warning = activeSegment && currentConfig?.warningMinutes && activeSegment.duration > currentConfig.warningMinutes * 60000;
+              return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full border-b text-left last:border-b-0 ${isSelected ? 'bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-slate-50/80'}`} style={{ gridTemplateColumns: `260px ${timelineWidth}px 112px` }}>
+                <div className="min-w-0 px-3 py-2.5" title={`${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
+                  <div className="flex items-center gap-2"><b className="min-w-0 flex-1 truncate text-sm text-gray-950">{wo.plateNumber}</b>{warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
+                  <p className="truncate text-[11px] text-gray-500">{wo.vehicleInfo || '-'} · {wo.customerName}</p>
+                  <p className={`mt-0.5 truncate text-[9px] font-bold uppercase ${isDone ? 'text-emerald-700' : currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.label}</p>
                 </div>
-                <div className="relative my-2 hidden min-h-[44px] overflow-hidden rounded bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)] md:block" style={{ minHeight: '44px', backgroundSize: `${100 / (timelineHours.length - 1)}% 100%` }}>
+                <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
                   {segments.map((segment, index) => {
                     const rawLeft = position(segment.start);
                     const rawRight = position(segment.end);
                     if (rawRight < 0 || rawLeft > 100) return null;
                     const left = Math.max(0, Math.min(100, rawLeft));
                     const right = Math.max(0, Math.min(100, rawRight));
-                    return <span key={`${segment.key}-${index}`} title={`${segment.label}: ${durationLabel(segment.duration)}`} className={`absolute top-1/2 z-10 flex h-8 -translate-y-1/2 items-center justify-center overflow-hidden rounded px-1 text-[10px] font-bold text-white shadow-sm ${STAGES[segment.key].bar}`} style={{ left: `${left}%`, width: `${Math.max(2.2, right - left)}%`, height: '32px', backgroundColor: STAGES[segment.key].color, color: '#ffffff' }}>{durationLabel(segment.duration)}</span>;
+                    const width = Math.max(0.8, right - left);
+                    return <span key={`${segment.key}-${index}`} title={`${STAGES[segment.key].label}: ${durationLabel(segment.duration)} (${formatClock(segment.start)}–${formatClock(segment.end)})`} className="absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center justify-center overflow-hidden px-1 text-[9px] font-bold text-white shadow-sm first:rounded-l-md last:rounded-r-md" style={{ left: `${left}%`, width: `${width}%`, backgroundColor: STAGES[segment.key].color }}>
+                      {width >= 4.2 ? durationLabel(segment.duration) : ''}{segment.active && <i className="absolute right-0 h-2 w-2 animate-pulse rounded-full border border-white bg-white/90"/>}
+                    </span>;
                   })}
-                  {showNowLine && (
-                    <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>
-                  )}
+                  <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
+                </div>
+                <div className="flex items-center justify-center gap-1.5 px-2">
+                  <span title={isDone || invoice ? 'Pekerjaan selesai' : 'Pekerjaan belum selesai'} className={`grid h-6 w-6 place-items-center rounded-full border text-[10px] font-black ${isDone || invoice ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>✓</span>
+                  <span title={invoice ? `Faktur ${invoice.invoiceNumber}` : 'Belum ada faktur'} className={`grid h-6 min-w-8 place-items-center rounded-md border px-1 text-[9px] font-black ${invoice ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>INV</span>
+                  <span title={invoice?.status === 'Lunas' ? 'Pembayaran lunas' : 'Pembayaran belum lunas'} className={`grid h-6 w-7 place-items-center rounded-md border text-[10px] font-black ${invoice?.status === 'Lunas' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>Rp</span>
                 </div>
               </button>;
             })}
-            {!visibleRows.length && <div className="p-14 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}{stageFilter ? ` dengan status ${STAGES[stageFilter].label}` : ''}.</div>}
+            {!visibleRows.length && <div className="p-14 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}{stageFilter ? ' untuk status yang dipilih' : ''}.</div>}
           </div>
         </div>
       </section>
 
-      {selected && selectedRow && <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.05fr_1.55fr_1.35fr]">
-          <div className="border-l-4 border-blue-600 pl-4">
-            <div className="flex items-center gap-2"><h2 className="text-lg font-bold">{selected.woNumber}</h2><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${STAGES[currentStage(selected)].soft} ${STAGES[currentStage(selected)].text}`}>{STAGES[currentStage(selected)].label}</span></div>
-            <dl className="mt-3 grid grid-cols-[90px_1fr] gap-y-2 text-sm"><dt className="text-gray-500">Pelanggan</dt><dd className="font-semibold">{selected.customerName}</dd><dt className="text-gray-500">No. Polisi</dt><dd className="font-semibold">{selected.plateNumber}</dd><dt className="text-gray-500">Kendaraan</dt><dd>{selected.vehicleInfo}</dd><dt className="text-gray-500">Teknisi</dt><dd>{selected.technicianName || selected.createdByName || '-'}</dd></dl>
-            <p className="mt-3 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
-              Mulai {selectedRow.segments[0]?.start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · Durasi <b className="text-gray-700">{durationLabel(totalSelectedDuration)}</b> · {data.branches.find(item => item.id === selected.branchId)?.name || '-'}
-            </p>
-          </div>
-          <div className="min-w-0 border-l border-gray-200 pl-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase text-gray-400">Layanan &amp; Hasil</p>
-              {selected.status === 'Selesai' && <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Selesai</span>}
-            </div>
-            <p className="mt-2 truncate text-xs font-semibold text-gray-800" title={selected.services.map(service => service.name).join(', ')}>
-              {selected.services.length ? selected.services.map(service => service.name).join(', ') : 'Layanan belum diisi'}
-            </p>
-            {selected.status === 'Selesai' ? <>
-              {hasFinalMeasurements && <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold">
-                <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-rose-700"><Thermometer className="h-3.5 w-3.5"/>{selected.finalTemperature}°C</span>
-                <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-blue-700"><Gauge className="h-3.5 w-3.5"/>L {selected.finalLp} PSI</span>
-                <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-orange-700"><Gauge className="h-3.5 w-3.5"/>H {selected.finalHp} PSI</span>
-              </div>}
-              <p className={`mt-2 line-clamp-2 text-xs leading-4 ${completionNote ? 'text-gray-600' : 'italic text-gray-400'}`} title={completionNote || undefined}>{completionNote || 'Tidak ada catatan tambahan.'}</p>
-              <p className="mt-1 truncate text-[10px] text-gray-400">
-                {completionLog?.byUserName || selected.technicianName || selected.createdByName || 'Teknisi'}
-                {completionLog?.at ? ` · ${parseDateTime(completionLog.at, selected.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : ''}
-              </p>
-            </> : <p className="mt-2 text-xs text-gray-500">Hasil akhir tersedia setelah pekerjaan diselesaikan.</p>}
-          </div>
-          <div className="min-w-0 border-l border-gray-200 pl-4">
-            <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Rincian Durasi Tahapan</p>
-            <div className="space-y-1">{selectedStages.map(stage => { const config = STAGES[stage.key]; const Icon = config.icon; return <div key={stage.key} className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md border px-2 py-1.5 ${config.soft}`} title={`${config.label}: ${durationLabel(stage.duration)}`}><span className={`flex min-w-0 items-center gap-1 truncate text-[10px] font-bold ${config.text}`}><Icon className="h-3.5 w-3.5 flex-shrink-0"/><span className="truncate">{config.short}</span></span><b className="whitespace-nowrap text-[10px] text-gray-900">({durationLabel(stage.duration)})</b><small className="whitespace-nowrap text-[9px] text-gray-500">{stage.start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}–{stage.end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</small></div>; })}</div>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-          <div className="hidden min-w-0 flex-wrap gap-x-3 gap-y-1.5 text-[11px] md:flex">
-            {(Object.keys(STAGES) as StageKey[]).map(key => (
-              <span key={key} className="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-500">
-                <i className={`h-2.5 w-2.5 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => navigate(`/workorders?${selectedReadOnly ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)}
-            className="rounded-lg border px-4 py-2 text-sm font-semibold text-gray-600"
-          >{selectedReadOnly ? 'Lihat WO' : 'Buka WO'}</button>
-          {hasPermission('wo:edit') && selected.status === 'Register' && <>
-            <button onClick={() => navigate(`/workorders?edit=${encodeURIComponent(selected.id)}`)} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white">{selected.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
-            {selected.services.length > 0 && selected.total > 0 && <button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button>}
-            <button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button>
-          </>}
-          {hasPermission('wo:edit') && String(selected.status) === 'Pengecekan' && <>
-            <button disabled={actionBusy} onClick={() => setWaiting('approval')} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white">Tunggu Persetujuan</button>
-            <button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Setuju · Dikerjakan</button>
-            <button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button>
-          </>}
-          {hasPermission('wo:edit') && String(selected.status) === 'Pending' && <>
-            <button disabled={actionBusy} onClick={() => void moveStatus('Proses')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
-              {selectedStage === 'parts' ? 'Parts Tersedia · Dikerjakan' : 'Setuju · Dikerjakan'}
-            </button>
-            <button disabled={actionBusy} onClick={setLostSales} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white">Lost Sales</button>
-          </>}
-          {hasPermission('wo:edit') && selected.status === 'Proses' && <>
-            <button onClick={() => navigate(`/workorders?edit=${encodeURIComponent(selected.id)}`)} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700">Tambah/Edit Layanan</button>
-            <button disabled={actionBusy} onClick={() => void moveStatus('Selesai')} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white"><Check className="mr-1 inline h-4 w-4"/>Selesai</button>
-          </>}
-          {hasPermission('invoice:create') && selected.status === 'Selesai' && !selectedInvoice && (selected.total > 0
-            ? <button onClick={() => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`)} className="rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white"><FileText className="mr-1 inline h-4 w-4"/>Buat Faktur</button>
-            : <button disabled title="Isi layanan dan harga lebih dari Rp0" className="cursor-not-allowed rounded-lg bg-gray-200 px-5 py-2 text-sm font-semibold text-gray-500">Lengkapi layanan & harga</button>)}
-          {hasPermission('payment:create') && selectedInvoice && selectedInvoice.status !== 'Lunas' && <button onClick={() => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`)} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white"><Banknote className="mr-1 inline h-4 w-4"/>Pembayaran</button>}
-          {selectedInvoice?.status === 'Lunas' && <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-4 py-2 text-sm font-bold text-green-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
-          </div>
-        </div>
-      </section>}
-
-      <p className="flex items-center gap-2 text-xs text-gray-400"><Activity className="h-3.5 w-3.5"/>Data {branch?.name || 'semua cabang'} · pembaruan otomatis setiap 2 menit · operator {currentUser?.name || '-'}</p>
+      <footer className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-400">
+        <span className="inline-flex items-center gap-1.5"><Activity className="h-3.5 w-3.5"/>Pembaruan otomatis setiap 2 menit · operator {currentUser?.name || '-'}</span>
+        <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5"/>Rentang awal 08:00–17:30 · otomatis memanjang mengikuti aktivitas</span>
+      </footer>
     </div>
   );
 }

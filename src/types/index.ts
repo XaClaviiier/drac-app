@@ -100,6 +100,7 @@ export interface SalesInvoice {
 
 export type WOStatus = 'Register' | 'Proses' | 'Selesai' | 'Closed';
 export type LegacyWOStatus = 'Pengecekan' | 'Pending' | 'Dibayar' | 'Invoiced' | 'Batal';
+export type WorkOrderTimelineStage = 'diagnosis' | 'approval' | 'parts' | 'working';
 
 export interface WOStatusLog {
   from: WOStatus | LegacyWOStatus;

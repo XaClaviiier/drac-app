@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus } from '../types';
+import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus, WorkOrderTimelineStage } from '../types';
 import { api } from '../lib/apiClient';
 import { demoData } from '../lib/demoData';
 import { failSystemProcess, finishSystemProcess, startSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
+import { appendTimelineStageLog } from '../lib/workOrderTimeline';
 
 interface AppContextType {
   data: AppData;
@@ -44,6 +45,8 @@ interface AppContextType {
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder }>;
+  /** Catat tahap operasional timeline tanpa mengubah status inti WO. */
+  changeWorkOrderTimelineStage: (woId: string, stage: WorkOrderTimelineStage, note?: string) => Promise<{ ok: boolean; message?: string }>;
   createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string) => Promise<SalesInvoice | null>;
   addItem: (item: Item & { autoCode?: boolean; provisional?: boolean }) => Promise<Item>;
   updateItem: (id: string, item: Item) => Promise<void>;
@@ -701,6 +704,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { ok: true, workOrder: savedWorkOrder };
   };
 
+  const changeWorkOrderTimelineStage = async (
+    woId: string,
+    stage: WorkOrderTimelineStage,
+    note = '',
+  ): Promise<{ ok: boolean; message?: string }> => {
+    const wo = data.workOrders.find(item => item.id === woId);
+    if (!wo) return { ok: false, message: 'WO tidak ditemukan.' };
+    if (wo.status === 'Selesai' || wo.status === 'Closed' || wo.invoiceId) {
+      return { ok: false, message: 'Tahap WO yang sudah selesai, Lost Sales, atau difakturkan tidak dapat diubah.' };
+    }
+    if (isDemoMode) {
+      const now = new Date().toISOString();
+      setData(previous => ({
+        ...previous,
+        workOrders: previous.workOrders.map(item => item.id === woId ? {
+          ...item,
+          statusLog: appendTimelineStageLog(item, stage, now, { id: currentUser?.id, name: currentUser?.name }, note),
+          pendingAt: stage === 'approval' || stage === 'parts' ? now : undefined,
+          pendingReason: stage === 'approval' || stage === 'parts' ? note : undefined,
+          updatedAt: now,
+        } : item),
+      }));
+      return { ok: true };
+    }
+    const result = await api.update('work-orders', `${encodeURIComponent(woId)}/timeline-stage`, { stage, note });
+    if (!result?.success) return { ok: false, message: result?.message || result?.error || 'Tahap timeline gagal diubah.' };
+    await refreshData();
+    return { ok: true };
+  };
+
   const continueWorkOrder = async (
     sourceWoId: string,
     targetBranchId: string,
@@ -1054,7 +1087,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,
         addInvoice, updateInvoice, deleteInvoice,
         addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder,
-        findActiveWoByPlate, changeWorkOrderStatus,
+        findActiveWoByPlate, changeWorkOrderStatus, changeWorkOrderTimelineStage,
         createInvoiceFromWO,
         addItem, updateItem, deleteItem,
         addItemCategory, updateItemCategory, deleteItemCategory,
