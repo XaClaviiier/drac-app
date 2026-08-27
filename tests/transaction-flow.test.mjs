@@ -700,7 +700,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /form: 'work-order-entry-form'/);
   assert.match(page, /void handleSubmit\(\)/);
   assert.match(page, /setEditingWO\(created\);[\s\S]*?setIsAutoRegisteredDraft\(true\);[\s\S]*?setShowServiceForm\(true\)/);
-  assert.match(page, /diagnosisMode && editingWO \? `DIAGNOSA \$\{editingWO\.woNumber\}` : editingWO \? editingWO\.woNumber : 'Data Baru'/);
+  assert.match(page, /diagnosisMode && editingWO \? 'Diagnosa' : editingWO \? 'Rincian WO' : 'Data Baru'/);
   assert.match(page, /disabled=\{!editingWO \|\| !customerVehicleReady \|\| isAutoRegistering\}/);
   assert.match(page, /Hapus barang atau jasa terpilih/);
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
@@ -796,7 +796,7 @@ test('kanvas rincian WO memakai tabel kontras dan ringkasan total bergaya Accura
   const workOrders = source('src/pages/WorkOrders.tsx');
   assert.match(workOrders, /work-order-entry-form[^>]*lg:bg-\[var\(--app-canvas\)\]/);
   assert.match(workOrders, /data-wo-document-shell/);
-  assert.match(workOrders, /relative min-h-\[320px\] bg-white lg:ml-10 lg:border lg:border-gray-400 lg:bg-white lg:shadow-/);
+  assert.match(workOrders, /relative min-h-0 bg-white sm:min-h-\[320px\] lg:ml-10 lg:border lg:border-gray-400 lg:bg-white lg:shadow-/);
   assert.match(workOrders, /data-wo-items-table/);
   assert.match(workOrders, /const \[showQuickServices, setShowQuickServices\] = useState\(false\)/);
   assert.doesNotMatch(workOrders, /dokterac_wo_quick_services/);
@@ -838,7 +838,7 @@ test('panel Favorit WO langsung tertutup saat kehilangan fokus', () => {
   assert.match(workOrders, /document\.addEventListener\('pointerdown', closeWhenFocusLeaves\)/);
   assert.match(workOrders, /document\.addEventListener\('focusin', closeWhenFocusLeaves\)/);
   assert.match(workOrders, /event\.key === 'Escape'/);
-  assert.match(workOrders, /<div ref=\{quickServicesRef\} className="relative z-20 mb-4">/);
+  assert.match(workOrders, /<div ref=\{quickServicesRef\} className="relative z-20 mb-3 sm:mb-4">/);
 });
 
 test('WO tanpa layanan tetap menampilkan tabel rincian penuh dan panel total', () => {
