@@ -65,3 +65,19 @@ test('kontrak Control Board menyimpan audit tahap dan mempertahankan alur faktur
   assert.match(endpoint, /UPDATE work_orders SET status_log=\?,pending_at=\?,pending_reason=\?/);
   assert.doesNotMatch(endpoint, /UPDATE work_orders SET status='(?:Pengecekan|Pending)'/);
 });
+
+test('WO Timeline HP menjaga identitas, indikator, fokus sekarang, dan mode hari penuh', () => {
+  const page = source('src/pages/WorkOrderTimeline.tsx');
+
+  assert.match(page, /mobileTimelineRef/);
+  assert.match(page, /scrollMobileToNow/);
+  assert.match(page, /mobileView.*'focus'.*'full'/);
+  assert.match(page, /sticky left-0 z-30/);
+  assert.match(page, /sticky right-0 z-30/);
+  assert.match(page, />Sekarang<\/button>/);
+  assert.match(page, />Hari Penuh<\/button>/);
+  assert.match(page, /md:hidden.*mobileView === 'full'/);
+  assert.match(page, /hidden md:block.*renderFocusBoard\(false\)/);
+  assert.match(page, /const done = row\.stage === 'done'/);
+  assert.doesNotMatch(page, /const done = row\.stage === 'done' \|\| Boolean\(row\.invoice\)/);
+});

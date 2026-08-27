@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity, Banknote, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3,
@@ -128,6 +128,8 @@ export default function WorkOrderTimeline() {
   const [showLost, setShowLost] = useState(true);
   const [actionBusy, setActionBusy] = useState(false);
   const [clock, setClock] = useState(() => new Date());
+  const [mobileView, setMobileView] = useState<'focus' | 'full'>('focus');
+  const mobileTimelineRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 15000);
@@ -174,6 +176,7 @@ export default function WorkOrderTimeline() {
   const axisEndMinute = Math.max(DEFAULT_AXIS_END_MINUTE, latestObservedMinute);
   const axisSpan = axisEndMinute - AXIS_START_MINUTE;
   const timelineWidth = Math.max(760, Math.round(axisSpan * 1.45));
+  const mobileTimelineWidth = Math.max(960, Math.round(axisSpan * 2.1));
   const position = (value: Date) => ((minuteOfDay(value) - AXIS_START_MINUTE) / axisSpan) * 100;
   const nowPosition = position(clock);
   const showNowLine = date === localDateKey(clock) && nowPosition >= 0 && nowPosition <= 100;
@@ -183,6 +186,35 @@ export default function WorkOrderTimeline() {
     if (labels[labels.length - 1] !== axisEndMinute) labels.push(axisEndMinute);
     return labels;
   }, [axisEndMinute]);
+
+  const scrollMobileToNow = (behavior: ScrollBehavior = 'smooth') => {
+    const scroller = mobileTimelineRef.current;
+    if (!scroller) return;
+    const mobileIdentityWidth = 144;
+    const mobileIndicatorWidth = 84;
+    const availableTimelineWidth = Math.max(80, scroller.clientWidth - mobileIdentityWidth - mobileIndicatorWidth);
+    const currentPosition = Math.max(0, Math.min(100, ((minuteOfDay(new Date()) - AXIS_START_MINUTE) / axisSpan) * 100));
+    const absoluteNow = mobileIdentityWidth + (currentPosition / 100) * mobileTimelineWidth;
+    const target = absoluteNow - mobileIdentityWidth - availableTimelineWidth / 2;
+    scroller.scrollTo({ left: Math.max(0, target), behavior });
+  };
+
+  useEffect(() => {
+    if (mobileView !== 'focus' || date !== localDateKey()) return;
+    const timer = window.setTimeout(() => scrollMobileToNow('auto'), 80);
+    return () => window.clearTimeout(timer);
+  }, [date, mobileView, axisEndMinute]);
+
+  const showCurrentTime = () => {
+    setMobileView('focus');
+    const today = localDateKey();
+    if (date !== today) {
+      setDate(today);
+      setSelectedId('');
+      return;
+    }
+    window.setTimeout(() => scrollMobileToNow(), 0);
+  };
 
   const setCoreStatus = async (next: 'Proses' | 'Selesai' | 'Closed', reason?: string) => {
     if (!selected || actionBusy) return;
@@ -227,8 +259,103 @@ export default function WorkOrderTimeline() {
       danger: 'border-red-200 bg-white text-red-700 hover:bg-red-50',
       success: 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700',
     };
-    return <button type="button" disabled={actionBusy} onClick={onClick} className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 ${colors[tone]}`}><Icon className="h-3.5 w-3.5"/>{label}</button>;
+    return <button type="button" disabled={actionBusy} onClick={onClick} className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 sm:h-9 sm:flex-none sm:px-3 ${colors[tone]}`}><Icon className="h-3.5 w-3.5 flex-none"/><span className="truncate">{label}</span></button>;
   };
+
+  const renderIndicators = (row: TimelineRow, compact = false) => {
+    const done = row.stage === 'done';
+    const paid = row.invoice?.status === 'Lunas';
+    return <div className={`flex items-center justify-center ${compact ? 'gap-1' : 'gap-1.5'}`}>
+      <span title={done ? 'Pekerjaan selesai' : 'Pekerjaan belum selesai'} className={`grid place-items-center rounded-full border font-black ${compact ? 'h-5 w-5 text-[9px]' : 'h-6 w-6 text-[10px]'} ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>✓</span>
+      <span title={row.invoice ? `Faktur ${row.invoice.invoiceNumber}` : 'Belum ada faktur'} className={`grid place-items-center rounded-md border font-black ${compact ? 'h-5 min-w-7 px-1 text-[8px]' : 'h-6 min-w-8 px-1 text-[9px]'} ${row.invoice ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>INV</span>
+      <span title={paid ? 'Pembayaran lunas' : 'Pembayaran belum lunas'} className={`grid place-items-center rounded-md border font-black ${compact ? 'h-5 w-6 text-[9px]' : 'h-6 w-7 text-[10px]'} ${paid ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>Rp</span>
+    </div>;
+  };
+
+  const renderSegments = (segments: Segment[], minimumLabelWidth = 4.2) => segments.map((segment, index) => {
+    const rawLeft = position(segment.start);
+    const rawRight = position(segment.end);
+    if (rawRight < 0 || rawLeft > 100) return null;
+    const left = Math.max(0, Math.min(100, rawLeft));
+    const right = Math.max(0, Math.min(100, rawRight));
+    const width = Math.max(0.8, right - left);
+    return <span key={`${segment.key}-${index}`} title={`${STAGES[segment.key].label}: ${durationLabel(segment.duration)} (${formatClock(segment.start)}–${formatClock(segment.end)})`} className="absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center justify-center overflow-hidden px-1 text-[9px] font-bold text-white shadow-sm first:rounded-l-md last:rounded-r-md" style={{ left: `${left}%`, width: `${width}%`, backgroundColor: STAGES[segment.key].color }}>
+      {width >= minimumLabelWidth ? durationLabel(segment.duration) : ''}{segment.active && <i className="absolute right-0 h-2 w-2 animate-pulse rounded-full border border-white bg-white/90"/>}
+    </span>;
+  });
+
+  const renderFocusBoard = (mobile: boolean) => {
+    const identityWidth = mobile ? 144 : 260;
+    const indicatorWidth = mobile ? 84 : 112;
+    const boardTimelineWidth = mobile ? mobileTimelineWidth : timelineWidth;
+    const gridColumns = `${identityWidth}px ${boardTimelineWidth}px ${indicatorWidth}px`;
+    const stickyIdentity = mobile ? 'sticky left-0 z-30 border-r border-slate-200' : '';
+    const stickyIndicator = mobile ? 'sticky right-0 z-30 border-l border-slate-200' : '';
+    return <div ref={mobile ? mobileTimelineRef : undefined} className="overflow-x-auto overscroll-x-contain">
+      <div style={{ minWidth: `${identityWidth + boardTimelineWidth + indicatorWidth}px` }}>
+        <div className="grid border-b bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns: gridColumns }}>
+          <div className={`flex items-end bg-slate-50 px-3 py-2.5 ${stickyIdentity}`}>{mobile ? 'Kendaraan' : 'Kendaraan / Customer'}</div>
+          <div className="relative h-11 border-x border-slate-200">
+            {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
+            {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
+          </div>
+          <div className={`flex items-end justify-center bg-slate-50 px-1 py-2.5 ${stickyIndicator}`}>{mobile ? '✓ · INV · Rp' : 'Selesai · INV · Rp'}</div>
+        </div>
+        {visibleRows.map(row => {
+          const { wo, segments, stage } = row;
+          const isSelected = selectedId === wo.id;
+          const isDone = stage === 'done';
+          const currentConfig = isDone ? null : STAGES[stage as TimelineStageKey];
+          const activeSegment = [...segments].reverse().find(segment => segment.active);
+          const warning = activeSegment && currentConfig?.warningMinutes && activeSegment.duration > currentConfig.warningMinutes * 60000;
+          const stickyBackground = isSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-slate-50';
+          return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`group grid w-full border-b text-left last:border-b-0 ${isSelected ? 'bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-slate-50/80'}`} style={{ gridTemplateColumns: gridColumns }}>
+            <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
+              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 truncate text-gray-950 ${mobile ? 'text-xs' : 'text-sm'}`}>{wo.plateNumber}</b>{warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
+              <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'} · {wo.customerName}</p>
+              <p className={`mt-0.5 truncate text-[9px] font-bold uppercase ${isDone ? 'text-emerald-700' : currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.label}</p>
+            </div>
+            <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
+              {renderSegments(segments, mobile ? 2.8 : 4.2)}
+              <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
+            </div>
+            <div className={`flex items-center justify-center bg-white px-1 group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderIndicators(row, mobile)}</div>
+          </button>;
+        })}
+        {!visibleRows.length && <div className="p-14 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}{stageFilter ? ' untuk status yang dipilih' : ''}.</div>}
+      </div>
+    </div>;
+  };
+
+  const renderMobileFullDay = () => <div className="divide-y divide-slate-100">
+    {visibleRows.map(row => {
+      const { wo, segments, stage } = row;
+      const isDone = stage === 'done';
+      const isSelected = selectedId === wo.id;
+      const currentConfig = isDone ? null : STAGES[stage as TimelineStageKey];
+      const activeSegment = [...segments].reverse().find(segment => segment.active);
+      const warning = activeSegment && currentConfig?.warningMinutes && activeSegment.duration > currentConfig.warningMinutes * 60000;
+      return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`w-full px-3 py-3 text-left ${isSelected ? 'bg-blue-50 shadow-[inset_3px_0_0_#2563eb]' : 'bg-white'}`}>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5"><b className="truncate text-sm text-gray-950">{wo.plateNumber}</b>{warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
+            <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'} · {wo.customerName}</p>
+          </div>
+          <span className={`rounded-md border px-1.5 py-1 text-[8px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>
+          {renderIndicators(row, true)}
+        </div>
+        <div className="relative mt-5 h-9 rounded-md border border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)]" style={{ backgroundSize: `${(60 / axisSpan) * 100}% 100%` }}>
+          <span className="absolute -top-4 left-0 text-[8px] font-semibold text-gray-400">08:00</span>
+          <span className="absolute -top-4 text-[8px] font-semibold text-gray-400" style={{ left: `${((12 * 60 - AXIS_START_MINUTE) / axisSpan) * 100}%` }}>12:00</span>
+          <span className="absolute -top-4 text-[8px] font-semibold text-gray-400" style={{ left: `${((16 * 60 - AXIS_START_MINUTE) / axisSpan) * 100}%` }}>16:00</span>
+          <span className="absolute -right-0 -top-4 text-[8px] font-semibold text-gray-400">{String(Math.floor(axisEndMinute / 60)).padStart(2, '0')}:{String(axisEndMinute % 60).padStart(2, '0')}</span>
+          {renderSegments(segments, 12)}
+          <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
+        </div>
+      </button>;
+    })}
+    {!visibleRows.length && <div className="p-10 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}.</div>}
+  </div>;
 
   return (
     <div className="min-w-0 space-y-3">
@@ -240,12 +367,12 @@ export default function WorkOrderTimeline() {
           <h1 className="text-xl font-bold tracking-tight text-gray-950 sm:text-2xl">WO Timeline Control Board</h1>
           <p className="mt-0.5 text-xs text-gray-500">{branchName} · {selectedDateLabel(date)}</p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-gray-600"><b className="text-blue-700">{activeCount}</b> Aktif · <b className="text-emerald-700">{counts.done || 0}</b> Selesai · <b className="text-red-700">{counts.lost || 0}</b> Lost Sales</span>
-          <IndonesianDateInput value={date} max={localDateKey()} onChange={value => { setDate(value); setSelectedId(''); }} className="h-9 w-40 text-xs"/>
-          <button type="button" onClick={() => void refreshData()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-bold text-gray-600 hover:bg-gray-50"><RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}/>Refresh</button>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <span className="w-full rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-gray-600 sm:w-auto"><b className="text-blue-700">{activeCount}</b> Aktif · <b className="text-emerald-700">{counts.done || 0}</b> Selesai · <b className="text-red-700">{counts.lost || 0}</b> Lost Sales</span>
+          <IndonesianDateInput value={date} max={localDateKey()} onChange={value => { setDate(value); setSelectedId(''); }} className="h-10 min-w-[10rem] flex-1 text-xs sm:h-9 sm:w-40 sm:flex-none"/>
+          <button type="button" aria-label="Refresh" onClick={() => void refreshData()} className="inline-flex h-10 w-10 items-center justify-center gap-1.5 rounded-lg border bg-white text-xs font-bold text-gray-600 hover:bg-gray-50 sm:h-9 sm:w-auto sm:px-3"><RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}/><span className="hidden sm:inline">Refresh</span></button>
           <div className="relative">
-            <button type="button" aria-label="Pengaturan tampilan" onClick={() => setShowSettings(value => !value)} className="grid h-9 w-9 place-items-center rounded-lg border bg-white text-gray-600 hover:bg-gray-50"><Settings2 className="h-4 w-4"/></button>
+            <button type="button" aria-label="Pengaturan tampilan" onClick={() => setShowSettings(value => !value)} className="grid h-10 w-10 place-items-center rounded-lg border bg-white text-gray-600 hover:bg-gray-50 sm:h-9 sm:w-9"><Settings2 className="h-4 w-4"/></button>
             {showSettings && <div className="absolute right-0 z-40 mt-2 w-56 rounded-xl border bg-white p-3 text-sm shadow-xl">
               <label className="flex items-center justify-between gap-3 py-2"><span>Tampilkan WO selesai</span><input type="checkbox" checked={showCompleted} onChange={event => setShowCompleted(event.target.checked)}/></label>
               <label className="flex items-center justify-between gap-3 py-2"><span>Tampilkan Lost Sales</span><input type="checkbox" checked={showLost} onChange={event => setShowLost(event.target.checked)}/></label>
@@ -263,9 +390,9 @@ export default function WorkOrderTimeline() {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><b className="truncate text-sm text-gray-950">{selected.plateNumber}</b><span className="text-xs text-gray-400">{selected.woNumber}</span></div>
             <p className="truncate text-xs text-gray-500">{selected.vehicleInfo || '-'} · {selected.customerName} · {selected.technicianName || 'Teknisi belum dipilih'}</p>
           </div>
-          <span className={`hidden rounded-md border px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex ${selectedStage === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : STAGES[selectedStage as TimelineStageKey].soft + ' ' + STAGES[selectedStage as TimelineStageKey].text}`}>{selectedStage === 'done' ? 'Selesai' : STAGES[selectedStage as TimelineStageKey].label}</span>
+          <span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold uppercase sm:text-[10px] ${selectedStage === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : STAGES[selectedStage as TimelineStageKey].soft + ' ' + STAGES[selectedStage as TimelineStageKey].text}`}>{selectedStage === 'done' ? 'Selesai' : STAGES[selectedStage as TimelineStageKey].label}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+        <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap lg:justify-end">
           {hasPermission('wo:edit') && selectedStage === 'diagnosis' && <>
             {renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
             {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
@@ -293,13 +420,13 @@ export default function WorkOrderTimeline() {
             : <span className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500">Lengkapi layanan &amp; harga</span>)}
           {hasPermission('payment:create') && selectedInvoice && !selectedPaid && renderAction('Pembayaran', () => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`), 'success', Banknote)}
           {selectedPaid && <span className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
-          <button type="button" onClick={() => navigate(`/workorders?${selectedInvoice || selected.status === 'Closed' ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)} className="h-9 rounded-lg border px-3 text-xs font-bold text-gray-600 hover:bg-gray-50">Detail WO</button>
+          <button type="button" onClick={() => navigate(`/workorders?${selectedInvoice || selected.status === 'Closed' ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)} className="col-span-2 h-10 rounded-lg border px-3 text-xs font-bold text-gray-600 hover:bg-gray-50 sm:h-9">Detail WO</button>
         </div>
       </section>}
 
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50/80 px-3 py-2">
-          <label className={`inline-flex h-8 min-w-[190px] items-center gap-2 rounded-lg border px-2.5 text-xs font-semibold ${stageFilter ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-200 bg-white text-gray-600'}`}>
+          <label className={`inline-flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border px-2.5 text-xs font-semibold md:h-8 md:min-w-[190px] md:flex-none ${stageFilter ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-200 bg-white text-gray-600'}`}>
             <span className={`h-2 w-2 rounded-full ${stageFilter ? 'bg-blue-600' : 'bg-gray-300'}`}/>
             <select value={stageFilter || ''} onChange={event => { setStageFilter((event.target.value || null) as BoardStageKey | null); setSelectedId(''); }} className="min-w-0 flex-1 bg-transparent outline-none">
               <option value="">Semua status ({rows.length})</option>
@@ -307,58 +434,17 @@ export default function WorkOrderTimeline() {
               <option value="done">Selesai ({counts.done || 0})</option>
             </select>
           </label>
-          <ActiveFilterResetButton active={Boolean(stageFilter)} onReset={() => { setStageFilter(null); setSelectedId(''); }} className="h-8 w-8"/>
+          <ActiveFilterResetButton active={Boolean(stageFilter)} onReset={() => { setStageFilter(null); setSelectedId(''); }} className="h-9 w-9 md:h-8 md:w-8"/>
+          <div className="flex items-center gap-1 md:hidden">
+            <button type="button" onClick={showCurrentTime} className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2 text-[10px] font-bold ${mobileView === 'focus' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600'}`}><Clock3 className="h-3.5 w-3.5"/>Sekarang</button>
+            <button type="button" onClick={() => setMobileView('full')} className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2 text-[10px] font-bold ${mobileView === 'full' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600'}`}><Activity className="h-3.5 w-3.5"/>Hari Penuh</button>
+          </div>
           <div className="ml-auto hidden flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500 md:flex">
             {(Object.keys(STAGES) as TimelineStageKey[]).map(key => <span key={key} className="inline-flex items-center gap-1"><i className={`h-2 w-2 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}</span>)}
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <div style={{ minWidth: `${260 + timelineWidth + 112}px` }}>
-            <div className="grid border-b bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns: `260px ${timelineWidth}px 112px` }}>
-              <div className="flex items-end px-3 py-2.5">Kendaraan / Customer</div>
-              <div className="relative h-11 border-x border-slate-200">
-                {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
-                {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
-              </div>
-              <div className="flex items-end justify-center px-2 py-2.5">Selesai · INV · Rp</div>
-            </div>
-            {visibleRows.map(row => {
-              const { wo, invoice, segments, stage } = row;
-              const isSelected = selectedId === wo.id;
-              const isDone = stage === 'done';
-              const currentConfig = isDone ? null : STAGES[stage as TimelineStageKey];
-              const activeSegment = [...segments].reverse().find(segment => segment.active);
-              const warning = activeSegment && currentConfig?.warningMinutes && activeSegment.duration > currentConfig.warningMinutes * 60000;
-              return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`grid w-full border-b text-left last:border-b-0 ${isSelected ? 'bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-slate-50/80'}`} style={{ gridTemplateColumns: `260px ${timelineWidth}px 112px` }}>
-                <div className="min-w-0 px-3 py-2.5" title={`${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
-                  <div className="flex items-center gap-2"><b className="min-w-0 flex-1 truncate text-sm text-gray-950">{wo.plateNumber}</b>{warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
-                  <p className="truncate text-[11px] text-gray-500">{wo.vehicleInfo || '-'} · {wo.customerName}</p>
-                  <p className={`mt-0.5 truncate text-[9px] font-bold uppercase ${isDone ? 'text-emerald-700' : currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.label}</p>
-                </div>
-                <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
-                  {segments.map((segment, index) => {
-                    const rawLeft = position(segment.start);
-                    const rawRight = position(segment.end);
-                    if (rawRight < 0 || rawLeft > 100) return null;
-                    const left = Math.max(0, Math.min(100, rawLeft));
-                    const right = Math.max(0, Math.min(100, rawRight));
-                    const width = Math.max(0.8, right - left);
-                    return <span key={`${segment.key}-${index}`} title={`${STAGES[segment.key].label}: ${durationLabel(segment.duration)} (${formatClock(segment.start)}–${formatClock(segment.end)})`} className="absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center justify-center overflow-hidden px-1 text-[9px] font-bold text-white shadow-sm first:rounded-l-md last:rounded-r-md" style={{ left: `${left}%`, width: `${width}%`, backgroundColor: STAGES[segment.key].color }}>
-                      {width >= 4.2 ? durationLabel(segment.duration) : ''}{segment.active && <i className="absolute right-0 h-2 w-2 animate-pulse rounded-full border border-white bg-white/90"/>}
-                    </span>;
-                  })}
-                  <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
-                </div>
-                <div className="flex items-center justify-center gap-1.5 px-2">
-                  <span title={isDone || invoice ? 'Pekerjaan selesai' : 'Pekerjaan belum selesai'} className={`grid h-6 w-6 place-items-center rounded-full border text-[10px] font-black ${isDone || invoice ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>✓</span>
-                  <span title={invoice ? `Faktur ${invoice.invoiceNumber}` : 'Belum ada faktur'} className={`grid h-6 min-w-8 place-items-center rounded-md border px-1 text-[9px] font-black ${invoice ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>INV</span>
-                  <span title={invoice?.status === 'Lunas' ? 'Pembayaran lunas' : 'Pembayaran belum lunas'} className={`grid h-6 w-7 place-items-center rounded-md border text-[10px] font-black ${invoice?.status === 'Lunas' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>Rp</span>
-                </div>
-              </button>;
-            })}
-            {!visibleRows.length && <div className="p-14 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}{stageFilter ? ' untuk status yang dipilih' : ''}.</div>}
-          </div>
-        </div>
+        <div className="md:hidden">{mobileView === 'full' ? renderMobileFullDay() : renderFocusBoard(true)}</div>
+        <div className="hidden md:block">{renderFocusBoard(false)}</div>
       </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-400">
