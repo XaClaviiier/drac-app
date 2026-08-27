@@ -1,4 +1,5 @@
 <?php
+runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260827_v1', static function(PDO $pdo): void {
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
@@ -18,6 +19,7 @@ $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_type VARC
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_warehouse_id VARCHAR(20) NULL AFTER source_type");
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_branch_id VARCHAR(20) NULL AFTER source_warehouse_id");
 $pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS transfer_number VARCHAR(40) NULL AFTER source_branch_id");
+});
 // ==========================================================
 // ALL DATA - Load semua data sekaligus untuk aplikasi
 // GET /api/all-data
@@ -53,7 +55,8 @@ try {
         'branchIds' => $allowedBranchIds,
     ];
 
-    // Migrasi ringan agar field master barang baru langsung tersedia setelah deploy.
+    // Bootstrap historis dijalankan sekali per versi, bukan setiap GET all-data.
+    runVersionedApiBootstrap($pdo, 'all_data_transaction_schema_and_repairs_20260827_v1', static function(PDO $pdo): void {
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS receipt_description VARCHAR(255) NULL AFTER description");
     $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) NULL AFTER receipt_description");
     try { $pdo->exec("ALTER TABLE items ADD UNIQUE INDEX IF NOT EXISTS uq_items_barcode (barcode)"); } catch (Throwable $e) {}
@@ -141,6 +144,7 @@ try {
     $pdo->exec("UPDATE sales_invoices SET manual_receipt_number=NULL WHERE manual_receipt_number IS NOT NULL AND TRIM(manual_receipt_number)=''");
     $manualReceiptIndex = $pdo->query("SHOW INDEX FROM sales_invoices WHERE Key_name='uniq_sales_manual_receipt_number'")->fetch();
     if (!$manualReceiptIndex) $pdo->exec("CREATE UNIQUE INDEX uniq_sales_manual_receipt_number ON sales_invoices(manual_receipt_number)");
+    });
 
     // Branches
     $rows = $pdo->query("SELECT * FROM branches ORDER BY code")->fetchAll();
@@ -541,6 +545,8 @@ try {
     }
 
     respondSuccess($data, 'All data loaded');
-} catch (Exception $e) {
-    respondError('Failed to load data', 500, $e->getMessage());
+} catch (Throwable $e) {
+    $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
+    error_log(sprintf('All-data failed [%s] %s in %s:%d', $errorReference, $e->getMessage(), $e->getFile(), $e->getLine()));
+    respondError('Failed to load data. Referensi: ' . $errorReference, 500);
 }

@@ -62,6 +62,45 @@ const formatPlateNumber = (value?: string) => {
   return [match[1], match[2], match[3]].filter(Boolean).join(' ');
 };
 
+const workOrderEditorFingerprint = (source: Partial<WorkOrder>) => JSON.stringify({
+  date: source.date || '',
+  transactionTime: String(source.transactionTime || '').slice(0, 5),
+  customerRefId: source.customerRefId || '',
+  customerId: source.customerId || '',
+  customerName: source.customerName || '',
+  vehicleRefId: source.vehicleRefId || '',
+  plateNumber: source.plateNumber || '',
+  vehicleInfo: source.vehicleInfo || '',
+  driverContactId: source.driverContactId || '',
+  driverName: source.driverName || '',
+  driverPhone: source.driverPhone || '',
+  approvalContactId: source.approvalContactId || '',
+  billingContactId: source.billingContactId || '',
+  description: source.description || '',
+  complaintComment: source.complaintComment || '',
+  diagnosisTemperature: source.diagnosisTemperature ?? null,
+  diagnosisLp: source.diagnosisLp ?? null,
+  diagnosisHp: source.diagnosisHp ?? null,
+  finalTemperature: source.finalTemperature ?? null,
+  finalLp: source.finalLp ?? null,
+  finalHp: source.finalHp ?? null,
+  services: (source.services || []).map(service => ({
+    id: service.id,
+    itemId: service.itemId || '',
+    code: service.code || '',
+    name: service.name || '',
+    description: service.description || '',
+    price: Number(service.price || 0),
+    qty: Number(service.qty || 0),
+  })),
+  findings: source.findings || '',
+  notes: source.notes || '',
+  technicianId: source.technicianId || '',
+  technicianName: source.technicianName || '',
+  assistantTechnicianIds: source.assistantTechnicianIds || [],
+  assistantTechnicianNames: source.assistantTechnicianNames || [],
+});
+
 const WorkOrderEstimateAmount = ({ amount, isLostSales }: { amount: number; isLostSales: boolean }) => (
   <span className="inline-flex flex-col items-end leading-tight">
     <span className={`font-bold ${isLostSales ? 'text-gray-400 line-through decoration-gray-400 decoration-1' : 'text-gray-900'}`}>
@@ -294,7 +333,12 @@ export default function WorkOrders() {
   const canShowAdminRowActions = Boolean(
     currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
   );
-  const currentUserIsTechnician = /teknisi|technician/i.test((currentUser?.roleName || '').trim());
+  const isTechnicianIdentity = (roleId?: string, roleName?: string) => {
+    const role = data.roles.find(candidate => candidate.id === roleId);
+    return role?.code?.trim().toUpperCase() === 'TKN'
+      || /teknisi|technician/i.test((role?.name || roleName || '').trim());
+  };
+  const currentUserIsTechnician = isTechnicianIdentity(currentUser?.roleId, currentUser?.roleName);
   const [showComplaintEditor, setShowComplaintEditor] = useState(false);
   const [newComplaintTemplate, setNewComplaintTemplate] = useState('');
   const [complaintTemplates, setComplaintTemplates] = useState<string[]>(() => {
@@ -341,6 +385,30 @@ export default function WorkOrders() {
     if (latest && latest !== detailWO) setDetailWO(latest);
   }, [data.workOrders, detailWO?.id]);
 
+  const canEditWorkOrderInActiveBranch = (wo: WorkOrder) => {
+    const activeBranch = data.branches.find(branch => branch.id === currentBranchId && branch.isActive);
+    const assignedBranchIds = new Set([
+      currentUser?.branchId,
+      ...(currentUser?.branchIds || []),
+    ].filter((branchId): branchId is string => Boolean(branchId && branchId !== 'ALL')));
+    const canAccessBranch = Boolean(
+      currentUser?.isOwner
+      || hasPermission('all_branches')
+      || assignedBranchIds.has(wo.branchId)
+    );
+    return hasPermission('wo:edit')
+      && Boolean(activeBranch)
+      && currentBranchId !== 'ALL'
+      && wo.branchId === currentBranchId
+      && canAccessBranch;
+  };
+
+  const requireEditableWorkOrder = (wo: WorkOrder) => {
+    if (canEditWorkOrderInActiveBranch(wo)) return true;
+    showAccurateNotice('Pilih cabang aktif yang sesuai dan pastikan Anda memiliki hak Edit WO.');
+    return false;
+  };
+
   const previousWorkOrderFor = (wo: WorkOrder) => data.workOrders
     .filter(candidate => candidate.id !== wo.id && (
       (candidate.vehicleRefId && candidate.vehicleRefId === wo.vehicleRefId)
@@ -349,6 +417,7 @@ export default function WorkOrders() {
     .sort((left, right) => `${right.date} ${right.transactionTime || ''}`.localeCompare(`${left.date} ${left.transactionTime || ''}`))[0];
 
   const takeServicesFromPreviousWO = (wo: WorkOrder) => {
+    if (!requireEditableWorkOrder(wo)) return;
     const previous = previousWorkOrderFor(wo);
     if (!previous || previous.services.length === 0) {
       showAccurateNotice(`Belum ada layanan WO sebelumnya untuk kendaraan ${wo.plateNumber}.`);
@@ -367,11 +436,13 @@ export default function WorkOrders() {
   };
 
   const openFavoriteServicesForWO = (wo: WorkOrder) => {
+    if (!requireEditableWorkOrder(wo)) return;
     handleOpenModal(wo, true);
     setShowQuickServices(true);
   };
 
   const takePreviousServicesIntoForm = async () => {
+    if (!editingWO || !requireEditableWorkOrder(editingWO)) return;
     if (!customerVehicleReady) {
       showAccurateNotice('Pilih atau daftarkan pelanggan dan kendaraan terlebih dahulu.');
       return;
@@ -518,6 +589,7 @@ export default function WorkOrders() {
     assistantTechnicianNames: [] as string[],
     status: 'Register' as WorkOrder['status'],
   });
+  const editorBaselineFingerprint = useRef('');
 
   useEffect(() => {
     setPendingTemplateDraft(data.settings.pendingReasonTemplates || DEFAULT_PENDING_REASONS);
@@ -1085,7 +1157,7 @@ export default function WorkOrders() {
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
   const resetForm = () => {
-    setFormData({
+    const nextFormData = {
       date: localDateKey(),
       transactionTime: localTimeKey(),
       customerRefId: '',
@@ -1111,7 +1183,9 @@ export default function WorkOrders() {
       assistantTechnicianIds: [],
       assistantTechnicianNames: [],
       status: 'Register',
-    });
+    } satisfies typeof formData;
+    setFormData(nextFormData);
+    editorBaselineFingerprint.current = workOrderEditorFingerprint(nextFormData);
     setShowServiceForm(true);
     setServiceSearch('');
     setEditingWO(null);
@@ -1130,16 +1204,21 @@ export default function WorkOrders() {
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false, viewOnly = false) => {
     setShowQuickServices(false);
     setDocumentTab(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
+    const editAllowed = !wo || canEditWorkOrderInActiveBranch(wo);
+    const effectiveViewOnly = Boolean(wo && (viewOnly || !editAllowed));
+    if (wo && !viewOnly && !editAllowed) {
+      showAccurateNotice('WO dibuka dalam mode lihat. Pilih cabang aktif yang sesuai dan pastikan Anda memiliki hak Edit WO untuk mengubah data.');
+    }
     setDetailWO(null);
-    setWorkOrderViewOnly(Boolean(wo && viewOnly));
+    setWorkOrderViewOnly(effectiveViewOnly);
     setDiagnosisMode(false);
-    setServiceEditMode(Boolean(wo && servicesOnly));
+    setServiceEditMode(Boolean(wo && servicesOnly && !effectiveViewOnly));
     setIsAutoRegisteredDraft(false);
     if (wo) {
       setEditingWO(wo);
       const matchedVehicle = data.vehicles.find(v => v.id === wo.vehicleRefId)
         || data.vehicles.find(v => v.plateNumber === wo.plateNumber && v.customerName === wo.customerName);
-      setFormData({
+      const nextFormData = {
         date: wo.date,
         transactionTime: wo.transactionTime?.slice(0, 5) || (wo.createdAt ? localTimeKey(new Date(wo.createdAt.replace(' ', 'T'))) : localTimeKey()),
         customerRefId: wo.customerRefId || '',
@@ -1169,7 +1248,9 @@ export default function WorkOrders() {
         assistantTechnicianIds: wo.assistantTechnicianIds || [],
         assistantTechnicianNames: wo.assistantTechnicianNames || [],
         status: wo.status,
-      });
+      } satisfies typeof formData;
+      setFormData(nextFormData);
+      editorBaselineFingerprint.current = workOrderEditorFingerprint(nextFormData);
       setWoDateUnlocked(wo.date !== localDateKey());
       setWoBackdateReason(wo.backdateReason || '');
     } else {
@@ -1179,6 +1260,7 @@ export default function WorkOrders() {
   };
 
   const handleOpenDiagnosis = (wo: WorkOrder) => {
+    if (!requireEditableWorkOrder(wo)) return;
     handleOpenModal(wo);
     setDiagnosisMode(true);
     setServiceEditMode(false);
@@ -1188,7 +1270,10 @@ export default function WorkOrders() {
   // WO dari cabang aktif selalu memakai kanvas yang sama; status transaksi tetap
   // menentukan field dan aksi mana yang dikunci.
   const openWorkOrderStandard = (wo: WorkOrder) => {
-    const sameBranch = wo.branchId === resolveBranchId();
+    const sameBranch = currentBranchId !== 'ALL'
+      && wo.branchId === currentBranchId
+      && Boolean(data.branches.find(branch => branch.id === currentBranchId && branch.isActive))
+      && canEditWorkOrderInActiveBranch(wo);
     const readOnly = !sameBranch || !hasPermission('wo:edit');
     handleOpenModal(wo, true, readOnly);
   };
@@ -1273,19 +1358,42 @@ export default function WorkOrders() {
     resetForm();
   };
 
-  const requestCloseEditor = async () => {
-    const hasUnsavedNewData = !editingWO && Boolean(
-      formData.customerRefId || formData.vehicleRefId || formData.description ||
-      formData.notes || formData.findings || formData.services.length > 1
-    );
-    if (hasUnsavedNewData && !await askAccurateConfirmation({
-      title: 'Tutup Data Baru',
-      message: 'Data yang belum disimpan akan hilang. Tutup Data Baru sekarang?',
+  const hasUnsavedEditorChanges = () => {
+    if (!editingWO) {
+      return Boolean(
+        formData.customerRefId || formData.vehicleRefId || formData.description ||
+        formData.notes || formData.findings || formData.services.length > 0
+      );
+    }
+    return workOrderEditorFingerprint(formData) !== editorBaselineFingerprint.current
+      || (woBackdateReason.trim() || '') !== (editingWO.backdateReason?.trim() || '')
+      || (customerVehicleCorrectionReason.trim() || '') !== (editingWO.correctionReason?.trim() || '');
+  };
+
+  const requestCloseEditor = async (): Promise<boolean> => {
+    const hasUnsavedChanges = hasUnsavedEditorChanges();
+    if (hasUnsavedChanges && !await askAccurateConfirmation({
+      title: editingWO ? `Tutup ${editingWO.woNumber}` : 'Tutup Data Baru',
+      message: editingWO
+        ? 'Perubahan yang belum disimpan akan hilang. Tutup Work Order sekarang?'
+        : 'Data yang belum disimpan akan hilang. Tutup Data Baru sekarang?',
       confirmLabel: 'Tutup',
       cancelLabel: 'Batal',
-    })) return;
+    })) return false;
     handleCloseModal();
+    return true;
   };
+
+  const editorHasUnsavedChanges = showModal && hasUnsavedEditorChanges();
+  useEffect(() => {
+    if (!editorHasUnsavedChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [editorHasUnsavedChanges]);
 
   const handleRemoveService = (id: string) => {
     setSelectedServiceId(current => current === id ? '' : current);
@@ -1348,6 +1456,7 @@ export default function WorkOrders() {
       showAccurateNotice('Register WO terlebih dahulu sebelum menambahkan layanan.');
       return false;
     }
+    if (!requireEditableWorkOrder(editingWO)) return false;
     if (autoRegisteringRef.current) return false;
     setFormData(previous => ({ ...previous, services: nextServices }));
     return true;
@@ -1429,6 +1538,7 @@ export default function WorkOrders() {
       showAccurateNotice(`WO ${editingWO.woNumber} sudah difakturkan dan tidak dapat diubah.`);
       return;
     }
+    if (editingWO && !requireEditableWorkOrder(editingWO)) return;
     if (!editingWO && autoRegisteringRef.current) return;
 
     // Validasi wajib ditampilkan sekaligus seperti dialog pemrosesan Accurate.
@@ -1450,6 +1560,9 @@ export default function WorkOrders() {
       if (!hasCompleteMeasurements && !hasCompletionNote) issues.push('Hasil pengukuran atau Hasil Kerja pada tab Info lainnya harus diisi');
     }
     if (issues.length > 0) {
+      if ((shouldProcessNew || shouldProcessEditing || shouldCreateInvoice) && !formData.technicianId) {
+        setDocumentTab('info');
+      }
       setSuccessMsg('');
       setProcessingIssues(issues);
       return;
@@ -1548,6 +1661,26 @@ export default function WorkOrders() {
             ],
           };
         }
+        if (shouldMarkLostSales) {
+          const reason = lostSalesReason.current.trim();
+          if (!reason) throw new Error('Alasan Lost Sales wajib diisi.');
+          finalWorkOrder = {
+            ...savedWorkOrder,
+            status: 'Closed',
+            cancelReason: reason,
+            statusLog: [
+              ...(editingWO.statusLog || []),
+              {
+                from: editingWO.status,
+                to: 'Closed',
+                at: new Date().toISOString(),
+                byUserId: currentUser?.id || '-',
+                byUserName: currentUser?.name || 'System',
+                reason,
+              },
+            ],
+          };
+        }
         if (shouldCreateInvoice) {
           const actor = {
             byUserId: currentUser?.id || '-',
@@ -1568,12 +1701,12 @@ export default function WorkOrders() {
                 },
               ],
             };
-            await updateWorkOrder(editingWO.id, processWorkOrder);
+            const savedProcessWorkOrder = await updateWorkOrder(editingWO.id, processWorkOrder);
             finalWorkOrder = {
-              ...processWorkOrder,
+              ...savedProcessWorkOrder,
               status: 'Selesai',
               statusLog: [
-                ...(processWorkOrder.statusLog || []),
+                ...(savedProcessWorkOrder.statusLog || []),
                 {
                   from: 'Proses',
                   to: 'Selesai',
@@ -1600,11 +1733,12 @@ export default function WorkOrders() {
             };
           }
         }
-        await updateWorkOrder(editingWO.id, finalWorkOrder);
+        const persistedWorkOrder = await updateWorkOrder(editingWO.id, finalWorkOrder);
+        setEditingWO(persistedWorkOrder);
+        setFormData(previous => ({ ...previous, status: persistedWorkOrder.status }));
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(persistedWorkOrder);
         if (shouldMarkLostSales) {
-          const result = await changeWorkOrderStatus(editingWO.id, 'Closed', lostSalesReason.current);
           lostSalesReason.current = '';
-          if (!result.ok) throw new Error(result.message || 'WO gagal diubah menjadi Lost Sales.');
           setSuccessMsg(`${editingWO.woNumber} berhasil disimpan sebagai Lost Sales.`);
         }
         if (serviceEditMode) await refreshData();
@@ -1619,7 +1753,7 @@ export default function WorkOrders() {
         );
         if (shouldCreateInvoice) {
           handleCloseModal();
-          handleOpenInvoiceModal(finalWorkOrder);
+          handleOpenInvoiceModal(persistedWorkOrder);
           return;
         }
       } else {
@@ -1643,6 +1777,7 @@ export default function WorkOrders() {
         });
         const bName = data.branches.find(b => b.id === targetBranch)?.name || targetBranch;
         setEditingWO(created);
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(created);
         setIsAutoRegisteredDraft(true);
         setShowServiceForm(true);
         setServiceSearch('');
@@ -1702,6 +1837,7 @@ export default function WorkOrders() {
 
   // Alur status berurutan: dipanggil dari tombol aksi di kartu WO.
   const requestStatusChange = (wo: WorkOrder, next: WorkOrder['status']) => {
+    if (!requireEditableWorkOrder(wo)) return;
     if (next === 'Closed' && wo.invoiceId) {
       showAccurateNotice(`WO tidak dapat dibatalkan karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}.`);
       return;
@@ -1710,16 +1846,56 @@ export default function WorkOrders() {
     setCancelStep(1);
     setCancelReasonChoice('');
     setCancelReasonNotes('');
-    setStatusDialog({ wo, next });
+    const latestWorkOrder = showModal && editingWO?.id === wo.id
+      ? { ...wo, ...formData, total: totalServices }
+      : wo;
+    setStatusDialog({ wo: latestWorkOrder, next });
   };
 
+  const requestStartProcessing = (wo: WorkOrder, useEditorDraft = false) => {
+    if (!requireEditableWorkOrder(wo)) return;
+    const services = useEditorDraft ? formData.services : wo.services;
+    const total = useEditorDraft ? totalServices : wo.total;
+    if (!services.length || total <= 0) {
+      showAccurateNotice('Tambahkan minimal satu layanan dan pastikan total estimasi lebih dari Rp0.');
+      return;
+    }
+    const technicianId = useEditorDraft ? formData.technicianId : wo.technicianId;
+    if (!technicianId) {
+      if (!useEditorDraft) handleOpenModal(wo, true);
+      setDocumentTab('info');
+      showAccurateNotice('Pilih Teknisi Utama pada tab Info lainnya sebelum memulai pekerjaan.');
+      return;
+    }
+    if (useEditorDraft) {
+      diagnosisSubmitAction.current = 'process';
+      void handleSubmit();
+      return;
+    }
+    requestStatusChange(wo, 'Proses');
+  };
+
+  const canShowProcessMenu = (wo: WorkOrder) => (
+    (canEditWorkOrderInActiveBranch(wo) && (
+      wo.status === 'Register'
+      || wo.status === 'Proses'
+      || (wo.status === 'Selesai' && !wo.invoiceId)
+      || (wo.status === 'Closed' && !wo.continuedToWoId)
+    ))
+    || Boolean(wo.invoiceId && (hasPermission('invoice:view') || hasPermission('payment:create')))
+  );
+
   const openCompletionModal = (wo: WorkOrder) => {
-    setCompletionWO(wo);
+    const latestWorkOrder = showModal && editingWO?.id === wo.id
+      ? { ...wo, ...formData, total: totalServices }
+      : wo;
+    if (!requireEditableWorkOrder(latestWorkOrder)) return;
+    setCompletionWO(latestWorkOrder);
     setCompletionForm({
-      temperature: wo.finalTemperature === undefined || wo.finalTemperature === null ? '' : String(wo.finalTemperature),
-      lp: wo.finalLp === undefined || wo.finalLp === null ? '' : String(wo.finalLp),
-      hp: wo.finalHp === undefined || wo.finalHp === null ? '' : String(wo.finalHp),
-      note: wo.findings?.trim() || '',
+      temperature: latestWorkOrder.finalTemperature === undefined || latestWorkOrder.finalTemperature === null ? '' : String(latestWorkOrder.finalTemperature),
+      lp: latestWorkOrder.finalLp === undefined || latestWorkOrder.finalLp === null ? '' : String(latestWorkOrder.finalLp),
+      hp: latestWorkOrder.finalHp === undefined || latestWorkOrder.finalHp === null ? '' : String(latestWorkOrder.finalHp),
+      note: latestWorkOrder.findings?.trim() || '',
     });
     setCompletionError('');
   };
@@ -1732,6 +1908,7 @@ export default function WorkOrders() {
 
   const completeWorkOrder = async () => {
     if (!completionWO || isCompletingWO) return;
+    if (!requireEditableWorkOrder(completionWO)) return;
     const measurementValues = [completionForm.temperature, completionForm.lp, completionForm.hp];
     const filledMeasurements = measurementValues.filter(value => value.trim() !== '').length;
     if (filledMeasurements > 0 && filledMeasurements < 3) {
@@ -1771,11 +1948,24 @@ export default function WorkOrders() {
           },
         ],
       };
-      await updateWorkOrder(completionWO.id, completed);
+      const savedWorkOrder = await updateWorkOrder(completionWO.id, completed);
+      setEditingWO(current => current?.id === savedWorkOrder.id ? savedWorkOrder : current);
+      setFormData(current => current && editingWO?.id === savedWorkOrder.id ? {
+        ...current,
+        status: savedWorkOrder.status,
+        services: savedWorkOrder.services,
+        technicianId: savedWorkOrder.technicianId || '',
+        technicianName: savedWorkOrder.technicianName || '',
+        finalTemperature: savedWorkOrder.finalTemperature,
+        finalLp: savedWorkOrder.finalLp,
+        finalHp: savedWorkOrder.finalHp,
+        findings: savedWorkOrder.findings || '',
+      } : current);
+      editorBaselineFingerprint.current = workOrderEditorFingerprint(savedWorkOrder);
+      setDetailWO(current => current?.id === savedWorkOrder.id ? savedWorkOrder : current);
       setSuccessMsg(`${completionWO.woNumber} berhasil diselesaikan. Selanjutnya dapat dibuatkan faktur.`);
       setTimeout(() => setSuccessMsg(''), 4000);
       setCompletionWO(null);
-      setDetailWO(null);
     } catch (error: any) {
       setCompletionError(error?.message || 'WO gagal diselesaikan. Periksa data lalu coba lagi.');
     } finally {
@@ -1784,10 +1974,11 @@ export default function WorkOrders() {
   };
 
   const canEditWorkResult = (wo: WorkOrder) => (
-    hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId
+    canEditWorkOrderInActiveBranch(wo) && wo.status !== 'Closed' && !wo.invoiceId
   );
 
   const openWorkResultEditor = (wo: WorkOrder) => {
+    if (!requireEditableWorkOrder(wo)) return;
     setWorkResultEditor(wo);
     setWorkComplaintText(wo.description || '');
     setWorkResultText(wo.findings || wo.notes || '');
@@ -1802,6 +1993,7 @@ export default function WorkOrders() {
 
   const saveWorkResult = async () => {
     if (!workResultEditor || isSavingWorkResult) return;
+    if (!requireEditableWorkOrder(workResultEditor)) return;
     const complaint = workComplaintText.trim();
     if (!complaint) {
       showAccurateNotice('Keluhan pelanggan wajib diisi.');
@@ -1810,17 +2002,13 @@ export default function WorkOrders() {
     setIsSavingWorkResult(true);
     try {
       const trimmed = workResultText.trim();
-      const now = new Date().toISOString();
       const nextWorkOrder: WorkOrder = {
         ...workResultEditor,
         description: complaint,
         findings: trimmed,
-        updatedAt: now,
       };
-      await updateWorkOrder(workResultEditor.id, nextWorkOrder);
-      setDetailWO(current => current?.id === workResultEditor.id
-        ? { ...current, description: complaint, findings: trimmed, updatedAt: now }
-        : current);
+      const savedWorkOrder = await updateWorkOrder(workResultEditor.id, nextWorkOrder);
+      setDetailWO(current => current?.id === workResultEditor.id ? savedWorkOrder : current);
       setSuccessMsg(`Catatan ${workResultEditor.woNumber} berhasil disimpan.`);
       setTimeout(() => setSuccessMsg(''), 3000);
       closeWorkResultEditor();
@@ -1834,7 +2022,22 @@ export default function WorkOrders() {
   const confirmStatusChange = async (reasonOverride?: string) => {
     if (!statusDialog) return;
     const { wo, next } = statusDialog;
+    if (!requireEditableWorkOrder(wo)) {
+      setStatusDialog(null);
+      return;
+    }
     try {
+      if (next === 'Closed' && showModal && editingWO?.id === wo.id && !workOrderViewOnly) {
+        lostSalesReason.current = (reasonOverride ?? statusReason).trim();
+        diagnosisSubmitAction.current = 'lost';
+        setStatusDialog(null);
+        setStatusReason('');
+        setCancelStep(1);
+        setCancelReasonChoice('');
+        setCancelReasonNotes('');
+        await handleSubmit();
+        return;
+      }
       const result = await changeWorkOrderStatus(wo.id, next, reasonOverride ?? statusReason);
       if (!result.ok) {
         showAccurateNotice(result.message || 'Perubahan status ditolak.');
@@ -1847,13 +2050,16 @@ export default function WorkOrders() {
       setCancelStep(1);
       setCancelReasonChoice('');
       setCancelReasonNotes('');
-      setDetailWO(current => current?.id === wo.id ? { ...current, status: next } : current);
+      setDetailWO(current => current?.id === wo.id
+        ? (result.workOrder || { ...current, status: next })
+        : current);
     } catch (error: any) {
       showAccurateNotice(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
     }
   };
 
   const handleReopenCompletedWorkOrder = async (wo: WorkOrder) => {
+    if (!requireEditableWorkOrder(wo)) return;
     if (wo.invoiceId || wo.invoiceNumber || data.invoices.some(invoice => invoice.woId === wo.id)) {
       showAccurateNotice('WO sudah memiliki faktur. Hapus faktur dan pembayarannya terlebih dahulu sebelum mengembalikan WO ke Dikerjakan.');
       return;
@@ -1875,13 +2081,19 @@ export default function WorkOrders() {
       }
       setSuccessMsg(`${wo.woNumber} dikembalikan ke Dikerjakan.`);
       setTimeout(() => setSuccessMsg(''), 4000);
-      setDetailWO(current => current?.id === wo.id ? { ...current, status: 'Proses' } : current);
+      setDetailWO(current => current?.id === wo.id
+        ? (result.workOrder || { ...current, status: 'Proses' })
+        : current);
     } catch (error: any) {
       showAccurateNotice(`Gagal mengembalikan WO: ${error?.message || 'server tidak merespons'}`);
     }
   };
 
   const handleOpenInvoiceModal = (wo: WorkOrder) => {
+    if (!hasPermission('invoice:create')) {
+      showAccurateNotice('Anda tidak memiliki hak untuk membuat faktur.');
+      return;
+    }
     if (wo.status !== 'Selesai') {
       showAccurateNotice(`WO ${wo.woNumber} masih berstatus ${statusLabel(wo.status)}. Ubah status menjadi Selesai sebelum membuat faktur.`);
       return;
@@ -1890,6 +2102,19 @@ export default function WorkOrders() {
     // Parameter woId langsung membuka subtab Data Baru dan memilih WO ini,
     // sehingga tidak ada lagi formulir modal duplikat yang melayang di atas daftar WO.
     window.location.assign(`/invoices?woId=${encodeURIComponent(wo.id)}`);
+  };
+
+  const handleOpenInvoiceFromEditor = (wo: WorkOrder) => {
+    if (!hasPermission('invoice:create')) {
+      showAccurateNotice('Anda tidak memiliki hak untuk membuat faktur.');
+      return;
+    }
+    if (showModal && editingWO?.id === wo.id && hasUnsavedEditorChanges()) {
+      showAccurateNotice('Simpan perubahan WO terlebih dahulu sebelum membuat faktur.');
+      return;
+    }
+    const latestWorkOrder = data.workOrders.find(item => item.id === wo.id) || wo;
+    handleOpenInvoiceModal(latestWorkOrder);
   };
 
   const openActiveWorkOrder = async (wo: WorkOrder) => {
@@ -1926,19 +2151,25 @@ export default function WorkOrders() {
   };
 
   // Cabang aktif user saat ini (untuk melanjutkan pekerjaan)
-  const activeBranchId = currentBranchId === 'ALL'
-    ? (currentUser?.branchId || 'BR-001')
-    : currentBranchId;
+  const activeBranchId = currentBranchId;
 
   const submitContinue = async () => {
     if (!continueWO) return;
-    const created = await continueWorkOrder(continueWO.id, activeBranchId);
-    if (created) {
-      const tgt = data.branches.find(b => b.id === activeBranchId);
-      setSuccessMsg(`${created.woNumber} dibuat di ${tgt?.name} sebagai lanjutan dari ${continueWO.woNumber}.`);
-      setTimeout(() => setSuccessMsg(''), 5000);
+    if (activeBranchId === 'ALL') {
+      showAccurateNotice('Pilih cabang tujuan secara eksplisit sebelum membuat WO lanjutan.');
+      return;
     }
-    setContinueWO(null);
+    try {
+      const created = await continueWorkOrder(continueWO.id, activeBranchId);
+      if (created) {
+        const tgt = data.branches.find(b => b.id === activeBranchId);
+        setSuccessMsg(`${created.woNumber} dibuat di ${tgt?.name} sebagai lanjutan dari ${continueWO.woNumber}.`);
+        setTimeout(() => setSuccessMsg(''), 5000);
+      }
+      setContinueWO(null);
+    } catch (error: any) {
+      showAccurateNotice(error?.message || 'WO lanjutan gagal dibuat.');
+    }
   };
 
   const handleCreateInvoice = async () => {
@@ -2004,12 +2235,29 @@ export default function WorkOrders() {
   ].filter(Boolean).join(' · ');
 
   const openLinkedInvoice = (wo: WorkOrder) => {
+    if (!hasPermission('invoice:view')) {
+      showAccurateNotice('Anda tidak memiliki hak untuk melihat faktur.');
+      return;
+    }
     const invoice = data.invoices.find(item =>
       item.id === wo.invoiceId || item.woId === wo.id || item.invoiceNumber === wo.invoiceNumber
     );
     const target = invoice?.id || wo.invoiceId || wo.invoiceNumber;
     if (!target) return showAccurateNotice('Faktur terkait belum ditemukan.');
     window.location.assign(`/invoices?view=${encodeURIComponent(target)}`);
+  };
+
+  const openCustomerPayments = (invoiceId: string, createPayment = false) => {
+    const permission = createPayment ? 'payment:create' : 'payment:view';
+    if (!hasPermission(permission)) {
+      showAccurateNotice(createPayment
+        ? 'Anda tidak memiliki hak untuk membuat pembayaran.'
+        : 'Anda tidak memiliki hak untuk melihat pembayaran.');
+      return;
+    }
+    window.location.assign(createPayment
+      ? `/customer-payments?invoiceId=${encodeURIComponent(invoiceId)}`
+      : `/customer-payments?viewInvoiceId=${encodeURIComponent(invoiceId)}`);
   };
 
   const openLinkedItem = (service: WorkOrderService) => {
@@ -2180,6 +2428,7 @@ export default function WorkOrders() {
 
   const continueLostSalesSameIssue = async () => {
     if (!lostSalesFollowUp || isFollowingUpLostSales) return;
+    if (!requireEditableWorkOrder(lostSalesFollowUp)) return;
     const positiveEstimate = lostSalesFollowUp.services.reduce((sum, service) => sum + Number(service.price || 0) * Number(service.qty || 0), 0);
     if (!lostSalesFollowUp.services.length || positiveEstimate <= 0) {
       const sourceWO = lostSalesFollowUp;
@@ -2200,7 +2449,11 @@ export default function WorkOrders() {
     }
     setIsFollowingUpLostSales(true);
     try {
-      const result = await changeWorkOrderStatus(lostSalesFollowUp.id, 'Proses');
+      const result = await changeWorkOrderStatus(
+        lostSalesFollowUp.id,
+        'Proses',
+        'Pelanggan kembali dengan masalah yang sama.',
+      );
       if (!result.ok) {
         showAccurateNotice(result.message || 'WO Lost Sales tidak dapat dilanjutkan.');
         return;
@@ -2218,10 +2471,14 @@ export default function WorkOrders() {
 
   const continueLostSalesDifferentIssue = async () => {
     if (!lostSalesFollowUp || isFollowingUpLostSales) return;
+    if (activeBranchId === 'ALL') {
+      showAccurateNotice('Pilih cabang tujuan secara eksplisit sebelum membuat WO baru.');
+      return;
+    }
     setIsFollowingUpLostSales(true);
     try {
       const sourceWO = lostSalesFollowUp;
-      const created = await continueWorkOrder(sourceWO.id, sourceWO.branchId, { resetJob: true });
+      const created = await continueWorkOrder(sourceWO.id, activeBranchId, { resetJob: true });
       if (!created) {
         showAccurateNotice('WO baru tidak dapat dibuat.');
         return;
@@ -2263,7 +2520,7 @@ export default function WorkOrders() {
   return (
     <div className="space-y-0 lg:-mx-6 lg:-mt-6">
       <div className={`${ui.childBar} ${showModal ? '!hidden lg:!flex' : ''}`}>
-        <button type="button" onClick={() => { requestCloseEditor(); setDetailWO(null); }} className={ui.childListTab} title="Daftar Order Kerja">
+        <button type="button" onClick={() => { void requestCloseEditor(); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
         </button>
         {showModal && diagnosisMode && editingWO ? (
@@ -2272,13 +2529,13 @@ export default function WorkOrders() {
             className={`${ui.childTabActive} gap-2 px-5 text-sm`}
           >
             <Wrench className="h-4 w-4" /> DIAGNOSA {editingWO.woNumber}
-            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); void requestCloseEditor(); }} />
           </button>
         ) : showModal && editingWO ? (
           <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
             <FileText className="h-4 w-4" />
             {editingWO.woNumber}
-            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); handleCloseModal(); }} />
+            <X className="ml-1 h-4 w-4" onClick={(event) => { event.stopPropagation(); void requestCloseEditor(); }} />
           </button>
         ) : showModal && hasPermission('wo:create') ? (
           <button type="button" className={`${ui.childTabActive} gap-2 px-5 text-sm`}>
@@ -2607,7 +2864,7 @@ export default function WorkOrders() {
                           type="button"
                           onClick={() => {
                             const attention = attentionByWorkOrderId.get(wo.id);
-                            if (attention?.kind === 'payment' && attention.invoice) window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(attention.invoice.id)}`);
+                            if (attention?.kind === 'payment' && attention.invoice) openCustomerPayments(attention.invoice.id, true);
                             else if (attention?.kind === 'invoice' && hasPermission('invoice:create')) handleOpenInvoiceModal(wo);
                             else openWorkOrderStandard(wo);
                           }}
@@ -2658,7 +2915,7 @@ export default function WorkOrders() {
                         <button onClick={() => openWorkOrderStandard(wo)} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-700" title="Buka WO">
                           <Eye className="h-4 w-4" />
                         </button>
-                        {canShowAdminRowActions && hasPermission('wo:edit') && !wo.invoiceId && (
+                        {canShowAdminRowActions && canEditWorkOrderInActiveBranch(wo) && !wo.invoiceId && (
                           <button onClick={() => handleOpenModal(wo)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit">
                             <Edit className="h-4 w-4" />
                           </button>
@@ -2743,7 +3000,7 @@ export default function WorkOrders() {
                   <WorkOrderEstimateAmount amount={wo.total} isLostSales={statusLabel(wo.status) === 'Lost Sales'} />
                 </span>
                 <button type="button" onClick={() => openWorkOrderStandard(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Buka ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
-                {canShowAdminRowActions && hasPermission('wo:edit') && !wo.invoiceId && (
+                {canShowAdminRowActions && canEditWorkOrderInActiveBranch(wo) && !wo.invoiceId && (
                   <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>
                 )}
                 {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
@@ -2817,10 +3074,10 @@ export default function WorkOrders() {
                     </span>
 
                     {/* Tombol aksi status berurutan */}
-                    {hasPermission('wo:edit') && wo.status === 'Register' && !wo.continuedToWoId && (
+                    {canEditWorkOrderInActiveBranch(wo) && wo.status === 'Register' && !wo.continuedToWoId && (
                       <button onClick={() => handleOpenDiagnosis(wo)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">{wo.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
                     )}
-                    {hasPermission('wo:edit') && wo.status === 'Proses' && (
+                    {canEditWorkOrderInActiveBranch(wo) && wo.status === 'Proses' && (
                       <button
                         onClick={() => openCompletionModal(wo)}
                         className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
@@ -2862,6 +3119,7 @@ export default function WorkOrders() {
                     {hasPermission('wo:create')
                       && wo.status === 'Register'
                       && !wo.continuedToWoId
+                      && activeBranchId !== 'ALL'
                       && wo.branchId !== activeBranchId && (
                       <button
                         onClick={() => setContinueWO(wo)}
@@ -2896,7 +3154,7 @@ export default function WorkOrders() {
                     >
                       <Eye className="h-5 w-5" />
                     </button>
-                    {hasPermission('wo:edit') && wo.status !== 'Closed' && !wo.invoiceId && (
+                    {canEditWorkOrderInActiveBranch(wo) && wo.status !== 'Closed' && !wo.invoiceId && (
                       <button
                         onClick={() => handleOpenModal(wo)}
                         className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
@@ -3017,31 +3275,31 @@ export default function WorkOrders() {
                 <span className="text-xs text-gray-500">Nomor: <strong className="font-mono text-gray-900">{detailWO.woNumber}</strong></span>
                 <span className="text-xs text-gray-500">Cabang: <strong className="text-gray-900">{data.branches.find(b => b.id === detailWO.branchId)?.name}</strong></span>
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
-                {(detailWO.invoiceId || detailWO.invoiceNumber) && (
+                {(detailWO.invoiceId || detailWO.invoiceNumber) && hasPermission('invoice:view') && (
                   <button type="button" onClick={() => openLinkedInvoice(detailWO)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:underline" title="Buka faktur terkait">
                     <FileText className="h-3.5 w-3.5" /> Faktur: {detailWO.invoiceNumber || 'Buka Faktur'}
                   </button>
                 )}
               </div>
               <div className="hidden shrink-0 items-center gap-2 lg:flex">
-                <details data-wo-action-menu className={`group relative ${statusLabel(detailWO.status) === 'Lost Sales' || detailWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                  <summary aria-disabled={statusLabel(detailWO.status) === 'Lost Sales' || Boolean(detailWO.invoiceId)} tabIndex={statusLabel(detailWO.status) === 'Lost Sales' || detailWO.invoiceId ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>Ambil <span className="text-xs">⌄</span></summary>
+                {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status !== 'Closed' && !detailWO.invoiceId && <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                  <summary className={`${ui.documentAction} cursor-pointer list-none`}>Ambil <span className="text-xs">⌄</span></summary>
                   <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
                     <button type="button" onClick={() => takeServicesFromPreviousWO(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Layanan WO Sebelumnya</strong><span className="text-xs text-gray-500">Salin layanan kendaraan ini</span></button>
                     <button type="button" onClick={() => openFavoriteServicesForWO(detailWO)} className="block w-full border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Paket / Layanan Favorit</strong><span className="text-xs text-gray-500">Pilih dari quick service</span></button>
                   </div>
-                </details>
-                <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                </details>}
+                {canShowProcessMenu(detailWO) && <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
                   <summary className={`${ui.documentAction} cursor-pointer list-none`}>Proses <span className="text-xs">⌄</span></summary>
                   <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                    {detailWO.status === 'Register' && <><button type="button" disabled={!detailWO.services.length || detailWO.total <= 0} onClick={() => requestStatusChange(detailWO, 'Proses')} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 disabled:text-gray-300">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                    {detailWO.status === 'Register' && <><button type="button" disabled={!detailWO.services.length || detailWO.total <= 0} onClick={() => requestStartProcessing(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 disabled:text-gray-300">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
                     {detailWO.status === 'Proses' && <><button type="button" onClick={() => openCompletionModal(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Tandai Selesai</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button></>}
                     {detailWO.status === 'Selesai' && !detailWO.invoiceId && <>{hasPermission('invoice:create') && detailWO.total > 0 && <button type="button" onClick={() => handleOpenInvoiceModal(detailWO)} className="block w-full px-3 py-2 text-left text-sm font-medium text-emerald-700 hover:bg-emerald-50">Buat Faktur</button>}<button type="button" onClick={() => void handleReopenCompletedWorkOrder(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-orange-700 hover:bg-orange-50">Kembali ke Dikerjakan</button><button type="button" onClick={() => requestStatusChange(detailWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
-                    {detailWO.invoiceId && <><button type="button" onClick={() => openLinkedInvoice(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Lihat Faktur</button><button type="button" onClick={() => window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(detailWO.invoiceId || '')}`)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Proses Pembayaran</button></>}
+                    {detailWO.invoiceId && <>{hasPermission('invoice:view') && <button type="button" onClick={() => openLinkedInvoice(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Lihat Faktur</button>}{hasPermission('payment:create') && <button type="button" onClick={() => openCustomerPayments(detailWO.invoiceId || '', true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50">Proses Pembayaran</button>}</>}
                     {detailWO.status === 'Closed' && <button type="button" onClick={() => setLostSalesFollowUp(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                   </div>
-                </details>
-                <button type="button" disabled={Boolean(detailWO.invoiceId) || !hasPermission('wo:edit')} onClick={() => handleOpenModal(detailWO, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4" /> Simpan</button>
+                </details>}
+                <button type="button" disabled={Boolean(detailWO.invoiceId) || !canEditWorkOrderInActiveBranch(detailWO)} onClick={() => handleOpenModal(detailWO, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"><Save className="h-4 w-4" /> Simpan</button>
                 <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Tutup tab WO"><X className="h-5 w-5" /></button>
               </div>
               <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden" title="Tutup tab WO"><X className="h-5 w-5" /></button>
@@ -3063,7 +3321,7 @@ export default function WorkOrders() {
               </div>
               <div className="rounded border border-gray-200 bg-white p-3">
                 <div className="mb-2 flex items-center gap-2">
-                  <button type="button" disabled={!hasPermission('wo:edit') || detailWO.status === 'Closed' || Boolean(detailWO.invoiceId)} onClick={() => handleOpenModal(detailWO, true)} className="relative max-w-xl flex-1 text-left disabled:cursor-default"><span className="flex h-10 w-full items-center rounded-lg border border-gray-300 bg-white py-2.5 pl-3 pr-10 text-sm text-gray-500">Cari/Pilih Barang dan Jasa</span><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /></button>
+                  <button type="button" disabled={!canEditWorkOrderInActiveBranch(detailWO) || detailWO.status === 'Closed' || Boolean(detailWO.invoiceId)} onClick={() => handleOpenModal(detailWO, true)} className="relative max-w-xl flex-1 text-left disabled:cursor-default"><span className="flex h-10 w-full items-center rounded-lg border border-gray-300 bg-white py-2.5 pl-3 pr-10 text-sm text-gray-500">Cari/Pilih Barang dan Jasa</span><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /></button>
                   <strong className="ml-auto shrink-0 text-sm text-gray-700">{detailWO.services.length} Barang/Jasa</strong>
                 </div>
                 <div className="overflow-hidden rounded border border-gray-200">
@@ -3081,7 +3339,7 @@ export default function WorkOrders() {
                     {detailWO.services.length > 0 ? detailWO.services.map((service, index) => {
                       if (isPackageMemberService(service)) return null;
                       const members = isPackageHeaderService(service) ? packageMembersAfterService(detailWO.services, index) : [];
-                      return <tr key={service.id} className={members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}><td className="px-3 py-2.5 text-center text-xs text-gray-400">{detailWO.services.slice(0, index).filter(row => !isPackageMemberService(row)).length + 1}</td><td className="px-3 py-2.5"><button type="button" onClick={() => openLinkedItem(service)} className="block max-w-full text-left hover:underline"><strong className="text-blue-700">{serviceReceiptName(service)}</strong><span className="block font-mono text-[10px] text-blue-500">{serviceItemCode(service)}</span></button>{members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <button type="button" key={member.id} onClick={() => openLinkedItem(member)} className="block max-w-full text-left hover:underline"><span className="font-mono text-purple-500">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</button>)}</div>}</td><td className="px-3 py-2.5 font-mono text-xs text-gray-600"><button type="button" onClick={() => openLinkedItem(service)} className="hover:text-blue-700 hover:underline">{serviceBarcodeOrCode(service)}</button></td><td className="px-3 py-2.5 text-center">{service.qty}</td><td className="px-3 py-2.5 text-right">Rp {service.price.toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-right font-semibold">Rp {(service.price * service.qty).toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-center">{hasPermission('wo:edit') && detailWO.status !== 'Closed' && !detailWO.invoiceId && <button type="button" onClick={() => handleOpenModal(detailWO, true)} className="rounded p-1.5 text-blue-600 hover:bg-blue-50" title="Edit layanan"><Edit className="h-4 w-4" /></button>}</td></tr>;
+                      return <tr key={service.id} className={members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}><td className="px-3 py-2.5 text-center text-xs text-gray-400">{detailWO.services.slice(0, index).filter(row => !isPackageMemberService(row)).length + 1}</td><td className="px-3 py-2.5"><button type="button" onClick={() => openLinkedItem(service)} className="block max-w-full text-left hover:underline"><strong className="text-blue-700">{serviceReceiptName(service)}</strong><span className="block font-mono text-[10px] text-blue-500">{serviceItemCode(service)}</span></button>{members.length > 0 && <div className="mt-1 space-y-0.5 border-l-2 border-purple-200 pl-2 text-[10px] text-purple-700">{members.map(member => <button type="button" key={member.id} onClick={() => openLinkedItem(member)} className="block max-w-full text-left hover:underline"><span className="font-mono text-purple-500">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</button>)}</div>}</td><td className="px-3 py-2.5 font-mono text-xs text-gray-600"><button type="button" onClick={() => openLinkedItem(service)} className="hover:text-blue-700 hover:underline">{serviceBarcodeOrCode(service)}</button></td><td className="px-3 py-2.5 text-center">{service.qty}</td><td className="px-3 py-2.5 text-right">Rp {service.price.toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-right font-semibold">Rp {(service.price * service.qty).toLocaleString('id-ID')}</td><td className="px-3 py-2.5 text-center">{canEditWorkOrderInActiveBranch(detailWO) && detailWO.status !== 'Closed' && !detailWO.invoiceId && <button type="button" onClick={() => handleOpenModal(detailWO, true)} className="rounded p-1.5 text-blue-600 hover:bg-blue-50" title="Edit layanan"><Edit className="h-4 w-4" /></button>}</td></tr>;
                     }) : <tr><td colSpan={7} className="h-40 text-center text-sm text-gray-400">Belum ada layanan atau barang.</td></tr>}
                   </tbody>
                 </table></div>
@@ -3126,13 +3384,13 @@ export default function WorkOrders() {
               </details>
             </div>
             <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6 sm:py-4 lg:hidden">
-              {hasPermission('wo:edit') && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
+              {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
                 <>
                   <button onClick={() => { handleOpenDiagnosis(detailWO); setDetailWO(null); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{detailWO.services.length ? 'Edit Layanan' : '+ Tambah Layanan'}</button>
-                  {detailWO.services.length > 0 && detailWO.total > 0 && <button onClick={() => requestStatusChange(detailWO, 'Proses')} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Setuju · Dikerjakan</button>}
+                  {detailWO.services.length > 0 && detailWO.total > 0 && <button onClick={() => requestStartProcessing(detailWO)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Setuju · Dikerjakan</button>}
                 </>
               )}
-              {hasPermission('wo:edit') && detailWO.status === 'Proses' && (
+              {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Proses' && (
                 <>
                   <button onClick={() => { handleOpenModal(detailWO, true); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Tambah/Edit Layanan</button>
                   <button onClick={() => openCompletionModal(detailWO)} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Tandai Selesai</button>
@@ -3145,22 +3403,22 @@ export default function WorkOrders() {
                   </button>
                 </>
               )}
-              {hasPermission('invoice:create') && detailWO.status === 'Selesai' && !detailWO.invoiceId && detailWO.total > 0 && (
+              {hasPermission('invoice:create') && canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Selesai' && !detailWO.invoiceId && detailWO.total > 0 && (
                 <button onClick={() => { handleOpenInvoiceModal(detailWO); setDetailWO(null); }} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Buat Faktur</button>
               )}
-              {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
+              {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
                 <button onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Batalkan / Lost Sales</button>
               )}
-              {hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.continuedToWoId && (
+              {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Closed' && !detailWO.continuedToWoId && (
                 <button onClick={() => setLostSalesFollowUp(detailWO)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Tindak Lanjut</button>
               )}
-              {hasPermission('wo:edit') && detailWO.status === 'Register' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
-              {canShowAdminRowActions && hasPermission('wo:edit') && detailWO.status === 'Closed' && !detailWO.invoiceId && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Koreksi Customer/Kendaraan</button>}
+              {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Register' && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Edit WO</button>}
+              {canShowAdminRowActions && canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Closed' && !detailWO.invoiceId && <button onClick={() => { handleOpenModal(detailWO); setDetailWO(null); }} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Koreksi Customer/Kendaraan</button>}
               <button onClick={() => closeDetailTab(detailWO.id)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Tutup</button>
-              {hasPermission('wo:edit') && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
+              {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Selesai' && !detailWO.invoiceId && (
                 <button onClick={() => { const selected = detailWO; setDetailWO(null); void handleReopenCompletedWorkOrder(selected); }} className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-white text-orange-700 hover:bg-orange-50" title="Kembali ke Dikerjakan" aria-label={`Kembalikan ${detailWO.woNumber} ke Dikerjakan`}><Undo2 className="h-5 w-5" /></button>
               )}
-              {hasPermission('wo:edit') && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
+              {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status === 'Register' && !detailWO.continuedToWoId && (
                 <button
                   onClick={() => { requestStatusChange(detailWO, 'Closed'); setDetailWO(null); }}
                   className="rounded-lg border border-red-700 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
@@ -3322,7 +3580,7 @@ export default function WorkOrders() {
                 <p className="mt-1 text-xs leading-snug text-gray-500 sm:text-sm">{diagnosisMode ? 'Isi hasil pemeriksaan dan estimasi layanan' : editingWO ? 'WO sudah terdaftar. Tambahkan atau ubah layanan lalu simpan.' : 'Pilih pelanggan, kendaraan, dan isi keluhan untuk Register WO'}</p>
               </div>
               <button
-                onClick={handleCloseModal}
+                onClick={() => { void requestCloseEditor(); }}
                 className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
               >
                 <X className="w-5 h-5 text-gray-500" />
@@ -3387,8 +3645,8 @@ export default function WorkOrders() {
               {openActionRailMenu === 'more' && (
                 <div className="absolute right-[104px] top-[196px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl">
                   <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button>
-                  {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button>}
-                  {editingWO && !editingWO.invoiceId && canShowAdminRowActions && hasPermission('wo:edit') && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => { setOpenActionRailMenu(''); setShowCustomerVehicleCorrectionForm(true); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Koreksi Customer/Kendaraan</button>}
+                  {editingWO && hasPermission('payment:view') && <button type="button" onClick={() => { setOpenActionRailMenu(''); setDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button>}
+                  {editingWO && !editingWO.invoiceId && canShowAdminRowActions && canEditWorkOrderInActiveBranch(editingWO) && !customerVehicleCorrectionUnlocked && <button type="button" onClick={() => { setOpenActionRailMenu(''); setShowCustomerVehicleCorrectionForm(true); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Koreksi Customer/Kendaraan</button>}
                   {editingWO && <button type="button" onClick={() => { setOpenActionRailMenu(''); void copyWorkOrder(editingWO); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Salin ringkasan WO</button>}
                 </div>
               )}
@@ -3492,26 +3750,26 @@ export default function WorkOrders() {
                       />
                     </div>
                     <div data-wo-inline-actions className="hidden items-center justify-end gap-1.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex">
-                      <details data-wo-action-menu className={`group relative ${editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                        <summary aria-disabled={Boolean(editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId))} tabIndex={editingWO && (statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId) ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>
+                      <details data-wo-action-menu className={`group relative ${!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO) || statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                        <summary aria-disabled={Boolean(!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO) || statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId)} tabIndex={!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO) || statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>
                           Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
                         </summary>
                         <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                          <button type="button" disabled={!editingWO} onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Layanan WO Sebelumnya</button>
-                          <button type="button" disabled={!editingWO} onClick={() => setShowQuickServices(true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Paket/Layanan Favorit</button>
+                          <button type="button" disabled={!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO)} onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Layanan WO Sebelumnya</button>
+                          <button type="button" disabled={!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO)} onClick={() => { if (editingWO && requireEditableWorkOrder(editingWO)) setShowQuickServices(true); }} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Paket/Layanan Favorit</button>
                           {!editingWO && <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-400">Register WO terlebih dahulu.</p>}
                         </div>
                       </details>
-                      {editingWO ? <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                      {editingWO && !workOrderViewOnly && canEditWorkOrderInActiveBranch(editingWO) && (editingWO.status === 'Register' || editingWO.status === 'Proses' || (editingWO.status === 'Selesai' && !editingWO.invoiceId)) ? <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
                         <summary className={`${ui.documentAction} cursor-pointer list-none`}>
                           Proses <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
                         </summary>
                         <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                          {editingWO.status === 'Register' && <><button type="submit" onClick={() => { diagnosisSubmitAction.current = 'process'; }} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                          {editingWO.status === 'Register' && <><button type="button" disabled={!formData.services.length || totalServices <= 0} onClick={() => requestStartProcessing(editingWO, true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
                           {editingWO.status === 'Proses' && <><button type="button" onClick={() => openCompletionModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Tandai Selesai</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button></>}
-                          {editingWO.status === 'Selesai' && !editingWO.invoiceId && <><button type="button" onClick={() => handleOpenInvoiceModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Buat Faktur</button><button type="button" onClick={() => handleReopenCompletedWorkOrder(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Kembali ke Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                          {editingWO.status === 'Selesai' && !editingWO.invoiceId && <>{hasPermission('invoice:create') && <button type="button" onClick={() => handleOpenInvoiceFromEditor(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Buat Faktur</button>}<button type="button" onClick={() => handleReopenCompletedWorkOrder(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Kembali ke Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
                         </div>
-                      </details> : <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button>}
+                      </details> : !editingWO ? <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button> : null}
                     </div>
                   </>
                 )}
@@ -4062,7 +4320,7 @@ export default function WorkOrders() {
                         }));
                       }} className="h-9 w-full border border-gray-500 bg-white px-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
                         <option value="">Pilih teknisi utama</option>
-                        {data.users.filter(user => user.isActive && !user.isOwner && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => (
+                        {data.users.filter(user => user.isActive && !user.isOwner && isTechnicianIdentity(user.roleId, user.roleName) && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => (
                           <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
                         ))}
                       </select>
@@ -4075,7 +4333,7 @@ export default function WorkOrders() {
                           <span className="ml-2 text-xs text-gray-500">▼</span>
                         </summary>
                         <div className="absolute left-0 right-0 z-40 mt-1 max-h-44 overflow-y-auto border border-gray-400 bg-white py-1 shadow-lg">
-                          {data.users.filter(user => user.isActive && !user.isOwner && user.id !== formData.technicianId && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => {
+                          {data.users.filter(user => user.isActive && !user.isOwner && isTechnicianIdentity(user.roleId, user.roleName) && user.id !== formData.technicianId && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => {
                             const checked = formData.assistantTechnicianIds.includes(user.id);
                             return <label key={user.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-blue-50">
                               <input type="checkbox" checked={checked} onChange={() => setFormData(previous => {
@@ -4144,7 +4402,7 @@ export default function WorkOrders() {
                 <div className="p-4">
                   {financialTimelineLoading ? <div className="border border-gray-300 bg-gray-50 px-4 py-12 text-center text-sm text-gray-500">Memuat faktur dan pembayaran…</div> : (() => {
                     const invoice = financialTimeline.woId === editingWO?.id ? financialTimeline.invoice : null;
-                    if (!invoice) return <div className="border border-dashed border-gray-300 bg-gray-50 px-4 py-10 text-center text-sm text-gray-500"><p>WO ini belum memiliki faktur penjualan.</p>{editingWO?.status === 'Selesai' && hasPermission('invoice:create') && <button type="button" onClick={() => { const target = editingWO; handleCloseModal(); if (target) handleOpenInvoiceModal(target); }} className="mt-3 border border-emerald-700 bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700">Buat Faktur</button>}</div>;
+                    if (!invoice) return <div className="border border-dashed border-gray-300 bg-gray-50 px-4 py-10 text-center text-sm text-gray-500"><p>WO ini belum memiliki faktur penjualan.</p>{editingWO?.status === 'Selesai' && hasPermission('invoice:create') && canEditWorkOrderInActiveBranch(editingWO) && <button type="button" onClick={() => handleOpenInvoiceFromEditor(editingWO)} className="mt-3 border border-emerald-700 bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700">Buat Faktur</button>}</div>;
                     const remaining = Math.max(0, invoice.total - invoice.payment);
                     const isPaid = remaining === 0 && invoice.payment > 0;
                     const invoiceRows = [
@@ -4165,8 +4423,8 @@ export default function WorkOrders() {
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {hasPermission('invoice:view') && <button type="button" onClick={() => window.location.assign(`/invoices?view=${encodeURIComponent(invoice.id)}`)} className="border border-blue-600 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-50">Lihat Faktur</button>}
-                          {financialTimeline.canViewPayments && <button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(invoice.id)}`)} className="border border-blue-600 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-50">Buka Daftar Pembayaran</button>}
-                          {remaining > 0 && hasPermission('payment:create') && <button type="button" onClick={() => window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(invoice.id)}`)} className="border border-emerald-700 bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700">+ Pembayaran</button>}
+                          {financialTimeline.canViewPayments && hasPermission('payment:view') && <button type="button" onClick={() => openCustomerPayments(invoice.id)} className="border border-blue-600 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-50">Buka Daftar Pembayaran</button>}
+                          {remaining > 0 && hasPermission('payment:create') && <button type="button" onClick={() => openCustomerPayments(invoice.id, true)} className="border border-emerald-700 bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700">+ Pembayaran</button>}
                         </div>
                       </section>
                       <section className="relative min-w-0 overflow-hidden">
@@ -4184,12 +4442,12 @@ export default function WorkOrders() {
               <div className="sticky bottom-0 z-30 -mx-4 flex items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] sm:-mx-6 sm:gap-3 sm:px-6 sm:pb-0 sm:pt-4 sm:shadow-none lg:hidden">
                 <button
                   type="button"
-                  onClick={handleCloseModal}
+                  onClick={() => { void requestCloseEditor(); }}
                   className="rounded-lg border border-gray-300 px-3 py-2.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:px-5 sm:text-sm"
                 >
                   Batal
                 </button>
-                {editingWO && editingWO.status === 'Register' && hasPermission('wo:edit') && !editingWO.invoiceId && (
+                {editingWO && editingWO.status === 'Register' && canEditWorkOrderInActiveBranch(editingWO) && !editingWO.invoiceId && (
                   <>
                     <button
                       type="button"
@@ -4210,10 +4468,10 @@ export default function WorkOrders() {
                     >
                       Lost Sales
                     </button>
-                    {editingWO.services.length > 0 && editingWO.total > 0 && (
+                    {formData.services.length > 0 && totalServices > 0 && (
                       <button
-                        type="submit"
-                        onClick={() => { diagnosisSubmitAction.current = 'process'; }}
+                        type="button"
+                        onClick={() => requestStartProcessing(editingWO, true)}
                         className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-700 sm:flex-none sm:px-5 sm:text-sm"
                       >
                         <PlayCircle className="h-4 w-4" />
@@ -4222,9 +4480,19 @@ export default function WorkOrders() {
                     )}
                   </>
                 )}
+                {editingWO && editingWO.status === 'Proses' && canEditWorkOrderInActiveBranch(editingWO) && !editingWO.invoiceId && (
+                  <button
+                    type="button"
+                    onClick={() => openCompletionModal(editingWO)}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-emerald-600/20 transition-colors hover:bg-emerald-700 sm:flex-none sm:px-5 sm:text-sm"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Tandai Selesai
+                  </button>
+                )}
                 <button
                   type="submit"
-                  disabled={!editingWO ? isAutoRegistering : false}
+                  disabled={workOrderViewOnly || (!editingWO ? isAutoRegistering : false)}
                   onClick={() => {
                     diagnosisSubmitAction.current = 'save';
                   }}

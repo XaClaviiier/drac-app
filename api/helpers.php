@@ -97,7 +97,8 @@ function resolveCustomerVehicle(
 function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $excludeWoId = null): void {
     $sql = "SELECT wo_number FROM work_orders
             WHERE vehicle_ref_id = ?
-              AND status IN ('Register', 'Proses')";
+              AND status IN ('Register', 'Proses')
+              AND COALESCE(TRIM(continued_to_wo_id), '') = ''";
     $params = [$vehicleRefId];
     if ($excludeWoId !== null) {
         $sql .= " AND id <> ?";
@@ -201,6 +202,10 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('billing_contact_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD billing_contact_id VARCHAR(64) NULL AFTER approval_contact_phone");
     if (!in_array('billing_contact_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD billing_contact_name VARCHAR(150) NULL AFTER billing_contact_id");
     if (!in_array('billing_contact_phone', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD billing_contact_phone VARCHAR(30) NULL AFTER billing_contact_name");
+    $workOrderUpdatedAtColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'updated_at'")->fetch();
+    if (!$workOrderUpdatedAtColumn || stripos((string)$workOrderUpdatedAtColumn['Type'], 'timestamp(6)') === false) {
+        $pdo->exec("ALTER TABLE work_orders MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)");
+    }
     $statusColumn = $pdo->query("SHOW COLUMNS FROM work_orders LIKE 'status'")->fetch();
     if ($statusColumn && (
         stripos((string)$statusColumn['Type'], "'Register'") === false
@@ -802,9 +807,82 @@ function ensureApiSupportTables(PDO $pdo): void {
             $pdo->exec("ALTER TABLE sales_invoices ADD payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai' AFTER payment");
         }
     }
-    runProductionIntegrityRepair20260808($pdo);
-    runProductionIntegrityRepair20260808StatusRestore($pdo);
-    runVehicleOtherColorCleanup20260817($pdo);
+}
+
+/**
+ * Menjalankan bootstrap skema API sekali per versi aplikasi.
+ *
+ * Instalasi lama tetap aman: tabel penanda dibuat terlebih dahulu dan marker
+ * baru ditulis setelah seluruh bootstrap berhasil. Jika bootstrap gagal,
+ * request berikutnya akan mencoba lagi seperti perilaku lama.
+ * Saat isi ensureApiSupportTables() berubah, nilai version di router wajib
+ * dinaikkan agar perubahan baru tetap diterapkan pada hosting yang sudah aktif.
+ */
+function ensureApiSupportTablesVersioned(PDO $pdo, string $version): void {
+    $version = trim($version);
+    if ($version === '') {
+        ensureApiSupportTables($pdo);
+    } else {
+        runVersionedApiBootstrap($pdo, $version, static function(PDO $pdo): void {
+            ensureApiSupportTables($pdo);
+        });
+    }
+
+    // Perbaikan data memiliki marker masing-masing dan sengaja berada di luar
+    // marker bootstrap skema. Jika salah satu perbaikan gagal lalu menulis log,
+    // request berikutnya tetap akan mencoba lagi sampai marker internal tercatat.
+    foreach ([
+        'production_integrity_repair_20260808' => 'runProductionIntegrityRepair20260808',
+        'production_integrity_status_restore_20260808' => 'runProductionIntegrityRepair20260808StatusRestore',
+        'vehicle_other_color_cleanup_20260817' => 'runVehicleOtherColorCleanup20260817',
+    ] as $repairLock => $repairFunction) {
+        withApiMigrationLock($pdo, $repairLock, static function(PDO $pdo) use ($repairFunction): void {
+            $repairFunction($pdo);
+        });
+    }
+}
+
+function ensureApiMigrationTable(PDO $pdo): void {
+    if (!$pdo->query("SHOW TABLES LIKE 'app_schema_migrations'")->fetchColumn()) {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
+            migration_key VARCHAR(100) PRIMARY KEY,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    }
+}
+
+function withApiMigrationLock(PDO $pdo, string $key, callable $callback): void {
+    $lockName = 'drac:' . substr(hash('sha256', $key), 0, 48);
+    $lockStmt = $pdo->prepare('SELECT GET_LOCK(?, 15)');
+    $lockStmt->execute([$lockName]);
+    if ((int)$lockStmt->fetchColumn() !== 1) {
+        throw new RuntimeException('Bootstrap database sedang dijalankan oleh request lain. Silakan coba kembali.');
+    }
+    try {
+        $callback($pdo);
+    } finally {
+        try {
+            $releaseStmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+            $releaseStmt->execute([$lockName]);
+        } catch (Throwable $ignored) {
+            // Named lock otomatis dilepas ketika koneksi database berakhir.
+        }
+    }
+}
+
+function runVersionedApiBootstrap(PDO $pdo, string $version, callable $bootstrap): void {
+    ensureApiMigrationTable($pdo);
+    $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $check->execute([$version]);
+    if ((int)$check->fetchColumn() > 0) return;
+    withApiMigrationLock($pdo, 'bootstrap:' . $version, static function(PDO $pdo) use ($version, $bootstrap): void {
+        // Request yang menunggu lock wajib memeriksa marker kembali.
+        $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+        $check->execute([$version]);
+        if ((int)$check->fetchColumn() > 0) return;
+        $bootstrap($pdo);
+        $pdo->prepare('INSERT IGNORE INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$version]);
+    });
 }
 
 function getBearerToken(): string {
@@ -911,6 +989,20 @@ function requireAccessibleBranch(PDO $pdo, array $user, ?string $branchId): void
     if (!in_array($branchId, getAccessibleBranchIds($pdo, $user), true)) {
         respondError('Akun tidak memiliki akses ke cabang tersebut', 403);
     }
+}
+
+/**
+ * Transaksi baru maupun perubahan transaksi hanya boleh menyentuh cabang aktif.
+ * Data historis pada cabang nonaktif tetap dapat dibaca oleh endpoint GET.
+ */
+function assertActiveBranch(PDO $pdo, ?string $branchId): void {
+    $branchId = trim((string)$branchId);
+    if ($branchId === '') throw new InvalidArgumentException('Cabang wajib dipilih.');
+    $stmt = $pdo->prepare('SELECT is_active FROM branches WHERE id=? LIMIT 1');
+    $stmt->execute([$branchId]);
+    $isActive = $stmt->fetchColumn();
+    if ($isActive === false) throw new InvalidArgumentException('Cabang tidak ditemukan.');
+    if (!(bool)$isActive) throw new DomainException('Cabang sudah nonaktif dan tidak dapat dipakai untuk transaksi.');
 }
 
 function requestIp(): string {

@@ -1,4 +1,158 @@
 <?php
+if (!class_exists('WorkOrderVersionConflictException')) {
+    class WorkOrderVersionConflictException extends RuntimeException {}
+}
+
+$validateWorkOrderDate = static function ($value): string {
+    $dateValue = trim((string)$value);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateValue)) {
+        throw new InvalidArgumentException('Tanggal WO tidak valid. Gunakan format YYYY-MM-DD.');
+    }
+    $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $dateValue, new DateTimeZone('Asia/Makassar'));
+    $errors = DateTimeImmutable::getLastErrors();
+    if (!$parsed || ($errors !== false && (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0)) || $parsed->format('Y-m-d') !== $dateValue) {
+        throw new InvalidArgumentException('Tanggal WO tidak valid.');
+    }
+    return $dateValue;
+};
+
+$normalizeWorkOrderVersion = static function ($value): ?string {
+    if ($value === null || trim((string)$value) === '') return null;
+    try {
+        return (new DateTimeImmutable((string)$value, new DateTimeZone('Asia/Makassar')))
+            ->setTimezone(new DateTimeZone('UTC'))
+            ->format('Y-m-d H:i:s.u');
+    } catch (Throwable $error) {
+        throw new InvalidArgumentException('Versi WO tidak valid. Muat ulang data lalu coba lagi.');
+    }
+};
+
+$logWorkOrderFailure = static function (string $operation, Throwable $error): string {
+    $reference = substr(hash('sha256', uniqid('', true)), 0, 10);
+    error_log(sprintf(
+        'Work order %s failed [%s] %s in %s:%d',
+        $operation,
+        $reference,
+        $error->getMessage(),
+        $error->getFile(),
+        $error->getLine()
+    ));
+    return $reference;
+};
+
+$resolveWorkOrderContinuations = static function (
+    PDO $pdo,
+    array $actor,
+    string $currentWoId,
+    ?string $fromWoId,
+    ?string $toWoId,
+    ?string $declaredToBranchId = null,
+    ?string $expectedCustomerRefId = null,
+    ?string $expectedVehicleRefId = null,
+    ?string $currentWoStatus = null
+): array {
+    $fromWoId = trim((string)$fromWoId) ?: null;
+    $toWoId = trim((string)$toWoId) ?: null;
+    if (($fromWoId !== null && $fromWoId === $currentWoId) || ($toWoId !== null && $toWoId === $currentWoId)) {
+        throw new InvalidArgumentException('WO tidak dapat dilanjutkan ke dirinya sendiri.');
+    }
+    if ($fromWoId !== null && $fromWoId === $toWoId) {
+        throw new InvalidArgumentException('WO asal dan WO tujuan lanjutan tidak boleh sama.');
+    }
+
+    $normalizeSourceStatus = static function ($status): string {
+        $legacySourceStatus = [
+            'Pengecekan' => 'Register',
+            'Pending' => 'Register',
+            'Batal' => 'Closed',
+        ];
+        $status = trim((string)$status);
+        return $legacySourceStatus[$status] ?? $status;
+    };
+    $assertSourceCanContinue = static function ($status) use ($normalizeSourceStatus): void {
+        if (!in_array($normalizeSourceStatus($status), ['Register', 'Proses', 'Closed'], true)) {
+            throw new DomainException('WO asal hanya dapat dilanjutkan ketika berstatus Register, Dikerjakan, atau Lost Sales.');
+        }
+    };
+
+    $accessibleBranches = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
+    $loadWo = $pdo->prepare('SELECT id,wo_number,branch_id,customer_ref_id,vehicle_ref_id,status,continued_from_wo_id,continued_to_wo_id FROM work_orders WHERE id=? LIMIT 1 FOR UPDATE');
+    $loadBranch = $pdo->prepare('SELECT name,is_active FROM branches WHERE id=? LIMIT 1');
+    $loaded = [];
+    foreach (['from' => $fromWoId, 'to' => $toWoId] as $direction => $referenceId) {
+        if ($referenceId === null) continue;
+        $loadWo->execute([$referenceId]);
+        $row = $loadWo->fetch();
+        if (!$row) throw new InvalidArgumentException('Referensi WO lanjutan tidak ditemukan.');
+        $branchId = (string)$row['branch_id'];
+        if (!isset($accessibleBranches[$branchId])) {
+            throw new DomainException('Akun tidak memiliki akses ke cabang WO lanjutan.');
+        }
+        $loadBranch->execute([$branchId]);
+        $branch = $loadBranch->fetch();
+        if (!$branch) throw new InvalidArgumentException('Cabang WO lanjutan tidak ditemukan.');
+        if (!(bool)$branch['is_active']) throw new DomainException('Cabang WO lanjutan sudah nonaktif.');
+        if ($expectedCustomerRefId !== null && (string)$row['customer_ref_id'] !== $expectedCustomerRefId) {
+            throw new DomainException('WO lanjutan harus memakai pelanggan yang sama.');
+        }
+        if ($expectedVehicleRefId !== null && (string)$row['vehicle_ref_id'] !== $expectedVehicleRefId) {
+            throw new DomainException('WO lanjutan harus memakai kendaraan yang sama.');
+        }
+        $row['branch_name'] = (string)$branch['name'];
+        $loaded[$direction] = $row;
+    }
+
+    if (isset($loaded['from'])) {
+        $existingTarget = trim((string)($loaded['from']['continued_to_wo_id'] ?? ''));
+        if ($existingTarget !== '' && $existingTarget !== $currentWoId) {
+            throw new DomainException('WO asal sudah dilanjutkan ke WO lain.');
+        }
+        if ($existingTarget === '') {
+            $assertSourceCanContinue($loaded['from']['status']);
+        }
+    }
+    if (isset($loaded['to'])) {
+        $existingSource = trim((string)($loaded['to']['continued_from_wo_id'] ?? ''));
+        if ($existingSource !== '' && $existingSource !== $currentWoId) {
+            throw new DomainException('WO tujuan sudah memiliki WO asal yang berbeda.');
+        }
+        if ($existingSource === '') {
+            $assertSourceCanContinue($currentWoStatus);
+        }
+        $actualTargetBranchId = (string)$loaded['to']['branch_id'];
+        if ($declaredToBranchId !== null && trim($declaredToBranchId) !== '' && trim($declaredToBranchId) !== $actualTargetBranchId) {
+            throw new InvalidArgumentException('Cabang tujuan lanjutan tidak sesuai dengan data WO tujuan.');
+        }
+
+        $seen = [];
+        $cursor = $toWoId;
+        $cycleStmt = $pdo->prepare('SELECT continued_to_wo_id FROM work_orders WHERE id=? LIMIT 1');
+        for ($hop = 0; $cursor !== null && $hop < 100; $hop++) {
+            if ($cursor === $currentWoId) throw new DomainException('Relasi lanjutan WO membentuk siklus.');
+            if (isset($seen[$cursor])) throw new DomainException('Relasi lanjutan WO tujuan sudah membentuk siklus.');
+            $seen[$cursor] = true;
+            $cycleStmt->execute([$cursor]);
+            $next = trim((string)($cycleStmt->fetchColumn() ?: ''));
+            $cursor = $next !== '' ? $next : null;
+        }
+        if ($cursor !== null) throw new DomainException('Rantai lanjutan WO terlalu panjang untuk divalidasi.');
+    }
+
+    return [
+        'fromId' => $fromWoId,
+        'fromNumber' => isset($loaded['from']) ? (string)$loaded['from']['wo_number'] : null,
+        'fromBranchName' => isset($loaded['from']) ? (string)$loaded['from']['branch_name'] : null,
+        'toId' => $toWoId,
+        'toNumber' => isset($loaded['to']) ? (string)$loaded['to']['wo_number'] : null,
+        'toBranchName' => isset($loaded['to']) ? (string)$loaded['to']['branch_name'] : null,
+        'toBranchId' => isset($loaded['to']) ? (string)$loaded['to']['branch_id'] : null,
+        'fromNeedsSync' => isset($loaded['from'])
+            && trim((string)($loaded['from']['continued_to_wo_id'] ?? '')) !== $currentWoId,
+        'toNeedsSync' => isset($loaded['to'])
+            && trim((string)($loaded['to']['continued_from_wo_id'] ?? '')) !== $currentWoId,
+    ];
+};
+
 $normalizeWorkOrderServices = static function (PDO $pdo, array $services): array {
     $result = [];
     $total = 0.0;
@@ -47,17 +201,30 @@ $syncWorkOrderTechnicians = static function(PDO $pdo, string $woId, string $bran
         if ($assistantId !== '' && $assistantId !== $primaryId && !in_array($assistantId, $orderedIds, true)) $orderedIds[] = $assistantId;
     }
 
-    $pdo->prepare("DELETE FROM work_order_technicians WHERE wo_id=?")->execute([$woId]);
-    if (!$orderedIds) return ['primaryName' => '', 'assistantIds' => [], 'assistantNames' => []];
-
-    $loadUser = $pdo->prepare("SELECT u.id,u.name FROM users u WHERE u.id=? AND u.is_active=1 AND (u.branch_id=? OR EXISTS (SELECT 1 FROM user_branch_access uba WHERE uba.user_id=u.id AND uba.branch_id=?)) LIMIT 1");
+    assertActiveBranch($pdo, $branchId);
+    $loadUser = $pdo->prepare("SELECT u.id,u.name,r.code AS role_code,r.name AS role_name FROM users u JOIN roles r ON r.id=u.role_id AND r.is_active=1 WHERE u.id=? AND u.is_active=1 AND (u.branch_id=? OR EXISTS (SELECT 1 FROM user_branch_access uba WHERE uba.user_id=u.id AND uba.branch_id=?)) LIMIT 1");
     $insert = $pdo->prepare("INSERT INTO work_order_technicians(wo_id,user_id,user_name,assignment_role,sort_order) VALUES(?,?,?,?,?)");
     $primaryName = '';
     $assistantNames = [];
+    $validatedUsers = [];
     foreach ($orderedIds as $index => $userId) {
         $loadUser->execute([$userId, $branchId, $branchId]);
         $user = $loadUser->fetch();
         if (!$user) throw new InvalidArgumentException('Teknisi yang dipilih tidak ditemukan atau sudah nonaktif.');
+        $roleCode = strtoupper(trim((string)($user['role_code'] ?? '')));
+        $roleName = strtolower(trim((string)($user['role_name'] ?? '')));
+        if ($roleCode !== 'TKN' && !str_contains($roleName, 'teknisi') && !str_contains($roleName, 'technician')) {
+            throw new InvalidArgumentException('Petugas yang dipilih bukan pengguna dengan role Teknisi.');
+        }
+        $validatedUsers[$userId] = $user;
+    }
+
+    // Jangan hapus penugasan lama sebelum seluruh pilihan baru lolos validasi.
+    $pdo->prepare("DELETE FROM work_order_technicians WHERE wo_id=?")->execute([$woId]);
+    if (!$orderedIds) return ['primaryName' => '', 'assistantIds' => [], 'assistantNames' => []];
+
+    foreach ($orderedIds as $index => $userId) {
+        $user = $validatedUsers[$userId];
         $role = $userId === $primaryId ? 'primary' : 'assistant';
         $insert->execute([$woId, $userId, (string)$user['name'], $role, $index]);
         if ($role === 'primary') $primaryName = (string)$user['name'];
@@ -74,6 +241,15 @@ $formatAuditTimestamp = static function($value): ?string {
     try {
         return (new DateTimeImmutable((string)$value, new DateTimeZone('Asia/Makassar')))
             ->format(DateTimeInterface::ATOM);
+    } catch (Throwable $error) {
+        return (string)$value;
+    }
+};
+$formatWorkOrderVersion = static function($value): ?string {
+    if ($value === null || trim((string)$value) === '') return null;
+    try {
+        return (new DateTimeImmutable((string)$value, new DateTimeZone('Asia/Makassar')))
+            ->format('Y-m-d\TH:i:s.uP');
     } catch (Throwable $error) {
         return (string)$value;
     }
@@ -214,7 +390,7 @@ switch ($method) {
             $r['continuedByName']         = $r['continued_by_name'] ?? null;
             $r['continuedBranchId']       = $r['continued_branch_id'] ?? null;
             $r['createdAt']               = $formatAuditTimestamp($r['created_at'] ?? null);
-            $r['updatedAt']               = $formatAuditTimestamp($r['updated_at'] ?? null);
+            $r['updatedAt']               = $formatWorkOrderVersion($r['updated_at'] ?? null);
 
             $stmt = $pdo->prepare("SELECT * FROM work_order_services WHERE wo_id = ?");
             $stmt->execute([$r['id']]);
@@ -244,9 +420,13 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             $normalizedServices = $normalizeWorkOrderServices($pdo, is_array($d['services'] ?? null) ? $d['services'] : []);
-            $woId = $d['id'] ?? generateId();
+            $woId = trim((string)($d['id'] ?? '')) ?: generateId();
             $branchId = (string)($d['branchId'] ?? '');
+            assertActiveBranch($pdo, $branchId);
             requireAccessibleBranch($pdo, $actor, $branchId);
+            $invoiceCollision = $pdo->prepare('SELECT id FROM sales_invoices WHERE wo_id=? LIMIT 1 FOR UPDATE');
+            $invoiceCollision->execute([$woId]);
+            if ($invoiceCollision->fetchColumn()) throw new DomainException('ID WO sudah terhubung dengan faktur lain. Muat ulang lalu coba lagi.');
             [$customer, $vehicle] = resolveCustomerVehicle(
                 $pdo,
                 (string)($d['customerRefId'] ?? ''),
@@ -254,10 +434,13 @@ switch ($method) {
                 true
             );
             $contacts = $resolveWorkOrderContacts($pdo, (string)$customer['id'], $d);
-            assertNoActiveWorkOrder($pdo, (string)$vehicle['id']);
-            $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
+            // WO baru selalu dimulai dari Register, termasuk WO lanjutan.
+            $initialStatus = 'Register';
+            $transactionDate = $validateWorkOrderDate($d['date'] ?? date('Y-m-d'));
             $transactionTime = substr((string)($d['transactionTime'] ?? date('H:i')), 0, 5);
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
+            $complaint = trim((string)($d['description'] ?? ''));
+            if ($complaint === '') throw new InvalidArgumentException('Keluhan pelanggan wajib diisi.');
             if (!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/', $transactionTime)) {
                 throw new InvalidArgumentException('Waktu WO tidak valid.');
             }
@@ -273,10 +456,24 @@ switch ($method) {
             if (isBackdateReasonRequired($pdo) && $transactionDate < date('Y-m-d') && $backdateReason === '') {
                 throw new InvalidArgumentException('Alasan tanggal mundur wajib diisi.');
             }
-            $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $d['date'] ?? null);
+            $continuation = $resolveWorkOrderContinuations(
+                $pdo,
+                $actor,
+                $woId,
+                ($d['continuedFromWoId'] ?? '') ?: null,
+                ($d['continuedToWoId'] ?? '') ?: null,
+                ($d['continuedBranchId'] ?? '') ?: null,
+                (string)$customer['id'],
+                (string)$vehicle['id'],
+                $initialStatus
+            );
+            // WO asal yang sedang dipindahkan/dilanjutkan dikecualikan. Relasi
+            // dua arah dipasang dalam transaksi ini sebelum commit, sehingga
+            // setelahnya sumber tidak lagi dihitung sebagai WO aktif mandiri.
+            assertNoActiveWorkOrder($pdo, (string)$vehicle['id'], $continuation['fromId']);
+            $woNumber = nextDocumentNumber($pdo, 'work_order', $branchId, $transactionDate);
             // Diagnosa/estimasi adalah aktivitas di dalam tahap Register, bukan
-            // status operasional tersendiri. WO baru selalu dimulai dari Register.
-            $initialStatus = 'Register';
+            // status operasional tersendiri.
             $statusLog = [[
                 'from' => 'Register',
                 'to' => 'Register',
@@ -308,7 +505,7 @@ switch ($method) {
                 $contacts['driverContactId'], $contacts['driverName'], $contacts['driverPhone'],
                 $contacts['approvalContactId'], $contacts['approvalContactName'], $contacts['approvalContactPhone'],
                 $contacts['billingContactId'], $contacts['billingContactName'], $contacts['billingContactPhone'],
-                $d['description'] ?? '', $d['findings'] ?? null,
+                $complaint, $d['findings'] ?? null,
                 $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
                 $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,
                 $normalizedServices['total'], $normalizedServices['total'], null, null,
@@ -318,8 +515,8 @@ switch ($method) {
                 json_encode($statusLog),
                 $d['notes'] ?? '', $branchId, $actor['id'] ?? null, $actor['name'] ?? null,
                 ($d['technicianId'] ?? '') ?: null, ($d['technicianName'] ?? '') ?: null,
-                $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
-                $d['continuedToWoId'] ?? null, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
+                $continuation['fromId'], $continuation['fromNumber'], $continuation['fromBranchName'],
+                $continuation['toId'], $continuation['toNumber'], $continuation['toBranchName'],
             ]);
             $pdo->prepare("UPDATE work_orders SET complaint_comment=? WHERE id=?")->execute([($d['complaintComment'] ?? '') ?: null, $woId]);
             $technicianAssignment = $syncWorkOrderTechnicians($pdo, $woId, $branchId, ($d['technicianId'] ?? '') ?: null, is_array($d['assistantTechnicianIds'] ?? null) ? $d['assistantTechnicianIds'] : []);
@@ -333,14 +530,40 @@ switch ($method) {
                     $sStmt->execute([$woId, $s['itemId'], $s['code'], $s['name'], $s['description'], $s['price'], $s['qty'], $s['subtotal']]);
                 }
             }
+            $branchNameStmt = $pdo->prepare('SELECT name FROM branches WHERE id=? LIMIT 1');
+            $branchNameStmt->execute([$branchId]);
+            $currentBranchName = (string)($branchNameStmt->fetchColumn() ?: $branchId);
+            $sourceVersion = null;
+            if ($continuation['fromId'] !== null && $continuation['fromNeedsSync']) {
+                $pdo->prepare("UPDATE work_orders SET continued_to_wo_id=?,continued_to_wo_number=?,continued_to_branch_name=?,continued_at=CURRENT_TIMESTAMP(6),continued_by=?,continued_by_name=?,continued_branch_id=?,updated_at=CURRENT_TIMESTAMP(6) WHERE id=?")
+                    ->execute([$woId,$woNumber,$currentBranchName,$actor['id']??null,$actor['name']??'System',$branchId,$continuation['fromId']]);
+                $sourceVersionStmt = $pdo->prepare('SELECT updated_at FROM work_orders WHERE id=?');
+                $sourceVersionStmt->execute([$continuation['fromId']]);
+                $sourceVersion = $formatWorkOrderVersion($sourceVersionStmt->fetchColumn());
+            }
+            if ($continuation['toId'] !== null && $continuation['toNeedsSync']) {
+                $pdo->prepare("UPDATE work_orders SET continued_from_wo_id=?,continued_from_wo_number=?,continued_from_branch_name=?,updated_at=CURRENT_TIMESTAMP(6) WHERE id=?")
+                    ->execute([$woId,$woNumber,$currentBranchName,$continuation['toId']]);
+            }
+            $versionStmt = $pdo->prepare('SELECT updated_at FROM work_orders WHERE id=?');
+            $versionStmt->execute([$woId]);
+            $createdVersion = $formatWorkOrderVersion($versionStmt->fetchColumn());
             $pdo->commit();
-            respondSuccess(['id' => $woId, 'woNumber' => $woNumber], 'WO disimpan');
+            respondSuccess([
+                'id' => $woId,
+                'woNumber' => $woNumber,
+                'updatedAt' => $createdVersion,
+                'sourceWorkOrder' => $continuation['fromId'] !== null
+                    ? ['id' => $continuation['fromId'], 'updatedAt' => $sourceVersion]
+                    : null,
+            ], 'WO disimpan');
         } catch (InvalidArgumentException | DomainException $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) $pdo->rollBack();
             respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            respondError('Gagal simpan WO', 500, $e->getMessage());
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $reference = $logWorkOrderFailure('create', $e);
+            respondError('Gagal simpan WO. Referensi: ' . $reference, 500);
         }
         break;
 
@@ -358,15 +581,27 @@ switch ($method) {
                 false
             );
             $contacts = $resolveWorkOrderContacts($pdo, (string)$customer['id'], $d);
-            $currentStmt = $pdo->prepare("SELECT wo_number,customer_ref_id,customer_name,vehicle_ref_id,plate_number,date,transaction_time,backdate_reason,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,continued_to_wo_id,continued_at,continued_by,continued_by_name,continued_branch_id FROM work_orders WHERE id=? FOR UPDATE");
+            $currentStmt = $pdo->prepare("SELECT wo_number,customer_ref_id,customer_name,vehicle_ref_id,plate_number,date,transaction_time,backdate_reason,description,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,approved_at,approved_services_json,technician_id,continued_from_wo_id,continued_from_wo_number,continued_from_branch_name,continued_to_wo_id,continued_to_wo_number,continued_to_branch_name,continued_at,continued_by,continued_by_name,continued_branch_id,updated_at FROM work_orders WHERE id=? FOR UPDATE");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
             if (!$currentWorkOrder) {
                 throw new InvalidArgumentException('WO tidak ditemukan.');
             }
             $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+            assertActiveBranch($pdo, (string)$currentWorkOrder['branch_id']);
             requireAccessibleBranch($pdo, $actor, (string)$currentWorkOrder['branch_id']);
-            if (!empty($currentWorkOrder['invoice_id'])) {
+            if (!array_key_exists('updatedAt', $d) || trim((string)$d['updatedAt']) === '') {
+                throw new WorkOrderVersionConflictException('Versi WO tidak tersedia. Muat ulang data sebelum menyimpan kembali.');
+            }
+            $clientVersion = $normalizeWorkOrderVersion($d['updatedAt']);
+            $databaseVersion = $normalizeWorkOrderVersion($currentWorkOrder['updated_at'] ?? null);
+            if ($clientVersion === null || $databaseVersion === null || $clientVersion !== $databaseVersion) {
+                throw new WorkOrderVersionConflictException('WO telah berubah di perangkat lain. Muat ulang data sebelum menyimpan kembali.');
+            }
+            $linkedInvoiceStmt = $pdo->prepare('SELECT id,invoice_number FROM sales_invoices WHERE wo_id=? LIMIT 1 FOR UPDATE');
+            $linkedInvoiceStmt->execute([$id]);
+            $reverseLinkedInvoice = $linkedInvoiceStmt->fetch();
+            if (!empty($currentWorkOrder['invoice_id']) || $reverseLinkedInvoice) {
                 throw new DomainException('WO yang sudah difakturkan tidak dapat diedit. Ubah rincian pada faktur atau hapus faktur terlebih dahulu.');
             }
             $vehicleChanged = (string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id'];
@@ -387,6 +622,9 @@ switch ($method) {
             $currentStatus = $legacyStatusMap[$storedStatus] ?? $storedStatus;
             $requestedStatus = (string)($d['status'] ?? $currentStatus);
             $nextStatus = $legacyStatusMap[$requestedStatus] ?? $requestedStatus;
+            $complaint = trim((string)($d['description'] ?? $currentWorkOrder['description'] ?? ''));
+            if ($complaint === '') throw new InvalidArgumentException('Keluhan pelanggan wajib diisi.');
+            $technicianId = trim((string)($d['technicianId'] ?? $currentWorkOrder['technician_id'] ?? ''));
             $allowedTransitions = [
                 'Register' => ['Register', 'Proses', 'Closed'],
                 'Proses' => ['Proses', 'Selesai', 'Closed'],
@@ -404,7 +642,7 @@ switch ($method) {
                         : 'WO tidak dapat diselesaikan. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0.'
                 );
             }
-            if (in_array($nextStatus, ['Proses', 'Selesai'], true) && trim((string)($d['technicianId'] ?? '')) === '') {
+            if (in_array($nextStatus, ['Proses', 'Selesai'], true) && $technicianId === '') {
                 throw new InvalidArgumentException('Teknisi utama wajib dipilih sebelum WO dikerjakan atau diselesaikan.');
             }
             if ($nextStatus === 'Selesai') {
@@ -448,7 +686,7 @@ switch ($method) {
                     throw new InvalidArgumentException('WO yang sudah memiliki faktur tidak dapat dijadikan Lost Sales. Batalkan transaksi melalui Maintenance Data terlebih dahulu.');
                 }
             }
-            $transactionDate = (string)($d['date'] ?? date('Y-m-d'));
+            $transactionDate = $validateWorkOrderDate($d['date'] ?? $currentWorkOrder['date']);
             $transactionTime = substr((string)($d['transactionTime'] ?? $currentWorkOrder['transaction_time'] ?? date('H:i')), 0, 5);
             $backdateReason = trim((string)($d['backdateReason'] ?? ''));
             $dateChanged = $transactionDate !== (string)$currentWorkOrder['date'];
@@ -507,14 +745,28 @@ switch ($method) {
             $estimateTotal = $isApproval
                 ? $normalizedServices['total']
                 : ($currentWorkOrder['estimate_total'] ?? $normalizedServices['total']);
-            $continuedToWoId = ($d['continuedToWoId'] ?? '') ?: null;
-            $isNewContinuation = empty($currentWorkOrder['continued_to_wo_id']) && $continuedToWoId !== null;
-            $continuedAt = $isNewContinuation ? date('Y-m-d H:i:s') : ($currentWorkOrder['continued_at'] ?? null);
-            $continuedBy = $isNewContinuation ? ($actor['id'] ?? null) : ($currentWorkOrder['continued_by'] ?? null);
-            $continuedByName = $isNewContinuation ? ($actor['name'] ?? 'System') : ($currentWorkOrder['continued_by_name'] ?? null);
-            $continuedBranchId = $isNewContinuation
-                ? (($d['continuedBranchId'] ?? '') ?: null)
-                : ($currentWorkOrder['continued_branch_id'] ?? null);
+            $continuedFromWoId = array_key_exists('continuedFromWoId', $d)
+                ? (($d['continuedFromWoId'] ?? '') ?: null)
+                : (($currentWorkOrder['continued_from_wo_id'] ?? '') ?: null);
+            $continuedToWoId = array_key_exists('continuedToWoId', $d)
+                ? (($d['continuedToWoId'] ?? '') ?: null)
+                : (($currentWorkOrder['continued_to_wo_id'] ?? '') ?: null);
+            $continuation = $resolveWorkOrderContinuations(
+                $pdo,
+                $actor,
+                (string)$id,
+                $continuedFromWoId,
+                $continuedToWoId,
+                ($d['continuedBranchId'] ?? $currentWorkOrder['continued_branch_id'] ?? '') ?: null,
+                (string)$customer['id'],
+                (string)$vehicle['id'],
+                $currentStatus
+            );
+            $continuationChanged = (string)($currentWorkOrder['continued_to_wo_id'] ?? '') !== (string)($continuation['toId'] ?? '');
+            $continuedAt = $continuation['toId'] === null ? null : ($continuationChanged ? date('Y-m-d H:i:s') : ($currentWorkOrder['continued_at'] ?? null));
+            $continuedBy = $continuation['toId'] === null ? null : ($continuationChanged ? ($actor['id'] ?? null) : ($currentWorkOrder['continued_by'] ?? null));
+            $continuedByName = $continuation['toId'] === null ? null : ($continuationChanged ? ($actor['name'] ?? 'System') : ($currentWorkOrder['continued_by_name'] ?? null));
+            $continuedBranchId = $continuation['toBranchId'];
             $stmt = $pdo->prepare("
                 UPDATE work_orders SET
                     wo_number=?, date=?, transaction_time=?, backdate_reason=?,
@@ -530,7 +782,8 @@ switch ($method) {
                     invoice_id=?, invoice_number=?,
                     continued_from_wo_id=?, continued_from_wo_number=?, continued_from_branch_name=?,
                     continued_to_wo_id=?, continued_to_wo_number=?, continued_to_branch_name=?,
-                    continued_at=?, continued_by=?, continued_by_name=?, continued_branch_id=?
+                    continued_at=?, continued_by=?, continued_by_name=?, continued_branch_id=?,
+                    updated_at=CURRENT_TIMESTAMP(6)
                 WHERE id=?
             ");
             $stmt->execute([
@@ -541,7 +794,7 @@ switch ($method) {
                 $contacts['driverContactId'], $contacts['driverName'], $contacts['driverPhone'],
                 $contacts['approvalContactId'], $contacts['approvalContactName'], $contacts['approvalContactPhone'],
                 $contacts['billingContactId'], $contacts['billingContactName'], $contacts['billingContactPhone'],
-                $d['description'] ?? '', $d['findings'] ?? null,
+                $complaint, $d['findings'] ?? null,
                 $d['diagnosisTemperature'] ?? null, $d['diagnosisLp'] ?? null, $d['diagnosisHp'] ?? null,
                 $d['finalTemperature'] ?? null, $d['finalLp'] ?? null, $d['finalHp'] ?? null,
                 $normalizedServices['total'], $estimateTotal, $approvedAt, $approvedServicesJson,
@@ -550,15 +803,41 @@ switch ($method) {
                 $d['cancelReason'] ?? null,
                 json_encode($statusLog),
                 $d['notes'] ?? '', $currentWorkOrder['branch_id'],
-                ($d['technicianId'] ?? '') ?: null, ($d['technicianName'] ?? '') ?: null,
+                $technicianId ?: null, ($d['technicianName'] ?? '') ?: null,
                 $currentWorkOrder['invoice_id'], $currentWorkOrder['invoice_number'],
-                $d['continuedFromWoId'] ?? null, $d['continuedFromWoNumber'] ?? null, $d['continuedFromBranchName'] ?? null,
-                $continuedToWoId, $d['continuedToWoNumber'] ?? null, $d['continuedToBranchName'] ?? null,
+                $continuation['fromId'], $continuation['fromNumber'], $continuation['fromBranchName'],
+                $continuation['toId'], $continuation['toNumber'], $continuation['toBranchName'],
                 $continuedAt, $continuedBy, $continuedByName, $continuedBranchId,
                 $id
             ]);
+
+            // Jaga relasi lanjutan dua arah dalam transaksi yang sama. Kondisi pada
+            // relasi lama mencegah WO lain ikut berubah bila data historis tidak konsisten.
+            $oldFromWoId = trim((string)($currentWorkOrder['continued_from_wo_id'] ?? '')) ?: null;
+            $oldToWoId = trim((string)($currentWorkOrder['continued_to_wo_id'] ?? '')) ?: null;
+            if ($oldFromWoId !== null && $oldFromWoId !== $continuation['fromId']) {
+                $pdo->prepare("UPDATE work_orders SET continued_to_wo_id=NULL,continued_to_wo_number=NULL,continued_to_branch_name=NULL,continued_at=NULL,continued_by=NULL,continued_by_name=NULL,continued_branch_id=NULL,updated_at=CURRENT_TIMESTAMP(6) WHERE id=? AND continued_to_wo_id=?")
+                    ->execute([$oldFromWoId, $id]);
+            }
+            if ($oldToWoId !== null && $oldToWoId !== $continuation['toId']) {
+                $pdo->prepare("UPDATE work_orders SET continued_from_wo_id=NULL,continued_from_wo_number=NULL,continued_from_branch_name=NULL,updated_at=CURRENT_TIMESTAMP(6) WHERE id=? AND continued_from_wo_id=?")
+                    ->execute([$oldToWoId, $id]);
+            }
+            $currentBranchStmt = $pdo->prepare('SELECT name FROM branches WHERE id=? LIMIT 1');
+            $currentBranchStmt->execute([(string)$currentWorkOrder['branch_id']]);
+            $currentBranchName = (string)($currentBranchStmt->fetchColumn() ?: '');
+            if ($continuation['fromId'] !== null && $continuation['fromNeedsSync']) {
+                $sourceLinkStmt = $pdo->prepare("UPDATE work_orders SET continued_to_wo_id=?,continued_to_wo_number=?,continued_to_branch_name=?,continued_at=CURRENT_TIMESTAMP(6),continued_by=?,continued_by_name=?,continued_branch_id=?,updated_at=CURRENT_TIMESTAMP(6) WHERE id=?");
+                $sourceLinkStmt->execute([$id, $currentWorkOrder['wo_number'], $currentBranchName, $actor['id'] ?? null, $actor['name'] ?? 'System', $currentWorkOrder['branch_id'], $continuation['fromId']]);
+                if ($sourceLinkStmt->rowCount() !== 1) throw new DomainException('Relasi WO asal gagal diperbarui. Muat ulang data lalu coba lagi.');
+            }
+            if ($continuation['toId'] !== null && $continuation['toNeedsSync']) {
+                $targetLinkStmt = $pdo->prepare("UPDATE work_orders SET continued_from_wo_id=?,continued_from_wo_number=?,continued_from_branch_name=?,updated_at=CURRENT_TIMESTAMP(6) WHERE id=?");
+                $targetLinkStmt->execute([$id, $currentWorkOrder['wo_number'], $currentBranchName, $continuation['toId']]);
+                if ($targetLinkStmt->rowCount() !== 1) throw new DomainException('Relasi WO tujuan gagal diperbarui. Muat ulang data lalu coba lagi.');
+            }
             $pdo->prepare("UPDATE work_orders SET complaint_comment=? WHERE id=?")->execute([($d['complaintComment'] ?? '') ?: null, $id]);
-            $technicianAssignment = $syncWorkOrderTechnicians($pdo, $id, (string)$currentWorkOrder['branch_id'], ($d['technicianId'] ?? '') ?: null, is_array($d['assistantTechnicianIds'] ?? null) ? $d['assistantTechnicianIds'] : []);
+            $technicianAssignment = $syncWorkOrderTechnicians($pdo, $id, (string)$currentWorkOrder['branch_id'], $technicianId ?: null, is_array($d['assistantTechnicianIds'] ?? null) ? $d['assistantTechnicianIds'] : []);
             $pdo->prepare("UPDATE work_orders SET technician_name=? WHERE id=?")->execute([$technicianAssignment['primaryName'] ?: null, $id]);
 
             $pdo->prepare("DELETE FROM work_order_services WHERE wo_id = ?")->execute([$id]);
@@ -568,14 +847,21 @@ switch ($method) {
                     $sStmt->execute([$id, $s['itemId'], $s['code'], $s['name'], $s['description'], $s['price'], $s['qty'], $s['subtotal']]);
                 }
             }
+            $versionStmt = $pdo->prepare('SELECT updated_at FROM work_orders WHERE id=?');
+            $versionStmt->execute([$id]);
+            $updatedVersion = $formatWorkOrderVersion($versionStmt->fetchColumn());
             $pdo->commit();
-            respondSuccess(null, 'WO diupdate');
+            respondSuccess(['updatedAt' => $updatedVersion], 'WO diupdate');
+        } catch (WorkOrderVersionConflictException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            respondError($e->getMessage(), 409);
         } catch (InvalidArgumentException | DomainException $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) $pdo->rollBack();
             respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            respondError('Gagal update WO', 500, $e->getMessage());
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $reference = $logWorkOrderFailure('update', $e);
+            respondError('Gagal update WO. Referensi: ' . $reference, 500);
         }
         break;
 
@@ -590,6 +876,7 @@ switch ($method) {
             $woStmt->execute([$id]);
             $wo = $woStmt->fetch();
             if (!$wo) throw new InvalidArgumentException('WO tidak ditemukan.');
+            assertActiveBranch($pdo, (string)$wo['branch_id']);
             requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), (string)$wo['branch_id']);
 
             // Jangan hanya mengandalkan work_orders.invoice_id. Data lama mungkin
@@ -652,6 +939,7 @@ switch ($method) {
             ")->execute([$id]);
 
             $pdo->prepare("DELETE FROM work_order_services WHERE wo_id=?")->execute([$id]);
+            $pdo->prepare("DELETE FROM work_order_technicians WHERE wo_id=?")->execute([$id]);
             $pdo->prepare("DELETE FROM work_orders WHERE id=?")->execute([$id]);
             $pdo->commit();
             respondSuccess(null, 'WO dihapus');
@@ -660,7 +948,8 @@ switch ($method) {
             respondError($e->getMessage(), 422);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError('Gagal menghapus WO: ' . $e->getMessage(), 500);
+            $reference = $logWorkOrderFailure('delete', $e);
+            respondError('Gagal menghapus WO. Referensi: ' . $reference, 500);
         }
         break;
 

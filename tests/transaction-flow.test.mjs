@@ -650,8 +650,8 @@ test('Teknisi dapat menyimpan layanan dan melanjutkan Register menjadi Dikerjaka
   assert.match(workOrders, /currentUserIsTechnician \? currentUser\?\.id \|\| '' : ''/);
   assert.match(context, /nextStatus === 'Proses' && !wo\.technicianId && currentUserIsTechnician/);
   assert.match(workOrders, /const latest = data\.workOrders\.find\(\(workOrder\) => workOrder\.id === detailWO\.id\)/);
-  assert.match(workOrders, /onClick=\{\(\) => requestStatusChange\(detailWO, 'Proses'\)\}/);
-  assert.match(workOrders, /editingWO\.services\.length > 0 && editingWO\.total > 0/);
+  assert.match(workOrders, /onClick=\{\(\) => requestStartProcessing\(detailWO\)\}/);
+  assert.match(workOrders, /formData\.services\.length > 0 && totalServices > 0/);
   assert.match(workOrders, /diagnosisSubmitAction\.current = 'process'/);
   assert.match(workOrders, />\s*Dikerjakan\s*<\/button>/);
 });
@@ -880,7 +880,9 @@ test('seluruh notifikasi dan konfirmasi WO memakai modal Accurate, bukan dialog 
   assert.match(page, /const showAccurateNotice = \(message: string/);
   assert.match(page, /const askAccurateConfirmation = \(options:/);
   assert.match(page, /const askAccurateText = \(options:/);
-  assert.match(page, /title: 'Tutup Data Baru',[\s\S]*?confirmLabel: 'Tutup',[\s\S]*?cancelLabel: 'Batal'/);
+  assert.match(page, /const requestCloseEditor = async \(\): Promise<boolean> =>/);
+  assert.match(page, /title: editingWO \? `Tutup \$\{editingWO\.woNumber\}` : 'Tutup Data Baru'/);
+  assert.match(page, /message: editingWO[\s\S]*?: 'Data yang belum disimpan akan hilang\. Tutup Data Baru sekarang\?',[\s\S]*?confirmLabel: 'Tutup',[\s\S]*?cancelLabel: 'Batal'/);
   assert.match(page, /setDeleteDialogWO\(wo\)/);
   assert.match(page, /const confirmDeleteWorkOrder = async \(\) =>/);
   assert.match(page, /title="Konfirmasi Penghapusan"[\s\S]*?confirmLabel="Hapus"[\s\S]*?cancelLabel="Batal"/);

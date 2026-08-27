@@ -33,7 +33,7 @@ interface AppContextType {
   updateInvoice: (id: string, invoice: SalesInvoice) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
   addWorkOrder: (wo: WorkOrder) => Promise<WorkOrder>;
-  updateWorkOrder: (id: string, wo: WorkOrder) => Promise<void>;
+  updateWorkOrder: (id: string, wo: WorkOrder) => Promise<WorkOrder>;
   deleteWorkOrder: (id: string) => Promise<void>;
   continueWorkOrder: (
     sourceWoId: string,
@@ -43,7 +43,7 @@ interface AppContextType {
   /** Cari WO aktif (Register/Proses dan belum dilanjutkan) untuk plat nomor tertentu. */
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
-  changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string }>;
+  changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder }>;
   createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string) => Promise<SalesInvoice | null>;
   addItem: (item: Item & { autoCode?: boolean; provisional?: boolean }) => Promise<Item>;
   updateItem: (id: string, item: Item) => Promise<void>;
@@ -538,6 +538,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...createdWorkOrder,
       id: result.data?.id || createdWorkOrder.id,
       woNumber: result.data?.woNumber || createdWorkOrder.woNumber,
+      updatedAt: result.data?.updatedAt || createdWorkOrder.updatedAt,
       status: 'Register',
     };
     // Aktifkan WO yang baru diregister seketika. Jangan menahan editor sampai
@@ -552,11 +553,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void refreshData();
     return savedWorkOrder;
   };
-  const updateWorkOrder = async (id: string, wo: WorkOrder) => {
-    await executeCRUD(
-      () => api.update('work-orders', id, wo),
-      () => setData(prev => ({ ...prev, workOrders: prev.workOrders.map(x => x.id === id ? wo : x) }))
-    );
+  const updateWorkOrder = async (id: string, wo: WorkOrder): Promise<WorkOrder> => {
+    if (isDemoMode) {
+      setData(prev => ({ ...prev, workOrders: prev.workOrders.map(x => x.id === id ? wo : x) }));
+      return wo;
+    }
+    const result = await api.update('work-orders', id, wo);
+    if (!result?.success) {
+      const serverMessage = result?.message || result?.error || 'WO gagal diperbarui';
+      const isVersionConflict = /\b409\b|konflik|conflict|versi.*(?:berubah|usang)|data\s+WO.*berubah|muat\s+ulang/i.test(serverMessage);
+      if (isVersionConflict) {
+        await refreshData();
+        throw new Error('Data WO telah berubah di perangkat lain. Data terbaru sudah dimuat; buka kembali WO lalu ulangi perubahan.');
+      }
+      throw new Error(serverMessage);
+    }
+    const savedWorkOrder: WorkOrder = {
+      ...wo,
+      updatedAt: result.data?.updatedAt || wo.updatedAt,
+    };
+    setData(prev => ({
+      ...prev,
+      workOrders: prev.workOrders.map(item => item.id === id ? savedWorkOrder : item),
+    }));
+    void refreshData();
+    return savedWorkOrder;
   };
   const deleteWorkOrder = async (id: string) => {
     await executeCRUD(
@@ -594,7 +615,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     woId: string,
     nextStatus: WOStatus,
     reason?: string
-  ): Promise<{ ok: boolean; message?: string }> => {
+  ): Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder }> => {
     const wo = data.workOrders.find(w => w.id === woId);
     if (!wo) return { ok: false, message: 'WO tidak ditemukan.' };
 
@@ -634,11 +655,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const now = new Date().toISOString();
-    const normalizedRoleName = (currentUser?.roleName || '').trim().toLowerCase();
     const currentRole = data.roles.find(role => role.id === currentUser?.roleId);
-    const currentUserIsTechnician = currentRole?.code?.toUpperCase() === 'TKN'
+    const normalizedRoleName = (currentRole?.name || currentUser?.roleName || '').trim().toLowerCase();
+    const currentUserIsTechnician = currentRole?.code?.trim().toUpperCase() === 'TKN'
       || normalizedRoleName.includes('teknisi')
       || normalizedRoleName.includes('technician');
+    if (nextStatus === 'Proses' && !wo.technicianId && !currentUserIsTechnician) {
+      return { ok: false, message: 'Pilih teknisi sebelum WO mulai dikerjakan.' };
+    }
     const log = [
       ...(wo.statusLog || []),
       {
@@ -673,8 +697,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : wo.technicianName,
     };
 
-    await updateWorkOrder(woId, patch);
-    return { ok: true };
+    const savedWorkOrder = await updateWorkOrder(woId, patch);
+    return { ok: true, workOrder: savedWorkOrder };
   };
 
   const continueWorkOrder = async (
@@ -684,9 +708,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   ): Promise<WorkOrder | null> => {
     const src = data.workOrders.find(w => w.id === sourceWoId);
     if (!src) return null;
+    if (!targetBranchId || targetBranchId === 'ALL') {
+      throw new Error('Pilih cabang tujuan secara eksplisit sebelum membuat WO lanjutan.');
+    }
     const srcBranch = data.branches.find(b => b.id === src.branchId);
-    const tgtBranch = data.branches.find(b => b.id === targetBranchId);
-    if (!tgtBranch) return null;
+    const tgtBranch = data.branches.find(b => b.id === targetBranchId && b.isActive);
+    if (!tgtBranch) throw new Error('Cabang tujuan tidak aktif atau tidak ditemukan.');
+    const assignedBranchIds = new Set([
+      currentUser?.branchId,
+      ...(currentUser?.branchIds || []),
+    ].filter((branchId): branchId is string => Boolean(branchId && branchId !== 'ALL')));
+    if (!currentUser?.isOwner && !hasPermission('all_branches') && !assignedBranchIds.has(targetBranchId)) {
+      throw new Error('Anda tidak memiliki akses ke cabang tujuan.');
+    }
 
     const today = localDateKey();
     const newWoNumber = generateDocumentNumber('workOrder', targetBranchId);
@@ -738,17 +772,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     const createdWorkOrder = await addWorkOrder(newWo);
-    await updateWorkOrder(src.id, {
-      ...src,
-      continuedToWoId: createdWorkOrder.id,
-      continuedToWoNumber: createdWorkOrder.woNumber,
-      continuedToBranchName: tgtBranch.name,
-      continuedAt: new Date().toISOString(),
-      continuedBy: currentUser?.id,
-      continuedByName: currentUser?.name,
-      continuedBranchId: targetBranchId,
-      notes: `${src.notes || ''}\n[${today}] Dilanjutkan di ${createdWorkOrder.woNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
-    });
+    if (isDemoMode) {
+      const continuedAt = new Date().toISOString();
+      setData(previous => ({
+        ...previous,
+        workOrders: previous.workOrders.map(workOrder => workOrder.id === src.id ? {
+          ...workOrder,
+          continuedToWoId: createdWorkOrder.id,
+          continuedToWoNumber: createdWorkOrder.woNumber,
+          continuedToBranchName: tgtBranch.name,
+          continuedAt,
+          continuedBy: currentUser?.id,
+          continuedByName: currentUser?.name,
+          continuedBranchId: targetBranchId,
+          notes: `${workOrder.notes || ''}\n[${today}] Dilanjutkan di ${createdWorkOrder.woNumber} (${tgtBranch.name}) oleh ${currentUser?.name || 'System'}`.trim(),
+        } : workOrder),
+      }));
+    } else {
+      // Backend membuat WO lanjutan dan mengikat WO asal dalam satu transaksi.
+      // Jangan PUT ulang snapshot `src` karena dapat menimpa perubahan terbaru.
+      await refreshData();
+    }
 
     return createdWorkOrder;
   };

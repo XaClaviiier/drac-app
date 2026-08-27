@@ -7,8 +7,20 @@ require_once 'config.php';
 require_once 'helpers.php';
 // Seluruh audit operasional memakai WITA. Berkas router ini ikut deployment,
 // sedangkan config.php sengaja tidak ditimpa agar kredensial hosting tetap aman.
-$pdo->exec("SET time_zone = '+08:00'");
-ensureApiSupportTables($pdo);
+try {
+    $pdo->exec("SET time_zone = '+08:00'");
+    ensureApiSupportTablesVersioned($pdo, 'api_support_20260827_wo_safety_v2');
+} catch (Throwable $e) {
+    $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
+    error_log(sprintf(
+        '[API bootstrap %s] %s in %s:%d',
+        $errorReference,
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine()
+    ));
+    respondError('Server belum siap. Referensi: ' . $errorReference, 500);
+}
 
 $route = $_GET['route'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
@@ -22,6 +34,7 @@ $action = $parts[2] ?? null;
 // Login adalah satu-satunya endpoint publik. Semua data bisnis harus melalui
 // sesi server yang aktif; pemeriksaan di endpoint tetap dipertahankan sebagai
 // lapisan tambahan untuk aturan yang lebih spesifik.
+try {
 $requestUser = null;
 if ($resource !== 'login') {
     $requestUser = requireAuthenticatedUser($pdo);
@@ -99,7 +112,6 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
 // ==========================================================
 // ROUTING
 // ==========================================================
-try {
     switch ($resource) {
         // ----- AUTH -----
         case 'login':
@@ -285,5 +297,13 @@ try {
             respondError('Endpoint not found: ' . $resource, 404);
     }
 } catch (Throwable $e) {
-    respondError('Server error', 500, $e->getMessage());
+    $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
+    error_log(sprintf(
+        'API request failed [%s] %s in %s:%d',
+        $errorReference,
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine()
+    ));
+    respondError('Server error. Referensi: ' . $errorReference, 500);
 }
