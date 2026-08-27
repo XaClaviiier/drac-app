@@ -20,6 +20,7 @@ import { ConfigurableTableHeaderCell, useConfigurableTable } from '../components
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
+import { timelineStageFromReason } from '../lib/workOrderTimeline';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -39,6 +40,12 @@ const COMPLETION_NOTE_TEMPLATES = [
   'Pekerjaan selesai dan sudah diuji bersama pelanggan.',
   'Pekerjaan selesai, pelanggan menyetujui hasil pengerjaan.',
 ];
+const OPERATIONAL_TIMELINE_STAGES = {
+  diagnosis: { title: 'Diagnosa', tone: 'bg-orange-500' },
+  approval: { title: 'Tunggu Persetujuan', tone: 'bg-amber-500' },
+  parts: { title: 'Tunggu Parts', tone: 'bg-violet-600' },
+  working: { title: 'Dikerjakan', tone: 'bg-blue-600' },
+} as const;
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
 const localTimeKey = (date = new Date()) =>
@@ -360,6 +367,7 @@ export default function WorkOrders() {
   });
   const [complaintTemplateDraft, setComplaintTemplateDraft] = useState<string[]>([]);
   const [documentTab, setDocumentTab] = useState<AccurateDocumentTab>(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
+  const [infoMobilePane, setInfoMobilePane] = useState<'notes' | 'timeline'>('notes');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [openActionRailMenu, setOpenActionRailMenu] = useState<'print' | 'more' | ''>('');
   const [mobileProcessMenuOpen, setMobileProcessMenuOpen] = useState(false);
@@ -834,6 +842,20 @@ export default function WorkOrders() {
   const selectedCustomerPeople = data.customerPeople.filter(person => person.customerId === formData.customerRefId && person.isActive);
   const customerVehicleReady = Boolean(formData.customerRefId && formData.vehicleRefId);
   const customerVehicleLocked = Boolean(isAutoRegistering || (editingWO && !customerVehicleCorrectionUnlocked));
+  const infoBranchId = editingWO?.branchId || resolveBranchId();
+  const eligibleTechnicians = data.users
+    .filter(user => user.isActive && !user.isOwner && isTechnicianIdentity(user.roleId, user.roleName)
+      && (user.branchIds?.includes(infoBranchId) || user.branchId === infoBranchId))
+    .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
+  const assignedAssistantTechnicians = formData.assistantTechnicianIds.map((id, index) => ({
+    id,
+    name: eligibleTechnicians.find(user => user.id === id)?.name || formData.assistantTechnicianNames[index] || id,
+  }));
+  const infoPanelInvoiceLocked = Boolean(
+    editingWO?.invoiceId
+    || (editingWO && financialTimeline.woId === editingWO.id && financialTimeline.invoice),
+  );
+  const infoPanelLocked = workOrderViewOnly || infoPanelInvoiceLocked;
 
   const selectVisitContact = (personId: string) => {
     const person = selectedCustomerPeople.find(item => item.id === personId);
@@ -1199,12 +1221,14 @@ export default function WorkOrders() {
     setCustomerVehicleCorrectionUnlocked(false);
     setCustomerVehicleCorrectionReason('');
     setDocumentTab(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
+    setInfoMobilePane('notes');
     setSelectedServiceId('');
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false, viewOnly = false) => {
     setShowQuickServices(false);
     setDocumentTab(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
+    setInfoMobilePane('notes');
     setMobileProcessMenuOpen(false);
     const editAllowed = !wo || canEditWorkOrderInActiveBranch(wo);
     const effectiveViewOnly = Boolean(wo && (viewOnly || !editAllowed));
@@ -1365,7 +1389,9 @@ export default function WorkOrders() {
     if (!editingWO) {
       return Boolean(
         formData.customerRefId || formData.vehicleRefId || formData.description ||
-        formData.notes || formData.findings || formData.services.length > 0
+        formData.complaintComment || formData.notes || formData.findings ||
+        formData.technicianId || formData.assistantTechnicianIds.length > 0 ||
+        formData.services.length > 0
       );
     }
     return workOrderEditorFingerprint(formData) !== editorBaselineFingerprint.current
@@ -1984,7 +2010,7 @@ export default function WorkOrders() {
     if (!requireEditableWorkOrder(wo)) return;
     setWorkResultEditor(wo);
     setWorkComplaintText(wo.description || '');
-    setWorkResultText(wo.findings || wo.notes || '');
+    setWorkResultText(wo.findings || '');
   };
 
   const closeWorkResultEditor = () => {
@@ -2316,12 +2342,28 @@ export default function WorkOrders() {
       tone: 'bg-violet-600',
       continuation: true,
     });
-    (wo.statusLog || []).filter(log => log.from !== log.to).forEach(log => events.push({
-      at: log.at,
-      title: `${statusLabel(log.from)} → ${statusLabel(log.to)}`,
-      description: `Oleh ${log.byUserName || '-'}${log.reason ? ` · ${log.reason}` : ''}`,
-      tone: 'bg-amber-500',
-    }));
+    (wo.statusLog || []).forEach(log => {
+      const operationalStage = timelineStageFromReason(log.reason || '');
+      if (operationalStage) {
+        const stage = OPERATIONAL_TIMELINE_STAGES[operationalStage];
+        const note = (log.reason || '').replace(/\[WO_TIMELINE_STAGE:(?:diagnosis|approval|parts|working)\]/i, '').trim();
+        const isInitialDiagnosis = operationalStage === 'diagnosis' && /^WO diregister\.?$/i.test(note);
+        events.push({
+          at: log.at,
+          title: isInitialDiagnosis ? 'Diagnosa dimulai' : stage.title,
+          description: `Oleh ${log.byUserName || '-'}${!isInitialDiagnosis && note ? ` · ${note}` : ''}`,
+          tone: stage.tone,
+        });
+        return;
+      }
+      if (log.from === log.to) return;
+      events.push({
+        at: log.at,
+        title: `${statusLabel(log.from)} → ${statusLabel(log.to)}`,
+        description: `Oleh ${log.byUserName || '-'}${log.reason ? ` · ${log.reason}` : ''}`,
+        tone: 'bg-amber-500',
+      });
+    });
     const finance = financialTimeline.woId === wo.id ? financialTimeline : EMPTY_FINANCIAL_TIMELINE;
     if (finance.invoice) {
       const invoice = finance.invoice;
@@ -2340,7 +2382,7 @@ export default function WorkOrders() {
       events.push({
         at: invoiceAuditAt,
         title: `Faktur ${invoice.invoiceNumber} dibuat`,
-        description: `Tanggal faktur ${formatBusinessDate(invoice.date)} · Total Rp ${Number(invoice.total).toLocaleString('id-ID')} · ${invoice.status}`,
+        description: `Tanggal faktur ${formatBusinessDate(invoice.date)} · Total Rp ${Number(invoice.total).toLocaleString('id-ID')}`,
         tone: 'bg-emerald-600',
       });
       finance.payments.forEach(payment => events.push({
@@ -4330,81 +4372,123 @@ export default function WorkOrders() {
               </div>}
 
               {documentTab === 'info' && (
-                <div className="grid gap-4 p-4 text-sm lg:grid-cols-2">
-                  <section className="space-y-3">
-                    <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Teknisi yang mengerjakan</h4>
-                    <label className="grid items-center gap-1 sm:grid-cols-[145px_minmax(0,1fr)]">
-                      <span className="font-medium text-gray-700">Teknisi Utama <span className="text-red-500">*</span></span>
-                      <select value={formData.technicianId} onChange={(event) => {
-                        const technician = data.users.find(user => user.id === event.target.value);
-                        setFormData(previous => ({
-                          ...previous,
-                          technicianId: event.target.value,
-                          technicianName: technician?.name || '',
-                          assistantTechnicianIds: previous.assistantTechnicianIds.filter(id => id !== event.target.value),
-                          assistantTechnicianNames: previous.assistantTechnicianNames.filter(name => name !== technician?.name),
-                        }));
-                      }} className="h-9 w-full border border-gray-500 bg-white px-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
-                        <option value="">Pilih teknisi utama</option>
-                        {data.users.filter(user => user.isActive && !user.isOwner && isTechnicianIdentity(user.roleId, user.roleName) && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => (
-                          <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="grid gap-1 sm:grid-cols-[145px_minmax(0,1fr)]">
-                      <span className="font-medium text-gray-700">Teknisi Pendamping</span>
-                      <details data-wo-action-menu onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown} className="relative">
-                        <summary className="flex h-9 cursor-pointer list-none items-center justify-between border border-gray-500 bg-white px-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
-                          <span className={`truncate ${formData.assistantTechnicianNames.length ? 'text-gray-900' : 'text-gray-400'}`}>{formData.assistantTechnicianNames.length ? formData.assistantTechnicianNames.join(', ') : 'Pilih teknisi pendamping'}</span>
-                          <span className="ml-2 text-xs text-gray-500">▼</span>
-                        </summary>
-                        <div className="absolute left-0 right-0 z-40 mt-1 max-h-44 overflow-y-auto border border-gray-400 bg-white py-1 shadow-lg">
-                          {data.users.filter(user => user.isActive && !user.isOwner && isTechnicianIdentity(user.roleId, user.roleName) && user.id !== formData.technicianId && (user.branchIds?.includes(editingWO?.branchId || resolveBranchId()) || user.branchId === (editingWO?.branchId || resolveBranchId()))).map(user => {
-                            const checked = formData.assistantTechnicianIds.includes(user.id);
-                            return <label key={user.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-blue-50">
-                              <input type="checkbox" checked={checked} onChange={() => setFormData(previous => {
-                                const nextIds = checked ? previous.assistantTechnicianIds.filter(id => id !== user.id) : [...previous.assistantTechnicianIds, user.id];
-                                const nextNames = checked ? previous.assistantTechnicianNames.filter(name => name !== user.name) : [...previous.assistantTechnicianNames, user.name];
-                                return { ...previous, assistantTechnicianIds: nextIds, assistantTechnicianNames: nextNames };
-                              })} />
-                              <span className="truncate">{user.name}</span>
-                            </label>;
-                          })}
-                        </div>
-                      </details>
+                <div data-wo-info-panel className="grid items-start gap-3 p-3 text-sm lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,.8fr)] lg:p-4">
+                  <header className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 lg:col-span-2">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Work Order</p>
+                      <p className="truncate font-mono text-sm font-bold text-slate-900">{editingWO?.woNumber || 'Nomor dibuat saat Register'}</p>
                     </div>
-                    <p className="border-t border-gray-200 pt-2 text-xs text-gray-500">No. WO: <strong>{editingWO?.woNumber || 'Otomatis saat Register'}</strong> · Cabang: <strong>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || '-'}</strong></p>
-                    <h4 className="border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keluhan dan hasil kerja</h4>
-                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Keluhan Asli</span><div className="min-h-9 border border-gray-300 bg-gray-100 px-3 py-2 text-gray-700">{formData.description || '-'}</div></label>
-                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Komentar / Diagnosis Keluhan</span><textarea value={formData.complaintComment} onChange={event => setFormData(previous => ({ ...previous, complaintComment: event.target.value }))} rows={2} placeholder="Hasil pemeriksaan atas keluhan pelanggan..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
-                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Hasil Kerja</span><textarea value={formData.findings} onChange={event => setFormData(previous => ({ ...previous, findings: event.target.value }))} rows={2} placeholder="Pekerjaan yang dilakukan dan hasil pengujian akhir..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
-                    <label className="block"><span className="mb-1 block font-medium text-gray-700">Keterangan Internal</span><textarea value={formData.notes} onChange={event => setFormData(previous => ({ ...previous, notes: event.target.value }))} rows={1} placeholder="Keterangan internal (opsional)..." className="w-full resize-none border border-gray-500 px-3 py-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" /></label>
-                  </section>
-                  <section className="flex min-h-[420px] flex-col border-gray-300 lg:border-l lg:pl-4">
-                    <div className="mb-3 flex items-center gap-2 border-b border-gray-300 pb-2">
-                      <Clock3 className="h-4 w-4 text-blue-600" />
-                      <h4 className="text-base font-medium text-blue-600">Timeline WO</h4>
-                      {financialTimelineLoading && <span className="ml-auto text-xs text-gray-400">Memuat transaksi…</span>}
+                    <div className="hidden h-8 w-px bg-slate-200 sm:block" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cabang</p>
+                      <p className="truncate font-semibold text-slate-700">{data.branches.find(branch => branch.id === infoBranchId)?.name || '-'}</p>
                     </div>
-                    {!editingWO ? (
-                      <div className="flex flex-1 items-center justify-center border border-dashed border-gray-300 bg-gray-50 px-3 py-8 text-center text-sm text-gray-500">Timeline tersedia setelah WO diregister.</div>
-                    ) : (
-                      <div className="relative ml-2 flex-1 overflow-y-auto border-l-2 border-gray-200 pl-5 pr-2">
-                        {workOrderAuditTimeline(editingWO).map((event, index) => (
-                          <div key={`${event.at}-${event.title}-${index}`} className="relative pb-5 last:pb-0">
-                            <span className={`absolute -left-[26px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${event.tone}`} />
-                            <div className="flex items-start gap-2">
-                              {event.continuation && <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />}
-                              <div className="min-w-0">
-                                <p className="font-semibold text-gray-900">{event.title}</p>
-                                <p className="text-xs leading-5 text-gray-600">{event.description}</p>
-                                <p className="text-[11px] text-gray-400">{formatAuditTime(event.at)}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">{editingWO ? statusLabel(editingWO.status) : 'Draft'}</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600">{(formData.technicianId ? 1 : 0) + formData.assistantTechnicianIds.length} teknisi</span>
+                    {infoPanelLocked && <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700"><LockKeyhole className="h-3 w-3" />{infoPanelInvoiceLocked ? 'Terkunci setelah faktur' : 'Mode lihat'}</span>}
+                  </header>
+
+                  <div className="grid grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1 lg:hidden">
+                    <button type="button" onClick={() => setInfoMobilePane('notes')} aria-pressed={infoMobilePane === 'notes'} className={`h-11 rounded-md text-xs font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 ${infoMobilePane === 'notes' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Catatan</button>
+                    <button type="button" onClick={() => setInfoMobilePane('timeline')} aria-pressed={infoMobilePane === 'timeline'} className={`h-11 rounded-md text-xs font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 ${infoMobilePane === 'timeline' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Riwayat</button>
+                  </div>
+
+                  <div className={`min-w-0 space-y-3 ${infoMobilePane === 'timeline' ? 'hidden lg:block' : ''}`}>
+                    <section data-wo-technician-panel className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                      <div className="mb-3 flex items-start gap-2 border-b border-slate-200 pb-2.5">
+                        <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-blue-50 text-blue-700"><Wrench className="h-4 w-4" /></span>
+                        <div className="min-w-0"><h4 className="font-bold text-slate-900">Teknisi yang mengerjakan</h4><p className="text-xs text-slate-500">Teknisi utama wajib dipilih sebelum pekerjaan dimulai.</p></div>
                       </div>
-                    )}
+                      <div className="space-y-3">
+                        <label className="grid items-center gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)]">
+                          <span className="font-semibold text-slate-700">Teknisi Utama <span className="text-red-500">*</span></span>
+                          <select disabled={infoPanelLocked} value={formData.technicianId} onChange={(event) => {
+                            const technician = eligibleTechnicians.find(user => user.id === event.target.value);
+                            setFormData(previous => {
+                              const nextAssistantIds = previous.assistantTechnicianIds.filter(id => id !== event.target.value);
+                              return {
+                                ...previous,
+                                technicianId: event.target.value,
+                                technicianName: technician?.name || '',
+                                assistantTechnicianIds: nextAssistantIds,
+                                assistantTechnicianNames: nextAssistantIds.map(id => eligibleTechnicians.find(user => user.id === id)?.name || previous.assistantTechnicianNames[previous.assistantTechnicianIds.indexOf(id)] || id),
+                              };
+                            });
+                          }} className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 sm:h-10">
+                            <option value="">Pilih teknisi utama</option>
+                            {formData.technicianId && !eligibleTechnicians.some(user => user.id === formData.technicianId) && <option value={formData.technicianId}>{formData.technicianName || formData.technicianId} · Penugasan lama</option>}
+                            {eligibleTechnicians.map(user => <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>)}
+                          </select>
+                        </label>
+                        <div className="grid gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)]">
+                          <span className="font-semibold text-slate-700 sm:pt-2.5">Teknisi Pendamping</span>
+                          <div className="min-w-0">
+                            <details data-wo-action-menu onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown} className={`relative ${infoPanelLocked ? 'pointer-events-none' : ''}`}>
+                              <summary aria-disabled={infoPanelLocked} tabIndex={infoPanelLocked ? -1 : 0} className={`flex h-11 cursor-pointer list-none items-center justify-between rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:h-10 ${infoPanelLocked ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}>
+                                <span className={`truncate ${assignedAssistantTechnicians.length ? 'text-slate-800' : 'text-slate-400'}`}>{assignedAssistantTechnicians.length === 0 ? 'Pilih teknisi pendamping' : assignedAssistantTechnicians.length === 1 ? assignedAssistantTechnicians[0].name : `${assignedAssistantTechnicians.length} teknisi dipilih`}</span>
+                                <span className="ml-2 text-xs text-slate-500">▼</span>
+                              </summary>
+                              <div className="absolute left-0 right-0 z-40 mt-1 max-h-52 overflow-y-auto rounded-lg border border-slate-300 bg-white py-1 shadow-xl">
+                                {eligibleTechnicians.filter(user => user.id !== formData.technicianId).map(user => {
+                                  const checked = formData.assistantTechnicianIds.includes(user.id);
+                                  return <label key={user.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-blue-50">
+                                    <input type="checkbox" checked={checked} onChange={() => setFormData(previous => {
+                                      const nextIds = checked ? previous.assistantTechnicianIds.filter(id => id !== user.id) : [...previous.assistantTechnicianIds, user.id];
+                                      return { ...previous, assistantTechnicianIds: nextIds, assistantTechnicianNames: nextIds.map(id => eligibleTechnicians.find(candidate => candidate.id === id)?.name || previous.assistantTechnicianNames[previous.assistantTechnicianIds.indexOf(id)] || id) };
+                                    })} />
+                                    <span className="truncate">{user.name}</span>
+                                  </label>;
+                                })}
+                                {eligibleTechnicians.filter(user => user.id !== formData.technicianId).length === 0 && <p className="px-3 py-2 text-xs text-slate-400">Tidak ada teknisi pendamping lain di cabang ini.</p>}
+                              </div>
+                            </details>
+                            {assignedAssistantTechnicians.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{assignedAssistantTechnicians.map(technician => <span key={technician.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700"><span className="truncate">{technician.name}</span>{!infoPanelLocked && <button type="button" onClick={() => setFormData(previous => {
+                              const nextIds = previous.assistantTechnicianIds.filter(id => id !== technician.id);
+                              return { ...previous, assistantTechnicianIds: nextIds, assistantTechnicianNames: nextIds.map(id => eligibleTechnicians.find(user => user.id === id)?.name || previous.assistantTechnicianNames[previous.assistantTechnicianIds.indexOf(id)] || id) };
+                            })} className="grid h-4 w-4 flex-none place-items-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${technician.name}`}><X className="h-3 w-3" /></button>}</span>)}</div>}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section data-wo-work-notes className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                      <div className="mb-3 flex items-start gap-2 border-b border-slate-200 pb-2.5"><span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-cyan-50 text-cyan-700"><ClipboardList className="h-4 w-4" /></span><div><h4 className="font-bold text-slate-900">Keluhan dan hasil kerja</h4><p className="text-xs text-slate-500">Pisahkan hasil pemeriksaan, pekerjaan aktual, dan catatan internal.</p></div></div>
+                      <div className="space-y-3">
+                        <div><span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Keluhan Asli</span><div className="min-h-10 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-medium text-slate-800">{formData.description || '-'}</div></div>
+                        <label className="block"><span className="mb-1 block font-semibold text-slate-700">Komentar / Diagnosis Keluhan</span><textarea disabled={infoPanelLocked} value={formData.complaintComment} onChange={event => setFormData(previous => ({ ...previous, complaintComment: event.target.value }))} rows={3} placeholder="Hasil pemeriksaan atas keluhan pelanggan..." className="min-h-[84px] w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" /><span className="mt-1 block text-[11px] text-slate-400">Catatan teknis pemeriksaan; keluhan asli tetap tersimpan.</span></label>
+                        <label className="block">
+                          <span className="mb-1 flex flex-wrap items-center justify-between gap-1"><span className="font-semibold text-slate-700">Hasil Kerja</span><span className="text-[10px] font-medium text-amber-700">Wajib jika tidak ada pengukuran lengkap</span></span>
+                          {!infoPanelLocked && !formData.findings.trim() && <span className="mb-2 flex flex-wrap gap-1.5">{COMPLETION_NOTE_TEMPLATES.map(template => <button key={template} type="button" onClick={() => setFormData(previous => ({ ...previous, findings: template }))} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">{template.replace(/\.$/, '')}</button>)}</span>}
+                          <textarea disabled={infoPanelLocked} value={formData.findings} onChange={event => setFormData(previous => ({ ...previous, findings: event.target.value }))} rows={3} placeholder="Pekerjaan yang dilakukan dan hasil pengujian akhir..." className="min-h-[84px] w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" />
+                        </label>
+                        <label className="block"><span className="mb-1 block font-semibold text-slate-700">Keterangan Internal <span className="font-normal text-slate-400">(opsional)</span></span><textarea disabled={infoPanelLocked} value={formData.notes} onChange={event => setFormData(previous => ({ ...previous, notes: event.target.value }))} rows={2} placeholder="Catatan internal untuk tim..." className="min-h-[64px] w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" /><span className="mt-1 block text-[11px] text-slate-400">Tidak tampil sebagai Hasil Kerja dan tidak dapat menggantikan bukti penyelesaian.</span></label>
+                      </div>
+                    </section>
+                  </div>
+
+                  <section data-wo-audit-panel className={`min-h-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:sticky lg:top-2 ${infoMobilePane === 'notes' ? 'hidden lg:block' : ''}`}>
+                    <div className="mb-3 flex items-center gap-2 border-b border-slate-200 pb-2.5">
+                      <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-blue-50 text-blue-700"><Clock3 className="h-4 w-4" /></span>
+                      <div><h4 className="font-bold text-slate-900">Timeline WO</h4><p className="text-xs text-slate-500">Riwayat status, operasional, faktur, dan pembayaran.</p></div>
+                      {financialTimelineLoading && <span className="ml-auto text-xs text-slate-400">Memuat…</span>}
+                    </div>
+                    {!editingWO ? <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-8 text-center text-sm text-slate-500">Timeline tersedia setelah WO diregister.</div> : (() => {
+                      const timelineEvents = workOrderAuditTimeline(editingWO);
+                      const latestEvent = timelineEvents[timelineEvents.length - 1];
+                      return <>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500"><strong className="text-slate-700">{timelineEvents.length} aktivitas</strong><span>Terakhir {latestEvent ? formatAuditTime(latestEvent.at) : '-'}</span></div>
+                        <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
+                          {timelineEvents.map((event, index) => <div key={`${event.at}-${event.title}-${index}`} className="relative pl-6">
+                            {index < timelineEvents.length - 1 && <span className="absolute bottom-[-10px] left-[5px] top-4 w-px bg-slate-200" />}
+                            <span className={`absolute left-0 top-3 h-2.5 w-2.5 rounded-full ring-4 ring-white ${event.tone}`} />
+                            <article className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-slate-300">
+                              <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-1.5">{event.continuation && <GitBranch className="mt-0.5 h-3.5 w-3.5 flex-none text-violet-600" />}<p className="font-bold text-slate-900">{event.title}</p></div><time className="flex-none whitespace-nowrap text-[10px] text-slate-400">{formatAuditTime(event.at)}</time></div>
+                              <p className="mt-0.5 text-xs leading-5 text-slate-600">{event.description}</p>
+                            </article>
+                          </div>)}
+                        </div>
+                      </>;
+                    })()}
                   </section>
                 </div>
               )}
@@ -4520,7 +4604,9 @@ export default function WorkOrders() {
                   data-wo-mobile-save
                   type="submit"
                   form="work-order-entry-form"
-                  disabled={workOrderViewOnly || (!editingWO ? isAutoRegistering : false)}
+                  disabled={infoPanelLocked
+                    || Boolean(editingWO && statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)
+                    || (!editingWO ? isAutoRegistering : false)}
                   onClick={() => {
                     diagnosisSubmitAction.current = 'save';
                   }}

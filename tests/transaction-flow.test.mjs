@@ -1077,9 +1077,10 @@ test('semua jalur buka WO memakai form Data Baru sebagai kanvas baku', () => {
   assert.match(page, />Pembayaran \/ Saldo<\/button>/);
 });
 
-test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger faktur', () => {
+test('Info lainnya WO memisahkan catatan dan audit, mengunci faktur, serta memakai ledger pembayaran', () => {
   const types = source('src/types/index.ts');
   const page = source('src/pages/WorkOrders.tsx');
+  const context = source('src/context/AppContext.tsx');
   const endpoint = source('api/endpoints/work-orders.php');
   const helpers = source('api/helpers.php');
   const allData = source('api/endpoints/all-data.php');
@@ -1089,10 +1090,18 @@ test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger fa
   assert.match(types, /assistantTechnicianIds\?: string\[\]/);
   assert.match(page, />Teknisi Utama/);
   assert.match(page, />Teknisi Pendamping/);
-  assert.match(page, /assistantTechnicianNames\.join\(', '\)/);
+  assert.match(page, /const assignedAssistantTechnicians = formData\.assistantTechnicianIds\.map/);
   assert.match(page, /Pilih teknisi pendamping/);
+  assert.match(page, /Penugasan lama/);
   assert.match(page, />Komentar \/ Diagnosis Keluhan/);
   assert.match(page, />Hasil Kerja/);
+  assert.match(page, /Tidak tampil sebagai Hasil Kerja dan tidak dapat menggantikan bukti penyelesaian/);
+  assert.match(page, /setWorkResultText\(wo\.findings \|\| ''\)/);
+  assert.doesNotMatch(page, /setWorkResultText\(wo\.findings \|\| wo\.notes/);
+  assert.match(context, /const hasCompletionNote = Boolean\(wo\.findings\?\.trim\(\)\)/);
+  assert.doesNotMatch(context, /hasCompletionNote[^;]*wo\.notes/);
+  assert.match(page, /formData\.complaintComment \|\| formData\.notes \|\| formData\.findings/);
+  assert.match(page, /formData\.technicianId \|\| formData\.assistantTechnicianIds\.length > 0/);
   assert.match(page, /documentTab === 'payment'/);
   assert.match(page, /documentTab === 'payment' \|\| documentTab === 'info'/);
   assert.match(page, /work-orders\/\$\{timelineTarget\.id\}\/timeline/);
@@ -1103,9 +1112,25 @@ test('Info lainnya WO menyimpan tim teknisi dan pembayaran tampil dari ledger fa
   assert.match(page, /\['Retur', 'Rp 0'/);
   assert.match(page, /aria-label="Faktur lunas"/);
   assert.match(page, />Timeline WO</);
-  assert.match(page, /workOrderAuditTimeline\(editingWO\)\.map/);
+  assert.match(page, /const timelineEvents = workOrderAuditTimeline\(editingWO\)/);
   assert.match(page, /Timeline tersedia setelah WO diregister/);
-  assert.match(page, /flex min-h-\[420px\] flex-col border-gray-300 lg:border-l lg:pl-4/);
+  assert.match(page, /data-wo-info-panel/);
+  assert.match(page, /data-wo-technician-panel/);
+  assert.match(page, /data-wo-work-notes/);
+  assert.match(page, /data-wo-audit-panel/);
+  assert.match(page, /setInfoMobilePane\('notes'\)/);
+  assert.match(page, /setInfoMobilePane\('timeline'\)/);
+  assert.match(page, /aria-pressed=\{infoMobilePane === 'notes'\}/);
+  assert.match(page, /aria-pressed=\{infoMobilePane === 'timeline'\}/);
+  assert.match(page, /const infoPanelLocked = workOrderViewOnly \|\| infoPanelInvoiceLocked/);
+  assert.match(page, /disabled=\{infoPanelLocked\}/);
+  assert.match(page, /data-wo-mobile-save[\s\S]*?disabled=\{infoPanelLocked\s*\|\|/);
+  assert.match(page, /timelineStageFromReason\(log\.reason \|\| ''\)/);
+  assert.match(page, /const isInitialDiagnosis = operationalStage === 'diagnosis' && \/\^WO diregister/);
+  assert.match(page, /title: isInitialDiagnosis \? 'Diagnosa dimulai' : stage\.title/);
+  assert.match(page, /Faktur \$\{invoice\.invoiceNumber\} dibuat/);
+  assert.match(page, /Tanggal faktur \$\{formatBusinessDate\(invoice\.date\)\} · Total Rp \$\{Number\(invoice\.total\)\.toLocaleString\('id-ID'\)\}/);
+  assert.doesNotMatch(page, /Total Rp \$\{Number\(invoice\.total\)\.toLocaleString\('id-ID'\)\} · \$\{invoice\.status\}/);
   assert.match(page, /customer-payments\?invoiceId=/);
   assert.doesNotMatch(page, /Pembayaran dikelola melalui faktur penjualan terkait/);
   assert.match(endpoint, /work_order_technicians/);

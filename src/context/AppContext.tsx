@@ -643,7 +643,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
       const hasFinalMeasurements = [wo.finalTemperature, wo.finalLp, wo.finalHp]
         .every(value => value !== undefined && value !== null && Number.isFinite(Number(value)));
-      const hasCompletionNote = Boolean(wo.findings?.trim() || wo.notes?.trim());
+      const hasCompletionNote = Boolean(wo.findings?.trim());
       if (!hasDiagnosisMeasurements && !hasFinalMeasurements && !hasCompletionNote) {
         return {
           ok: false,
