@@ -4,7 +4,9 @@ import { api } from '../lib/apiClient';
 import { demoData } from '../lib/demoData';
 import { failSystemProcess, finishSystemProcess, startSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
-import { appendTimelineStageLog } from '../lib/workOrderTimeline';
+import {
+  appendTimelineStageLog, isTimelineStageTransitionAllowed, timelineStageFromWorkOrder,
+} from '../lib/workOrderTimeline';
 
 interface AppContextType {
   data: AppData;
@@ -713,6 +715,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!wo) return { ok: false, message: 'WO tidak ditemukan.' };
     if (wo.status === 'Selesai' || wo.status === 'Closed' || wo.invoiceId) {
       return { ok: false, message: 'Tahap WO yang sudah selesai, Lost Sales, atau difakturkan tidak dapat diubah.' };
+    }
+    if (wo.status !== 'Proses') {
+      return { ok: false, message: 'Tahap operasional hanya dapat diubah setelah WO berada pada Dikerjakan.' };
+    }
+    if (!isTimelineStageTransitionAllowed(timelineStageFromWorkOrder(wo), stage)) {
+      return { ok: false, message: 'Transisi tahap tidak sesuai. Status tunggu hanya dapat dipilih dari Dikerjakan.' };
     }
     if (isDemoMode) {
       const now = new Date().toISOString();

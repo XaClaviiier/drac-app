@@ -40,6 +40,31 @@ $logWorkOrderFailure = static function (string $operation, Throwable $error): st
     return $reference;
 };
 
+$timelineStageFromStatusLog = static function (array $statusLog, string $coreStatus): string {
+    for ($index = count($statusLog) - 1; $index >= 0; $index--) {
+        $entry = $statusLog[$index] ?? null;
+        if (!is_array($entry)) continue;
+        if (preg_match('/\[WO_TIMELINE_STAGE:(diagnosis|approval|parts|working)\]/i', (string)($entry['reason'] ?? ''), $matches)) {
+            return strtolower((string)$matches[1]);
+        }
+        $targetStatus = (string)($entry['to'] ?? '');
+        if ($targetStatus === 'Proses') return 'working';
+        if (in_array($targetStatus, ['Closed', 'Batal'], true)) return 'lost';
+    }
+    return $coreStatus === 'Proses' ? 'working' : 'diagnosis';
+};
+
+$isTimelineStageTransitionAllowed = static function (string $current, string $next): bool {
+    $allowedTransitions = [
+        'diagnosis' => ['working'],
+        'working' => ['approval', 'parts'],
+        'approval' => ['working'],
+        'parts' => ['working'],
+        'lost' => [],
+    ];
+    return in_array($next, $allowedTransitions[$current] ?? [], true);
+};
+
 $resolveWorkOrderContinuations = static function (
     PDO $pdo,
     array $actor,
@@ -589,11 +614,15 @@ switch ($method) {
                 if (in_array($coreStatus, ['Selesai', 'Closed', 'Batal'], true) || !empty($stageWorkOrder['invoice_id'])) {
                     throw new DomainException('Tahap WO yang sudah selesai, Lost Sales, atau difakturkan tidak dapat diubah.');
                 }
-                if ($stage === 'working' && $coreStatus !== 'Proses') {
-                    throw new DomainException('Mulai Dikerjakan melalui aksi status WO agar estimasi dan teknisi tetap tervalidasi.');
-                }
                 $statusLog = json_decode((string)($stageWorkOrder['status_log'] ?? '[]'), true);
                 if (!is_array($statusLog)) $statusLog = [];
+                if ($coreStatus !== 'Proses') {
+                    throw new DomainException('Tahap operasional hanya dapat diubah setelah WO berada pada Dikerjakan.');
+                }
+                $currentTimelineStage = $timelineStageFromStatusLog($statusLog, $coreStatus);
+                if (!$isTimelineStageTransitionAllowed($currentTimelineStage, $stage)) {
+                    throw new DomainException('Transisi tahap tidak sesuai. Status tunggu hanya dapat dipilih dari Dikerjakan.');
+                }
                 $note = trim((string)($d['note'] ?? ''));
                 $statusLog[] = [
                     'from' => $coreStatus,

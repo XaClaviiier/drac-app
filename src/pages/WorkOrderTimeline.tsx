@@ -394,24 +394,19 @@ export default function WorkOrderTimeline() {
         </div>
         <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap lg:justify-end">
           {hasPermission('wo:edit') && selectedStage === 'diagnosis' && <>
-            {renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
-            {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
             {renderAction('Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
             {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
           </>}
           {hasPermission('wo:edit') && selectedStage === 'approval' && <>
-            {renderAction('Kembali Diagnosa', () => void setStage('diagnosis'), 'neutral', Stethoscope)}
-            {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
             {renderAction('Disetujui · Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
             {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
           </>}
           {hasPermission('wo:edit') && selectedStage === 'parts' && <>
-            {selected.status === 'Register' && renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
             {renderAction('Parts Tersedia · Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
-            {selected.status === 'Proses' && renderAction('Selesai', () => void setCoreStatus('Selesai'), 'success', Check)}
             {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
           </>}
           {hasPermission('wo:edit') && selectedStage === 'working' && selected.status === 'Proses' && <>
+            {renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
             {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
             {renderAction('Selesai', () => void setCoreStatus('Selesai'), 'success', Check)}
           </>}

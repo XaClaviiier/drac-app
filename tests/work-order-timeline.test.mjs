@@ -47,6 +47,53 @@ test('transisi inti Proses yang lebih baru mengalahkan tahap tunggu sebelumnya',
   assert.equal(helper.timelineStageFromWorkOrder(wo), 'working');
 });
 
+test('tahap tunggu hanya dapat dipilih dari Dikerjakan', () => {
+  const stages = ['diagnosis', 'working', 'approval', 'parts', 'lost'];
+  const nextStages = ['diagnosis', 'approval', 'parts', 'working'];
+  const allowed = new Set([
+    'diagnosis:working',
+    'working:approval',
+    'working:parts',
+    'approval:working',
+    'parts:working',
+  ]);
+
+  for (const current of stages) {
+    for (const next of nextStages) {
+      assert.equal(
+        helper.isTimelineStageTransitionAllowed(current, next),
+        allowed.has(`${current}:${next}`),
+        `${current} -> ${next}`,
+      );
+    }
+  }
+});
+
+test('action bar dan API menegakkan urutan Diagnosa, Dikerjakan, lalu status tunggu', () => {
+  const page = source('src/pages/WorkOrderTimeline.tsx');
+  const context = source('src/context/AppContext.tsx');
+  const endpoint = source('api/endpoints/work-orders.php');
+  const actionBlock = stage => {
+    const start = page.indexOf(`selectedStage === '${stage}'`);
+    assert.notEqual(start, -1, `blok aksi ${stage} tersedia`);
+    return page.slice(start, page.indexOf('</>}', start));
+  };
+
+  const diagnosis = actionBlock('diagnosis');
+  const approval = actionBlock('approval');
+  const parts = actionBlock('parts');
+  const working = actionBlock('working');
+  assert.doesNotMatch(diagnosis, /Tunggu Persetujuan|Tunggu Parts/);
+  assert.doesNotMatch(approval, /Tunggu Parts/);
+  assert.doesNotMatch(parts, /Tunggu Persetujuan|Selesai/);
+  assert.match(working, /Tunggu Persetujuan/);
+  assert.match(working, /Tunggu Parts/);
+  assert.match(context, /isTimelineStageTransitionAllowed\(timelineStageFromWorkOrder\(wo\), stage\)/);
+  assert.ok(context.indexOf('isTimelineStageTransitionAllowed(timelineStageFromWorkOrder(wo), stage)') < context.indexOf('if (isDemoMode)', context.indexOf('const changeWorkOrderTimelineStage')));
+  assert.match(endpoint, /\$isTimelineStageTransitionAllowed\(\$currentTimelineStage, \$stage\)/);
+  assert.match(endpoint, /Status tunggu hanya dapat dipilih dari Dikerjakan/);
+});
+
 test('kontrak Control Board menyimpan audit tahap dan mempertahankan alur faktur pembayaran', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
   const context = source('src/context/AppContext.tsx');

@@ -4,6 +4,21 @@ export type TimelineStageKey = WorkOrderTimelineStage | 'lost';
 
 export const TIMELINE_STAGE_MARKER = 'WO_TIMELINE_STAGE';
 
+const ALLOWED_TIMELINE_TRANSITIONS: Record<TimelineStageKey, WorkOrderTimelineStage[]> = {
+  diagnosis: ['working'],
+  working: ['approval', 'parts'],
+  approval: ['working'],
+  parts: ['working'],
+  lost: [],
+};
+
+export function isTimelineStageTransitionAllowed(
+  current: TimelineStageKey,
+  next: WorkOrderTimelineStage,
+) {
+  return ALLOWED_TIMELINE_TRANSITIONS[current].includes(next);
+}
+
 export function timelineStageReason(stage: WorkOrderTimelineStage, note = '') {
   return `[${TIMELINE_STAGE_MARKER}:${stage}]${note.trim() ? ` ${note.trim()}` : ''}`;
 }
