@@ -651,6 +651,9 @@ test('Teknisi dapat menyimpan layanan dan melanjutkan Register menjadi Dikerjaka
   assert.match(context, /nextStatus === 'Proses' && !wo\.technicianId && currentUserIsTechnician/);
   assert.match(workOrders, /const latest = data\.workOrders\.find\(\(workOrder\) => workOrder\.id === detailWO\.id\)/);
   assert.match(workOrders, /onClick=\{\(\) => requestStatusChange\(detailWO, 'Proses'\)\}/);
+  assert.match(workOrders, /editingWO\.services\.length > 0 && editingWO\.total > 0/);
+  assert.match(workOrders, /diagnosisSubmitAction\.current = 'process'/);
+  assert.match(workOrders, />\s*Dikerjakan\s*<\/button>/);
 });
 
 test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samping', () => {

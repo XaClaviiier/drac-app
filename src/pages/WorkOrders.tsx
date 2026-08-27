@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, CircleAlert, Undo2, LockKeyhole, Download, Printer, Filter, ClipboardList } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Wrench, X, Save, FileText, CheckCircle2, Receipt, User, Car, ArrowLeftRight, Building2, CalendarClock, Star, ListPlus, CalendarDays, Eye, Copy, MessageCircle, RefreshCw, Settings2, Lightbulb, Clock3, GitBranch, AlertTriangle, CircleAlert, Undo2, LockKeyhole, Download, Printer, Filter, ClipboardList, PlayCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, Vehicle, WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
@@ -4190,25 +4190,37 @@ export default function WorkOrders() {
                   Batal
                 </button>
                 {editingWO && editingWO.status === 'Register' && hasPermission('wo:edit') && !editingWO.invoiceId && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const reason = await askAccurateText({
-                        title: 'Konfirmasi Lost Sales',
-                        message: `Tandai ${editingWO.woNumber} sebagai Lost Sales.`,
-                        label: 'Alasan Lost Sales',
-                        placeholder: 'Masukkan alasan Lost Sales',
-                        confirmLabel: 'Lost Sales',
-                      });
-                      if (!reason) return;
-                      lostSalesReason.current = reason;
-                      diagnosisSubmitAction.current = 'lost';
-                      void handleSubmit();
-                    }}
-                    className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-rose-700 sm:px-5 sm:text-sm"
-                  >
-                    Lost Sales
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const reason = await askAccurateText({
+                          title: 'Konfirmasi Lost Sales',
+                          message: `Tandai ${editingWO.woNumber} sebagai Lost Sales.`,
+                          label: 'Alasan Lost Sales',
+                          placeholder: 'Masukkan alasan Lost Sales',
+                          confirmLabel: 'Lost Sales',
+                        });
+                        if (!reason) return;
+                        lostSalesReason.current = reason;
+                        diagnosisSubmitAction.current = 'lost';
+                        void handleSubmit();
+                      }}
+                      className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-rose-700 sm:px-5 sm:text-sm"
+                    >
+                      Lost Sales
+                    </button>
+                    {editingWO.services.length > 0 && editingWO.total > 0 && (
+                      <button
+                        type="submit"
+                        onClick={() => { diagnosisSubmitAction.current = 'process'; }}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-700 sm:flex-none sm:px-5 sm:text-sm"
+                      >
+                        <PlayCircle className="h-4 w-4" />
+                        Dikerjakan
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   type="submit"
