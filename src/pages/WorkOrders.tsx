@@ -101,7 +101,7 @@ const WorkOrderCustomerVehicleIdentity = ({
 
 type WorkOrderColumnKey = 'number' | 'date' | 'customer' | 'services' | 'total' | 'attention' | 'createdBy' | 'actions';
 const WORK_ORDER_COLUMNS: Array<{ key: WorkOrderColumnKey; label: string; locked?: boolean }> = [
-  { key: 'number', label: 'No. WO / Status', locked: true },
+  { key: 'number', label: 'No. WO / Status / Cabang', locked: true },
   { key: 'date', label: 'Tanggal', locked: true },
   { key: 'attention', label: 'Perhatian', locked: true },
   { key: 'customer', label: 'Pelanggan / Kendaraan' },
@@ -2583,12 +2583,13 @@ export default function WorkOrders() {
                       if (key === 'number') return <td key={key} className="overflow-hidden px-4 py-3">
                       <button type="button" onClick={() => openWorkOrderStandard(wo)} className="text-left">
                         <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
+                        <span className="mt-0.5 block text-xs font-semibold text-gray-500">{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}</span>
                       </button>
                     </td>;
                       if (key === 'date') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3">
                       <span className="block text-sm text-gray-800">{formatBusinessDate(wo.date)}</span>
                       <span className="mt-0.5 block text-xs text-gray-500">
-                        {wo.transactionTime ? wo.transactionTime.slice(0, 5) : '—'} · {data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}
+                        {wo.transactionTime ? wo.transactionTime.slice(0, 5) : '—'}
                       </span>
                     </td>;
                       if (key === 'attention') return <td key={key} className="overflow-hidden px-2 py-3 text-center">
