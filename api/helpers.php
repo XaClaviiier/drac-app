@@ -969,6 +969,15 @@ function authenticatedUserHasPermission(PDO $pdo, array $user, string $permissio
     return !empty($user['is_owner']) || in_array($permission, getUserPermissions($pdo, $user), true);
 }
 
+function authenticatedUserIsOwnerOrAdministrator(PDO $pdo, array $user): bool {
+    if (!empty($user['is_owner'])) return true;
+    $stmt = $pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');
+    $stmt->execute([(string)($user['role_id'] ?? '')]);
+    $role = $stmt->fetch() ?: [];
+    return strtoupper(trim((string)($role['code'] ?? ''))) === 'ADM'
+        || strtolower(trim((string)($role['name'] ?? ''))) === 'administrator';
+}
+
 function requireAuthenticatedUserPermission(PDO $pdo, array $user, string $permission): void {
     if (authenticatedUserHasPermission($pdo, $user, $permission)) return;
     respondError('Akun tidak memiliki izin ' . $permission, 403);

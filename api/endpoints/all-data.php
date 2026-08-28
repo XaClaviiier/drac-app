@@ -37,7 +37,7 @@ try {
     $canUseVehicles = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'vehicle:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create');
     $canUseItems = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'item:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create') || authenticatedUserHasPermission($pdo, $actor, 'invoice:create');
     $canUseWorkOrders = authenticatedUserHasPermission($pdo, $actor, 'wo:view');
-    $canUseInvoices = authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view');
+    $canUseInvoices = authenticatedUserIsOwnerOrAdministrator($pdo, $actor) || authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view');
     $canUseReceipts = authenticatedUserHasPermission($pdo, $actor, 'receipt:view');
     $canUsePurchases = authenticatedUserHasPermission($pdo, $actor, 'purchase:view');
     $supplierRoleStmt = $pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');

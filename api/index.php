@@ -105,6 +105,15 @@ if ($requestUser && $resource === 'receipt-ocr') {
 if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
     requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
 }
+if ($requestUser && $resource === 'branch-targets') {
+    if (!authenticatedUserIsOwnerOrAdministrator($pdo, $requestUser)) {
+        requireAuthenticatedUserPermission($pdo, $requestUser, 'report:view');
+        if (!authenticatedUserHasPermission($pdo, $requestUser, 'invoice:view')
+            && !authenticatedUserHasPermission($pdo, $requestUser, 'payment:view')) {
+            respondError('Akun tidak memiliki izin melihat data faktur', 403);
+        }
+    }
+}
 if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is_owner'])) {
     respondError('Backup dan restore transaksi hanya dapat dilakukan Owner', 403);
 }
@@ -254,6 +263,10 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
 
         case 'settings':
             require 'endpoints/settings.php';
+            break;
+
+        case 'branch-targets':
+            require 'endpoints/branch-targets.php';
             break;
 
         case 'ai-settings':

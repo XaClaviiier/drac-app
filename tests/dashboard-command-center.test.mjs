@@ -46,3 +46,36 @@ test('daftar faktur dan WO membaca filter tanggal dari tautan dashboard', () => 
   assert.match(workOrders, /const requestedStatus = searchParams\.get\('status'\)/);
   assert.match(workOrders, /setFilterStatus\(requestedStatus\)/);
 });
+
+test('dashboard desktop dan mobile memakai ringkasan target cabang yang sama', () => {
+  const dashboard = source('src/pages/Dashboard.tsx');
+  const mobile = source('src/components/MobileDashboard.tsx');
+  const calculator = source('src/lib/branchPerformance.ts');
+  const apiRouter = source('api/index.php');
+  const apiHelpers = source('api/helpers.php');
+  const allData = source('api/endpoints/all-data.php');
+  const targetEndpoint = source('api/endpoints/branch-targets.php');
+
+  assert.match(dashboard, /buildBranchPerformanceSummary/);
+  assert.match(dashboard, /api\.get\('branch-targets'\)/);
+  assert.match(dashboard, /const canViewBranchPerformance = canViewFinancial && canUseInvoiceData/);
+  assert.match(dashboard, /ExecutiveBranchPerformance/);
+  assert.match(dashboard, /Target vs Realisasi/);
+  assert.match(dashboard, /<MobileDashboard branchPerformance=.*canViewBranchPerformance=/);
+  assert.doesNotMatch(dashboard, /const executiveBranchPerformance = useMemo/);
+  assert.match(mobile, /branchPerformance: BranchPerformanceSummary \| null/);
+  assert.doesNotMatch(mobile, /useMemo\(\(\)=>buildBranchPerformanceSummary/);
+  assert.match(mobile, /Target Cabang Bulan Ini/);
+  assert.match(mobile, /Target cabang belum dapat dimuat/);
+  assert.doesNotMatch(calculator, /150_000_000|75_000_000/);
+  assert.match(apiRouter, /\$resource === 'branch-targets'/);
+  assert.match(apiHelpers, /function authenticatedUserIsOwnerOrAdministrator/);
+  assert.match(apiRouter, /authenticatedUserIsOwnerOrAdministrator\(\$pdo, \$requestUser\)/);
+  assert.match(allData, /\$canUseInvoices = authenticatedUserIsOwnerOrAdministrator\(\$pdo, \$actor\)/);
+  assert.match(apiRouter, /requireAuthenticatedUserPermission\(\$pdo, \$requestUser, 'report:view'\)/);
+  assert.match(apiRouter, /authenticatedUserHasPermission\(\$pdo, \$requestUser, 'invoice:view'\)/);
+  assert.match(apiRouter, /authenticatedUserHasPermission\(\$pdo, \$requestUser, 'payment:view'\)/);
+  assert.match(apiRouter, /case 'branch-targets'/);
+  assert.match(targetEndpoint, /150000000/);
+  assert.match(targetEndpoint, /75000000/);
+});

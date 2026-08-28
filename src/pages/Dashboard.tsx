@@ -8,6 +8,12 @@ import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import MobileDashboard from '../components/MobileDashboard';
 import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../lib/workOrderAttention';
+import {
+  buildBranchPerformanceSummary,
+  type BranchMonthlyTargets,
+  type BranchPerformanceSummary,
+  type BranchPerformanceRow,
+} from '../lib/branchPerformance';
 
 type CustomerPayment = { id: string; date: string; amount: number; paymentMethod: string; branchId: string; invoiceNumber: string; customerName: string };
 type CashAccount = { id: string; name: string; accountType: 'cash' | 'bank' | 'qris'; branchId?: string; balance: number; unsubmitted: number; isActive: boolean };
@@ -27,25 +33,42 @@ const addDays = (date: Date, amount: number) => { const next = new Date(date); n
 const monthStartKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
 const monthEndKey = (date: Date) => dateKey(new Date(date.getFullYear(), date.getMonth() + 1, 0));
 const percent = (value: number, total: number) => total > 0 ? Math.round((value / total) * 100) : 0;
+const isBranchMonthlyTargets = (value: unknown): value is BranchMonthlyTargets => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return ['PERINTIS', 'CAKALANG', 'MAMUJU'].every(key => Number.isFinite(Number(candidate[key])) && Number(candidate[key]) >= 0);
+};
 
 export default function Dashboard() {
   const { data, currentBranchId, currentUser, hasPermission, refreshData } = useApp();
   const canViewFinancial = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('report:view'));
+  const canUseInvoiceData = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('invoice:view') || hasPermission('payment:view'));
+  const canViewBranchPerformance = canViewFinancial && canUseInvoiceData;
   const [payments, setPayments] = useState<CustomerPayment[]>([]);
   const [accounts, setAccounts] = useState<CashAccount[]>([]);
   const [depositSummary, setDepositSummary] = useState<DepositSummary[]>([]);
+  const [branchTargets, setBranchTargets] = useState<BranchMonthlyTargets | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [salesTrendMode, setSalesTrendMode] = useState<'week' | 'months'>('months');
 
   const loadFinance = async () => {
     if (!canViewFinancial) return;
     setRefreshing(true);
-    const [paymentResult, accountResult, depositResult] = await Promise.all([
-      api.get('customer-payments'), api.get('cash-accounts'), api.get('branch-deposits'),
+    const [paymentResult, accountResult, depositResult, targetResult] = await Promise.all([
+      api.get('customer-payments'), api.get('cash-accounts'), api.get('branch-deposits'), api.get('branch-targets'),
     ]);
     if (paymentResult.success) setPayments(paymentResult.data || []);
     if (accountResult.success) setAccounts(accountResult.data || []);
     if (depositResult.success) setDepositSummary(depositResult.data?.summary || []);
+    if (targetResult.success && isBranchMonthlyTargets(targetResult.data)) {
+      setBranchTargets({
+        PERINTIS: Number(targetResult.data.PERINTIS),
+        CAKALANG: Number(targetResult.data.CAKALANG),
+        MAMUJU: Number(targetResult.data.MAMUJU),
+      });
+    } else {
+      setBranchTargets(null);
+    }
     setRefreshing(false);
   };
 
@@ -91,6 +114,9 @@ export default function Dashboard() {
   const elapsedMonthDays = Math.max(1, Math.min(today.getDate(), daysInCurrentMonth));
   const averageDailySales = currentMonthSales / elapsedMonthDays;
   const projectedMonthSales = Math.round(averageDailySales * daysInCurrentMonth);
+  const executiveBranchPerformance = branchTargets
+    ? buildBranchPerformanceSummary({ branches: data.branches, invoices: data.invoices, targets: branchTargets, now: today })
+    : null;
 
   const monthlyMetrics = useMemo<MonthMetric[]>(() => Array.from({ length: 6 }, (_, index) => {
     const month = new Date(today.getFullYear(), today.getMonth() + index - 5, 1);
@@ -157,7 +183,7 @@ export default function Dashboard() {
   };
 
   return <>
-    <MobileDashboard />
+    <MobileDashboard branchPerformance={executiveBranchPerformance} canViewBranchPerformance={canViewBranchPerformance} />
     <div className="hidden space-y-3 pb-5 lg:block">
       <section className="flex items-center justify-between">
         <div>
@@ -188,6 +214,9 @@ export default function Dashboard() {
         dailyAverage={averageDailySales}
         projection={projectedMonthSales}
       />}
+
+      {canViewBranchPerformance && executiveBranchPerformance && <ExecutiveBranchPerformance summary={executiveBranchPerformance} />}
+      {canViewBranchPerformance && !executiveBranchPerformance && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Target cabang belum dapat dimuat. Gunakan Refresh setelah koneksi server tersedia.</div>}
 
       {canViewFinancial && <>
         <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,1fr)]">
@@ -256,6 +285,53 @@ export default function Dashboard() {
       </section>}
     </div>
   </>;
+}
+
+function ExecutiveBranchPerformance({ summary }: { summary: BranchPerformanceSummary }) {
+  const statusStyles: Record<BranchPerformanceRow['status'], string> = {
+    green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    red: 'border-red-200 bg-red-50 text-red-700',
+  };
+  const statusLabels: Record<BranchPerformanceRow['status'], string> = {
+    green: 'Sesuai pace', amber: 'Perlu dorongan', red: 'Tertinggal',
+  };
+
+  return <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Target vs Realisasi</p>
+        <h2 className="text-lg font-bold text-slate-900">Performa Omzet Tiga Cabang</h2>
+        <p className="text-xs text-slate-500">Bulan berjalan sampai hari ke-{summary.period.elapsedDays} dari {summary.period.daysInMonth} hari.</p>
+      </div>
+      <div className="grid grid-cols-3 gap-4 text-right text-xs">
+        <div><span className="block text-slate-400">Realisasi</span><b className="text-slate-900">{rupiah(summary.total.sales)}</b></div>
+        <div><span className="block text-slate-400">Target</span><b className="text-blue-700">{rupiah(summary.total.target)}</b></div>
+        <div><span className="block text-slate-400">Proyeksi</span><b className="text-violet-700">{rupiah(summary.total.projectedSales)}</b></div>
+      </div>
+    </header>
+
+    {summary.rows.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">Cabang Perintis, Cakalang, dan Mamuju belum tersedia pada akses ini.</div> : <div className="overflow-x-auto">
+      <table className="w-full min-w-[1180px] text-sm">
+        <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr>
+          <th className="px-4 py-2.5">Cabang</th><th className="px-3 py-2.5 text-right">Realisasi</th><th className="px-3 py-2.5 text-right">Target</th><th className="px-3 py-2.5">Pencapaian</th><th className="px-3 py-2.5 text-right">Pace Hari Ini</th><th className="px-3 py-2.5 text-right">Selisih Pace</th><th className="px-3 py-2.5 text-right">Proyeksi</th><th className="px-3 py-2.5 text-center">Faktur</th><th className="px-3 py-2.5 text-right">Diterima</th><th className="px-4 py-2.5 text-right">Piutang</th>
+        </tr></thead>
+        <tbody className="divide-y divide-slate-100">{summary.rows.map(row => <tr key={row.branchId} className="hover:bg-blue-50/30">
+          <td className="px-4 py-3"><b className="block text-slate-900">{row.branchLabel}</b><span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusStyles[row.status]}`}>{statusLabels[row.status]}</span></td>
+          <td className="px-3 text-right font-bold text-slate-900">{compactMoney(row.sales)}</td>
+          <td className="px-3 text-right text-slate-600">{compactMoney(row.target)}</td>
+          <td className="px-3"><div className="flex items-center gap-2"><div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${row.status === 'green' ? 'bg-emerald-500' : row.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, row.achievementPercent)}%` }} /></div><b className="text-xs text-slate-700">{row.achievementPercent}%</b></div><small className="text-[10px] text-slate-400">Sisa {compactMoney(row.remainingTarget)}</small></td>
+          <td className="px-3 text-right text-slate-600">{compactMoney(row.paceTarget)}</td>
+          <td className={`px-3 text-right font-semibold ${row.paceDifference >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{row.paceDifference >= 0 ? '+' : '-'}{compactMoney(Math.abs(row.paceDifference)).replace('Rp ', '')}</td>
+          <td className="px-3 text-right font-semibold text-violet-700">{compactMoney(row.projectedSales)}</td>
+          <td className="px-3 text-center font-semibold">{row.invoiceCount}</td>
+          <td className="px-3 text-right font-semibold text-emerald-700">{compactMoney(row.received)}</td>
+          <td className="px-4 text-right font-semibold text-amber-700">{compactMoney(row.receivable)}</td>
+        </tr>)}</tbody>
+        <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold"><tr><td className="px-4 py-3">TOTAL</td><td className="px-3 text-right">{compactMoney(summary.total.sales)}</td><td className="px-3 text-right">{compactMoney(summary.total.target)}</td><td className="px-3">{summary.total.achievementPercent}%</td><td className="px-3 text-right">{compactMoney(summary.total.paceTarget)}</td><td className={`px-3 text-right ${summary.total.paceDifference >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{summary.total.paceDifference >= 0 ? '+' : '-'}{compactMoney(Math.abs(summary.total.paceDifference)).replace('Rp ', '')}</td><td className="px-3 text-right text-violet-700">{compactMoney(summary.total.projectedSales)}</td><td className="px-3 text-center">{summary.total.invoiceCount}</td><td className="px-3 text-right text-emerald-700">{compactMoney(summary.total.received)}</td><td className="px-4 text-right text-amber-700">{compactMoney(summary.total.receivable)}</td></tr></tfoot>
+      </table>
+    </div>}
+  </section>;
 }
 
 function BranchOperationalCard({ branchName, period, sales, workOrders, completedWorkOrders, activeWorkOrders, invoices, awaitingInvoices, conversion, cash, nonCash, unpaid, unsubmitted, dailyAverage, projection }: {
