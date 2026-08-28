@@ -4,3 +4,8 @@ node_modules/
 api/config.local.php
 .env.*
 !.env.example
+
+# Local Codex diagnostics and generated deliverables are not source code.
+.codex-*.log
+.codex-tmp/
+outputs/

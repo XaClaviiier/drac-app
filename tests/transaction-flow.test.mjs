@@ -1077,6 +1077,25 @@ test('semua jalur buka WO memakai form Data Baru sebagai kanvas baku', () => {
   assert.match(page, />Pembayaran \/ Saldo<\/button>/);
 });
 
+test('modul WO dikunci pada kontrak tampilan kanvas baku', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const tabs = source('src/components/AccurateDocumentSideTabs.tsx');
+  const rail = source('src/components/AccurateFormActionRail.tsx');
+
+  assert.match(page, /const WORK_ORDER_UI_STANDARD_VERSION = 'wo-canonical-2026-08-26'/);
+  assert.match(page, /data-wo-ui-standard=\{WORK_ORDER_UI_STANDARD_VERSION\}/);
+  assert.match(page, /const DEFAULT_WORK_ORDER_DOCUMENT_TAB: AccurateDocumentTab = 'details'/);
+  assert.match(page, /const \[showQuickServices, setShowQuickServices\] = useState\(false\)/);
+  assert.match(page, /data-wo-document-shell/);
+  assert.match(page, /data-wo-items-table/);
+  assert.match(page, /data-wo-total-summary/);
+  assert.match(page, /data-wo-inline-actions/);
+  assert.match(page, /AccurateFormActionRail/);
+  assert.match(page, /AccurateDocumentSideTabs active=\{documentTab\}/);
+  assert.match(tabs, /lg:absolute lg:right-full lg:top-0/);
+  assert.match(rail, /aria-label=\{ariaLabel\}/);
+});
+
 test('Info lainnya WO memisahkan catatan dan audit, mengunci faktur, serta memakai ledger pembayaran', () => {
   const types = source('src/types/index.ts');
   const page = source('src/pages/WorkOrders.tsx');

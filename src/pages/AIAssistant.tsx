@@ -1694,7 +1694,7 @@ ${buildSmartContext(userMsgText)}`;
     // Percakapan master kendaraan diproses lokal agar pemeriksaan dan
     // penambahan tidak bergantung pada model AI atau berisiko mengarang data.
     const isVehicleCatalogIntent = /\b(merek|brand|tipe\s+(?:mobil|kendaraan)|type\s+(?:mobil|kendaraan)|master\s+kendaraan)\b/i.test(content)
-      || /\b(?:cek|list|daftar|tambah|konfirmasi tambah)\s+(?:tipe|model)\b/i.test(content);
+      || /\b(?:cek|list|daftar|tambah|konfirmasi tambah)\s+(?:tipe|type|model)\b/i.test(content);
     if (isVehicleCatalogIntent) {
       setInput('');
       setBusy(true);
@@ -1708,7 +1708,7 @@ ${buildSmartContext(userMsgText)}`;
         };
 
         const confirmBrand = content.match(/^konfirmasi\s+tambah\s+merek\s+(.+)$/i);
-        const confirmModel = content.match(/^konfirmasi\s+tambah\s+(?:tipe|model)\s+(.+?)\s+(?:untuk|pada)\s+(?:merek\s+)?(.+)$/i);
+        const confirmModel = content.match(/^konfirmasi\s+tambah\s+(?:tipe|type|model)\s+(.+?)\s+(?:untuk|pada)\s+(?:merek\s+)?(.+)$/i);
         if (confirmBrand) {
           const brandName = confirmBrand[1].trim();
           if (!hasPermission('vehicle:create') && !hasPermission('vehicle:edit')) throw new Error('Akun ini tidak memiliki hak menambah master kendaraan.');
@@ -1741,7 +1741,7 @@ ${buildSmartContext(userMsgText)}`;
         }
 
         const addBrand = content.match(/^tambah\s+merek\s+(.+)$/i);
-        const addModel = content.match(/^tambah\s+(?:tipe|model)\s+(.+?)\s+(?:untuk|pada)\s+(?:merek\s+)?(.+)$/i);
+        const addModel = content.match(/^tambah\s+(?:tipe|type|model)\s+(.+?)\s+(?:untuk|pada)\s+(?:merek\s+)?(.+)$/i);
         if (addBrand) {
           const brandName = addBrand[1].trim();
           const existing = findBrand(brandName);
@@ -1767,8 +1767,8 @@ ${buildSmartContext(userMsgText)}`;
         }
 
         const checkBrand = content.match(/^(?:cek|cari)\s+(?:merek|brand)\s+(.+?)[?]?$/i);
-        const directCatalogQuery = content.match(/^(?:merek|brand|tipe|model)\s+(.+?)[?]?$/i);
-        const checkModels = content.match(/^(?:cek|list|daftar)\s+(?:tipe|model)(?:\s+(?:mobil|kendaraan))?\s+(?:merek\s+)?(.+?)[?]?$/i);
+        const directCatalogQuery = content.match(/^(?:merek|brand|tipe|type|model)\s+(.+?)[?]?$/i);
+        const checkModels = content.match(/^(?:cek|list|daftar)\s+(?:tipe|type|model)(?:\s+(?:mobil|kendaraan))?\s+(?:merek\s+)?(.+?)[?]?$/i);
         const questionBrand = content.match(/^apakah\s+(?:merek|brand)\s+(.+?)(?:\s+ada)?[?]?$/i);
         const brandQuery = (checkBrand?.[1] || checkModels?.[1] || questionBrand?.[1] || directCatalogQuery?.[1] || '').trim().replace(/\s+ada$/i, '');
         const matchedBrand = brandQuery ? findBrand(brandQuery) : undefined;

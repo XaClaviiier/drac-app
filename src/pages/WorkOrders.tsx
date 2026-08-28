@@ -28,6 +28,9 @@ const COMPLAINT_TEMPLATE_KEY = 'dokterac_complaint_templates';
 const COMPLAINT_TEMPLATE_VERSION_KEY = 'dokterac_complaint_templates_version';
 const COMPLAINT_TEMPLATE_VERSION = '2';
 const DEFAULT_WORK_ORDER_DOCUMENT_TAB: AccurateDocumentTab = 'details';
+// Kontrak UI WO ini disengaja: tampilan WO baru, buka, dan edit memakai satu
+// kanvas baku. Ubah versinya hanya jika perubahan standar WO memang disetujui.
+const WORK_ORDER_UI_STANDARD_VERSION = 'wo-canonical-2026-08-26';
 const WO_ENTRY_GUIDANCE_ISSUES = ['Pelanggan harus diisi', 'Kendaraan harus diisi', 'Keluhan pelanggan harus diisi'] as const;
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
@@ -3652,7 +3655,7 @@ export default function WorkOrders() {
               </div>
             </div>
 
-            <form id="work-order-entry-form" onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-5 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
+            <form id="work-order-entry-form" data-wo-ui-standard={WORK_ORDER_UI_STANDARD_VERSION} onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-5 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
               <AccurateFormActionRail
                 ariaLabel="Aksi Work Order"
                 className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
