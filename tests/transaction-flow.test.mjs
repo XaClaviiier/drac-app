@@ -344,6 +344,34 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(allData, /engineType/);
 });
 
+test('Terima Barang mobile memakai ringkasan satu kolom, kartu barang, dan action bar di atas navigasi', () => {
+  const entry = source('src/pages/GoodsReceiptEntry.tsx');
+  const detail = source('src/pages/GoodsReceiptDetail.tsx');
+  const endpoint = source('api/endpoints/goods-receipts.php');
+  for (const page of [entry, detail]) {
+    assert.match(page, /goods-receipt-mobile-summary/);
+    assert.match(page, /goods-receipt-mobile-item/);
+    assert.match(page, /goods-receipt-mobile-actions/);
+    assert.match(page, /bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\]/);
+    assert.match(page, /lg:hidden/);
+    assert.match(page, /hidden[^"\n]*lg:block/);
+    assert.match(page, /goods-receipt-mobile-summary.*grid grid-cols-1/s);
+    assert.match(page, /goods-receipt-mobile-open-item/);
+    assert.match(page, /goods-receipt-mobile-delivery-other/);
+  }
+  assert.match(entry, /className="hidden lg:flex"/);
+  assert.match(entry, /pb-\[calc\(11rem\+env\(safe-area-inset-bottom\)\)\][^"\n]*lg:pb-20/);
+  assert.match(detail, /pb-\[calc\(11rem\+env\(safe-area-inset-bottom\)\)\][^"\n]*lg:pb-20/);
+  assert.match(entry, /whitespace-normal.*line\.itemName/s);
+  assert.match(detail, /whitespace-normal.*line\.itemName/s);
+  assert.match(detail, /goods-receipt-mobile-purchase-invoice/);
+  assert.match(detail, /const save=async\(\)=>\{.*form\.deliveryMethod==='Lainnya'&&!form\.deliveryOther\.trim\(\)/s);
+  assert.match(endpoint, /function normalizeGoodsReceiptDelivery/);
+  assert.equal((endpoint.match(/normalizeGoodsReceiptDelivery\(/g)||[]).length, 3);
+  assert.match(endpoint, /Tuliskan cara pengiriman lainnya/);
+  assert.doesNotMatch(entry, /ml-2 mr-\[92px\] mt-1 overflow-hidden/);
+});
+
 test('rail aksi penerimaan baru mengikuti ukuran dan split button Accurate', () => {
   const page = source('src/pages/GoodsReceiptEntry.tsx');
   const railButton = source('src/components/AccurateActionRailButton.tsx');

@@ -38,6 +38,13 @@ function canSeeReceiptSupplier(PDO $pdo,array $actor):bool{
     $stmt=$pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');$stmt->execute([(string)($actor['role_id']??'')]);$role=$stmt->fetch()?:[];
     return strtoupper(trim((string)($role['code']??'')))==='ADM'||strtolower(trim((string)($role['name']??'')))==='administrator';
 }
+function normalizeGoodsReceiptDelivery(array $data,string $fallbackMethod='Diantar Supplier',string $fallbackOther=''):array{
+    $method=trim((string)($data['deliveryMethod']??$fallbackMethod));
+    $other=trim((string)($data['deliveryOther']??$fallbackOther));
+    if($method==='Lainnya'&&$other==='')throw new InvalidArgumentException('Tuliskan cara pengiriman lainnya');
+    if(mb_strlen($other)>100)throw new InvalidArgumentException('Cara pengiriman lainnya maksimal 100 karakter');
+    return[$method,$other];
+}
 $journalReceipt = static function(PDO $pdo,array $row,string $itemId,int $qty,bool $reverse,array $actor,?string $correctionGroupId=null,?string $reversalOfId=null,?string $idempotencyKey=null,?float $unitCost=null):string{
     $warehouseId=(string)($row['warehouse_id']??'');
     if($warehouseId===''&&!empty($row['branch_id']))$warehouseId=defaultWarehouseId($pdo,(string)$row['branch_id']);
@@ -138,6 +145,7 @@ switch ($method) {
         if (!in_array($newStatus, ['Draft', 'Diterima'], true)) respondError('Status awal penerimaan tidak valid', 422);
         $pdo->beginTransaction();
         try {
+            [$deliveryMethod,$deliveryOther]=normalizeGoodsReceiptDelivery($d);
             $rId = $d['id'] ?? generateId();
             // Nomor dari browser hanya pratinjau. Nomor final wajib diambil dari
             // antrian server supaya dua HP atau data yang belum tersinkron tidak
@@ -147,7 +155,7 @@ switch ($method) {
             $stmt = $pdo->prepare("INSERT INTO goods_receipts (id,receipt_number,date,supplier_id,supplier_name,do_number,delivery_method,delivery_other,shipping_notes,source_type,source_warehouse_id,source_branch_id,transfer_number,status,notes,branch_id,warehouse_id,received_by,received_by_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
                 $rId, $receiptNumber, $d['date'],
-                $sourceType==='Supplier'?($supplier['id'] ?? null):null, $sourceType==='Supplier'?($supplier['name'] ?? ''):'', $d['doNumber'] ?? '', $d['deliveryMethod'] ?? 'Diantar Supplier', $d['deliveryOther'] ?? '', $d['shippingNotes'] ?? '', $sourceType,$sourceWarehouseId,$sourceBranchId,$transferNumber,
+                $sourceType==='Supplier'?($supplier['id'] ?? null):null, $sourceType==='Supplier'?($supplier['name'] ?? ''):'', $d['doNumber'] ?? '', $deliveryMethod, $deliveryOther, $d['shippingNotes'] ?? '', $sourceType,$sourceWarehouseId,$sourceBranchId,$transferNumber,
                 $newStatus, $d['notes'] ?? '',
                 $branchId,$warehouseId,$receiver['name'],$receiver['id']
             ]);
@@ -212,6 +220,7 @@ switch ($method) {
             $oldRowStmt->execute([$id]);
             $oldRow = $oldRowStmt->fetch();
             if (!$oldRow) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
+            [$deliveryMethod,$deliveryOther]=normalizeGoodsReceiptDelivery($d,(string)($oldRow['delivery_method']??'Diantar Supplier'),(string)($oldRow['delivery_other']??''));
             $oldStatus = $oldRow['status'] ?? '';
             $oldBranchId = $oldRow['branch_id'] ?? ($d['branchId'] ?? 'BR-001');
             $newBranchId = (string)($d['branchId'] ?? $oldBranchId);
@@ -239,7 +248,7 @@ switch ($method) {
             $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,delivery_method=?,delivery_other=?,shipping_notes=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");
             $stmt->execute([
                 $d['receiptNumber'], $d['date'],
-                $supplier['id']??null,$supplier['name']??'', $d['doNumber'] ?? '', $d['deliveryMethod'] ?? ($oldRow['delivery_method']??'Diantar Supplier'), $d['deliveryOther'] ?? ($oldRow['delivery_other']??''), $d['shippingNotes'] ?? ($oldRow['shipping_notes']??''),
+                $supplier['id']??null,$supplier['name']??'', $d['doNumber'] ?? '', $deliveryMethod, $deliveryOther, $d['shippingNotes'] ?? ($oldRow['shipping_notes']??''),
                 $newStatus, $d['notes'] ?? '',
                 $newBranchId,$newWarehouseId,$receiver['name'],$receiver['id'],
                 $id
