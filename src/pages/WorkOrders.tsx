@@ -2434,7 +2434,10 @@ export default function WorkOrders() {
       setLostSalesFollowUp(null);
       setDetailWO(null);
       setResumeLostSalesAfterEstimate(true);
-      handleOpenDiagnosis(sourceWO);
+      // Tindak lanjut tetap memakai kanvas WO baku. Mode khusus Diagnosa
+      // mengubah susunan identitas/header dan membuat pengguna seolah membuka
+      // dokumen berbeda, padahal WO dan nomor dokumennya masih sama.
+      handleOpenModal(sourceWO, true);
       setSuccessMsg(`${sourceWO.woNumber}: lengkapi layanan dan estimasi sebelum melanjutkan ke Dikerjakan.`);
       setTimeout(() => setSuccessMsg(''), 5000);
       return;

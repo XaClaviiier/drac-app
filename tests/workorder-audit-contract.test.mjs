@@ -196,6 +196,9 @@ test('aksi edit WO dibatasi izin dan cabang aktif yang dapat diakses', () => {
   assert.match(workResultSave, /requireEditableWorkOrder\(workResultEditor\)/);
   assert.match(reopen, /requireEditableWorkOrder\(wo\)/);
   assert.match(continueLostSales, /requireEditableWorkOrder\(lostSalesFollowUp\)/);
+  assert.match(continueLostSales, /setResumeLostSalesAfterEstimate\(true\)/);
+  assert.match(continueLostSales, /handleOpenModal\(sourceWO, true\)/);
+  assert.doesNotMatch(continueLostSales, /handleOpenDiagnosis\(sourceWO\)/);
 });
 
 test('editor melindungi draft dan memakai versi WO terbaru sebelum membuka faktur', () => {
