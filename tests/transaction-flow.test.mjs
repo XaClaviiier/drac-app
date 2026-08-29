@@ -779,15 +779,17 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(tabs, /before:w-0\.5 before:bg-rose-500/);
 });
 
-test('tombol Ambil dan Proses WO serta Faktur memakai ukuran dan posisi baku yang sama', () => {
+test('tombol Proses WO tetap terpisah dari Simpan dan WO tidak menampilkan tombol Ambil', () => {
   const standards = source('src/components/ui/interfaceStandards.ts');
   const workOrders = source('src/pages/WorkOrders.tsx');
   const invoices = source('src/pages/SalesInvoice.tsx');
   assert.match(standards, /documentAction: 'inline-flex h-9 w-\[104px\]/);
-  assert.match(workOrders, /Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄<\/span>/);
+  assert.doesNotMatch(workOrders, />Ambil <span/);
   assert.match(workOrders, /disabled title="Register WO terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
+  assert.match(workOrders, /data-wo-mobile-process/);
+  assert.match(workOrders, /editingWO\.status === 'Closed'[\s\S]*?Tindak Lanjut Lost Sales/);
   assert.match(invoices, /disabled title="Simpan faktur terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
-  assert.ok((workOrders.match(/ui\.documentAction/g) || []).length >= 4);
+  assert.ok((workOrders.match(/ui\.documentAction/g) || []).length >= 2);
   assert.ok((invoices.match(/ui\.documentAction/g) || []).length >= 4);
   assert.match(workOrders, /data-wo-inline-actions className="hidden items-center justify-end gap-1\.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex"/);
 });

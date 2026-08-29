@@ -177,8 +177,8 @@ test('aksi edit WO dibatasi izin dan cabang aktif yang dapat diakses', () => {
   assert.match(editGuard, /currentBranchId !== 'ALL'/);
   assert.match(editGuard, /wo\.branchId === currentBranchId/);
   assert.match(editGuard, /assignedBranchIds\.has\(wo\.branchId\)/);
-  assert.match(page, /const takeServicesFromPreviousWO =[\s\S]*?requireEditableWorkOrder\(wo\)/);
-  assert.match(page, /const openFavoriteServicesForWO =[\s\S]*?requireEditableWorkOrder\(wo\)/);
+  assert.doesNotMatch(page, /const takeServicesFromPreviousWO =/);
+  assert.doesNotMatch(page, /const openFavoriteServicesForWO =/);
   assert.match(page, /const persistServicesAfterAdd =[\s\S]*?requireEditableWorkOrder\(editingWO\)/);
 
   const handleSubmit = sectionBetween(page, 'const handleSubmit =', 'const handleDelete =');

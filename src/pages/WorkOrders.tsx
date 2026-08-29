@@ -421,61 +421,6 @@ export default function WorkOrders() {
     return false;
   };
 
-  const previousWorkOrderFor = (wo: WorkOrder) => data.workOrders
-    .filter(candidate => candidate.id !== wo.id && (
-      (candidate.vehicleRefId && candidate.vehicleRefId === wo.vehicleRefId)
-      || candidate.plateNumber.trim().toLowerCase() === wo.plateNumber.trim().toLowerCase()
-    ))
-    .sort((left, right) => `${right.date} ${right.transactionTime || ''}`.localeCompare(`${left.date} ${left.transactionTime || ''}`))[0];
-
-  const takeServicesFromPreviousWO = (wo: WorkOrder) => {
-    if (!requireEditableWorkOrder(wo)) return;
-    const previous = previousWorkOrderFor(wo);
-    if (!previous || previous.services.length === 0) {
-      showAccurateNotice(`Belum ada layanan WO sebelumnya untuk kendaraan ${wo.plateNumber}.`);
-      return;
-    }
-    handleOpenModal(wo, true);
-    setFormData(current => ({
-      ...current,
-      services: previous.services.map((service, index) => ({
-        ...service,
-        id: `svc-copy-${Date.now()}-${index}`,
-      })),
-    }));
-    setSuccessMsg(`Layanan dari ${previous.woNumber} sudah diambil. Periksa kembali sebelum disimpan.`);
-    setTimeout(() => setSuccessMsg(''), 5000);
-  };
-
-  const openFavoriteServicesForWO = (wo: WorkOrder) => {
-    if (!requireEditableWorkOrder(wo)) return;
-    handleOpenModal(wo, true);
-    setShowQuickServices(true);
-  };
-
-  const takePreviousServicesIntoForm = async () => {
-    if (!editingWO || !requireEditableWorkOrder(editingWO)) return;
-    if (!customerVehicleReady) {
-      showAccurateNotice('Pilih atau daftarkan pelanggan dan kendaraan terlebih dahulu.');
-      return;
-    }
-    const previous = data.workOrders
-      .filter(candidate => candidate.id !== editingWO?.id && (
-        (formData.vehicleRefId && candidate.vehicleRefId === formData.vehicleRefId)
-        || (formData.plateNumber && candidate.plateNumber.trim().toLowerCase() === formData.plateNumber.trim().toLowerCase())
-      ) && candidate.services.length > 0)
-      .sort((left, right) => `${right.date} ${right.transactionTime || ''}`.localeCompare(`${left.date} ${left.transactionTime || ''}`))[0];
-    if (!previous) {
-      showAccurateNotice('Pilih pelanggan dan kendaraan terlebih dahulu. Kendaraan ini belum memiliki layanan WO sebelumnya.');
-      return;
-    }
-    const copiedServices = previous.services.map((service, index) => ({ ...service, id: `svc-copy-${Date.now()}-${index}` }));
-    if (await persistServicesAfterAdd(copiedServices)) {
-      setSuccessMsg(`Layanan dari ${previous.woNumber} sudah diambil ke ${editingWO?.woNumber || 'WO baru'}.`);
-      setTimeout(() => setSuccessMsg(''), 5000);
-    }
-  };
-
   const handleActionMenuToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
     const currentMenu = event.currentTarget;
     if (!currentMenu.open) return;
@@ -3330,13 +3275,6 @@ export default function WorkOrders() {
                 )}
               </div>
               <div className="hidden shrink-0 items-center gap-2 lg:flex">
-                {canEditWorkOrderInActiveBranch(detailWO) && detailWO.status !== 'Closed' && !detailWO.invoiceId && <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                  <summary className={`${ui.documentAction} cursor-pointer list-none`}>Ambil <span className="text-xs">⌄</span></summary>
-                  <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                    <button type="button" onClick={() => takeServicesFromPreviousWO(detailWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Layanan WO Sebelumnya</strong><span className="text-xs text-gray-500">Salin layanan kendaraan ini</span></button>
-                    <button type="button" onClick={() => openFavoriteServicesForWO(detailWO)} className="block w-full border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50"><strong className="block">Paket / Layanan Favorit</strong><span className="text-xs text-gray-500">Pilih dari quick service</span></button>
-                  </div>
-                </details>}
                 {canShowProcessMenu(detailWO) && <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
                   <summary className={`${ui.documentAction} cursor-pointer list-none`}>Proses <span className="text-xs">⌄</span></summary>
                   <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
@@ -3819,17 +3757,7 @@ export default function WorkOrders() {
                       />
                     </div>
                     <div data-wo-inline-actions className="hidden items-center justify-end gap-1.5 lg:col-span-3 lg:col-start-5 lg:row-start-2 lg:flex">
-                      <details data-wo-action-menu className={`group relative ${!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO) || statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? 'pointer-events-none opacity-50' : ''}`} onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
-                        <summary aria-disabled={Boolean(!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO) || statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId)} tabIndex={!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO) || statusLabel(editingWO.status) === 'Lost Sales' || editingWO.invoiceId ? -1 : 0} className={`${ui.documentAction} cursor-pointer list-none`}>
-                          Ambil <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
-                        </summary>
-                        <div onClick={closeActionMenuAfterChoice} className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                          <button type="button" disabled={!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO)} onClick={takePreviousServicesIntoForm} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Layanan WO Sebelumnya</button>
-                          <button type="button" disabled={!editingWO || workOrderViewOnly || !canEditWorkOrderInActiveBranch(editingWO)} onClick={() => { if (editingWO && requireEditableWorkOrder(editingWO)) setShowQuickServices(true); }} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Paket/Layanan Favorit</button>
-                          {!editingWO && <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-400">Register WO terlebih dahulu.</p>}
-                        </div>
-                      </details>
-                      {editingWO && !workOrderViewOnly && canEditWorkOrderInActiveBranch(editingWO) && (editingWO.status === 'Register' || editingWO.status === 'Proses' || (editingWO.status === 'Selesai' && !editingWO.invoiceId)) ? <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
+                      {editingWO && !workOrderViewOnly && canEditWorkOrderInActiveBranch(editingWO) && (editingWO.status === 'Register' || editingWO.status === 'Proses' || (editingWO.status === 'Selesai' && !editingWO.invoiceId) || (editingWO.status === 'Closed' && !editingWO.continuedToWoId)) ? <details data-wo-action-menu className="group relative" onToggle={handleActionMenuToggle} onBlur={handleActionMenuBlur} onKeyDown={handleActionMenuKeyDown}>
                         <summary className={`${ui.documentAction} cursor-pointer list-none`}>
                           Proses <span className="text-xs transition-transform group-open:rotate-180">⌄</span>
                         </summary>
@@ -3837,6 +3765,7 @@ export default function WorkOrders() {
                           {editingWO.status === 'Register' && <><button type="button" disabled={!formData.services.length || totalServices <= 0} onClick={() => requestStartProcessing(editingWO, true)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">Mulai Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
                           {editingWO.status === 'Proses' && <><button type="button" onClick={() => openCompletionModal(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Tandai Selesai</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan Pekerjaan / Lost Sales</button></>}
                           {editingWO.status === 'Selesai' && !editingWO.invoiceId && <>{hasPermission('invoice:create') && <button type="button" onClick={() => handleOpenInvoiceFromEditor(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-green-50 hover:text-green-700">Buat Faktur</button>}<button type="button" onClick={() => handleReopenCompletedWorkOrder(editingWO)} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">Kembali ke Dikerjakan</button><button type="button" onClick={() => requestStatusChange(editingWO, 'Closed')} className="block w-full px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button></>}
+                          {editingWO.status === 'Closed' && !editingWO.continuedToWoId && <button type="button" onClick={() => setLostSalesFollowUp(editingWO)} className="block w-full px-3 py-2 text-left text-sm font-medium text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                         </div>
                       </details> : !editingWO ? <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button> : null}
                     </div>
@@ -4565,7 +4494,7 @@ export default function WorkOrders() {
                 >
                   {editingWO ? 'Tutup' : 'Batal'}
                 </button>
-                {editingWO && !workOrderViewOnly && canEditWorkOrderInActiveBranch(editingWO) && !editingWO.invoiceId && (editingWO.status === 'Register' || editingWO.status === 'Proses' || editingWO.status === 'Selesai' || diagnosisMode) && (
+                {editingWO && !workOrderViewOnly && canEditWorkOrderInActiveBranch(editingWO) && !editingWO.invoiceId && (editingWO.status === 'Register' || editingWO.status === 'Proses' || editingWO.status === 'Selesai' || (editingWO.status === 'Closed' && !editingWO.continuedToWoId) || diagnosisMode) && (
                   <div className="relative">
                     <button
                       data-wo-mobile-process
@@ -4597,6 +4526,7 @@ export default function WorkOrders() {
                             <button type="button" onClick={() => { setMobileProcessMenuOpen(false); handleReopenCompletedWorkOrder(editingWO); }} className="block w-full px-3 py-2.5 text-left text-blue-700 hover:bg-blue-50">Kembali ke Dikerjakan</button>
                             <button type="button" onClick={() => { setMobileProcessMenuOpen(false); requestStatusChange(editingWO, 'Closed'); }} className="block w-full px-3 py-2.5 text-left font-medium text-rose-600 hover:bg-rose-50">Batalkan / Lost Sales</button>
                           </>}
+                          {editingWO.status === 'Closed' && !editingWO.continuedToWoId && <button type="button" onClick={() => { setMobileProcessMenuOpen(false); setLostSalesFollowUp(editingWO); }} className="block w-full px-3 py-2.5 text-left font-medium text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                           {diagnosisMode && hasPermission('invoice:create') && <button type="button" onClick={() => { setMobileProcessMenuOpen(false); diagnosisSubmitAction.current = 'invoice'; void handleSubmit(); }} className="block w-full border-t border-gray-100 px-3 py-2.5 text-left font-semibold text-green-700 hover:bg-green-50">Selesai &amp; Tagihkan</button>}
                         </div>
                       </>
