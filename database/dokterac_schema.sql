@@ -172,6 +172,23 @@ INSERT INTO `item_categories` (`id`, `code`, `name`, `type`, `description`, `is_
 ('3', 'KAT-003', 'Jasa Service AC', 'Jasa', 'Jasa teknisi & perawatan AC', 1),
 ('4', 'KAT-004', 'Tools Bengkel', 'Non Persediaan', 'Alat bengkel operasional', 1);
 
+-- Master jenis barang/spare part, terpisah dari sifat Persediaan/Jasa
+CREATE TABLE IF NOT EXISTS `item_product_types` (
+  `id` VARCHAR(64) NOT NULL,
+  `code` VARCHAR(20) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `category_id` VARCHAR(20),
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_item_product_type_code` (`code`),
+  UNIQUE KEY `uq_item_product_type_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `item_product_types` (`id`, `code`, `name`, `category_id`, `is_active`) VALUES
+('IPT-MOTOR-BLOWER', 'MB', 'MOTOR BLOWER', '1', 1);
+
 -- ==========================================================
 -- 8. TABEL ITEMS (BARANG & JASA)
 -- ==========================================================
@@ -181,8 +198,13 @@ CREATE TABLE IF NOT EXISTS `items` (
   `name` VARCHAR(200) NOT NULL,
   `category_id` VARCHAR(20),
   `category_name` VARCHAR(100),
+  `product_type_id` VARCHAR(64),
+  `product_type_name` VARCHAR(100),
   `type` ENUM('Persediaan', 'Jasa', 'Non Persediaan', 'Group') NOT NULL,
   `brand` VARCHAR(50),
+  `item_brand_id` VARCHAR(64),
+  `vehicle_brand_id` VARCHAR(64),
+  `vehicle_brand_name` VARCHAR(100),
   `unit` VARCHAR(20),
   `stock` INT DEFAULT 0,
   `sellable_stock` INT DEFAULT 0,
@@ -193,6 +215,13 @@ CREATE TABLE IF NOT EXISTS `items` (
   `description` TEXT,
   `receipt_description` VARCHAR(255),
   `barcode` VARCHAR(100) NULL,
+  `oem_part_number` VARCHAR(100),
+  `alternate_part_numbers` VARCHAR(500),
+  `technical_notes` TEXT,
+  `verification_status` VARCHAR(20) NOT NULL DEFAULT 'Verified',
+  `created_by` VARCHAR(64),
+  `verified_by` VARCHAR(64),
+  `merged_into_item_id` VARCHAR(64),
   `branch_id` VARCHAR(20),
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -202,6 +231,37 @@ CREATE TABLE IF NOT EXISTS `items` (
   KEY `idx_type` (`type`),
   KEY `idx_branch` (`branch_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `item_vehicle_brands` (
+  `item_id` VARCHAR(64) NOT NULL,
+  `vehicle_brand_id` VARCHAR(64) NOT NULL,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (`item_id`, `vehicle_brand_id`),
+  KEY `idx_ivb_brand` (`vehicle_brand_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `item_vehicle_compatibilities` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `item_id` VARCHAR(64) NOT NULL,
+  `brand_id` VARCHAR(64) NOT NULL,
+  `model_id` VARCHAR(64),
+  `generation_id` VARCHAR(64),
+  `year_from` SMALLINT UNSIGNED,
+  `year_to` SMALLINT UNSIGNED,
+  `engine_cc` SMALLINT UNSIGNED,
+  `engine_type` VARCHAR(20),
+  `engine_code` VARCHAR(50),
+  `variant` VARCHAR(100),
+  `transmission` VARCHAR(20),
+  `hvac_type` VARCHAR(30),
+  `fitment_status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+  `source` VARCHAR(255),
+  `notes` VARCHAR(500),
+  `sort_order` INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_ivc_item` (`item_id`),
+  KEY `idx_ivc_vehicle` (`brand_id`, `model_id`, `generation_id`, `engine_cc`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 9. TABEL GROUP MEMBERS (ISI PAKET)

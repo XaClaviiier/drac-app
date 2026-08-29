@@ -1,11 +1,27 @@
 <?php
-runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260827_v1', static function(PDO $pdo): void {
+runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260829_v2', static function(PDO $pdo): void {
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
 $pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_from SMALLINT UNSIGNED NULL AFTER generation_id");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_to SMALLINT UNSIGNED NULL AFTER year_from");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS fitment_status VARCHAR(20) NOT NULL DEFAULT 'Pending' AFTER hvac_type");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS source VARCHAR(255) NULL AFTER fitment_status");
+$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS notes VARCHAR(500) NULL AFTER source");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS oem_part_number VARCHAR(100) NULL AFTER barcode");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS alternate_part_numbers VARCHAR(500) NULL AFTER oem_part_number");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS technical_notes TEXT NULL AFTER alternate_part_numbers");
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_product_types(id VARCHAR(64) NOT NULL PRIMARY KEY,code VARCHAR(20) NOT NULL UNIQUE,name VARCHAR(100) NOT NULL UNIQUE,category_id VARCHAR(64) NULL,is_active TINYINT(1) NOT NULL DEFAULT 1,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_id VARCHAR(64) NULL AFTER category_name");
+$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_name VARCHAR(100) NULL AFTER product_type_id");
+$pdo->exec("INSERT IGNORE INTO item_product_types(id,code,name,category_id,is_active) VALUES ('IPT-MOTOR-BLOWER','MB','MOTOR BLOWER',(SELECT id FROM item_categories WHERE LOWER(TRIM(name))='sparepart ac' LIMIT 1),1)");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
@@ -248,6 +264,9 @@ try {
     $rows = $pdo->query("SELECT * FROM item_categories ORDER BY code")->fetchAll();
     foreach ($rows as &$r) $r['isActive'] = (bool)$r['is_active'];
     $data['itemCategories'] = $canUseItems ? $rows : [];
+    $rows = $pdo->query("SELECT id,code,name,category_id AS categoryId,is_active AS isActive FROM item_product_types ORDER BY name")->fetchAll();
+    foreach($rows as &$r)$r['isActive']=(bool)$r['isActive'];
+    $data['itemProductTypes'] = $canUseItems ? $rows : [];
 
     // Items (with group members)
     $rows = $pdo->query("SELECT * FROM items ORDER BY code")->fetchAll();
@@ -266,7 +285,7 @@ try {
     }
     $groupMembersAll = $pdo->query("SELECT * FROM item_group_members")->fetchAll();
     $vehicleBrandLinks=$pdo->query("SELECT ivb.item_id,ivb.vehicle_brand_id,b.name FROM item_vehicle_brands ivb JOIN vehicle_brands b ON b.id=ivb.vehicle_brand_id ORDER BY ivb.sort_order,b.name")->fetchAll();$vehicleBrandsByItem=[];foreach($vehicleBrandLinks as $link)$vehicleBrandsByItem[$link['item_id']][]=$link;
-    $compatibilityLinks=$pdo->query("SELECT c.item_id,c.brand_id AS brandId,b.name AS brandName,c.model_id AS modelId,m.name AS modelName,c.generation_id AS generationId,g.name AS generationName,c.engine_cc AS engineCc,c.engine_type AS engineType FROM item_vehicle_compatibilities c JOIN vehicle_brands b ON b.id=c.brand_id LEFT JOIN vehicle_models m ON m.id=c.model_id LEFT JOIN vehicle_generations g ON g.id=c.generation_id ORDER BY c.item_id,c.sort_order,c.id")->fetchAll();$compatibilitiesByItem=[];foreach($compatibilityLinks as $compatibility){$compatibility['engineCc']=$compatibility['engineCc']!==null?(int)$compatibility['engineCc']:null;$compatibilitiesByItem[$compatibility['item_id']][]=$compatibility;}
+    $compatibilityLinks=$pdo->query("SELECT c.item_id,c.brand_id AS brandId,b.name AS brandName,c.model_id AS modelId,m.name AS modelName,c.generation_id AS generationId,g.name AS generationName,c.year_from AS yearFrom,c.year_to AS yearTo,c.engine_cc AS engineCc,c.engine_type AS engineType,c.engine_code AS engineCode,c.variant,c.transmission,c.hvac_type AS hvacType,c.fitment_status AS fitmentStatus,c.source,c.notes FROM item_vehicle_compatibilities c JOIN vehicle_brands b ON b.id=c.brand_id LEFT JOIN vehicle_models m ON m.id=c.model_id LEFT JOIN vehicle_generations g ON g.id=c.generation_id ORDER BY c.item_id,c.sort_order,c.id")->fetchAll();$compatibilitiesByItem=[];foreach($compatibilityLinks as $link){$link['yearFrom']=$link['yearFrom']!==null?(int)$link['yearFrom']:null;$link['yearTo']=$link['yearTo']!==null?(int)$link['yearTo']:null;$link['engineCc']=$link['engineCc']!==null?(int)$link['engineCc']:null;$compatibilitiesByItem[$link['item_id']][]=$link;}
     $membersByGroup = [];
     foreach ($groupMembersAll as $m) {
         $membersByGroup[$m['group_item_id']][] = [
@@ -281,6 +300,8 @@ try {
     foreach ($rows as &$r) {
         $r['categoryId'] = $r['category_id'];
         $r['categoryName'] = $r['category_name'];
+        $r['productTypeId'] = $r['product_type_id'] ?? null;
+        $r['productTypeName'] = $r['product_type_name'] ?? '';
         $r['sellableStock'] = (int)$r['sellable_stock'];
         $r['purchasePrice'] = (float)$r['purchase_price'];
         $r['sellingPrice'] = (float)$r['selling_price'];
@@ -292,6 +313,9 @@ try {
         $r['vehicleBrandIds']=array_values(array_column($linkedBrands,'vehicle_brand_id'));
         $r['vehicleBrandNames']=array_values(array_column($linkedBrands,'name'));
         $r['vehicleCompatibilities']=$compatibilitiesByItem[$r['id']]??[];
+        $r['oemPartNumber']=$r['oem_part_number']??'';
+        $r['alternatePartNumbers']=$r['alternate_part_numbers']??'';
+        $r['technicalNotes']=$r['technical_notes']??'';
         $r['verificationStatus'] = $r['verification_status'] ?? 'Verified';
         $r['createdBy'] = $r['created_by'] ?? null;
         $r['verifiedBy'] = $r['verified_by'] ?? null;

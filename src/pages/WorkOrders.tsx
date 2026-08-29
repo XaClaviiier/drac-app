@@ -22,6 +22,7 @@ import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import { timelineStageFromReason } from '../lib/workOrderTimeline';
 import { formatVehicleCompatibility } from '../components/VehicleCompatibilityPicker';
+import { compatibilityBadgeForRank, compareCompatibilityRanks, rankItemVehicleCompatibility } from '../lib/vehicleCompatibility';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -657,7 +658,25 @@ export default function WorkOrders() {
   };
   // Item pengecekan gratis lama tetap tersimpan untuk histori, tetapi tidak lagi
   // ditawarkan pada transaksi baru.
-  const availableServiceItems = data.items.filter((item) => item.isActive && !isLegacyFreeInspection(item));
+  const selectedWorkOrderVehicle = data.vehicles.find(vehicle => vehicle.id === formData.vehicleRefId);
+  const itemCompatibilityRank = (item: typeof data.items[number]) => {
+    if (!selectedWorkOrderVehicle) return { score: 0, level: 'unknown' as const };
+    return rankItemVehicleCompatibility({
+      brandId: selectedWorkOrderVehicle.brandId,
+      modelId: selectedWorkOrderVehicle.modelId,
+      generationId: selectedWorkOrderVehicle.generationId,
+      engineCc: selectedWorkOrderVehicle.engineCc,
+      year: selectedWorkOrderVehicle.year,
+    }, item.vehicleCompatibilities || []);
+  };
+  const compatibilityBadge = (item: typeof data.items[number]) => {
+    if (!selectedWorkOrderVehicle || item.type === 'Jasa' || item.type === 'Group') return null;
+    if ((item.vehicleCompatibilities || []).length === 0) return null;
+    return compatibilityBadgeForRank(itemCompatibilityRank(item));
+  };
+  const availableServiceItems = data.items
+    .filter((item) => item.isActive && !isLegacyFreeInspection(item))
+    .sort((left, right) => compareCompatibilityRanks(itemCompatibilityRank(left), itemCompatibilityRank(right)) || left.name.localeCompare(right.name, 'id-ID'));
   const isPackageHeaderService = (service: WorkOrderService) => (
     service.name.startsWith('[PAKET]')
     || data.items.some(item => item.id === service.itemId && item.type === 'Group')
@@ -4088,7 +4107,13 @@ export default function WorkOrders() {
                                 }}
                                 className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-gray-100 px-3 py-2.5 text-left last:border-0 ${added ? 'cursor-not-allowed bg-green-50 opacity-60' : 'active:bg-blue-100 hover:bg-blue-50'}`}
                               >
-                                <ItemSearchOption name={item.name} code={item.code} selected={added}/>
+                                <div className="min-w-0">
+                                  <ItemSearchOption name={item.name} code={item.code} selected={added}/>
+                                  {(() => {
+                                    const badge = compatibilityBadge(item);
+                                    return badge ? <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${badge.className}`}>{badge.label}</span> : null;
+                                  })()}
+                                </div>
                                 {added && <CheckCircle2 className="h-4 w-4 text-green-600" />}
                               </button>
                             );

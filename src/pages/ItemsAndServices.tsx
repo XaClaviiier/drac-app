@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2, RefreshCw, Printer, Share2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { Item, ItemCategory, ItemType, GroupMember, StockMovement } from '../types';
+import type { Item, ItemCategory, ItemType, GroupMember, StockMovement, ItemVehicleCompatibility } from '../types';
 import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
@@ -12,6 +12,8 @@ import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
+import VehicleCompatibilityPicker, { type VehicleCatalogBrandOption } from '../components/VehicleCompatibilityPicker';
+import { ITEM_COMPATIBILITY_TEMPLATES } from '../lib/itemCompatibilityTemplates';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -37,10 +39,15 @@ const emptyItem = {
   code: '',
   name: '',
   categoryId: '',
+  productTypeId: '',
   type: 'Persediaan' as ItemType,
   brand: '',
   vehicleBrandId: '',
   vehicleBrandIds: [] as string[],
+  vehicleCompatibilities: [] as ItemVehicleCompatibility[],
+  oemPartNumber: '',
+  alternatePartNumbers: '',
+  technicalNotes: '',
   itemBrandId: '',
   unit: 'PCS',
   stock: 0,
@@ -142,7 +149,7 @@ export default function ItemsAndServices() {
   const [verificationFeedback, setVerificationFeedback] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
   useAccurateDocumentCanvas(showItemModal);
-  const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'account' | 'image' | 'other' | 'movement' | 'warehouse'>('general');
+  const [itemFormTab, setItemFormTab] = useState<'general' | 'sales' | 'stock' | 'compatibility' | 'account' | 'image' | 'other' | 'movement' | 'warehouse'>('general');
   const [movementDateFrom, setMovementDateFrom] = useState(() => {
     const today = new Date();
     return localDateKey(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -167,9 +174,10 @@ export default function ItemsAndServices() {
   const [editingCategory, setEditingCategory] = useState<ItemCategory | null>(null);
   const [itemForm, setItemForm] = useState(emptyItem);
   const [vehicleBrands,setVehicleBrands]=useState<Array<{id:string;name:string;itemCode?:string;isActive:boolean}>>([]);
+  const [vehicleCatalog,setVehicleCatalog]=useState<VehicleCatalogBrandOption[]>([]);
   const [vehicleBrandPickerOpen,setVehicleBrandPickerOpen]=useState(false);
   const [vehicleBrandQuery,setVehicleBrandQuery]=useState('');
-  useEffect(()=>{api.get<any>('vehicle-catalog').then(res=>setVehicleBrands(res.data?.brands||[])).catch(()=>setVehicleBrands([]));},[]);
+  useEffect(()=>{api.get<any>('vehicle-catalog').then(res=>{const brands=res.data?.brands||[];setVehicleBrands(brands);setVehicleCatalog(brands);}).catch(()=>{setVehicleBrands([]);setVehicleCatalog([]);});},[]);
   type ItemBrandMaster={id:string;code:string;name:string;description:string;isActive:boolean;sortOrder?:number;usageCount?:number};
   const [itemBrands,setItemBrands]=useState<ItemBrandMaster[]>([]);
   const [brandForm,setBrandForm]=useState({id:'',code:'',name:'',description:'',isActive:true});
@@ -387,10 +395,15 @@ export default function ItemsAndServices() {
         code: item.code,
         name: item.name,
         categoryId: item.categoryId,
+        productTypeId: item.productTypeId || '',
         type: item.type,
         brand: item.brand,
         vehicleBrandId: item.vehicleBrandId || '',
         vehicleBrandIds: item.vehicleBrandIds?.length ? [...item.vehicleBrandIds] : (item.vehicleBrandId ? [item.vehicleBrandId] : []),
+        vehicleCompatibilities: item.vehicleCompatibilities ? [...item.vehicleCompatibilities] : [],
+        oemPartNumber: item.oemPartNumber || '',
+        alternatePartNumbers: item.alternatePartNumbers || '',
+        technicalNotes: item.technicalNotes || '',
         itemBrandId: item.itemBrandId || '',
         unit: item.unit,
         stock: item.stock,
@@ -552,11 +565,16 @@ export default function ItemsAndServices() {
       code,
       name,
       categoryId: itemForm.categoryId,
+      productTypeId: itemForm.productTypeId || undefined,
       categoryName: category?.name || '-',
       type: itemForm.type,
       brand: itemForm.brand,
       vehicleBrandId: effectiveVehicleBrandIds[0] || undefined,
       vehicleBrandIds: effectiveVehicleBrandIds,
+      vehicleCompatibilities: itemForm.vehicleCompatibilities,
+      oemPartNumber: itemForm.oemPartNumber.trim(),
+      alternatePartNumbers: itemForm.alternatePartNumbers.trim(),
+      technicalNotes: itemForm.technicalNotes.trim(),
       itemBrandId: itemForm.itemBrandId || undefined,
       unit: itemForm.unit,
       // Saldo stok dan harga beli dikelola oleh transaksi persediaan/pembelian,
@@ -1503,7 +1521,7 @@ export default function ItemsAndServices() {
             <div className="flex flex-shrink-0 items-end justify-between border-b border-slate-400 bg-[#f4f4f4] px-4 pt-1">
               <div className="flex items-end gap-1">{([
                   ['general', 'Umum'], ['sales', 'Penjualan / Pembelian'], ['stock', 'Stok'],
-                  ['account', 'Akun'], ['image', 'Gambar'], ['other', 'Lain-lain'],
+                  ['compatibility', 'Kompatibilitas Kendaraan'], ['account', 'Akun'], ['image', 'Gambar'], ['other', 'Lain-lain'],
                 ] as const).map(([key, label]) => (
                   <button key={key} type="button" onClick={() => setItemFormTab(key)} className={`rounded-t border border-b-0 px-3 py-2 text-sm ${itemFormTab === key ? 'border-t-2 border-t-blue-600 bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>{label}</button>
                 ))}</div>
@@ -1572,6 +1590,19 @@ export default function ItemsAndServices() {
                   </table>
                   {!itemWarehouseRows.length && <div className="bg-white px-4 py-12 text-center text-slate-500">Belum ada gudang aktif pada cabang yang dipilih.</div>}
                 </div>}
+              </div>}
+              {itemFormTab === 'compatibility' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm">
+                <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-300 pb-4">
+                  <div><h4 className="text-lg font-medium text-blue-600">Kompatibilitas Kendaraan</h4><p className="text-sm text-slate-600">Satu barang dapat digunakan oleh banyak kendaraan. Status Pending tidak dianggap cocok final sebelum diverifikasi.</p></div>
+                  <select value="" onChange={event=>{const template=ITEM_COMPATIBILITY_TEMPLATES.find(row=>row.id===event.target.value);if(!template)return;setItemForm(current=>({...current,name:template.name,categoryId:data.itemCategories.find(row=>row.name.toUpperCase()==='SPAREPART AC')?.id||current.categoryId,productTypeId:'IPT-MOTOR-BLOWER',oemPartNumber:template.oemPartNumber,alternatePartNumbers:template.alternatePartNumbers,technicalNotes:template.technicalNotes,vehicleBrandId:template.vehicleBrandId,vehicleBrandIds:[template.vehicleBrandId],vehicleCompatibilities:template.vehicleCompatibilities}));}} className="h-10 rounded border border-blue-300 bg-blue-50 px-3 text-sm font-medium text-blue-800"><option value="">Gunakan template barang…</option>{ITEM_COMPATIBILITY_TEMPLATES.map(template=><option key={template.id} value={template.id}>{template.name}</option>)}</select>
+                </div>
+                <div className="mb-6 grid gap-4 lg:grid-cols-4">
+                  <label className="text-sm font-medium text-slate-700">Jenis Barang / Spare Part<select value={itemForm.productTypeId} onChange={event=>setItemForm({...itemForm,productTypeId:event.target.value})} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3"><option value="">Belum dipilih</option>{data.itemProductTypes.filter(row=>row.isActive&&(!row.categoryId||row.categoryId===itemForm.categoryId)).map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select><span className="sr-only">MOTOR BLOWER</span></label>
+                  <label className="text-sm font-medium text-slate-700">Nomor Part OEM<input value={itemForm.oemPartNumber} onChange={event=>setItemForm({...itemForm,oemPartNumber:event.target.value.toUpperCase()})} placeholder="Contoh 79310-SAA-003" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 font-mono"/></label>
+                  <label className="text-sm font-medium text-slate-700">Nomor Part Alternatif<input value={itemForm.alternatePartNumbers} onChange={event=>setItemForm({...itemForm,alternatePartNumbers:event.target.value.toUpperCase()})} placeholder="Pisahkan dengan koma" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 font-mono"/></label>
+                  <label className="text-sm font-medium text-slate-700">Catatan Teknis<textarea rows={2} value={itemForm.technicalNotes} onChange={event=>setItemForm({...itemForm,technicalNotes:event.target.value})} placeholder="Soket, dudukan, ukuran kipas…" className="mt-1 w-full rounded border border-slate-300 px-3 py-2"/></label>
+                </div>
+                <VehicleCompatibilityPicker canVerifyFitment={canVerifyItems} catalog={vehicleCatalog} value={itemForm.vehicleCompatibilities} onChange={vehicleCompatibilities=>setItemForm({...itemForm,vehicleCompatibilities})}/>
               </div>}
               {itemFormTab === 'movement' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
                 <div className="mb-3 flex flex-wrap items-center gap-3">

@@ -122,6 +122,19 @@ foreach ($defaults as $brandName => $models) {
         $modelInsert->execute(['VM-' . substr(sha1(strtolower($brandName . '|' . $modelName)), 0, 16), $brandId, $modelName]);
     }
 }
+$jazzModel = $pdo->query("SELECT m.id FROM vehicle_models m JOIN vehicle_brands b ON b.id=m.brand_id WHERE b.name='Honda' AND m.name='Jazz' LIMIT 1")->fetchColumn();
+if ($jazzModel) {
+    $generationSeed = $pdo->prepare("INSERT IGNORE INTO vehicle_generations(id,model_id,name,aliases,year_from,year_to,sort_order) VALUES(?,?,?,?,?,?,?)");
+    $engineSeed = $pdo->prepare("INSERT IGNORE INTO vehicle_generation_engines(generation_id,engine_cc) VALUES(?,?)");
+    foreach ([
+        ['VG-JAZZ-GD3','GD3','Jazz generasi 1,gen 1,i-DSI,VTEC',2004,2008],
+        ['VG-JAZZ-GE8','GE8','Jazz generasi 2,gen 2,A,S,RS',2008,2014],
+        ['VG-JAZZ-GK5','GK5','Jazz generasi 3,gen 3,A,S,RS',2014,2021],
+    ] as $index => [$generationId,$generationName,$aliases,$yearFrom,$yearTo]) {
+        $generationSeed->execute([$generationId,$jazzModel,$generationName,$aliases,$yearFrom,$yearTo,100+($index+1)*10]);
+        $engineSeed->execute([$generationId,1500]);
+    }
+}
 $universalBrandId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES(?,'Universal','01',1,0)")->execute([$universalBrandId]);
 $itemBrandCodes=['Universal'=>'01','Toyota'=>'02','Daihatsu'=>'03','Honda'=>'04','Mitsubishi'=>'05','Suzuki'=>'06','Wuling'=>'07','Nissan'=>'08','Datsun'=>'09','Isuzu'=>'10','Mazda'=>'11','Ford'=>'12','Chevrolet'=>'13','Kia'=>'14','Hyundai'=>'15'];
 foreach($itemBrandCodes as $brandName=>$itemCode){$codeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) AND (item_code IS NULL OR item_code='')");$codeUpdate->execute([$itemCode,$brandName]);}

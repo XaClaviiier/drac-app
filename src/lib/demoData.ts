@@ -103,6 +103,9 @@ export const demoData: AppData = {
     { id: '1', code: 'SUP-001', name: 'PT WURTH INDONESIA', contactPerson: 'Pak Andi', phone: '021-5551111', email: 'sales@wurth.id', address: 'Jakarta', isActive: true, createdAt: '2026-01-05' },
     { id: '2', code: 'SUP-002', name: 'TOKO DENSO MAKASSAR', contactPerson: 'Pak Hendra', phone: '0411-444333', email: 'denso@gmail.com', address: 'Makassar', isActive: true, createdAt: '2026-02-01' },
   ],
+  itemProductTypes: [
+    { id: 'IPT-MOTOR-BLOWER', code: 'MB', name: 'MOTOR BLOWER', categoryId: '1', isActive: true },
+  ],
   itemCategories: [
     { id: '1', code: 'KAT-001', name: 'Sparepart AC', type: 'Persediaan', description: 'Komponen AC', isActive: true },
     { id: '2', code: 'KAT-002', name: 'Chemical & Freon', type: 'Persediaan', description: 'Freon, cleaner', isActive: true },
