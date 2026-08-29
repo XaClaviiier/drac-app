@@ -1010,7 +1010,7 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.match(rules, /invoice\.payment < invoice\.total/);
   assert.match(layout, /buildWorkOrderAttentionItems/);
   assert.match(layout, /aria-label=\{`Notifikasi, \$\{workOrderAttentionItems\.length\} perlu tindakan`\}/);
-  assert.match(layout, /navigate\('\/workorders\?attention=1'\)/);
+  assert.match(layout, /navigateWithEditorGuard\('\/workorders\?attention=1'\)/);
   assert.match(mobileDashboard, /buildWorkOrderAttentionItems/);
   assert.match(mobileDashboard, /aria-label=\{`Notifikasi, \$\{attentionItems\.length\} perlu tindakan`\}/);
   assert.match(mobileDashboard, /navigate\('\/workorders\?attention=1'\)/);

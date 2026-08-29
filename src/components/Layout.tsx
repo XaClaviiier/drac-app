@@ -55,6 +55,10 @@ import {
   readProcessQueue,
 } from "../lib/processQueue";
 
+type WorkOrderEditorGuardWindow = Window & {
+  __dracRequestCloseWorkOrderEditor?: () => Promise<boolean>;
+};
+
 function CrossedToolsIcon({ className = "" }: { className?: string }) {
   return (
     <span
@@ -598,6 +602,11 @@ export default function Layout() {
   }, [sidebarOpen]);
   const location = useLocation();
   const navigate = useNavigate();
+  const navigateWithEditorGuard = async (target: string) => {
+    const guard = (window as WorkOrderEditorGuardWindow).__dracRequestCloseWorkOrderEditor;
+    if (guard && !await guard()) return;
+    navigate(target);
+  };
   const {
     data,
     currentUser,
@@ -626,7 +635,7 @@ export default function Layout() {
   const workOrderAttentionCounts = countWorkOrderAttentionByKind(workOrderAttentionItems);
   const openWorkOrderAttention = () => {
     setNotificationMenuOpen(false);
-    navigate('/workorders?attention=1');
+    void navigateWithEditorGuard('/workorders?attention=1');
   };
   const refreshRunning = systemProcesses.some(
     (task) => task.label === "Refresh Data" && task.status === "running",
@@ -672,15 +681,19 @@ export default function Layout() {
     );
   };
 
-  const closeWorkspaceTab = (path: string) => {
+  const closeWorkspaceTab = async (path: string) => {
     const index = workspaceTabs.findIndex((tab) => tab.path === path);
     const remaining = workspaceTabs.filter((tab) => tab.path !== path);
-    setWorkspaceTabs(remaining);
     if (workspacePathFor(location.pathname) === path) {
+      const guard = (window as WorkOrderEditorGuardWindow).__dracRequestCloseWorkOrderEditor;
+      if (guard && !await guard()) return;
       const fallback =
         remaining[Math.min(index, remaining.length - 1)]?.path || "/";
+      setWorkspaceTabs(remaining);
       navigate(fallback);
+      return;
     }
+    setWorkspaceTabs(remaining);
   };
 
   // Tutup menu mobile saat pindah halaman
@@ -812,6 +825,10 @@ export default function Layout() {
           {hasPermission("ai:view") && (
             <NavLink
               to="/ai"
+              onClick={(event) => {
+                event.preventDefault();
+                void navigateWithEditorGuard('/ai');
+              }}
               className={`group relative mx-2 mt-4 flex items-center gap-3 rounded-lg border-t border-white/10 py-3 pt-4 transition-all ${sidebarOpen ? "px-4" : "justify-center px-0"} ${location.pathname === "/ai" && !desktopMenuOpen ? "bg-[#020d20] text-white shadow-[inset_4px_0_0_#22d3ee]" : "text-white/80 hover:bg-blue-600 hover:text-white"}`}
             >
               <Bot className="h-6 w-6 flex-shrink-0" />
@@ -893,7 +910,7 @@ export default function Layout() {
                           disabled={!available}
                           onClick={() => {
                             if (!item.path) return;
-                            navigate(item.path);
+                            void navigateWithEditorGuard(item.path);
                             setDesktopMenuOpen(null);
                           }}
                           className={`relative flex h-20 flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-center transition-all duration-150 ${tones[item.tone]} ${available ? "shadow-[0_2px_7px_rgba(15,23,42,0.10)] hover:-translate-y-0.5 hover:shadow-[0_5px_12px_rgba(15,23,42,0.16)] active:translate-y-0" : "cursor-not-allowed opacity-40 shadow-none"}`}
@@ -932,7 +949,7 @@ export default function Layout() {
           <div className="flex min-w-0 items-center gap-2 sm:gap-4 lg:hidden">
             {/* Kembali ke dashboard mobile; menu lama tidak digunakan lagi. */}
             <button
-              onClick={() => navigate("/")}
+              onClick={() => { void navigateWithEditorGuard("/"); }}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-md active:scale-95 lg:hidden"
               aria-label="Kembali ke Beranda"
             >
@@ -1233,7 +1250,7 @@ export default function Layout() {
                     <button
                       onClick={() => {
                         setUserMenuOpen(false);
-                        navigate("/settings");
+                        void navigateWithEditorGuard("/settings");
                       }}
                       className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
                     >
@@ -1256,7 +1273,7 @@ export default function Layout() {
           <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-0.5 overflow-x-auto overflow-y-hidden">
             <button
               type="button"
-              onClick={() => navigate("/")}
+              onClick={() => { void navigateWithEditorGuard("/"); }}
               className={`${workspaceTabClass(location.pathname === "/")} justify-between gap-3 px-4 text-sm`}
             >
               <span className="truncate">Dashboard</span>
@@ -1270,7 +1287,7 @@ export default function Layout() {
                 >
                   <button
                     type="button"
-                    onClick={() => navigate(tab.path)}
+                    onClick={() => { void navigateWithEditorGuard(tab.path); }}
                     title={tab.label}
                     className={`min-w-0 flex-1 truncate px-3 text-left text-sm ${active ? "font-semibold" : ""}`}
                   >
@@ -1278,7 +1295,7 @@ export default function Layout() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => closeWorkspaceTab(tab.path)}
+                    onClick={() => { void closeWorkspaceTab(tab.path); }}
                     title={`Tutup ${tab.label}`}
                     className={`mr-1 rounded p-1 ${active ? "hover:bg-blue-700" : "hover:bg-gray-300"}`}
                   >
@@ -1293,9 +1310,9 @@ export default function Layout() {
               aria-label="Pilih modul yang terbuka"
               title="Pilih tab yang terbuka"
               value=""
-              onChange={(event) =>
-                event.target.value && navigate(event.target.value)
-              }
+              onChange={(event) => {
+                if (event.target.value) void navigateWithEditorGuard(event.target.value);
+              }}
               className="relative z-10 ml-1 h-[34px] w-16 flex-shrink-0 rounded-t-md border border-b-0 border-gray-300 bg-gray-200 px-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
             >
               <option value="">{workspaceTabs.length + 1}</option>
@@ -1326,35 +1343,35 @@ export default function Layout() {
               icon={Home}
               label="Beranda"
               active={false}
-              onClick={() => navigate("/")}
+              onClick={() => { void navigateWithEditorGuard("/"); }}
             />
             <MobileBottom
               icon={Activity}
               label="Timeline"
               active={location.pathname === "/workorders/timeline"}
-              onClick={() => navigate("/workorders/timeline")}
+              onClick={() => { void navigateWithEditorGuard("/workorders/timeline"); }}
             />
             <MobileBottom
               icon={CirclePlus}
               label="Tambah"
               active={false}
-              onClick={() =>
-                navigate(currentBranchId === "ALL" ? "/" : "/workorders")
-              }
+              onClick={() => {
+                void navigateWithEditorGuard(currentBranchId === "ALL" ? "/" : "/workorders");
+              }}
             />
             {hasPermission("ai:view") && (
               <MobileBottom
                 icon={Bot}
                 label="Asisten AI"
                 active={location.pathname === "/ai"}
-                onClick={() => navigate("/ai")}
+                onClick={() => { void navigateWithEditorGuard("/ai"); }}
               />
             )}
             <MobileBottom
               icon={Settings}
               label="Akun"
               active={location.pathname === "/settings"}
-              onClick={() => navigate("/settings")}
+              onClick={() => { void navigateWithEditorGuard("/settings"); }}
             />
           </nav>
         )}
@@ -1447,7 +1464,7 @@ export default function Layout() {
                     <button
                       key={item.path}
                       onClick={() => {
-                        navigate(item.path);
+                        void navigateWithEditorGuard(item.path);
                         setMobileMenuOpen(false);
                       }}
                       style={{ animationDelay: `${idx * 35}ms` }}

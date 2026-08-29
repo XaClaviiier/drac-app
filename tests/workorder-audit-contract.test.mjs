@@ -215,12 +215,30 @@ test('editor melindungi draft dan memakai versi WO terbaru sebelum membuka faktu
 
 test('browser memperingatkan saat editor WO memiliki perubahan belum disimpan', () => {
   const page = source('src/pages/WorkOrders.tsx');
+  const layout = source('src/components/Layout.tsx');
+  const closeRequest = sectionBetween(page, 'const requestCloseEditor =', 'const editorHasUnsavedChanges =');
   const closeGuard = sectionBetween(page, 'const editorHasUnsavedChanges =', 'const handleRemoveService =');
 
+  assert.match(closeRequest, /hasUnsavedEditorChanges\(\)/);
+  assert.match(closeRequest, /Perubahan yang belum disimpan akan hilang/);
+  assert.match(closeRequest, /__dracRequestCloseWorkOrderEditor = requestCloseEditor/);
+  assert.match(layout, /const navigateWithEditorGuard = async/);
+  assert.match(layout, /if \(guard && !await guard\(\)\) return/);
   assert.match(closeGuard, /showModal\s*&&\s*hasUnsavedEditorChanges\(\)/);
   assert.match(closeGuard, /window\.addEventListener\('beforeunload',\s*handleBeforeUnload\)/);
   assert.match(closeGuard, /event\.returnValue\s*=\s*''/);
   assert.match(closeGuard, /window\.removeEventListener\('beforeunload',\s*handleBeforeUnload\)/);
+});
+
+test('aksi status mempertahankan editor sedangkan Simpan dan Tutup menutup WO', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const submit = sectionBetween(page, 'const handleSubmit =', 'const handleDelete =');
+
+  assert.match(submit, /const keepEditorOpenAfterStatusChange = Boolean\(/);
+  assert.match(submit, /shouldProcessEditing \|\| shouldMarkLostSales \|\| resumeLostSalesAfterEstimate/);
+  assert.match(submit, /if \(!keepEditorOpenAfterStatusChange\) handleCloseModal\(\)/);
+  assert.match(page, /'Simpan & Tutup Work Order'/);
+  assert.match(page, /'Simpan & Tutup'/);
 });
 
 test('editor layanan WO seragam dan tombol sampah kanan hanya menghapus WO untuk Admin atau Owner', () => {

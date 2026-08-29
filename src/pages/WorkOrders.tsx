@@ -180,6 +180,9 @@ type WorkOrderFinancialTimeline = {
   canViewPayments: boolean;
 };
 const EMPTY_FINANCIAL_TIMELINE: WorkOrderFinancialTimeline = { woId: '', invoice: null, payments: [], paymentAudits: [], canViewPayments: false };
+type WorkOrderEditorGuardWindow = Window & {
+  __dracRequestCloseWorkOrderEditor?: () => Promise<boolean>;
+};
 
 export default function WorkOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1384,6 +1387,20 @@ export default function WorkOrders() {
     return true;
   };
 
+  // Navigasi modul dari Layout juga harus melewati pemeriksaan draft yang sama.
+  // Dengan demikian klik tab/menu saat editor kehilangan fokus tidak membuang
+  // perubahan secara diam-diam, sedangkan data yang sudah tersimpan langsung tutup.
+  useEffect(() => {
+    if (!showModal) return undefined;
+    const appWindow = window as WorkOrderEditorGuardWindow;
+    appWindow.__dracRequestCloseWorkOrderEditor = requestCloseEditor;
+    return () => {
+      if (appWindow.__dracRequestCloseWorkOrderEditor === requestCloseEditor) {
+        delete appWindow.__dracRequestCloseWorkOrderEditor;
+      }
+    };
+  });
+
   const editorHasUnsavedChanges = showModal && hasUnsavedEditorChanges();
   useEffect(() => {
     if (!editorHasUnsavedChanges) return;
@@ -1557,6 +1574,9 @@ export default function WorkOrders() {
     const shouldMarkLostSales = diagnosisSubmitAction.current === 'lost';
     const shouldProcessNew = !editingWO && diagnosisSubmitAction.current === 'process';
     const shouldProcessEditing = Boolean(editingWO && editingWO.status === 'Register' && diagnosisSubmitAction.current === 'process');
+    const keepEditorOpenAfterStatusChange = Boolean(
+      shouldProcessEditing || shouldMarkLostSales || resumeLostSalesAfterEstimate
+    );
     diagnosisSubmitAction.current = 'save';
 
     if (workOrderViewOnly) {
@@ -1818,7 +1838,7 @@ export default function WorkOrders() {
         return;
       }
       setTimeout(() => setSuccessMsg(''), 4000);
-      if (!isAutoRegisteredDraft) handleCloseModal();
+      if (!keepEditorOpenAfterStatusChange) handleCloseModal();
     } catch (err: any) {
       showAccurateNotice('Gagal menyimpan Order Kerja: ' + (err?.message || 'terjadi kesalahan'));
     } finally {
@@ -2080,9 +2100,13 @@ export default function WorkOrders() {
       setCancelStep(1);
       setCancelReasonChoice('');
       setCancelReasonNotes('');
-      setDetailWO(current => current?.id === wo.id
-        ? (result.workOrder || { ...current, status: next })
-        : current);
+      const changedWorkOrder = result.workOrder || { ...wo, status: next };
+      setDetailWO(current => current?.id === wo.id ? changedWorkOrder : current);
+      if (showModal && editingWO?.id === wo.id) {
+        setEditingWO(changedWorkOrder);
+        setFormData(current => ({ ...current, status: changedWorkOrder.status }));
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(changedWorkOrder);
+      }
     } catch (error: any) {
       showAccurateNotice(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
     }
@@ -2109,11 +2133,15 @@ export default function WorkOrders() {
         showAccurateNotice(result.message || 'WO tidak dapat dikembalikan ke Dikerjakan.');
         return;
       }
+      const reopenedWorkOrder = result.workOrder || { ...wo, status: 'Proses' as const };
       setSuccessMsg(`${wo.woNumber} dikembalikan ke Dikerjakan.`);
       setTimeout(() => setSuccessMsg(''), 4000);
-      setDetailWO(current => current?.id === wo.id
-        ? (result.workOrder || { ...current, status: 'Proses' })
-        : current);
+      setDetailWO(current => current?.id === wo.id ? reopenedWorkOrder : current);
+      if (showModal && editingWO?.id === wo.id) {
+        setEditingWO(reopenedWorkOrder);
+        setFormData(current => ({ ...current, status: reopenedWorkOrder.status }));
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(reopenedWorkOrder);
+      }
     } catch (error: any) {
       showAccurateNotice(`Gagal mengembalikan WO: ${error?.message || 'server tidak merespons'}`);
     }
@@ -3678,7 +3706,7 @@ export default function WorkOrders() {
                   disabled: workOrderViewOnly || (editingWO
                     ? Boolean(editingWO.invoiceId) || (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)
                     : isAutoRegistering),
-                  title: editingWO ? 'Simpan Work Order' : 'Register Work Order',
+                  title: editingWO ? 'Simpan & Tutup Work Order' : 'Register Work Order',
                 }}
                 print={{
                   onClick: () => setOpenActionRailMenu(openActionRailMenu === 'print' ? '' : 'print'),
@@ -4596,9 +4624,9 @@ export default function WorkOrders() {
                   {resumeLostSalesAfterEstimate
                     ? 'Setuju · Dikerjakan'
                     : diagnosisMode
-                      ? 'Simpan Diagnosa'
+                      ? 'Simpan Diagnosa & Tutup'
                       : editingWO
-                        ? 'Simpan'
+                        ? 'Simpan & Tutup'
                         : isAutoRegistering ? 'Meregister...' : 'Register'}
                 </button>
               </div>
