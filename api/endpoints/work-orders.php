@@ -946,6 +946,10 @@ switch ($method) {
 
     case 'DELETE':
         if (!$id) respondError('ID required', 422);
+        $deleteActor = $requestUser ?? requireAuthenticatedUser($pdo);
+        if (!authenticatedUserIsOwnerOrAdministrator($pdo, $deleteActor)) {
+            respondError('Hanya Admin atau Owner yang dapat menghapus WO.', 403);
+        }
         $pdo->beginTransaction();
         try {
             $woStmt = $pdo->prepare("
@@ -956,7 +960,7 @@ switch ($method) {
             $wo = $woStmt->fetch();
             if (!$wo) throw new InvalidArgumentException('WO tidak ditemukan.');
             assertActiveBranch($pdo, (string)$wo['branch_id']);
-            requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), (string)$wo['branch_id']);
+            requireAccessibleBranch($pdo, $deleteActor, (string)$wo['branch_id']);
 
             // Jangan hanya mengandalkan work_orders.invoice_id. Data lama mungkin
             // sudah memiliki sales_invoices.wo_id tetapi tautan balik WO belum terisi.

@@ -368,7 +368,8 @@ test('rail aksi form baru dipakai bersama oleh penerimaan dan penyesuaian stok',
   assert.match(receipt, /AccurateFormActionRail/);
   assert.match(adjustment, /AccurateFormActionRail/);
   assert.match(rail, /ariaLabel = 'Aksi formulir'/);
-  assert.match(rail, /title=\{remove\?\.title \|\| 'Hapus'\}/);
+  assert.match(rail, /\{remove && \(/);
+  assert.match(rail, /title=\{remove\.title \|\| 'Hapus'\}/);
   assert.match(rail, /title=\{print\?\.title \|\| 'Cetak'\}/);
 });
 
@@ -702,7 +703,8 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(page, /setEditingWO\(created\);[\s\S]*?setIsAutoRegisteredDraft\(true\);[\s\S]*?setShowServiceForm\(true\)/);
   assert.match(page, /diagnosisMode && editingWO \? 'Diagnosa' : editingWO \? 'Rincian WO' : 'Data Baru'/);
   assert.match(page, /disabled=\{!editingWO \|\| !customerVehicleReady \|\| isAutoRegistering\}/);
-  assert.match(page, /Hapus barang atau jasa terpilih/);
+  assert.match(page, /'Hapus Work Order'/);
+  assert.match(page, /Hapus Baris/);
   assert.match(page, /<td colSpan=\{6\} className="h-48/);
   assert.match(page, /setSelectedServiceId\(service\.id\)/);
   assert.match(page, /Waktu WO desktop/);

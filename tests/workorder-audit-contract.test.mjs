@@ -223,6 +223,23 @@ test('browser memperingatkan saat editor WO memiliki perubahan belum disimpan', 
   assert.match(closeGuard, /window\.removeEventListener\('beforeunload',\s*handleBeforeUnload\)/);
 });
 
+test('editor layanan WO seragam dan tombol sampah kanan hanya menghapus WO untuk Admin atau Owner', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const rail = source('src/components/AccurateFormActionRail.tsx');
+  const endpoint = source('api/endpoints/work-orders.php');
+
+  assert.match(page, /data-wo-service-editor/);
+  assert.match(page, /onClick=\{\(\) => openServiceEditor\(service\)\}/);
+  assert.match(page, /onClick=\{removeServiceFromEditor\}/);
+  assert.doesNotMatch(page, /onClick=\{\(\) => handleRemoveService\(service\.id\)\}/);
+  assert.match(page, /remove=\{canShowAdminRowActions \? \{/);
+  assert.match(page, /handleDelete\(editingWO\)/);
+  assert.match(page, /currentRole\?\.code\?\.trim\(\)\.toUpperCase\(\) === 'ADM'/);
+  assert.match(rail, /\{remove && \(/);
+  assert.match(endpoint, /authenticatedUserIsOwnerOrAdministrator\(\$pdo, \$deleteActor\)/);
+  assert.match(endpoint, /Hanya Admin atau Owner yang dapat menghapus WO/);
+});
+
 test('WO lanjutan dari Semua Cabang wajib memilih cabang eksplisit', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const context = source('src/context/AppContext.tsx');

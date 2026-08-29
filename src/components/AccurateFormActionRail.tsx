@@ -64,16 +64,18 @@ export default function AccurateFormActionRail({
         tone="success"
         icon={<CircleEllipsis className="h-8 w-8" />}
       />
-      <div className="mt-3">
-        <AccurateActionRailButton
-          title={remove?.title || 'Hapus'}
-          disabled={!remove?.onClick || remove.disabled}
-          onClick={action(remove)}
-          tone="danger"
-          showChevron={false}
-          icon={<Trash2 className="h-7 w-7" />}
-        />
-      </div>
+      {remove && (
+        <div className="mt-3">
+          <AccurateActionRailButton
+            title={remove.title || 'Hapus'}
+            disabled={!remove.onClick || remove.disabled}
+            onClick={action(remove)}
+            tone="danger"
+            showChevron={false}
+            icon={<Trash2 className="h-7 w-7" />}
+          />
+        </div>
+      )}
     </aside>
   );
 }

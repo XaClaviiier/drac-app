@@ -340,8 +340,11 @@ export default function WorkOrders() {
     setAccuratePrompt(null);
     resolve?.(value);
   };
+  const currentRole = data.roles.find(role => role.id === currentUser?.roleId);
   const canShowAdminRowActions = Boolean(
-    currentUser?.isOwner || /^(owner|administrator)$/i.test((currentUser?.roleName || '').trim())
+    currentUser?.isOwner
+    || currentRole?.code?.trim().toUpperCase() === 'ADM'
+    || /^(owner|admin|administrator)$/i.test((currentRole?.name || currentUser?.roleName || '').trim())
   );
   const isTechnicianIdentity = (roleId?: string, roleName?: string) => {
     const role = data.roles.find(candidate => candidate.id === roleId);
@@ -372,6 +375,12 @@ export default function WorkOrders() {
   const [documentTab, setDocumentTab] = useState<AccurateDocumentTab>(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
   const [infoMobilePane, setInfoMobilePane] = useState<'notes' | 'timeline'>('notes');
   const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [serviceEditor, setServiceEditor] = useState<{
+    id: string;
+    qty: string;
+    price: string;
+    description: string;
+  } | null>(null);
   const [openActionRailMenu, setOpenActionRailMenu] = useState<'print' | 'more' | ''>('');
   const [mobileProcessMenuOpen, setMobileProcessMenuOpen] = useState(false);
 
@@ -1127,6 +1136,19 @@ export default function WorkOrders() {
   };
 
   const totalServices = formData.services.reduce((sum, s) => sum + s.price * s.qty, 0);
+  const canDeleteEditingWorkOrder = Boolean(
+    canShowAdminRowActions
+    && hasPermission('wo:delete')
+    && editingWO
+    && canEditWorkOrderInActiveBranch(editingWO)
+    && !editingWO.invoiceId
+    && ['Register', 'Selesai'].includes(editingWO.status)
+  );
+  const serviceEditorReadOnly = Boolean(
+    workOrderViewOnly
+    || editingWO?.invoiceId
+    || (editingWO && !canEditWorkOrderInActiveBranch(editingWO))
+  );
   const resetForm = () => {
     const nextFormData = {
       date: localDateKey(),
@@ -1171,6 +1193,7 @@ export default function WorkOrders() {
     setDocumentTab(DEFAULT_WORK_ORDER_DOCUMENT_TAB);
     setInfoMobilePane('notes');
     setSelectedServiceId('');
+    setServiceEditor(null);
   };
 
   const handleOpenModal = (wo?: WorkOrder, servicesOnly = false, viewOnly = false) => {
@@ -1409,6 +1432,36 @@ export default function WorkOrders() {
       });
       return { ...prev, services };
     });
+  };
+
+  const openServiceEditor = (service: WorkOrderService) => {
+    if (isPackageMemberService(service)) return;
+    setSelectedServiceId(service.id);
+    setServiceEditor({
+      id: service.id,
+      qty: String(Math.max(1, Number(service.qty) || 1)),
+      price: String(Math.max(0, Number(service.price) || 0)),
+      description: service.description || '',
+    });
+  };
+
+  const closeServiceEditor = () => {
+    setServiceEditor(null);
+    setSelectedServiceId('');
+  };
+
+  const saveServiceEditor = () => {
+    if (!serviceEditor) return;
+    handleUpdateService(serviceEditor.id, 'qty', Math.max(1, Number(serviceEditor.qty) || 1));
+    handleUpdateService(serviceEditor.id, 'price', Math.max(0, Number(serviceEditor.price) || 0));
+    handleUpdateService(serviceEditor.id, 'description', serviceEditor.description.trim());
+    closeServiceEditor();
+  };
+
+  const removeServiceFromEditor = () => {
+    if (!serviceEditor) return;
+    handleRemoveService(serviceEditor.id);
+    closeServiceEditor();
   };
 
   const getDuplicateServices = (itemId: string) => {
@@ -2247,6 +2300,15 @@ export default function WorkOrders() {
     setLinkedServiceDetail(service);
   };
   const linkedServiceMaster = linkedServiceDetail ? masterItemForService(linkedServiceDetail) : undefined;
+  const activeServiceEditorItem = serviceEditor
+    ? formData.services.find(service => service.id === serviceEditor.id)
+    : undefined;
+  const activeServiceEditorIndex = activeServiceEditorItem
+    ? formData.services.findIndex(service => service.id === activeServiceEditorItem.id)
+    : -1;
+  const activeServiceEditorMembers = activeServiceEditorIndex >= 0
+    ? packageMembersAfterService(formData.services, activeServiceEditorIndex)
+    : [];
 
   const customerPhoneForWO = (wo: WorkOrder) => {
     const customer = data.customers.find(item =>
@@ -3165,7 +3227,7 @@ export default function WorkOrders() {
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
-                    {hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                    {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
                       <button
                         onClick={() => void handleDelete(wo)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
@@ -3630,11 +3692,17 @@ export default function WorkOrders() {
                   onClick: () => setOpenActionRailMenu(openActionRailMenu === 'more' ? '' : 'more'),
                   title: 'Lain-lain',
                 }}
-                remove={{
-                  onClick: selectedServiceId ? () => handleRemoveService(selectedServiceId) : undefined,
-                  disabled: !selectedServiceId,
-                  title: selectedServiceId ? 'Hapus barang atau jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu',
-                }}
+                remove={canShowAdminRowActions ? {
+                  onClick: canDeleteEditingWorkOrder && editingWO ? () => handleDelete(editingWO) : undefined,
+                  disabled: !canDeleteEditingWorkOrder,
+                  title: !editingWO
+                    ? 'Register WO terlebih dahulu'
+                    : editingWO.invoiceId
+                      ? 'Hapus faktur terlebih dahulu'
+                      : !['Register', 'Selesai'].includes(editingWO.status)
+                        ? `WO berstatus ${statusLabel(editingWO.status)} tidak dapat dihapus`
+                        : 'Hapus Work Order',
+                } : undefined}
               />
               {openActionRailMenu && <button type="button" aria-label="Tutup menu aksi" onClick={() => setOpenActionRailMenu('')} className="fixed inset-0 z-[55] cursor-default" />}
               {openActionRailMenu === 'print' && (
@@ -4133,7 +4201,20 @@ export default function WorkOrders() {
                         : [];
                       const visibleIndex = formData.services.slice(0, index).filter(candidate => !isPackageMemberService(candidate)).length + 1;
                       return (
-                        <div key={service.id} className={`rounded-lg border p-2.5 ${isGroupHeader ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-white'}`}>
+                        <div
+                          key={service.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openServiceEditor(service)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openServiceEditor(service);
+                            }
+                          }}
+                          title="Klik untuk membuka rincian barang atau jasa"
+                          className={`cursor-pointer rounded-lg border p-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${isGroupHeader ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-white hover:bg-blue-50/40'}`}
+                        >
                           <div className="flex items-start gap-2">
                             <span className="mt-0.5 text-xs text-gray-400">{visibleIndex}</span>
                             <div className="min-w-0 flex-1">
@@ -4143,14 +4224,9 @@ export default function WorkOrders() {
                               </div>
                               {service.code && <p className="font-mono text-[10px] text-gray-400">{service.code}</p>}
                             </div>
-                            <div className="ml-auto flex flex-shrink-0 items-start gap-1.5">
-                              <div className="text-right">
-                                <p className="text-[9px] font-semibold uppercase text-gray-400">Subtotal</p>
-                                <p className={`whitespace-nowrap text-xs font-bold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>Rp {(service.price * service.qty).toLocaleString('id-ID')}</p>
-                              </div>
-                              <button type="button" onClick={() => handleRemoveService(service.id)} className="rounded p-1 text-red-500 hover:bg-red-100" title="Hapus">
-                              <Trash2 className="h-4 w-4" />
-                              </button>
+                            <div className="ml-auto flex-shrink-0 text-right">
+                              <p className="text-[9px] font-semibold uppercase text-gray-400">Subtotal</p>
+                              <p className={`whitespace-nowrap text-xs font-bold ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>Rp {(service.price * service.qty).toLocaleString('id-ID')}</p>
                             </div>
                           </div>
                           {packageMembers.length > 0 && (
@@ -4158,32 +4234,9 @@ export default function WorkOrders() {
                               {packageMembers.map(member => <p key={member.id}><span className="font-mono text-purple-500">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</p>)}
                             </div>
                           )}
-                          <div className="mt-2 grid grid-cols-[4.25rem_minmax(0,1fr)] items-end gap-2">
-                            <label className="text-[10px] font-semibold uppercase text-gray-500">
-                              Qty
-                              <input
-                                type="number"
-                                inputMode="numeric"
-                                min="1"
-                                value={service.qty}
-                                onChange={(event) => handleUpdateService(service.id, 'qty', parseInt(event.target.value) || 1)}
-                                className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-2 text-center text-sm font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              />
-                            </label>
-                            <label className="text-[10px] font-semibold uppercase text-gray-500">
-                              Harga
-                              <span className="relative mt-1 block">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min="0"
-                                  value={service.price}
-                                  onChange={(event) => handleUpdateService(service.id, 'price', parseInt(event.target.value) || 0)}
-                                  className={`w-full rounded-lg border py-2 pl-7 pr-2 text-right text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isGroupHeader ? 'border-purple-300 bg-purple-50 font-bold text-purple-700' : service.price === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-300 bg-white'}`}
-                                />
-                              </span>
-                            </label>
+                          <div className="mt-2 grid grid-cols-2 gap-2 border-t border-gray-200 pt-2 text-xs">
+                            <span className="text-gray-500">Qty <strong className="ml-1 text-gray-800">{service.qty}</strong></span>
+                            <span className="text-right text-gray-500">Harga <strong className={isGroupHeader ? 'ml-1 text-purple-700' : 'ml-1 text-gray-800'}>Rp {service.price.toLocaleString('id-ID')}</strong></span>
                           </div>
                         </div>
                       );
@@ -4216,7 +4269,8 @@ export default function WorkOrders() {
                           return (
                             <tr
                               key={service.id}
-                              onClick={() => setSelectedServiceId(service.id)}
+                              onClick={() => openServiceEditor(service)}
+                              title="Klik untuk membuka rincian barang atau jasa"
                               className={`cursor-pointer ${selectedServiceId === service.id ? 'bg-blue-100 outline outline-1 outline-blue-400' : isGroupHeader ? 'bg-purple-50' : 'hover:bg-blue-50/40'}`}
                             >
                               <td className="px-3 py-2 text-center text-xs text-gray-400">{visibleIndex}</td>
@@ -4240,26 +4294,9 @@ export default function WorkOrders() {
                                 </div>
                               </td>
                               <td className="px-3 py-2 font-mono text-xs text-gray-600">{serviceBarcodeOrCode(service)}</td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={service.qty}
-                                  onChange={(e) => handleUpdateService(service.id, 'qty', parseInt(e.target.value) || 1)}
-                                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-center font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="relative">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={service.price}
-                                    onChange={(e) => handleUpdateService(service.id, 'price', parseInt(e.target.value) || 0)}
-                                    className={`w-full rounded-lg border px-7 py-1.5 text-right outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isGroupHeader ? 'border-purple-300 bg-purple-50 font-bold text-purple-700' : service.price === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-300 bg-white'}`}
-                                  />
-                                </div>
+                              <td className="px-3 py-2 text-center font-medium tabular-nums">{service.qty}</td>
+                              <td className={`px-3 py-2 text-right tabular-nums ${isGroupHeader ? 'font-bold text-purple-700' : service.price === 0 ? 'text-amber-700' : 'text-gray-800'}`}>
+                                Rp {service.price.toLocaleString('id-ID')}
                               </td>
                               <td className={`px-3 py-2 text-right font-bold whitespace-nowrap ${isGroupHeader ? 'text-purple-700' : 'text-gray-900'}`}>
                                 Rp {(service.price * service.qty).toLocaleString('id-ID')}
@@ -5073,6 +5110,96 @@ export default function WorkOrders() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Editor rincian layanan: pola Accurate, dipakai sama di desktop dan HP. */}
+      {serviceEditor && activeServiceEditorItem && (
+        <div data-wo-service-editor className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center sm:p-3" role="dialog" aria-modal="true" aria-label={`Edit rincian ${serviceReceiptName(activeServiceEditorItem)}`}>
+          <section className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-xl bg-white shadow-2xl sm:rounded-lg">
+            <header className="flex items-center justify-between bg-[#12386b] px-4 py-3 text-white">
+              <div className="flex min-w-0 items-center gap-2">
+                <Edit className="h-5 w-5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="truncate font-semibold">Rincian Barang / Jasa</h3>
+                  <p className="truncate text-xs text-blue-100">{serviceItemCode(activeServiceEditorItem)} · {serviceReceiptName(activeServiceEditorItem)}</p>
+                </div>
+              </div>
+              <button type="button" onClick={closeServiceEditor} className="rounded p-1 hover:bg-white/10" aria-label="Tutup rincian"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="flex border-b border-gray-300 px-3 pt-2 text-sm">
+              <span className="border-b-2 border-red-500 px-3 py-2 font-medium text-red-600">Rincian</span>
+              <span className="px-4 py-2 text-gray-400">Info lainnya</span>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm sm:p-5">
+              {serviceEditorReadOnly && (
+                <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Rincian ditampilkan dalam mode lihat karena WO terkunci atau berada di cabang lain.
+                </div>
+              )}
+              <div className="grid gap-3 sm:grid-cols-[145px_minmax(0,1fr)] sm:items-center">
+                <span className="text-gray-600">Kode / Barcode</span>
+                <div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 font-mono font-semibold text-cyan-700">{serviceBarcodeOrCode(activeServiceEditorItem)}</div>
+                <label htmlFor="wo-service-description" className="text-gray-600">Nama / Keterangan</label>
+                <input
+                  id="wo-service-description"
+                  value={serviceEditor.description}
+                  onChange={(event) => setServiceEditor(previous => previous ? { ...previous, description: event.target.value } : previous)}
+                  disabled={serviceEditorReadOnly}
+                  placeholder={serviceReceiptName(activeServiceEditorItem)}
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                />
+                <label htmlFor="wo-service-qty" className="text-gray-600">Kuantitas</label>
+                <input
+                  id="wo-service-qty"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={serviceEditor.qty}
+                  onChange={(event) => setServiceEditor(previous => previous ? { ...previous, qty: event.target.value } : previous)}
+                  disabled={serviceEditorReadOnly}
+                  className="rounded border border-gray-300 px-3 py-2 text-right tabular-nums outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                />
+                <label htmlFor="wo-service-price" className="text-gray-600">@Harga</label>
+                <div className="flex rounded border border-gray-300 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                  <span className="border-r border-gray-200 px-3 py-2 text-gray-500">Rp</span>
+                  <input
+                    id="wo-service-price"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={serviceEditor.price}
+                    onChange={(event) => setServiceEditor(previous => previous ? { ...previous, price: event.target.value } : previous)}
+                    disabled={serviceEditorReadOnly}
+                    className="min-w-0 flex-1 px-3 py-2 text-right tabular-nums outline-none disabled:bg-gray-100"
+                  />
+                </div>
+                <span className="text-gray-600">Total Harga</span>
+                <strong className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-right text-base tabular-nums">
+                  Rp {(Math.max(1, Number(serviceEditor.qty) || 1) * Math.max(0, Number(serviceEditor.price) || 0)).toLocaleString('id-ID')}
+                </strong>
+              </div>
+              {activeServiceEditorMembers.length > 0 && (
+                <div className="rounded border border-purple-200 bg-purple-50 p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-700">Isi Paket</p>
+                  <div className="space-y-1 text-xs text-slate-700">
+                    {activeServiceEditorMembers.map(member => (
+                      <p key={member.id}><span className="font-mono text-purple-600">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <footer className="flex items-center justify-between gap-3 border-t border-gray-300 p-4">
+              {!serviceEditorReadOnly ? (
+                <button type="button" onClick={removeServiceFromEditor} className="inline-flex items-center gap-2 rounded border border-red-300 px-4 py-2 font-semibold text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Hapus Baris</button>
+              ) : <span />}
+              <div className="flex gap-2">
+                <button type="button" onClick={closeServiceEditor} className="rounded border border-gray-300 px-4 py-2 font-semibold text-gray-700 hover:bg-gray-50">{serviceEditorReadOnly ? 'Tutup' : 'Batal'}</button>
+                {!serviceEditorReadOnly && <button type="button" onClick={saveServiceEditor} className="rounded bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-700">Simpan Rincian</button>}
+              </div>
+            </footer>
+          </section>
         </div>
       )}
 
