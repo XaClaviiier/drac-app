@@ -220,8 +220,25 @@ export interface ItemVehicleCompatibility {
   modelName?: string;
   generationId?: string;
   generationName?: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
   engineCc?: number | null;
   engineType?: 'Bensin' | 'Diesel' | 'Hybrid' | 'Listrik' | null;
+  engineCode?: string | null;
+  variant?: string | null;
+  transmission?: 'MT' | 'AT' | 'CVT' | 'DCT' | null;
+  hvacType?: 'Manual' | 'Digital' | 'Dual Zone' | null;
+  fitmentStatus?: 'Pending' | 'Verified' | 'Rejected';
+  source?: string | null;
+  notes?: string | null;
+}
+
+export interface ItemProductType {
+  id: string;
+  code: string;
+  name: string;
+  categoryId?: string | null;
+  isActive: boolean;
 }
 
 export interface Item {
@@ -230,6 +247,8 @@ export interface Item {
   name: string;
   categoryId: string;
   categoryName: string;
+  productTypeId?: string;
+  productTypeName?: string;
   type: ItemType;
   brand: string;
   vehicleBrandId?: string;
@@ -237,6 +256,9 @@ export interface Item {
   vehicleBrandIds?: string[];
   vehicleBrandNames?: string[];
   vehicleCompatibilities?: ItemVehicleCompatibility[];
+  oemPartNumber?: string;
+  alternatePartNumbers?: string;
+  technicalNotes?: string;
   itemBrandId?: string;
   unit: string;
   stock: number;
@@ -519,6 +541,7 @@ export interface AppData {
   invoices: SalesInvoice[];
   workOrders: WorkOrder[];
   itemCategories: ItemCategory[];
+  itemProductTypes: ItemProductType[];
   items: Item[];
   branches: Branch[];
   roles: Role[];

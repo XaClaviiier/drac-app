@@ -84,7 +84,7 @@ interface AppContextType {
 
 const emptyData: AppData = {
   vehicles: [], customers: [], customerPeople: [], invoices: [], workOrders: [],
-  itemCategories: [], items: [], branches: [], roles: [], users: [],
+  itemCategories: [], itemProductTypes: [], items: [], branches: [], roles: [], users: [],
   suppliers: [], goodsReceipts: [], purchaseInvoices: [],
   warehouses: [], warehouseStocks: [], stockMovements: [],
   settings: demoData.settings,
@@ -166,6 +166,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         invoices: res.data.invoices || [],
         workOrders: res.data.workOrders || [],
         itemCategories: res.data.itemCategories || [],
+        itemProductTypes: res.data.itemProductTypes || [],
         items: res.data.items || [],
         branches: res.data.branches || [],
         roles: res.data.roles || [],
