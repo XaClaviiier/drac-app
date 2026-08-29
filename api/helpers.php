@@ -307,6 +307,15 @@ function ensureApiSupportTables(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
+        CREATE TABLE IF NOT EXISTS goods_receipt_sequences (
+            branch_id VARCHAR(20) NOT NULL,
+            receipt_year SMALLINT UNSIGNED NOT NULL,
+            last_number INT UNSIGNED NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (branch_id, receipt_year)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $pdo->exec("
         CREATE TABLE IF NOT EXISTS branch_item_stocks (
             branch_id VARCHAR(20) NOT NULL,
             item_id VARCHAR(20) NOT NULL,
@@ -1110,6 +1119,54 @@ if (!function_exists('nextDocumentNumber')) {
                 . str_pad((string)$sequence, 3, '0', STR_PAD_LEFT);
         }
         return $prefix . $branchCode . $dateCode . str_pad((string)$sequence, $digits, '0', STR_PAD_LEFT);
+    }
+}
+
+if (!function_exists('nextGoodsReceiptNumber')) {
+    /**
+     * Mengambil nomor antrian penerimaan secara atomik per cabang dan tahun.
+     * Wajib dipanggil di dalam transaction aktif agar kunci baris bertahan
+     * sampai header, rincian, dan jurnal stok berhasil disimpan bersama-sama.
+     */
+    function nextGoodsReceiptNumber(PDO $pdo, string $branchId, string $date): string {
+        $date = trim($date);
+        $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        $dateErrors = DateTimeImmutable::getLastErrors();
+        if (!$parsedDate || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))
+            || $parsedDate->format('Y-m-d') !== $date) {
+            throw new InvalidArgumentException('Tanggal penerimaan tidak valid');
+        }
+
+        $year = (int)$parsedDate->format('Y');
+        $branchLetters = ['BR-001' => 'P', 'BR-002' => 'C', 'BR-003' => 'M'];
+        $branchLetter = $branchLetters[$branchId] ?? 'X';
+        $prefix = 'GR-' . $branchLetter . '-' . $year . '-';
+
+        $pdo->prepare("INSERT IGNORE INTO goods_receipt_sequences(branch_id,receipt_year,last_number) VALUES(?,?,0)")
+            ->execute([$branchId, $year]);
+        $lock = $pdo->prepare("SELECT last_number FROM goods_receipt_sequences WHERE branch_id=? AND receipt_year=? FOR UPDATE");
+        $lock->execute([$branchId, $year]);
+        $stored = (int)$lock->fetchColumn();
+
+        // Data lama atau dokumen yang pernah dihapus dapat membuat urutan
+        // berlubang. Nomor berikutnya selalu melanjutkan suffix terbesar.
+        $suffixStart = strlen($prefix) + 1;
+        $maxStmt = $pdo->prepare("SELECT COALESCE(MAX(CAST(SUBSTRING(receipt_number, {$suffixStart}) AS UNSIGNED)),0)
+            FROM goods_receipts WHERE branch_id=? AND receipt_number LIKE ?");
+        $maxStmt->execute([$branchId, $prefix . '%']);
+        $next = max($stored, (int)$maxStmt->fetchColumn()) + 1;
+
+        $exists = $pdo->prepare("SELECT 1 FROM goods_receipts WHERE receipt_number=? LIMIT 1");
+        do {
+            $number = $prefix . str_pad((string)$next, 4, '0', STR_PAD_LEFT);
+            $exists->execute([$number]);
+            if ($exists->fetchColumn()) $next++;
+            else break;
+        } while (true);
+
+        $pdo->prepare("UPDATE goods_receipt_sequences SET last_number=? WHERE branch_id=? AND receipt_year=?")
+            ->execute([$next, $branchId, $year]);
+        return $number;
     }
 }
 

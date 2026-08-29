@@ -285,7 +285,7 @@ export default function GoodsReceiptPage() {
     } else {
       addGoodsReceipt({
         id: Date.now().toString(),
-        receiptNumber: generateReceiptNumber(branchId),
+        receiptNumber: generateReceiptNumber(branchId, form.date),
         ...form, warehouseId, supplierName: supplier?.name || '', branchId,
         receivedBy: form.status === 'Diterima' ? (currentUser?.name || 'System') : undefined,
         createdAt: localDateKey(),
@@ -641,7 +641,7 @@ export default function GoodsReceiptPage() {
                 <span className="text-base font-bold text-blue-700 font-mono">
                   {editing
                     ? editing.receiptNumber
-                    : currentBranchId === 'ALL' ? 'PILIH CABANG' : generateReceiptNumber(currentBranchId)}
+                    : currentBranchId === 'ALL' ? 'PILIH CABANG' : generateReceiptNumber(currentBranchId, form.date)}
                 </span>
               </div>
 

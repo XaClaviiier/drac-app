@@ -72,7 +72,7 @@ interface AppContextType {
   addGoodsReceipt: (receipt: GoodsReceipt) => Promise<GoodsReceipt>;
   updateGoodsReceipt: (id: string, receipt: GoodsReceipt) => Promise<void>;
   deleteGoodsReceipt: (id: string) => Promise<void>;
-  generateReceiptNumber: (branchId: string) => string;
+  generateReceiptNumber: (branchId: string, date?: string) => string;
   receiveGoods: (receiptId: string) => Promise<void>;
   addPurchaseInvoice: (invoice: PurchaseInvoice) => Promise<PurchaseInvoice>;
   updatePurchaseInvoice: (id: string, invoice: PurchaseInvoice) => Promise<void>;
@@ -992,12 +992,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ===== GOODS RECEIPTS =====
-  const generateReceiptNumber = (branchId: string) => {
+  const generateReceiptNumber = (branchId: string, date?: string) => {
     const prefixes: Record<string, string> = { 'BR-001': 'GR-P', 'BR-002': 'GR-C', 'BR-003': 'GR-M' };
     const prefix = prefixes[branchId] || 'GR';
-    const year = new Date().getFullYear();
-    const branchReceipts = data.goodsReceipts.filter((r) => r.branchId === branchId);
-    return `${prefix}-${year}-${String(branchReceipts.length + 1).padStart(4, '0')}`;
+    const year = /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? String(date).slice(0, 4) : String(new Date().getFullYear());
+    const numberPattern = new RegExp(`^${prefix}-${year}-(\\d+)$`);
+    const highestSuffix = data.goodsReceipts.reduce((highest, receipt) => {
+      if (receipt.branchId !== branchId) return highest;
+      const match = receipt.receiptNumber.match(numberPattern);
+      return match ? Math.max(highest, Number(match[1]) || 0) : highest;
+    }, 0);
+    // Pratinjau saja. Server mengambil nomor antrian final secara atomik saat Simpan.
+    return `${prefix}-${year}-${String(highestSuffix + 1).padStart(4, '0')}`;
   };
 
   const addGoodsReceipt = async (receipt: GoodsReceipt): Promise<GoodsReceipt> => {

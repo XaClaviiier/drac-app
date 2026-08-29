@@ -113,6 +113,7 @@ switch ($method) {
         $branchId = (string)($d['branchId'] ?? '');
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         requireAccessibleBranch($pdo, $actor, $branchId);
+        assertActiveBranch($pdo, $branchId);
         $warehouseId = (string)($d['warehouseId'] ?? '');
         if ($warehouseId === '') respondError('Gudang tujuan wajib dipilih', 422);
         $warehouseCheck=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1");$warehouseCheck->execute([$warehouseId,$branchId]);
@@ -131,17 +132,21 @@ switch ($method) {
             if (!$supplier) respondError('Supplier tidak ditemukan atau nonaktif', 422);
         }
         if (empty($d['items']) || !is_array($d['items'])) respondError('Tambahkan minimal satu barang', 422);
-        $receiverId=(string)($d['receivedById']??($actor['id']??''));$receiverStmt=$pdo->prepare("SELECT id,name,branch_id,is_active FROM users WHERE id=? LIMIT 1");$receiverStmt->execute([$receiverId]);$receiver=$receiverStmt->fetch();if(!$receiver||!(bool)$receiver['is_active'])respondError('Petugas penerima tidak valid',422);
-        $receiverBranches=getUserBranchIds($pdo,$receiverId);if(!in_array($branchId,$receiverBranches,true)&&empty($receiver['is_owner']))respondError('Petugas penerima tidak bertugas di cabang tujuan',422);
+        $receiverId=(string)($d['receivedById']??($actor['id']??''));$receiverStmt=$pdo->prepare("SELECT id,name,branch_id,is_active,is_owner FROM users WHERE id=? LIMIT 1");$receiverStmt->execute([$receiverId]);$receiver=$receiverStmt->fetch();if(!$receiver||!(bool)$receiver['is_active'])respondError('Petugas penerima tidak valid',422);
+        $receiverBranches=getUserBranchIds($pdo,$receiverId);if(!empty($receiver['branch_id']))$receiverBranches[]=(string)$receiver['branch_id'];$receiverBranches=array_values(array_unique($receiverBranches));if(!in_array($branchId,$receiverBranches,true)&&empty($receiver['is_owner']))respondError('Petugas penerima tidak bertugas di cabang tujuan',422);
         $newStatus = (string)($d['status'] ?? 'Draft');
         if (!in_array($newStatus, ['Draft', 'Diterima'], true)) respondError('Status awal penerimaan tidak valid', 422);
         $pdo->beginTransaction();
         try {
             $rId = $d['id'] ?? generateId();
+            // Nomor dari browser hanya pratinjau. Nomor final wajib diambil dari
+            // antrian server supaya dua HP atau data yang belum tersinkron tidak
+            // pernah membuat receipt_number yang sama.
+            $receiptNumber = nextGoodsReceiptNumber($pdo, $branchId, (string)($d['date'] ?? ''));
             $transferNumber=$sourceType==='Transfer Gudang'?nextManualTransferNumber($pdo,$sourceBranchId,$branchId,(string)$d['date']):null;
             $stmt = $pdo->prepare("INSERT INTO goods_receipts (id,receipt_number,date,supplier_id,supplier_name,do_number,delivery_method,delivery_other,shipping_notes,source_type,source_warehouse_id,source_branch_id,transfer_number,status,notes,branch_id,warehouse_id,received_by,received_by_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
-                $rId, $d['receiptNumber'], $d['date'],
+                $rId, $receiptNumber, $d['date'],
                 $sourceType==='Supplier'?($supplier['id'] ?? null):null, $sourceType==='Supplier'?($supplier['name'] ?? ''):'', $d['doNumber'] ?? '', $d['deliveryMethod'] ?? 'Diantar Supplier', $d['deliveryOther'] ?? '', $d['shippingNotes'] ?? '', $sourceType,$sourceWarehouseId,$sourceBranchId,$transferNumber,
                 $newStatus, $d['notes'] ?? '',
                 $branchId,$warehouseId,$receiver['name'],$receiver['id']
@@ -171,18 +176,29 @@ switch ($method) {
                 foreach ($d['items'] as $i) {
                     if($sourceType==='Transfer Gudang')adjustWarehouseStock($pdo,$sourceWarehouseId,$sourceBranchId,$i['itemId'],-(int)$i['qty']);
                     adjustWarehouseStockAllowNegative($pdo,$warehouseId,$branchId,$i['itemId'],(int)$i['qty']);
-                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],(int)$i['qty'],false,$actor,'POST-'.$rId,null,'goods_receipt:'.$rId.':'.$i['itemId'].':post',max(0,(float)($i['unitPrice']??0)));
+                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$receiptNumber,'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],(int)$i['qty'],false,$actor,'POST-'.$rId,null,'goods_receipt:'.$rId.':'.$i['itemId'].':post',max(0,(float)($i['unitPrice']??0)));
                 }
             }
 
             $pdo->commit();
-            respondSuccess(['id' => $rId], 'Penerimaan disimpan');
+            respondSuccess(['id' => $rId, 'receiptNumber' => $receiptNumber], 'Penerimaan disimpan');
         } catch (InvalidArgumentException | DomainException $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) $pdo->rollBack();
             respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            respondError('Gagal simpan penerimaan', 500, $e->getMessage());
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $isDuplicate = (string)$e->getCode() === '23000' || (int)($e->errorInfo[1] ?? 0) === 1062;
+            if ($isDuplicate && stripos($e->getMessage(), 'receipt_number') !== false) {
+                respondError('Nomor antrian penerimaan baru saja dipakai perangkat lain. Tekan Simpan kembali.', 409);
+            }
+            $errorReference=substr(hash('sha256',uniqid('',true)),0,10);
+            error_log("[goods receipt create {$errorReference}] ".$e->getMessage());
+            respondError('Gagal simpan penerimaan. Referensi: '.$errorReference, 500);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $errorReference=substr(hash('sha256',uniqid('',true)),0,10);
+            error_log("[goods receipt create {$errorReference}] ".$e->getMessage());
+            respondError('Gagal simpan penerimaan. Referensi: '.$errorReference, 500);
         }
         break;
 

@@ -398,6 +398,16 @@ CREATE TABLE IF NOT EXISTS `goods_receipt_items` (
   FOREIGN KEY (`receipt_id`) REFERENCES `goods_receipts`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Nomor antrian penerimaan per cabang dan tahun. Baris ini dikunci saat
+-- penyimpanan agar dua perangkat tidak pernah memperoleh nomor yang sama.
+CREATE TABLE IF NOT EXISTS `goods_receipt_sequences` (
+  `branch_id` VARCHAR(20) NOT NULL,
+  `receipt_year` SMALLINT UNSIGNED NOT NULL,
+  `last_number` INT UNSIGNED NOT NULL DEFAULT 0,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`branch_id`, `receipt_year`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ==========================================================
 -- 16. TABEL PURCHASE INVOICES (FAKTUR PEMBELIAN)
 -- ==========================================================

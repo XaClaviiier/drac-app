@@ -398,6 +398,31 @@ test('penerimaan mewajibkan satu cabang dan gudang yang sesuai', () => {
   assert.match(endpoint, /Gudang tujuan tidak valid/);
 });
 
+test('nomor penerimaan memakai antrian server atomik dan nomor browser hanya pratinjau', () => {
+  const helpers = source('api/helpers.php');
+  const router = source('api/index.php');
+  const endpoint = source('api/endpoints/goods-receipts.php');
+  const context = source('src/context/AppContext.tsx');
+  const entry = source('src/pages/GoodsReceiptEntry.tsx');
+  const createBlock = endpoint.match(/case 'POST':([\s\S]*?)case 'PUT':/)?.[1] || '';
+
+  assert.match(router, /api_support_20260829_goods_receipt_queue_v1/);
+  assert.match(helpers, /CREATE TABLE IF NOT EXISTS goods_receipt_sequences/);
+  assert.match(helpers, /function nextGoodsReceiptNumber/);
+  assert.match(helpers, /INSERT IGNORE INTO goods_receipt_sequences/);
+  assert.match(helpers, /SELECT last_number FROM goods_receipt_sequences[^;]+FOR UPDATE/s);
+  assert.match(helpers, /MAX\(CAST\(SUBSTRING\(receipt_number/);
+  assert.match(helpers, /max\(\$stored, \(int\)\$maxStmt->fetchColumn\(\)\) \+ 1/);
+  assert.match(createBlock, /\$receiptNumber = nextGoodsReceiptNumber/);
+  assert.match(createBlock, /\$rId, \$receiptNumber, \$d\['date'\]/);
+  assert.match(createBlock, /'receiptNumber' => \$receiptNumber/);
+  assert.doesNotMatch(createBlock, /\$rId, \$d\['receiptNumber'\]/);
+  assert.match(createBlock, /Nomor antrian penerimaan baru saja dipakai perangkat lain/);
+  assert.doesNotMatch(context, /branchReceipts\.length \+ 1/);
+  assert.match(context, /highestSuffix \+ 1/);
+  assert.match(entry, /generateReceiptNumber\(branchId,form\.date\)/);
+});
+
 test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan keterangan', () => {
   const detail = source('src/pages/GoodsReceiptDetail.tsx');
   const list = source('src/pages/GoodsReceipt.tsx');
