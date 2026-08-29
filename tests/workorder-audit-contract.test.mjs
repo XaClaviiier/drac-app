@@ -281,6 +281,39 @@ test('editor layanan WO seragam dan tombol sampah kanan hanya menghapus WO untuk
   assert.match(endpoint, /Hanya Admin atau Owner yang dapat menghapus WO/);
 });
 
+test('editor rincian layanan WO terkunci dan wajib dikonfirmasi sebelum berubah', () => {
+  const page = source('src/pages/WorkOrders.tsx');
+  const lock = source('docs/standards/WORK_ORDER_UI_LOCK.md');
+  const editor = sectionBetween(page, '{/* Editor rincian layanan:', '{/* Rincian barang/jasa dari baris WO */}');
+
+  assert.match(lock, /Versi editor rincian: `wo-item-editor-accurate-2026-08-29`/);
+  assert.match(lock, /wajib meminta dan memperoleh konfirmasi eksplisit dari Owner\/pemilik aplikasi/);
+  assert.match(lock, /Tes pengunci editor rincian tidak boleh dihapus, dilonggarkan, atau diperbarui hanya untuk melewati kegagalan/);
+  assert.match(editor, /max-w-xl/);
+  assert.match(editor, /grid-cols-\[112px_minmax\(0,1fr\)\]/);
+  assert.match(editor, /sm:grid-cols-\[168px_minmax\(0,1fr\)\]/);
+  assert.match(editor, /grid-cols-\[minmax\(0,1fr\)_96px\]/);
+  assert.match(editor, /className="h-9/);
+  requireInOrder(editor, [
+    'data-wo-service-editor-tab="details"',
+    'data-wo-service-editor-tab="info"',
+    'data-wo-service-editor-summary',
+    '>Kode #</span>',
+    '>Nama Barang / Jasa</span>',
+    '>Keterangan baris</label>',
+    '>Kuantitas</label>',
+    '>@Harga</label>',
+    '>Total Harga</span>',
+    'data-wo-service-editor-info',
+    '>Barcode</span>',
+    '>Jenis / Kategori</span>',
+    '>Gudang / Stok</span>',
+    '>Penjual / Teknisi</span>',
+    '>Kecocokan Kendaraan</span>',
+    '>Isi Paket</p>',
+  ], 'struktur editor rincian WO terkunci');
+});
+
 test('WO lanjutan dari Semua Cabang wajib memilih cabang eksplisit', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const context = source('src/context/AppContext.tsx');
