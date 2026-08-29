@@ -1,6 +1,6 @@
 # Standar Terkunci Modul Work Order
 
-Versi standar: `wo-canonical-2026-08-26`
+Versi standar: `wo-canonical-2026-08-29`
 
 Versi editor rincian: `wo-item-editor-accurate-2026-08-29`
 
@@ -18,7 +18,10 @@ Dokumen ini menetapkan tampilan dan perilaku Work Order yang aktif saat ini seba
 - Rel aksi kanan mempertahankan urutan Simpan, Cetak, Lampiran, Lain-lain, dan Hapus.
 - Warna kanvas, tabel, border, bayangan, jarak, dan ukuran kontrol mengikuti tampilan WO yang telah disetujui.
 - Tampilan desktop tidak boleh menambah scroll halaman karena header atau rel aksi bergeser.
+- Tab Pembayaran merapatkan ringkasan menjadi dua kolom pada desktop pendek, menyediakan scroll internal pada layar sangat pendek, dan membatasi tinggi daftar riwayat pembayaran agar semua informasi tetap dapat dijangkau.
 - Tampilan HP tetap responsif dan tidak mengubah alur transaksi.
+
+Perubahan standar 29 Agustus 2026 disetujui Owner untuk memperbaiki tab Pembayaran yang terpotong pada layar pendek/zoom besar. Perubahan dibatasi pada kepadatan dan scroll internal; alur serta data transaksi tidak berubah.
 
 ## Kontrak editor rincian barang/jasa
 

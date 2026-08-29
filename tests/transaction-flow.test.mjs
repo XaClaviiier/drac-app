@@ -1089,7 +1089,7 @@ test('modul WO dikunci pada kontrak tampilan kanvas baku', () => {
   const tabs = source('src/components/AccurateDocumentSideTabs.tsx');
   const rail = source('src/components/AccurateFormActionRail.tsx');
 
-  assert.match(page, /const WORK_ORDER_UI_STANDARD_VERSION = 'wo-canonical-2026-08-26'/);
+  assert.match(page, /const WORK_ORDER_UI_STANDARD_VERSION = 'wo-canonical-2026-08-29'/);
   assert.match(page, /data-wo-ui-standard=\{WORK_ORDER_UI_STANDARD_VERSION\}/);
   assert.match(page, /const DEFAULT_WORK_ORDER_DOCUMENT_TAB: AccurateDocumentTab = 'details'/);
   assert.match(page, /const \[showQuickServices, setShowQuickServices\] = useState\(false\)/);
@@ -1137,6 +1137,13 @@ test('Info lainnya WO memisahkan catatan dan audit, mengunci faktur, serta memak
   assert.match(page, /\['Uang Muka', 'Rp 0'/);
   assert.match(page, /\['Retur', 'Rp 0'/);
   assert.match(page, /aria-label="Faktur lunas"/);
+  assert.match(page, /data-wo-payment-pane/);
+  assert.match(page, /data-wo-payment-summary/);
+  assert.match(page, /data-wo-payment-last-row/);
+  assert.match(page, /data-wo-payment-history className="relative z-10 max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-1"/);
+  const styles = source('src/index.css');
+  assert.match(styles, /@media \(min-width: 1024px\) and \(max-height: 900px\)[\s\S]*?\[data-wo-payment-summary\][\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /@media \(min-width: 1024px\) and \(max-height: 700px\)[\s\S]*?\[data-wo-payment-pane\][\s\S]*?overflow-y: auto/);
   assert.match(page, />Timeline WO</);
   assert.match(page, /const timelineEvents = workOrderAuditTimeline\(editingWO\)/);
   assert.match(page, /Timeline tersedia setelah WO diregister/);
