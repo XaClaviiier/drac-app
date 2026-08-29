@@ -2205,6 +2205,12 @@ export default function WorkOrders() {
     Selesai: 'bg-green-100 text-green-800',
     Closed: 'bg-rose-100 text-rose-800',
   };
+  const statusLampColors: Record<string, string> = {
+    Register: 'bg-slate-400',
+    Proses: 'bg-blue-500',
+    Selesai: 'bg-emerald-500',
+    Closed: 'bg-rose-500',
+  };
   const diagnosisMeasurementLabel = (wo: WorkOrder) => [
     wo.diagnosisTemperature != null ? `Suhu ${wo.diagnosisTemperature}°C` : '',
     wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
@@ -3564,7 +3570,7 @@ export default function WorkOrders() {
                   <h3 className="break-words text-base font-bold leading-tight text-gray-900 sm:text-lg">
                     {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? editingWO.woNumber : 'Register Baru'}
                   </h3>
-                  {editingWO && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusLabel(editingWO.status) === 'Lost Sales' ? 'bg-rose-100 text-rose-700' : editingWO.status === 'Selesai' ? 'bg-emerald-100 text-emerald-700' : editingWO.status === 'Proses' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>{statusLabel(editingWO.status)}</span>}
+                  {editingWO && <span data-wo-mobile-status-lamp className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusLabel(editingWO.status) === 'Lost Sales' ? 'bg-rose-100 text-rose-700' : editingWO.status === 'Selesai' ? 'bg-emerald-100 text-emerald-700' : editingWO.status === 'Proses' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}><span aria-hidden="true" className={`h-2 w-2 rounded-full ${statusLampColors[editingWO.status] || 'bg-slate-400'}`} />{statusLabel(editingWO.status)}</span>}
                 </div>
                 <p data-wo-mobile-context className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[11px] leading-tight text-gray-500 sm:text-sm">
                   <span>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || selectedBranchLabel}</span>
@@ -3768,6 +3774,7 @@ export default function WorkOrders() {
                           {editingWO.status === 'Closed' && !editingWO.continuedToWoId && <button type="button" onClick={() => setLostSalesFollowUp(editingWO)} className="block w-full px-3 py-2 text-left text-sm font-medium text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                         </div>
                       </details> : !editingWO ? <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button> : null}
+                      {editingWO && <span data-wo-status-lamp title={`Status WO: ${statusLabel(editingWO.status)}`} className={`inline-flex h-9 min-w-[104px] items-center justify-center gap-2 rounded-md border px-3 text-xs font-semibold ${statusColors[editingWO.status] || statusColors.Register}`}><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.8)] ${statusLampColors[editingWO.status] || 'bg-slate-400'}`} />{statusLabel(editingWO.status)}</span>}
                     </div>
                   </>
                 )}

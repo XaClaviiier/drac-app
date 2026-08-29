@@ -787,6 +787,9 @@ test('tombol Proses WO tetap terpisah dari Simpan dan WO tidak menampilkan tombo
   assert.doesNotMatch(workOrders, />Ambil <span/);
   assert.match(workOrders, /disabled title="Register WO terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
   assert.match(workOrders, /data-wo-mobile-process/);
+  assert.match(workOrders, /data-wo-status-lamp/);
+  assert.match(workOrders, /data-wo-mobile-status-lamp/);
+  assert.match(workOrders, /const statusLampColors: Record<string, string>/);
   assert.match(workOrders, /editingWO\.status === 'Closed'[\s\S]*?Tindak Lanjut Lost Sales/);
   assert.match(invoices, /disabled title="Simpan faktur terlebih dahulu" className=\{ui\.documentAction\}>Proses/);
   assert.ok((workOrders.match(/ui\.documentAction/g) || []).length >= 2);
