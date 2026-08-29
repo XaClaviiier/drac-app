@@ -544,6 +544,27 @@ test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
   assert.match(items, /className="flex h-8 items-center text-xs font-semibold uppercase"/);
 });
 
+test('Master Merek Barang tersedia dari menu Barang dan Jasa serta menerima kode otomatis', () => {
+  const layout = source('src/components/Layout.tsx');
+  const items = source('src/pages/ItemsAndServices.tsx');
+  const endpoint = source('api/endpoints/item-brands.php');
+  const saveBrand = items.match(/const saveItemBrand=async[\s\S]*?const removeItemBrand=/)?.[0] || '';
+
+  assert.match(layout, /label: "Merek Barang",\s*path: "\/items\?master=item-brands"/);
+  assert.match(items, /searchParams\.get\('master'\) !== 'item-brands'/);
+  assert.match(items, /data-item-brand-master-trigger/);
+  assert.match(items, /data-item-brand-master-modal/);
+  assert.match(items, /data-item-brand-master-form/);
+  assert.match(saveBrand, /if\(!payload\.name\)/);
+  assert.doesNotMatch(saveBrand, /!payload\.code/);
+  assert.match(saveBrand, /api\.create\('item-brands'/);
+  assert.match(items, /hasPermission\('item:create'\)/);
+  assert.match(items, /hasPermission\('item:edit'\)/);
+  assert.match(items, /hasPermission\('item:delete'\)/);
+  assert.match(endpoint, /if\(\$code===''\)\$code='NEW-'/);
+  assert.match(endpoint, /Nama merek wajib diisi/);
+});
+
 test('daftar Faktur Penjualan mengikuti kepadatan dan perataan Order Kerja', () => {
   const page = source('src/pages/SalesInvoice.tsx');
   assert.match(page, /space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0/);

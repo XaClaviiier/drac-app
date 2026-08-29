@@ -425,6 +425,17 @@ export default function ItemsAndServices() {
     setSearchParams(nextParams, { replace: true });
   }, [data.items, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    if (searchParams.get('master') !== 'item-brands') return;
+    setShowItemModal(false);
+    setItemListTab('list');
+    setBrandForm({ id: '', code: '', name: '', description: '', isActive: true });
+    setShowBrandModal(true);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('master');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const openCategoryModal = (category?: ItemCategory) => {
     if (category) {
       setEditingCategory(category);
@@ -1192,8 +1203,8 @@ export default function ItemsAndServices() {
     } finally { setMovementLoading(false); }
   };
 
-  const saveItemBrand=async(e:React.FormEvent)=>{e.preventDefault();const payload={...brandForm,code:brandForm.code.trim().toUpperCase(),name:brandForm.name.trim().toUpperCase()};if(!payload.code||!payload.name)return;const result=payload.id?await api.update('item-brands',payload.id,payload):await api.create('item-brands',{...payload,id:`IB-${Date.now()}`});if(!result.success)return window.alert(result.message||'Merek gagal disimpan');setBrandForm({id:'',code:'',name:'',description:'',isActive:true});await loadItemBrands();};
-  const removeItemBrand=async(brand:ItemBrandMaster)=>{if(!window.confirm(`Hapus merek ${brand.name}?`))return;const result=await api.remove('item-brands',brand.id);if(!result.success)return window.alert(result.message||'Merek gagal dihapus');await loadItemBrands();};
+  const saveItemBrand=async(e:React.FormEvent)=>{e.preventDefault();const payload={...brandForm,code:brandForm.code.trim().toUpperCase(),name:brandForm.name.trim().toUpperCase()};if(!payload.name)return window.alert('Nama merek wajib diisi');if(payload.id&&!hasPermission('item:edit'))return window.alert('Anda tidak memiliki izin mengubah merek barang');if(!payload.id&&!hasPermission('item:create'))return window.alert('Anda tidak memiliki izin menambah merek barang');const result=payload.id?await api.update('item-brands',payload.id,payload):await api.create('item-brands',{...payload,id:`IB-${Date.now()}`});if(!result.success)return window.alert(result.message||'Merek gagal disimpan');setBrandForm({id:'',code:'',name:'',description:'',isActive:true});await loadItemBrands();};
+  const removeItemBrand=async(brand:ItemBrandMaster)=>{if(!hasPermission('item:delete'))return window.alert('Anda tidak memiliki izin menghapus merek barang');if(!window.confirm(`Hapus merek ${brand.name}?`))return;const result=await api.remove('item-brands',brand.id);if(!result.success)return window.alert(result.message||'Merek gagal dihapus');await loadItemBrands();};
   const reloadVehicleBrands=async()=>{const result=await api.get<any>('vehicle-catalog');setVehicleBrands(result.data?.brands||[]);};
   const addVehicleBrand=async(e:React.FormEvent)=>{e.preventDefault();if(!newVehicleBrand.trim())return;const result=await api.create('vehicle-catalog',{entity:'brand',name:newVehicleBrand.trim()});if(!result.success)return window.alert(result.message||'Merek kendaraan gagal ditambahkan');setNewVehicleBrand('');await reloadVehicleBrands();};
   const editVehicleBrand=async(brand:{id:string;name:string;isActive:boolean})=>{const name=window.prompt('Ubah nama merek kendaraan:',brand.name)?.trim();if(!name||name===brand.name)return;const result=await api.update('vehicle-catalog',brand.id,{entity:'brand',name,isActive:brand.isActive});if(!result.success)return window.alert(result.message||'Merek kendaraan gagal diperbarui');await reloadVehicleBrands();await refreshData();};
@@ -1248,6 +1259,7 @@ export default function ItemsAndServices() {
           <List className="h-5 w-5" />
         </button>
         {!showItemModal && canVerifyItems && <button type="button" onClick={() => setItemListTab('verification')} className={`${childTabClass(itemListTab === 'verification')} gap-2 px-4 text-sm`}>Menunggu Verifikasi {pendingItems.length > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{pendingItems.length}</span>}</button>}
+        {!showItemModal && <button data-item-brand-master-trigger type="button" onClick={() => { setBrandForm({id:'',code:'',name:'',description:'',isActive:true}); setShowBrandModal(true); }} className={`${childTabClass(false)} gap-2 px-4 text-sm`}><Boxes className="h-4 w-4" />Merek Barang</button>}
         {showItemModal && (
           <div className={`${childTabClass(true)} gap-2 px-4 text-sm`}>
             <span className="max-w-[340px] truncate" title={editingItem?.name}>{editingItem ? editingItem.name : 'Data Baru'}</span>
@@ -1832,7 +1844,34 @@ export default function ItemsAndServices() {
 
       {showVehicleBrandModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="text-lg font-bold">Master Merek Kendaraan</h3><p className="text-sm text-slate-500">Kode digunakan sebagai bagian kode barang otomatis.</p></div><button type="button" onClick={()=>setShowVehicleBrandModal(false)}><X/></button></header><form onSubmit={addVehicleBrand} className="flex gap-2 border-b bg-slate-50 p-4"><input value={newVehicleBrand} onChange={e=>setNewVehicleBrand(e.target.value)} placeholder="Nama merek kendaraan baru" className="min-w-0 flex-1 rounded border px-3 py-2 uppercase"/><button className="rounded bg-blue-600 px-5 py-2 font-semibold text-white">Tambah</button></form><div className="max-h-[52vh] overflow-y-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-slate-600 text-white"><tr><th className="p-3 text-left">Kode</th><th className="text-left">Merek Kendaraan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{vehicleBrands.map(row=><tr key={row.id} className="border-b"><td className="p-3 font-mono">{row.itemCode||'--'}</td><td>{row.name}</td><td className="text-center"><button type="button" onClick={()=>void toggleVehicleBrand(row)} className={`rounded-full px-2 py-0.5 text-xs ${row.isActive?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-600'}`}>{row.isActive?'Aktif':'Nonaktif'}</button></td><td className="text-center"><button type="button" onClick={()=>void editVehicleBrand(row)} title="Edit merek kendaraan" className="p-2 text-blue-600"><Edit className="h-4 w-4"/></button></td></tr>)}</tbody></table></div><footer className="flex justify-end border-t p-4"><button type="button" onClick={()=>setShowVehicleBrandModal(false)} className="rounded border px-5 py-2">Tutup</button></footer></div></div>}
 
-      {showBrandModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="text-lg font-bold">Master Merek Barang</h3><p className="text-sm text-slate-500">Kode otomatis diurutkan dari merek yang paling banyak digunakan.</p></div><button type="button" onClick={()=>setShowBrandModal(false)}><X/></button></header><form onSubmit={saveItemBrand} className="grid gap-2 border-b bg-slate-50 p-4 sm:grid-cols-[110px_1fr_auto_auto]"><input readOnly value={brandForm.id?brandForm.code:'Otomatis'} aria-label="Kode otomatis" className="rounded border bg-slate-100 px-3 py-2 text-slate-500"/><input required value={brandForm.name} onChange={e=>setBrandForm({...brandForm,name:e.target.value})} placeholder="Nama merek" className="rounded border px-3 py-2 uppercase"/><label className="flex items-center gap-2 px-2 text-sm"><input type="checkbox" checked={brandForm.isActive} onChange={e=>setBrandForm({...brandForm,isActive:e.target.checked})}/>Aktif</label><button className="rounded bg-blue-600 px-5 py-2 font-semibold text-white">{brandForm.id?'Perbarui':'Tambah'}</button></form><div className="max-h-[50vh] overflow-y-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-slate-600 text-white"><tr><th className="p-3 text-left">Kode</th><th className="text-left">Nama Merek</th><th>Barang</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{itemBrands.map(row=><tr key={row.id} className="border-b"><td className="p-3 font-mono">{row.code}</td><td>{row.name}</td><td className="text-center font-semibold">{row.usageCount||0}</td><td className="text-center">{row.isActive?'Aktif':'Nonaktif'}</td><td className="text-center"><button type="button" onClick={()=>setBrandForm({id:row.id,code:row.code,name:row.name,description:row.description||'',isActive:row.isActive})} className="p-2 text-blue-600"><Edit className="h-4 w-4"/></button><button type="button" onClick={()=>void removeItemBrand(row)} className="p-2 text-red-600"><Trash2 className="h-4 w-4"/></button></td></tr>)}</tbody></table></div><footer className="flex justify-between border-t p-4"><button type="button" onClick={()=>setBrandForm({id:'',code:'',name:'',description:'',isActive:true})} className="rounded border px-4 py-2">Data Baru</button><button type="button" onClick={()=>setShowBrandModal(false)} className="rounded border px-5 py-2">Tutup</button></footer></div></div>}
+      {showBrandModal && (
+        <div data-item-brand-master-modal className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="item-brand-master-title">
+          <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <header className="flex items-center justify-between border-b px-5 py-4">
+              <div><h3 id="item-brand-master-title" className="text-lg font-bold">Master Merek Barang</h3><p className="text-sm text-slate-500">Kode dibuat otomatis dan diurutkan dari merek yang paling banyak digunakan.</p></div>
+              <button type="button" onClick={() => { setShowBrandModal(false); setBrandForm({id:'',code:'',name:'',description:'',isActive:true}); }} aria-label="Tutup Master Merek Barang"><X /></button>
+            </header>
+            {(brandForm.id ? hasPermission('item:edit') : hasPermission('item:create')) ? (
+              <form data-item-brand-master-form onSubmit={saveItemBrand} className="grid gap-2 border-b bg-slate-50 p-4 sm:grid-cols-[110px_1fr_auto_auto]">
+                <input readOnly value={brandForm.id ? brandForm.code : 'Otomatis'} aria-label="Kode otomatis" className="rounded border bg-slate-100 px-3 py-2 text-slate-500" />
+                <input required value={brandForm.name} onChange={e => setBrandForm({...brandForm,name:e.target.value})} placeholder="Nama merek" className="rounded border px-3 py-2 uppercase" />
+                <label className="flex items-center gap-2 px-2 text-sm"><input type="checkbox" checked={brandForm.isActive} onChange={e => setBrandForm({...brandForm,isActive:e.target.checked})} />Aktif</label>
+                <button type="submit" className="rounded bg-blue-600 px-5 py-2 font-semibold text-white hover:bg-blue-700">{brandForm.id ? 'Perbarui' : 'Tambah'}</button>
+              </form>
+            ) : <p className="border-b bg-slate-50 px-5 py-3 text-sm text-slate-600">Anda dapat melihat daftar merek, tetapi tidak memiliki izin untuk menambah atau mengubahnya.</p>}
+            <div className="max-h-[50vh] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-slate-600 text-white"><tr><th className="p-3 text-left">Kode</th><th className="text-left">Nama Merek</th><th>Barang</th><th>Status</th><th>Aksi</th></tr></thead>
+                <tbody>{itemBrands.map(row => <tr key={row.id} className="border-b"><td className="p-3 font-mono">{row.code}</td><td>{row.name}</td><td className="text-center font-semibold">{row.usageCount || 0}</td><td className="text-center">{row.isActive ? 'Aktif' : 'Nonaktif'}</td><td className="text-center">{hasPermission('item:edit') && <button type="button" onClick={() => setBrandForm({id:row.id,code:row.code,name:row.name,description:row.description || '',isActive:row.isActive})} aria-label={`Edit merek ${row.name}`} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>}{hasPermission('item:delete') && <button type="button" onClick={() => void removeItemBrand(row)} aria-label={`Hapus merek ${row.name}`} className="p-2 text-red-600"><Trash2 className="h-4 w-4" /></button>}{!hasPermission('item:edit') && !hasPermission('item:delete') && <span className="text-slate-400">—</span>}</td></tr>)}</tbody>
+              </table>
+            </div>
+            <footer className="flex justify-between border-t p-4">
+              <div>{hasPermission('item:create') && <button type="button" onClick={() => setBrandForm({id:'',code:'',name:'',description:'',isActive:true})} className="rounded border px-4 py-2">Data Baru</button>}</div>
+              <button type="button" onClick={() => { setShowBrandModal(false); setBrandForm({id:'',code:'',name:'',description:'',isActive:true}); }} className="rounded border px-5 py-2">Tutup</button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* IMPORT CSV MODAL */}

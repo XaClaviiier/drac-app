@@ -512,8 +512,8 @@ const desktopGroups = [
         tone: "purple",
       },
       {
-        label: "Merek & Satuan",
-        path: "/items",
+        label: "Merek Barang",
+        path: "/items?master=item-brands",
         icon: Boxes,
         perm: "item:view",
         tone: "purple",
