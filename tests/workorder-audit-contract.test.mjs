@@ -247,6 +247,12 @@ test('editor layanan WO seragam dan tombol sampah kanan hanya menghapus WO untuk
   const endpoint = source('api/endpoints/work-orders.php');
 
   assert.match(page, /data-wo-service-editor/);
+  assert.match(page, /formatVehicleCompatibility/);
+  assert.match(page, />Kode #<\/span>/);
+  assert.match(page, />Barcode<\/span>/);
+  assert.match(page, /activeServiceEditorUnit/);
+  assert.match(page, />Kecocokan Kendaraan<\/span>/);
+  assert.match(page, /Belum ditentukan di Master Barang & Jasa/);
   assert.match(page, /onClick=\{\(\) => openServiceEditor\(service\)\}/);
   assert.match(page, /onClick=\{removeServiceFromEditor\}/);
   assert.doesNotMatch(page, /onClick=\{\(\) => handleRemoveService\(service\.id\)\}/);

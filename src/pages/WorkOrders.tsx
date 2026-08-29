@@ -21,6 +21,7 @@ import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import { timelineStageFromReason } from '../lib/workOrderTimeline';
+import { formatVehicleCompatibility } from '../components/VehicleCompatibilityPicker';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -2337,6 +2338,19 @@ export default function WorkOrders() {
   const activeServiceEditorMembers = activeServiceEditorIndex >= 0
     ? packageMembersAfterService(formData.services, activeServiceEditorIndex)
     : [];
+  const activeServiceEditorMaster = activeServiceEditorItem
+    ? masterItemForService(activeServiceEditorItem)
+    : undefined;
+  const activeServiceEditorUnit = activeServiceEditorMaster?.unit
+    || (activeServiceEditorMaster?.type === 'Jasa' ? 'JASA' : activeServiceEditorMaster?.type === 'Group' ? 'PAKET' : 'PCS');
+  const directEditorCompatibilities = activeServiceEditorMaster?.vehicleCompatibilities || [];
+  const packageEditorCompatibilities = activeServiceEditorMembers.flatMap(member => (
+    masterItemForService(member)?.vehicleCompatibilities || []
+  ));
+  const activeServiceEditorCompatibilities = [...new Map(
+    (directEditorCompatibilities.length ? directEditorCompatibilities : packageEditorCompatibilities)
+      .map(row => [formatVehicleCompatibility(row), row])
+  ).values()];
 
   const customerPhoneForWO = (wo: WorkOrder) => {
     const customer = data.customers.find(item =>
@@ -5166,8 +5180,10 @@ export default function WorkOrders() {
                 </div>
               )}
               <div className="grid gap-3 sm:grid-cols-[145px_minmax(0,1fr)] sm:items-center">
-                <span className="text-gray-600">Kode / Barcode</span>
-                <div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 font-mono font-semibold text-cyan-700">{serviceBarcodeOrCode(activeServiceEditorItem)}</div>
+                <span className="text-gray-600">Kode #</span>
+                <div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 font-mono font-semibold text-cyan-700">{serviceItemCode(activeServiceEditorItem)}</div>
+                <span className="text-gray-600">Barcode</span>
+                <div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-gray-700">{activeServiceEditorMaster?.barcode?.trim() || '-'}</div>
                 <label htmlFor="wo-service-description" className="text-gray-600">Nama / Keterangan</label>
                 <input
                   id="wo-service-description"
@@ -5178,16 +5194,19 @@ export default function WorkOrders() {
                   className="rounded border border-gray-300 bg-white px-3 py-2 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
                 />
                 <label htmlFor="wo-service-qty" className="text-gray-600">Kuantitas</label>
-                <input
-                  id="wo-service-qty"
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  value={serviceEditor.qty}
-                  onChange={(event) => setServiceEditor(previous => previous ? { ...previous, qty: event.target.value } : previous)}
-                  disabled={serviceEditorReadOnly}
-                  className="rounded border border-gray-300 px-3 py-2 text-right tabular-nums outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
-                />
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_100px] gap-2">
+                  <input
+                    id="wo-service-qty"
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    value={serviceEditor.qty}
+                    onChange={(event) => setServiceEditor(previous => previous ? { ...previous, qty: event.target.value } : previous)}
+                    disabled={serviceEditorReadOnly}
+                    className="min-w-0 rounded border border-gray-300 px-3 py-2 text-right tabular-nums outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                  />
+                  <div title="Satuan dari Master Barang & Jasa" className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-center font-semibold uppercase text-gray-700">{activeServiceEditorUnit}</div>
+                </div>
                 <label htmlFor="wo-service-price" className="text-gray-600">@Harga</label>
                 <div className="flex rounded border border-gray-300 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                   <span className="border-r border-gray-200 px-3 py-2 text-gray-500">Rp</span>
@@ -5206,6 +5225,12 @@ export default function WorkOrders() {
                 <strong className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-right text-base tabular-nums">
                   Rp {(Math.max(1, Number(serviceEditor.qty) || 1) * Math.max(0, Number(serviceEditor.price) || 0)).toLocaleString('id-ID')}
                 </strong>
+                <span className="self-start pt-2 text-gray-600">Kecocokan Kendaraan</span>
+                <div className="max-h-28 space-y-1 overflow-y-auto rounded border border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                  {activeServiceEditorCompatibilities.length > 0 ? activeServiceEditorCompatibilities.map(row => (
+                    <p key={formatVehicleCompatibility(row)}>{formatVehicleCompatibility(row)}</p>
+                  )) : <p className="text-gray-500">Belum ditentukan di Master Barang & Jasa</p>}
+                </div>
               </div>
               {activeServiceEditorMembers.length > 0 && (
                 <div className="rounded border border-purple-200 bg-purple-50 p-3">
