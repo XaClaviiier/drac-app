@@ -385,6 +385,7 @@ export default function WorkOrders() {
     price: string;
     description: string;
   } | null>(null);
+  const [serviceEditorTab, setServiceEditorTab] = useState<'details' | 'info'>('details');
   const [openActionRailMenu, setOpenActionRailMenu] = useState<'print' | 'more' | ''>('');
   const [mobileProcessMenuOpen, setMobileProcessMenuOpen] = useState(false);
 
@@ -1433,7 +1434,7 @@ export default function WorkOrders() {
       const targetIndex = prev.services.findIndex(service => service.id === id);
       if (targetIndex < 0) return prev;
       const target = prev.services[targetIndex];
-      const nextValue = field === 'qty' ? Math.max(1, Number(value) || 1) : value;
+      const nextValue = field === 'qty' ? Math.max(1, Math.round(Number(value) || 1)) : value;
       const oldPackageQty = Math.max(1, Number(target.qty) || 1);
       const services = prev.services.map((service, index) => {
         if (index === targetIndex) return { ...service, [field]: nextValue };
@@ -1455,6 +1456,7 @@ export default function WorkOrders() {
   const openServiceEditor = (service: WorkOrderService) => {
     if (isPackageMemberService(service)) return;
     setSelectedServiceId(service.id);
+    setServiceEditorTab('details');
     setServiceEditor({
       id: service.id,
       qty: String(Math.max(1, Number(service.qty) || 1)),
@@ -1465,12 +1467,13 @@ export default function WorkOrders() {
 
   const closeServiceEditor = () => {
     setServiceEditor(null);
+    setServiceEditorTab('details');
     setSelectedServiceId('');
   };
 
   const saveServiceEditor = () => {
     if (!serviceEditor) return;
-    handleUpdateService(serviceEditor.id, 'qty', Math.max(1, Number(serviceEditor.qty) || 1));
+    handleUpdateService(serviceEditor.id, 'qty', Math.max(1, Math.round(Number(serviceEditor.qty) || 1)));
     handleUpdateService(serviceEditor.id, 'price', Math.max(0, Number(serviceEditor.price) || 0));
     handleUpdateService(serviceEditor.id, 'description', serviceEditor.description.trim());
     closeServiceEditor();
@@ -2341,8 +2344,44 @@ export default function WorkOrders() {
   const activeServiceEditorMaster = activeServiceEditorItem
     ? masterItemForService(activeServiceEditorItem)
     : undefined;
-  const activeServiceEditorUnit = activeServiceEditorMaster?.unit
-    || (activeServiceEditorMaster?.type === 'Jasa' ? 'JASA' : activeServiceEditorMaster?.type === 'Group' ? 'PAKET' : 'PCS');
+  const activeServiceEditorMasterName = activeServiceEditorItem
+    ? cleanPackageLabel(activeServiceEditorMaster?.name?.trim() || activeServiceEditorItem.name.replace(/^\s*-\s*/, '').trim())
+    : '—';
+  const activeServiceEditorUnit = activeServiceEditorMaster
+    ? (activeServiceEditorMaster.unit?.trim()
+      || (activeServiceEditorMaster.type === 'Jasa' ? 'JASA' : activeServiceEditorMaster.type === 'Group' ? 'PAKET' : 'PCS'))
+    : '—';
+  const activeServiceEditorBranchId = editingWO?.branchId || resolveBranchId();
+  const activeServiceEditorBranchStock = activeServiceEditorMaster?.branchStocks?.[activeServiceEditorBranchId];
+  const activeServiceEditorBranchWarehouses = data.warehouses
+    .filter(warehouse => warehouse.branchId === activeServiceEditorBranchId && warehouse.isActive && !warehouse.isSystem);
+  const activeServiceEditorWarehouseIds = new Set(activeServiceEditorBranchWarehouses.map(warehouse => warehouse.id));
+  const activeServiceEditorSellableWarehouseIds = new Set(activeServiceEditorBranchWarehouses
+    .filter(warehouse => warehouse.isSellable)
+    .map(warehouse => warehouse.id));
+  const activeServiceEditorWarehouseStocks = activeServiceEditorMaster
+    ? data.warehouseStocks.filter(stock => stock.itemId === activeServiceEditorMaster.id && activeServiceEditorWarehouseIds.has(stock.warehouseId))
+    : [];
+  const activeServiceEditorHasBranchStock = Boolean(activeServiceEditorBranchStock || activeServiceEditorBranchWarehouses.length > 0);
+  const activeServiceEditorStock = activeServiceEditorBranchStock?.stock
+    ?? (activeServiceEditorBranchWarehouses.length > 0
+      ? activeServiceEditorWarehouseStocks.reduce((sum, stock) => sum + stock.quantity, 0)
+      : undefined);
+  const activeServiceEditorSellableStock = activeServiceEditorBranchWarehouses.length > 0
+    ? activeServiceEditorWarehouseStocks
+      .filter(stock => activeServiceEditorSellableWarehouseIds.has(stock.warehouseId))
+      .reduce((sum, stock) => sum + stock.quantity - (Number(stock.reservedQuantity) || 0), 0)
+    : activeServiceEditorBranchStock?.sellableStock;
+  const activeServiceEditorWarehouseLabel = !activeServiceEditorMaster
+    ? 'Data master tidak tersedia'
+    : activeServiceEditorMaster.type === 'Persediaan'
+      ? 'Dipilih saat membuat faktur'
+      : activeServiceEditorMaster.type === 'Group'
+        ? 'Per komponen saat membuat faktur'
+        : 'Tidak menggunakan stok';
+  const activeServiceEditorTechnician = formData.technicianName
+    || editingWO?.technicianName
+    || 'Belum dipilih';
   const directEditorCompatibilities = activeServiceEditorMaster?.vehicleCompatibilities || [];
   const packageEditorCompatibilities = activeServiceEditorMembers.flatMap(member => (
     masterItemForService(member)?.vehicleCompatibilities || []
@@ -5159,7 +5198,7 @@ export default function WorkOrders() {
       {serviceEditor && activeServiceEditorItem && (
         <div data-wo-service-editor className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center sm:p-3" role="dialog" aria-modal="true" aria-label={`Edit rincian ${serviceReceiptName(activeServiceEditorItem)}`}>
           <section className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-xl bg-white shadow-2xl sm:rounded-lg">
-            <header className="flex items-center justify-between bg-[#12386b] px-4 py-3 text-white">
+            <header className="flex items-center justify-between bg-[#12386b] px-4 py-2.5 text-white">
               <div className="flex min-w-0 items-center gap-2">
                 <Edit className="h-5 w-5 flex-shrink-0" />
                 <div className="min-w-0">
@@ -5169,87 +5208,137 @@ export default function WorkOrders() {
               </div>
               <button type="button" onClick={closeServiceEditor} className="rounded p-1 hover:bg-white/10" aria-label="Tutup rincian"><X className="h-5 w-5" /></button>
             </header>
-            <div className="flex border-b border-gray-300 px-3 pt-2 text-sm">
-              <span className="border-b-2 border-red-500 px-3 py-2 font-medium text-red-600">Rincian</span>
-              <span className="px-4 py-2 text-gray-400">Info lainnya</span>
+            <div className="flex border-b border-gray-300 px-3 pt-1 text-sm" role="tablist" aria-label="Bagian rincian barang atau jasa">
+              <button
+                type="button"
+                role="tab"
+                data-wo-service-editor-tab="details"
+                aria-selected={serviceEditorTab === 'details'}
+                onClick={() => setServiceEditorTab('details')}
+                className={`border-b-2 px-3 py-2 font-medium ${serviceEditorTab === 'details' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                Rincian
+              </button>
+              <button
+                type="button"
+                role="tab"
+                data-wo-service-editor-tab="info"
+                aria-selected={serviceEditorTab === 'info'}
+                onClick={() => setServiceEditorTab('info')}
+                className={`border-b-2 px-4 py-2 font-medium ${serviceEditorTab === 'info' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                Info lainnya
+              </button>
             </div>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 text-sm sm:p-4">
               {serviceEditorReadOnly && (
-                <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   Rincian ditampilkan dalam mode lihat karena WO terkunci atau berada di cabang lain.
                 </div>
               )}
-              <div className="grid gap-3 sm:grid-cols-[145px_minmax(0,1fr)] sm:items-center">
-                <span className="text-gray-600">Kode #</span>
-                <div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 font-mono font-semibold text-cyan-700">{serviceItemCode(activeServiceEditorItem)}</div>
-                <span className="text-gray-600">Barcode</span>
-                <div className="rounded border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-gray-700">{activeServiceEditorMaster?.barcode?.trim() || '-'}</div>
-                <label htmlFor="wo-service-description" className="text-gray-600">Nama / Keterangan</label>
-                <input
-                  id="wo-service-description"
-                  value={serviceEditor.description}
-                  onChange={(event) => setServiceEditor(previous => previous ? { ...previous, description: event.target.value } : previous)}
-                  disabled={serviceEditorReadOnly}
-                  placeholder={serviceReceiptName(activeServiceEditorItem)}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
-                />
-                <label htmlFor="wo-service-qty" className="text-gray-600">Kuantitas</label>
-                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_100px] gap-2">
-                  <input
-                    id="wo-service-qty"
-                    type="number"
-                    inputMode="numeric"
-                    min="1"
-                    value={serviceEditor.qty}
-                    onChange={(event) => setServiceEditor(previous => previous ? { ...previous, qty: event.target.value } : previous)}
-                    disabled={serviceEditorReadOnly}
-                    className="min-w-0 rounded border border-gray-300 px-3 py-2 text-right tabular-nums outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
-                  />
-                  <div title="Satuan dari Master Barang & Jasa" className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-center font-semibold uppercase text-gray-700">{activeServiceEditorUnit}</div>
-                </div>
-                <label htmlFor="wo-service-price" className="text-gray-600">@Harga</label>
-                <div className="flex rounded border border-gray-300 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-                  <span className="border-r border-gray-200 px-3 py-2 text-gray-500">Rp</span>
-                  <input
-                    id="wo-service-price"
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    value={serviceEditor.price}
-                    onChange={(event) => setServiceEditor(previous => previous ? { ...previous, price: event.target.value } : previous)}
-                    disabled={serviceEditorReadOnly}
-                    className="min-w-0 flex-1 px-3 py-2 text-right tabular-nums outline-none disabled:bg-gray-100"
-                  />
-                </div>
-                <span className="text-gray-600">Total Harga</span>
-                <strong className="rounded border border-gray-300 bg-gray-50 px-3 py-2 text-right text-base tabular-nums">
-                  Rp {(Math.max(1, Number(serviceEditor.qty) || 1) * Math.max(0, Number(serviceEditor.price) || 0)).toLocaleString('id-ID')}
-                </strong>
-                <span className="self-start pt-2 text-gray-600">Kecocokan Kendaraan</span>
-                <div className="max-h-28 space-y-1 overflow-y-auto rounded border border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-700">
-                  {activeServiceEditorCompatibilities.length > 0 ? activeServiceEditorCompatibilities.map(row => (
-                    <p key={formatVehicleCompatibility(row)}>{formatVehicleCompatibility(row)}</p>
-                  )) : <p className="text-gray-500">Belum ditentukan di Master Barang & Jasa</p>}
-                </div>
-              </div>
-              {activeServiceEditorMembers.length > 0 && (
-                <div className="rounded border border-purple-200 bg-purple-50 p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-700">Isi Paket</p>
-                  <div className="space-y-1 text-xs text-slate-700">
-                    {activeServiceEditorMembers.map(member => (
-                      <p key={member.id}><span className="font-mono text-purple-600">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</p>
-                    ))}
+              {serviceEditorTab === 'details' ? (
+                <div data-wo-service-editor-summary className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 sm:grid-cols-[168px_minmax(0,1fr)] sm:gap-x-3">
+                  <span className="text-xs text-gray-600 sm:text-sm">Kode #</span>
+                  <div className="flex h-9 min-w-0 items-center justify-between gap-2 rounded border border-gray-300 bg-gray-50 px-3">
+                    <span title={`Kode ${serviceItemCode(activeServiceEditorItem)}`} className="min-w-0 truncate font-mono font-semibold text-cyan-700">{serviceItemCode(activeServiceEditorItem)}</span>
+                    {activeServiceEditorMaster?.type === 'Persediaan' ? (
+                      <span className="flex-none text-xs text-gray-500">Bisa dijual: <b className={typeof activeServiceEditorSellableStock === 'number' && activeServiceEditorSellableStock > 0 ? 'text-emerald-700' : 'text-amber-700'}>{typeof activeServiceEditorSellableStock === 'number' ? activeServiceEditorSellableStock.toLocaleString('id-ID') : '—'}</b></span>
+                    ) : (
+                      <span className="flex-none rounded bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">{activeServiceEditorMaster?.type || 'Manual'}</span>
+                    )}
                   </div>
+                  <span className="text-xs text-gray-600 sm:text-sm">Nama Barang / Jasa</span>
+                  <div title={activeServiceEditorMasterName} className="flex h-9 min-w-0 items-center truncate rounded border border-gray-300 bg-gray-50 px-3 font-medium text-gray-800">{activeServiceEditorMasterName}</div>
+                  <label htmlFor="wo-service-description" className="text-xs text-gray-600 sm:text-sm">Keterangan baris</label>
+                  <input
+                    id="wo-service-description"
+                    value={serviceEditor.description}
+                    onChange={(event) => setServiceEditor(previous => previous ? { ...previous, description: event.target.value } : previous)}
+                    disabled={serviceEditorReadOnly}
+                    placeholder="Keterangan tambahan (opsional)"
+                    className="h-9 min-w-0 rounded border border-gray-300 bg-white px-3 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  />
+                  <label htmlFor="wo-service-qty" className="text-xs text-gray-600 sm:text-sm">Kuantitas</label>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_96px] gap-2">
+                    <input
+                      id="wo-service-qty"
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
+                      value={serviceEditor.qty}
+                      onChange={(event) => setServiceEditor(previous => previous ? { ...previous, qty: event.target.value } : previous)}
+                      disabled={serviceEditorReadOnly}
+                      className="h-9 min-w-0 rounded border border-gray-300 px-3 text-right tabular-nums outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                    />
+                    <div title="Satuan dari Master Barang & Jasa" className="flex h-9 items-center justify-center truncate rounded border border-gray-300 bg-gray-50 px-2 text-center font-semibold uppercase text-gray-700">{activeServiceEditorUnit}</div>
+                  </div>
+                  <label htmlFor="wo-service-price" className="text-xs text-gray-600 sm:text-sm">@Harga</label>
+                  <div className="flex h-9 min-w-0 rounded border border-gray-300 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                    <span className="flex w-11 flex-none items-center justify-center border-r border-gray-200 text-gray-500">Rp</span>
+                    <input
+                      id="wo-service-price"
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      value={serviceEditor.price}
+                      onChange={(event) => setServiceEditor(previous => previous ? { ...previous, price: event.target.value } : previous)}
+                      disabled={serviceEditorReadOnly}
+                      className="min-w-0 flex-1 px-3 text-right tabular-nums outline-none disabled:bg-gray-100"
+                    />
+                  </div>
+                  <span className="text-xs text-gray-600 sm:text-sm">Total Harga</span>
+                  <strong className="flex h-9 items-center justify-end rounded border border-gray-300 bg-gray-50 px-3 text-base tabular-nums">
+                    Rp {(Math.max(1, Math.round(Number(serviceEditor.qty) || 1)) * Math.max(0, Number(serviceEditor.price) || 0)).toLocaleString('id-ID')}
+                  </strong>
+                </div>
+              ) : (
+                <div data-wo-service-editor-info className="space-y-3">
+                  <p className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">Informasi barang berasal dari Master Barang & Jasa saat ini. Isi paket mengikuti baris historis pada WO.</p>
+                  <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 sm:grid-cols-[168px_minmax(0,1fr)] sm:gap-x-3">
+                    <span className="text-xs text-gray-600 sm:text-sm">Barcode</span>
+                    <div title={`Barcode ${activeServiceEditorMaster?.barcode?.trim() || 'belum tersedia'}`} className="flex h-9 min-w-0 items-center truncate rounded border border-gray-300 bg-gray-50 px-3 font-mono text-gray-700">{activeServiceEditorMaster?.barcode?.trim() || '—'}</div>
+                    <span className="text-xs text-gray-600 sm:text-sm">Jenis / Kategori</span>
+                    <div className="flex min-h-9 min-w-0 items-center gap-2 rounded border border-gray-300 bg-gray-50 px-3">
+                      <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">{activeServiceEditorMaster?.type || 'Manual'}</span>
+                      <span className="min-w-0 truncate text-gray-700">{activeServiceEditorMaster?.categoryName || 'Tanpa kategori'}</span>
+                    </div>
+                    <span className="text-xs text-gray-600 sm:text-sm">Gudang / Stok</span>
+                    <div className="min-w-0 rounded border border-gray-300 bg-gray-50 px-3 py-2">
+                      <p className="truncate text-gray-700">{activeServiceEditorWarehouseLabel}</p>
+                      {activeServiceEditorMaster?.type === 'Persediaan' && (
+                        <p className="mt-0.5 text-xs text-gray-500">Stok cabang <b className="text-gray-700">{activeServiceEditorHasBranchStock && typeof activeServiceEditorStock === 'number' ? `${activeServiceEditorStock.toLocaleString('id-ID')} ${activeServiceEditorUnit}` : '—'}</b> · Bisa dijual <b className={typeof activeServiceEditorSellableStock === 'number' && activeServiceEditorSellableStock > 0 ? 'text-emerald-700' : 'text-amber-700'}>{typeof activeServiceEditorSellableStock === 'number' ? `${activeServiceEditorSellableStock.toLocaleString('id-ID')} ${activeServiceEditorUnit}` : '—'}</b></p>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-600 sm:text-sm">Penjual / Teknisi</span>
+                    <div className="flex min-h-9 items-center rounded border border-gray-300 bg-gray-50 px-3 text-gray-700">{activeServiceEditorTechnician}</div>
+                    <span className="self-start pt-2 text-xs text-gray-600 sm:text-sm">Kecocokan Kendaraan</span>
+                    <div className="max-h-28 space-y-1 overflow-y-auto rounded border border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                      {activeServiceEditorCompatibilities.length > 0 ? activeServiceEditorCompatibilities.map(row => (
+                        <p key={formatVehicleCompatibility(row)}>{formatVehicleCompatibility(row)}</p>
+                      )) : <p className="text-gray-500">Belum ditentukan di Master Barang & Jasa</p>}
+                    </div>
+                  </div>
+                  {activeServiceEditorMembers.length > 0 && (
+                    <div className="rounded border border-purple-200 bg-purple-50 p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-700">Isi Paket</p>
+                      <div className="space-y-1 text-xs text-slate-700">
+                        {activeServiceEditorMembers.map(member => (
+                          <p key={member.id}><span className="font-mono text-purple-600">{serviceItemCode(member)}</span> · {serviceReceiptName(member)} ×{member.qty}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-            <footer className="flex items-center justify-between gap-3 border-t border-gray-300 p-4">
+            <footer className="flex items-center justify-between gap-3 border-t border-gray-300 p-3 sm:px-4">
               {!serviceEditorReadOnly ? (
-                <button type="button" onClick={removeServiceFromEditor} className="inline-flex items-center gap-2 rounded border border-red-300 px-4 py-2 font-semibold text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Hapus Baris</button>
+                <button type="button" onClick={removeServiceFromEditor} className="inline-flex h-9 items-center gap-2 rounded border border-red-300 px-3 font-semibold text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Hapus Baris</button>
               ) : <span />}
               <div className="flex gap-2">
-                <button type="button" onClick={closeServiceEditor} className="rounded border border-gray-300 px-4 py-2 font-semibold text-gray-700 hover:bg-gray-50">{serviceEditorReadOnly ? 'Tutup' : 'Batal'}</button>
-                {!serviceEditorReadOnly && <button type="button" onClick={saveServiceEditor} className="rounded bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-700">Simpan Rincian</button>}
+                <button type="button" onClick={closeServiceEditor} className="h-9 rounded border border-gray-300 px-4 font-semibold text-gray-700 hover:bg-gray-50">{serviceEditorReadOnly ? 'Tutup' : 'Batal'}</button>
+                {!serviceEditorReadOnly && <button type="button" onClick={saveServiceEditor} className="h-9 rounded bg-blue-800 px-4 font-semibold text-white hover:bg-blue-700">Simpan Rincian</button>}
               </div>
             </footer>
           </section>
