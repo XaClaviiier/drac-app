@@ -209,6 +209,7 @@ export default function WorkOrders() {
   const autoRegisteringRef = useRef(false);
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
   const [statusDialog, setStatusDialog] = useState<{ wo: WorkOrder; next: WorkOrder['status'] } | null>(null);
+  const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [completionWO, setCompletionWO] = useState<WorkOrder | null>(null);
   const [completionForm, setCompletionForm] = useState({ temperature: '', lp: '', hp: '', note: '' });
   const [completionError, setCompletionError] = useState('');
@@ -1910,18 +1911,40 @@ export default function WorkOrders() {
 
   // Alur status berurutan: dipanggil dari tombol aksi di kartu WO.
   const requestStatusChange = (wo: WorkOrder, next: WorkOrder['status']) => {
-    if (!requireEditableWorkOrder(wo)) return;
-    if (next === 'Closed' && wo.invoiceId) {
-      showAccurateNotice(`WO tidak dapat dibatalkan karena sudah terhubung dengan Faktur ${wo.invoiceNumber || ''}.`);
+    const canonicalWorkOrder = data.workOrders.find(item => item.id === wo.id) || wo;
+    if (!requireEditableWorkOrder(canonicalWorkOrder)) return;
+    if (canonicalWorkOrder.status === next) {
+      setDetailWO(current => current?.id === canonicalWorkOrder.id ? canonicalWorkOrder : current);
+      if (showModal && editingWO?.id === canonicalWorkOrder.id) {
+        setEditingWO(canonicalWorkOrder);
+        setFormData(current => ({ ...current, status: canonicalWorkOrder.status }));
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(canonicalWorkOrder);
+      }
+      setSuccessMsg(`${canonicalWorkOrder.woNumber}: status sudah ${statusLabel(next)}.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+      return;
+    }
+    if (canonicalWorkOrder.status !== wo.status) {
+      setDetailWO(current => current?.id === canonicalWorkOrder.id ? canonicalWorkOrder : current);
+      if (showModal && editingWO?.id === canonicalWorkOrder.id) {
+        setEditingWO(canonicalWorkOrder);
+        setFormData(current => ({ ...current, status: canonicalWorkOrder.status }));
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(canonicalWorkOrder);
+      }
+      showAccurateNotice(`Status ${canonicalWorkOrder.woNumber} telah berubah menjadi ${statusLabel(canonicalWorkOrder.status)}. Periksa status terbaru lalu ulangi aksi.`);
+      return;
+    }
+    if (next === 'Closed' && canonicalWorkOrder.invoiceId) {
+      showAccurateNotice(`WO tidak dapat dibatalkan karena sudah terhubung dengan Faktur ${canonicalWorkOrder.invoiceNumber || ''}.`);
       return;
     }
     setStatusReason('');
     setCancelStep(1);
     setCancelReasonChoice('');
     setCancelReasonNotes('');
-    const latestWorkOrder = showModal && editingWO?.id === wo.id
-      ? { ...wo, ...formData, total: totalServices }
-      : wo;
+    const latestWorkOrder = showModal && editingWO?.id === canonicalWorkOrder.id
+      ? { ...canonicalWorkOrder, ...formData, status: canonicalWorkOrder.status, total: totalServices }
+      : canonicalWorkOrder;
     setStatusDialog({ wo: latestWorkOrder, next });
   };
 
@@ -2093,12 +2116,45 @@ export default function WorkOrders() {
   };
 
   const confirmStatusChange = async (reasonOverride?: string) => {
-    if (!statusDialog) return;
-    const { wo, next } = statusDialog;
+    if (!statusDialog || isChangingStatus) return;
+    const { wo: dialogWorkOrder, next } = statusDialog;
+    const wo = data.workOrders.find(item => item.id === dialogWorkOrder.id) || dialogWorkOrder;
     if (!requireEditableWorkOrder(wo)) {
       setStatusDialog(null);
       return;
     }
+    if (wo.status === next) {
+      setStatusDialog(null);
+      setStatusReason('');
+      setCancelStep(1);
+      setCancelReasonChoice('');
+      setCancelReasonNotes('');
+      setDetailWO(current => current?.id === wo.id ? wo : current);
+      if (showModal && editingWO?.id === wo.id) {
+        setEditingWO(wo);
+        setFormData(current => ({ ...current, status: wo.status }));
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(wo);
+      }
+      setSuccessMsg(`${wo.woNumber}: status sudah ${statusLabel(next)}.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+      return;
+    }
+    if (wo.status !== dialogWorkOrder.status) {
+      setStatusDialog(null);
+      setStatusReason('');
+      setCancelStep(1);
+      setCancelReasonChoice('');
+      setCancelReasonNotes('');
+      setDetailWO(current => current?.id === wo.id ? wo : current);
+      if (showModal && editingWO?.id === wo.id) {
+        setEditingWO(wo);
+        setFormData(current => ({ ...current, status: wo.status }));
+        editorBaselineFingerprint.current = workOrderEditorFingerprint(wo);
+      }
+      showAccurateNotice(`Status ${wo.woNumber} telah berubah menjadi ${statusLabel(wo.status)}. Periksa status terbaru lalu ulangi aksi.`);
+      return;
+    }
+    setIsChangingStatus(true);
     try {
       if (next === 'Closed' && showModal && editingWO?.id === wo.id && !workOrderViewOnly) {
         lostSalesReason.current = (reasonOverride ?? statusReason).trim();
@@ -2116,7 +2172,9 @@ export default function WorkOrders() {
         showAccurateNotice(result.message || 'Perubahan status ditolak.');
         return;
       }
-      setSuccessMsg(`${wo.woNumber}: status berubah menjadi ${statusLabel(next)}.`);
+      setSuccessMsg(result.changed === false
+        ? `${wo.woNumber}: status sudah ${statusLabel(next)}.`
+        : `${wo.woNumber}: status berubah menjadi ${statusLabel(next)}.`);
       setTimeout(() => setSuccessMsg(''), 4000);
       setStatusDialog(null);
       setStatusReason('');
@@ -2132,41 +2190,61 @@ export default function WorkOrders() {
       }
     } catch (error: any) {
       showAccurateNotice(`Gagal mengubah status: ${error?.message || 'server tidak merespons'}`);
+    } finally {
+      setIsChangingStatus(false);
     }
   };
 
   const handleReopenCompletedWorkOrder = async (wo: WorkOrder) => {
-    if (!requireEditableWorkOrder(wo)) return;
-    if (wo.invoiceId || wo.invoiceNumber || data.invoices.some(invoice => invoice.woId === wo.id)) {
+    if (isChangingStatus) return;
+    const canonicalWorkOrder = data.workOrders.find(item => item.id === wo.id) || wo;
+    if (!requireEditableWorkOrder(canonicalWorkOrder)) return;
+    if (canonicalWorkOrder.status === 'Proses') {
+      setDetailWO(current => current?.id === canonicalWorkOrder.id ? canonicalWorkOrder : current);
+      setSuccessMsg(`${canonicalWorkOrder.woNumber} sudah berstatus Dikerjakan.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+      return;
+    }
+    if (canonicalWorkOrder.status !== wo.status || canonicalWorkOrder.status !== 'Selesai') {
+      setDetailWO(current => current?.id === canonicalWorkOrder.id ? canonicalWorkOrder : current);
+      showAccurateNotice(`Status ${canonicalWorkOrder.woNumber} telah berubah menjadi ${statusLabel(canonicalWorkOrder.status)}. Periksa status terbaru lalu ulangi aksi.`);
+      return;
+    }
+    if (canonicalWorkOrder.invoiceId || canonicalWorkOrder.invoiceNumber || data.invoices.some(invoice => invoice.woId === canonicalWorkOrder.id)) {
       showAccurateNotice('WO sudah memiliki faktur. Hapus faktur dan pembayarannya terlebih dahulu sebelum mengembalikan WO ke Dikerjakan.');
       return;
     }
-    const reason = await askAccurateText({
-      title: 'Kembalikan WO ke Dikerjakan',
-      message: `Mundur ${wo.woNumber} dari Selesai kembali ke Dikerjakan.`,
-      label: 'Alasan perubahan',
-      initialValue: 'Salah menekan Selesai',
-      placeholder: 'Masukkan alasan perubahan',
-      confirmLabel: 'Kembalikan',
-    });
-    if (!reason) return;
+    setIsChangingStatus(true);
     try {
-      const result = await changeWorkOrderStatus(wo.id, 'Proses', reason.trim());
+      const reason = await askAccurateText({
+        title: 'Kembalikan WO ke Dikerjakan',
+        message: `Mundur ${canonicalWorkOrder.woNumber} dari Selesai kembali ke Dikerjakan.`,
+        label: 'Alasan perubahan',
+        initialValue: 'Salah menekan Selesai',
+        placeholder: 'Masukkan alasan perubahan',
+        confirmLabel: 'Kembalikan',
+      });
+      if (!reason) return;
+      const result = await changeWorkOrderStatus(canonicalWorkOrder.id, 'Proses', reason.trim());
       if (!result.ok) {
         showAccurateNotice(result.message || 'WO tidak dapat dikembalikan ke Dikerjakan.');
         return;
       }
-      const reopenedWorkOrder = result.workOrder || { ...wo, status: 'Proses' as const };
-      setSuccessMsg(`${wo.woNumber} dikembalikan ke Dikerjakan.`);
+      const reopenedWorkOrder = result.workOrder || { ...canonicalWorkOrder, status: 'Proses' as const };
+      setSuccessMsg(result.changed === false
+        ? `${canonicalWorkOrder.woNumber} sudah berstatus Dikerjakan.`
+        : `${canonicalWorkOrder.woNumber} dikembalikan ke Dikerjakan.`);
       setTimeout(() => setSuccessMsg(''), 4000);
-      setDetailWO(current => current?.id === wo.id ? reopenedWorkOrder : current);
-      if (showModal && editingWO?.id === wo.id) {
+      setDetailWO(current => current?.id === canonicalWorkOrder.id ? reopenedWorkOrder : current);
+      if (showModal && editingWO?.id === canonicalWorkOrder.id) {
         setEditingWO(reopenedWorkOrder);
         setFormData(current => ({ ...current, status: reopenedWorkOrder.status }));
         editorBaselineFingerprint.current = workOrderEditorFingerprint(reopenedWorkOrder);
       }
     } catch (error: any) {
       showAccurateNotice(`Gagal mengembalikan WO: ${error?.message || 'server tidak merespons'}`);
+    } finally {
+      setIsChangingStatus(false);
     }
   };
 
@@ -2589,10 +2667,15 @@ export default function WorkOrders() {
 
   const continueLostSalesSameIssue = async () => {
     if (!lostSalesFollowUp || isFollowingUpLostSales) return;
-    if (!requireEditableWorkOrder(lostSalesFollowUp)) return;
-    const positiveEstimate = lostSalesFollowUp.services.reduce((sum, service) => sum + Number(service.price || 0) * Number(service.qty || 0), 0);
-    if (!lostSalesFollowUp.services.length || positiveEstimate <= 0) {
-      const sourceWO = lostSalesFollowUp;
+    const sourceWO = data.workOrders.find(item => item.id === lostSalesFollowUp.id) || lostSalesFollowUp;
+    if (!requireEditableWorkOrder(sourceWO)) return;
+    if (sourceWO.status !== 'Closed' && sourceWO.status !== 'Proses') {
+      setLostSalesFollowUp(null);
+      showAccurateNotice(`${sourceWO.woNumber} sudah berstatus ${statusLabel(sourceWO.status)}. Muat ulang WO sebelum memilih tindak lanjut.`);
+      return;
+    }
+    const positiveEstimate = sourceWO.services.reduce((sum, service) => sum + Number(service.price || 0) * Number(service.qty || 0), 0);
+    if (!sourceWO.services.length || positiveEstimate <= 0) {
       setLostSalesFollowUp(null);
       setDetailWO(null);
       setResumeLostSalesAfterEstimate(true);
@@ -2604,9 +2687,9 @@ export default function WorkOrders() {
       setTimeout(() => setSuccessMsg(''), 5000);
       return;
     }
-    const activeWO = findActiveWoByPlate(lostSalesFollowUp.plateNumber);
-    if (activeWO && activeWO.id !== lostSalesFollowUp.id) {
-      showAccurateNotice(`Kendaraan ${lostSalesFollowUp.plateNumber} sudah memiliki WO aktif ${activeWO.woNumber}.`);
+    const activeWO = findActiveWoByPlate(sourceWO.plateNumber);
+    if (activeWO && activeWO.id !== sourceWO.id) {
+      showAccurateNotice(`Kendaraan ${sourceWO.plateNumber} sudah memiliki WO aktif ${activeWO.woNumber}.`);
       setLostSalesFollowUp(null);
       openDetailTab(activeWO);
       return;
@@ -2614,7 +2697,7 @@ export default function WorkOrders() {
     setIsFollowingUpLostSales(true);
     try {
       const result = await changeWorkOrderStatus(
-        lostSalesFollowUp.id,
+        sourceWO.id,
         'Proses',
         'Pelanggan kembali dengan masalah yang sama.',
       );
@@ -2622,7 +2705,9 @@ export default function WorkOrders() {
         showAccurateNotice(result.message || 'WO Lost Sales tidak dapat dilanjutkan.');
         return;
       }
-      setSuccessMsg(`${lostSalesFollowUp.woNumber} dipulihkan dari Lost Sales dan masuk status Dikerjakan.`);
+      setSuccessMsg(result.changed === false
+        ? `${sourceWO.woNumber} sudah berstatus Dikerjakan.`
+        : `${sourceWO.woNumber} dipulihkan dari Lost Sales dan masuk status Dikerjakan.`);
       setTimeout(() => setSuccessMsg(''), 5000);
       setLostSalesFollowUp(null);
       setDetailWO(null);
@@ -4997,8 +5082,8 @@ export default function WorkOrders() {
                   {needsReason
                     ? cancelStep === 1
                       ? <button onClick={() => setCancelStep(2)} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Ya, Lanjutkan</button>
-                      : <button onClick={() => void confirmStatusChange(finalCancelReason)} disabled={!finalCancelEnabled} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-gray-300">Batalkan &amp; Jadikan Lost Sales</button>
-                    : <button onClick={() => void confirmStatusChange()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Ya, Ubah Status</button>}
+                      : <button onClick={() => void confirmStatusChange(finalCancelReason)} disabled={!finalCancelEnabled || isChangingStatus} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-gray-300">{isChangingStatus ? 'Memproses...' : 'Batalkan &amp; Jadikan Lost Sales'}</button>
+                    : <button onClick={() => void confirmStatusChange()} disabled={isChangingStatus} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">{isChangingStatus ? 'Memproses...' : 'Ya, Ubah Status'}</button>}
                 </div>
               </div>
             </div>

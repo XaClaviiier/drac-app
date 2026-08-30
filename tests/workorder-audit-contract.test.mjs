@@ -102,6 +102,35 @@ test('Register ke Dikerjakan melewati satu pintu dengan prasyarat operasional', 
   assert.match(technicianContract, /\$roleCode !== 'TKN'[\s\S]*?str_contains\(\$roleName, 'teknisi'\)[\s\S]*?str_contains\(\$roleName, 'technician'\)/);
 });
 
+test('perubahan status WO yang sama bersifat idempoten tanpa PUT atau log duplikat', () => {
+  const context = source('src/context/AppContext.tsx');
+  const page = source('src/pages/WorkOrders.tsx');
+  const statusChange = sectionBetween(context, 'const changeWorkOrderStatus =', 'const changeWorkOrderTimelineStage =');
+  const statusRequest = sectionBetween(page, 'const requestStatusChange =', 'const requestStartProcessing =');
+  const statusConfirm = sectionBetween(page, 'const confirmStatusChange =', 'const handleReopenCompletedWorkOrder =');
+
+  requireInOrder(statusChange, [
+    'const wo = data.workOrders.find',
+    'if (wo.status === nextStatus)',
+    'return { ok: true, workOrder: wo, changed: false }',
+    'if (!isStatusTransitionAllowed(wo.status, nextStatus))',
+    'const savedWorkOrder = await updateWorkOrder(woId, patch)',
+    'return { ok: true, workOrder: savedWorkOrder, changed: true }',
+  ], 'status yang sudah aktif harus selesai sebelum validasi transisi dan penyimpanan');
+  assert.match(statusRequest, /data\.workOrders\.find\(item\s*=>\s*item\.id\s*===\s*wo\.id\)/);
+  assert.match(statusRequest, /canonicalWorkOrder\.status\s*===\s*next/);
+  assert.match(statusRequest, /canonicalWorkOrder\.status\s*!==\s*wo\.status/);
+  assert.match(statusRequest, /status:\s*canonicalWorkOrder\.status/);
+  assert.match(statusConfirm, /isChangingStatus/);
+  assert.match(statusConfirm, /data\.workOrders\.find\(item\s*=>\s*item\.id\s*===\s*dialogWorkOrder\.id\)/);
+  assert.match(statusConfirm, /wo\.status\s*!==\s*dialogWorkOrder\.status/);
+  assert.match(statusConfirm, /result\.changed\s*===\s*false/);
+  const continueLostSales = sectionBetween(page, 'const continueLostSalesSameIssue =', 'const continueLostSalesDifferentIssue =');
+  assert.match(continueLostSales, /data\.workOrders\.find\(item\s*=>\s*item\.id\s*===\s*lostSalesFollowUp\.id\)/);
+  assert.match(continueLostSales, /sourceWO\.status\s*!==\s*'Closed'\s*&&\s*sourceWO\.status\s*!==\s*'Proses'/);
+  assert.match(continueLostSales, /result\.changed\s*===\s*false/);
+});
+
 test('menu proses hanya tersedia dengan izin edit dan aksi yang relevan', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const processVisibility = sectionBetween(page, 'const canShowProcessMenu =', 'const openCompletionModal =');
@@ -190,12 +219,17 @@ test('aksi edit WO dibatasi izin dan cabang aktif yang dapat diakses', () => {
   const continueLostSales = sectionBetween(page, 'const continueLostSalesSameIssue =', 'const continueLostSalesDifferentIssue =');
 
   assert.match(handleSubmit, /editingWO\s*&&\s*!requireEditableWorkOrder\(editingWO\)/);
-  assert.match(statusRequest, /requireEditableWorkOrder\(wo\)/);
+  assert.match(statusRequest, /requireEditableWorkOrder\(canonicalWorkOrder\)/);
   assert.match(statusConfirm, /requireEditableWorkOrder\(wo\)/);
   assert.match(completionSave, /requireEditableWorkOrder\(completionWO\)/);
   assert.match(workResultSave, /requireEditableWorkOrder\(workResultEditor\)/);
-  assert.match(reopen, /requireEditableWorkOrder\(wo\)/);
-  assert.match(continueLostSales, /requireEditableWorkOrder\(lostSalesFollowUp\)/);
+  assert.match(reopen, /data\.workOrders\.find\(item\s*=>\s*item\.id\s*===\s*wo\.id\)/);
+  assert.match(reopen, /requireEditableWorkOrder\(canonicalWorkOrder\)/);
+  assert.match(reopen, /canonicalWorkOrder\.status\s*===\s*'Proses'/);
+  assert.match(reopen, /canonicalWorkOrder\.status\s*!==\s*wo\.status\s*\|\|\s*canonicalWorkOrder\.status\s*!==\s*'Selesai'/);
+  assert.match(reopen, /result\.changed\s*===\s*false/);
+  assert.match(reopen, /setIsChangingStatus\(true\)[\s\S]*?finally[\s\S]*?setIsChangingStatus\(false\)/);
+  assert.match(continueLostSales, /requireEditableWorkOrder\(sourceWO\)/);
   assert.match(continueLostSales, /setResumeLostSalesAfterEstimate\(true\)/);
   assert.match(continueLostSales, /handleOpenModal\(sourceWO, true\)/);
   assert.doesNotMatch(continueLostSales, /handleOpenDiagnosis\(sourceWO\)/);

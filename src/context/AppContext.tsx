@@ -46,7 +46,7 @@ interface AppContextType {
   /** Cari WO aktif (Register/Proses dan belum dilanjutkan) untuk plat nomor tertentu. */
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
-  changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder }>;
+  changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder; changed?: boolean }>;
   /** Catat tahap operasional timeline tanpa mengubah status inti WO. */
   changeWorkOrderTimelineStage: (woId: string, stage: WorkOrderTimelineStage, note?: string) => Promise<{ ok: boolean; message?: string }>;
   createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string) => Promise<SalesInvoice | null>;
@@ -621,9 +621,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     woId: string,
     nextStatus: WOStatus,
     reason?: string
-  ): Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder }> => {
+  ): Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder; changed?: boolean }> => {
     const wo = data.workOrders.find(w => w.id === woId);
     if (!wo) return { ok: false, message: 'WO tidak ditemukan.' };
+
+    // Aksi status dapat terkirim dari dialog yang masih memegang snapshot lama
+    // atau dari ketukan ganda. Anggap target yang sudah aktif sebagai sukses
+    // idempoten: tidak kirim PUT dan tidak membuat log status inti duplikat.
+    if (wo.status === nextStatus) {
+      return { ok: true, workOrder: wo, changed: false };
+    }
 
     if (!isStatusTransitionAllowed(wo.status, nextStatus)) {
       return { ok: false, message: `Perubahan status ${wo.status} → ${nextStatus} tidak diizinkan.` };
@@ -704,7 +711,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     const savedWorkOrder = await updateWorkOrder(woId, patch);
-    return { ok: true, workOrder: savedWorkOrder };
+    return { ok: true, workOrder: savedWorkOrder, changed: true };
   };
 
   const changeWorkOrderTimelineStage = async (
