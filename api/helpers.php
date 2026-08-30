@@ -339,6 +339,7 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('last_activity', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD last_activity DATETIME NULL AFTER created_at");
     if (!in_array('ip_address', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD ip_address VARCHAR(45) NOT NULL DEFAULT '' AFTER last_activity");
     if (!in_array('user_agent', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD user_agent VARCHAR(255) NOT NULL DEFAULT '' AFTER ip_address");
+    if (!in_array('device_hash', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD device_hash CHAR(64) NOT NULL DEFAULT '' AFTER user_agent");
     if (!in_array('revoked_at', $sessionColumns, true)) $pdo->exec("ALTER TABLE api_sessions ADD revoked_at DATETIME NULL AFTER user_agent");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS user_login_rules (
@@ -347,12 +348,17 @@ function ensureApiSupportTables(PDO $pdo): void {
             schedule_mode ENUM('unrestricted','custom') NOT NULL DEFAULT 'unrestricted',
             schedule_json TEXT NULL,
             single_device TINYINT(1) NOT NULL DEFAULT 0,
+            max_devices TINYINT UNSIGNED NOT NULL DEFAULT 2,
             auto_logout TINYINT(1) NOT NULL DEFAULT 1,
             idle_timeout_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 30,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $ruleColumns = array_column($pdo->query("SHOW COLUMNS FROM user_login_rules")->fetchAll(), 'Field');
+    if (!in_array('max_devices', $ruleColumns, true)) {
+        $pdo->exec("ALTER TABLE user_login_rules ADD max_devices TINYINT UNSIGNED NOT NULL DEFAULT 2 AFTER single_device");
+        $pdo->exec("UPDATE user_login_rules SET max_devices = 1 WHERE single_device = 1");
+    }
     if (!in_array('idle_timeout_minutes', $ruleColumns, true)) $pdo->exec("ALTER TABLE user_login_rules ADD idle_timeout_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 30 AFTER auto_logout");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS login_audit_logs (

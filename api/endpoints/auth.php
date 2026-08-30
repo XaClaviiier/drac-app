@@ -69,12 +69,14 @@ if (!$isHashed) {
 // Owner selalu bebas pembatasan. User lain mengikuti durasi/jadwal login.
 $sessionHours=8;
 $idleTimeoutMinutes=30;
+$maxDevices=2;
 $scheduleEnd=null;
 if(empty($user['is_owner'])){
     $ruleStmt=$pdo->prepare("SELECT * FROM user_login_rules WHERE user_id=?");$ruleStmt->execute([$user['id']]);$rule=$ruleStmt->fetch();
     if($rule){
         $sessionHours=max(1,min(24,(int)$rule['session_hours']));
         $idleTimeoutMinutes=max(0,min(240,(int)($rule['idle_timeout_minutes']??30)));
+        $maxDevices=max(1,min(2,(int)($rule['max_devices']??(!empty($rule['single_device'])?1:2))));
         if($rule['schedule_mode']==='custom'){
             $tz=new DateTimeZone('Asia/Makassar');$now=new DateTime('now',$tz);$schedule=json_decode($rule['schedule_json']??'[]',true)?:[];$day=(string)$now->format('N');$today=$schedule[$day]??null;
             if(!$today||empty($today['enabled'])){writeLoginAudit($pdo,$user['id'],$username,'login_blocked','Login di luar hari kerja');respondError('Login tidak diizinkan pada hari ini',403);}
@@ -83,24 +85,59 @@ if(empty($user['is_owner'])){
             if(!$start||!$end||$now<$start||$now>$end){writeLoginAudit($pdo,$user['id'],$username,'login_blocked','Login di luar jam kerja');respondError('Login hanya diizinkan pukul '.($today['start']??'-').'–'.($today['end']??'-').' WITA',403);}
             if(!empty($rule['auto_logout']))$scheduleEnd=$end;
         }
-        if(!empty($rule['single_device']))$pdo->prepare("UPDATE api_sessions SET revoked_at=NOW() WHERE user_id=? AND revoked_at IS NULL")->execute([$user['id']]);
     }
 }
 
-// Update last login
-$pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
 $token = bin2hex(random_bytes(32));
-$pdo->prepare("DELETE FROM api_sessions WHERE expires_at <= NOW()")->execute();
+$deviceToken=trim((string)($_COOKIE['drac_device']??''));
+if(!preg_match('/^[a-f0-9]{64}$/i',$deviceToken))$deviceToken=bin2hex(random_bytes(32));
+$deviceHash=hash('sha256',$deviceToken);
 $expiresAt=(new DateTime('now',new DateTimeZone('Asia/Makassar')))->modify("+{$sessionHours} hours");
 if($scheduleEnd&&$scheduleEnd<$expiresAt)$expiresAt=$scheduleEnd;
-$pdo->prepare("INSERT INTO api_sessions (token_hash,user_id,expires_at,last_activity,ip_address,user_agent) VALUES(?,?,?,NOW(),?,?)")
-    ->execute([hash('sha256',$token),$user['id'],$expiresAt->format('Y-m-d H:i:s'),requestIp(),requestUserAgent()]);
+
+// Satu browser/perangkat mempertahankan identitas perangkatnya. Login ulang
+// dari perangkat yang sama mengganti sesi lama dan tidak memakai kuota baru.
+try{
+    $pdo->beginTransaction();
+    $lock=$pdo->prepare("SELECT id FROM users WHERE id=? FOR UPDATE");$lock->execute([$user['id']]);
+    $pdo->prepare("DELETE FROM api_sessions WHERE expires_at <= NOW()")->execute();
+    $currentSessionToken=trim((string)($_COOKIE['drac_session']??''));
+    if($currentSessionToken!==''){
+        $pdo->prepare("UPDATE api_sessions SET revoked_at=NOW() WHERE user_id=? AND token_hash=? AND revoked_at IS NULL")
+            ->execute([$user['id'],hash('sha256',$currentSessionToken)]);
+    }
+    $pdo->prepare("UPDATE api_sessions SET revoked_at=NOW() WHERE user_id=? AND device_hash=? AND revoked_at IS NULL")
+        ->execute([$user['id'],$deviceHash]);
+    if(empty($user['is_owner'])){
+        $count=$pdo->prepare("SELECT COUNT(*) FROM api_sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>NOW()");
+        $count->execute([$user['id']]);
+        if((int)$count->fetchColumn()>=$maxDevices){
+            $pdo->rollBack();
+            writeLoginAudit($pdo,$user['id'],$username,'login_blocked',"Batas {$maxDevices} perangkat aktif tercapai");
+            respondError("Batas {$maxDevices} perangkat aktif sudah tercapai. Logout dari perangkat lain atau hubungi Owner.",403);
+        }
+    }
+    $pdo->prepare("INSERT INTO api_sessions (token_hash,user_id,expires_at,last_activity,ip_address,user_agent,device_hash) VALUES(?,?,?,NOW(),?,?,?)")
+        ->execute([hash('sha256',$token),$user['id'],$expiresAt->format('Y-m-d H:i:s'),requestIp(),requestUserAgent(),$deviceHash]);
+    $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
+    $pdo->commit();
+}catch(Throwable $e){
+    if($pdo->inTransaction())$pdo->rollBack();
+    throw $e;
+}
 writeLoginAudit($pdo,$user['id'],$username,'login_success','Login berhasil');
 
 $forwardedProto = strtolower(trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || $forwardedProto === 'https';
 setcookie('drac_session', $token, [
     'expires' => $expiresAt->getTimestamp(),
+    'path' => '/',
+    'secure' => $isHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+setcookie('drac_device', $deviceToken, [
+    'expires' => time() + 31536000,
     'path' => '/',
     'secure' => $isHttps,
     'httponly' => true,
