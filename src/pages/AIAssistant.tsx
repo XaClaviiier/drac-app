@@ -1568,7 +1568,7 @@ ${buildSmartContext(userMsgText)}`;
     };
     await addWorkOrder(wo);
 
-    return { woNumber, branchName, total, customerName: wo.customerName, customerPhone: customer?.phone || a.phone || '', plateNumber: wo.plateNumber, vehicleInfo: wo.vehicleInfo, description: wo.description, date: wo.date, servicesCount: services.length, customerUpdateSkipped };
+    return { woNumber, branchName, total, customerName: wo.customerName, customerPhone: customer?.phone || a.phone || '', customerAddress: customer?.address || a.address || '', plateNumber: wo.plateNumber, vehicleInfo: wo.vehicleInfo, description: wo.description, date: wo.date, servicesCount: services.length, customerUpdateSkipped };
   };
 
   const shareRegisterToWhatsApp = async (text: string) => {
@@ -2101,7 +2101,8 @@ ${buildSmartContext(userMsgText)}`;
       const plateForShare = r.plateNumber.replace(/\s+/g, '').toUpperCase().replace(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/, (_all: string, prefix: string, number: string, suffix: string) => `${prefix} ${number}${suffix ? ` ${suffix}` : ''}`);
       const vehicleForShare = (r.vehicleInfo || '-').replace(/\s*-\s*([^-]+)$/, ' ($1)');
       const shareDate = new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID');
-      const shareText = `${r.woNumber} ( ${shareDate} )\n🚗 ${plateForShare} – ${vehicleForShare}\n👤 ${r.customerName}${r.customerPhone ? ` ${r.customerPhone}` : ''}\nKeluhan: ${r.description || '-'}\nInput: ${currentUser?.name || '-'}`;
+      const addressForShare = String(r.customerAddress || '').trim();
+      const shareText = `${r.woNumber} ( ${shareDate} )\n🚗 ${plateForShare} – ${vehicleForShare}\n👤 ${r.customerName}${r.customerPhone ? ` ${r.customerPhone}` : ''}${addressForShare ? `\n📍 ${addressForShare}` : ''}\nKeluhan: ${r.description || '-'}\nInput: ${currentUser?.name || '-'}`;
       setMessages(h => [...h, {
         role: 'assistant',
         time: now(),
