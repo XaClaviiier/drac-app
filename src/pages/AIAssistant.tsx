@@ -1571,18 +1571,38 @@ ${buildSmartContext(userMsgText)}`;
     return { woNumber, branchName, total, customerName: wo.customerName, customerPhone: customer?.phone || a.phone || '', customerAddress: customer?.address || a.address || '', plateNumber: wo.plateNumber, vehicleInfo: wo.vehicleInfo, description: wo.description, date: wo.date, servicesCount: services.length, customerUpdateSkipped };
   };
 
+  const enrichLegacyRegisterShareAddress = (text: string) => {
+    if (/^📍\s+\S/m.test(text)) return text;
+
+    const woNumber = text.match(/^(WO-[^\s(]+)/m)?.[1];
+    const workOrder = woNumber ? data.workOrders.find(wo => wo.woNumber === woNumber) : undefined;
+    if (!workOrder) return text;
+
+    const customer = data.customers.find(item => item.id === workOrder.customerRefId)
+      || data.customers.find(item => item.customerCode === workOrder.customerId)
+      || data.customers.find(item => item.name.trim().toUpperCase() === workOrder.customerName.trim().toUpperCase());
+    const normalizedPlate = workOrder.plateNumber.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    const vehicle = data.vehicles.find(item => item.id === workOrder.vehicleRefId)
+      || data.vehicles.find(item => item.plateNumber.replace(/[^A-Z0-9]/gi, '').toUpperCase() === normalizedPlate);
+    const address = String(customer?.address || vehicle?.address || '').trim();
+    if (!address) return text;
+
+    return text.replace(/^👤[^\n]*$/m, customerLine => `${customerLine}\n📍 ${address}`);
+  };
+
   const shareRegisterToWhatsApp = async (text: string) => {
+    const shareText = enrichLegacyRegisterShareAddress(text);
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Register Servis Baru', text });
+        await navigator.share({ title: 'Register Servis Baru', text: shareText });
         return;
       }
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(shareText);
       window.alert('Teks register sudah disalin. Buka WhatsApp lalu pilih grup tujuan.');
     } catch (error: any) {
       if (error?.name === 'AbortError') return;
       try {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(shareText);
         window.alert('Teks register sudah disalin. Buka WhatsApp lalu pilih grup tujuan.');
       } catch {
         window.alert('Gagal membuka menu Bagikan. Salin teks register secara manual.');
