@@ -259,24 +259,29 @@ export default function UsersAndRoles() {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="hidden grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 bg-slate-100 px-4 py-3 text-xs font-semibold uppercase text-slate-600 md:grid"><span>Pengguna</span><span>Role</span><span>Akses Cabang</span><span>Status</span><span>Aksi</span></div>
+            <div className="hidden grid-cols-[1.6fr_1fr_1fr_1fr_1.8fr_.7fr_auto] gap-3 bg-slate-100 px-4 py-3 text-xs font-semibold uppercase text-slate-600 md:grid"><span>Pengguna</span><span>Username</span><span>Password</span><span>Role</span><span>Akses Cabang</span><span>Status</span><span>Aksi</span></div>
             {filteredUsers.map((user) => (
-              <div key={user.id} className="grid gap-3 border-t border-gray-100 p-4 first:border-0 md:grid-cols-[2fr_1fr_2fr_1fr_auto] md:items-center">
+              <div key={user.id} className="grid gap-3 border-t border-gray-100 p-4 first:border-0 md:grid-cols-[1.6fr_1fr_1fr_1fr_1.8fr_.7fr_auto] md:items-center">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 font-bold text-white">{user.name.charAt(0)}</div>
                   <div className="flex items-center gap-3">
                     <div>
                       <p className="font-semibold text-gray-900">{user.name} {user.isOwner && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">OWNER UTAMA</span>}</p>
-                      <p className="text-xs text-gray-500">@{user.username} · {user.email}</p>
+                      <p className="text-xs text-gray-500">{user.email}</p>
                     </div>
                   </div>
+                </div>
+                <span className="font-mono text-sm text-gray-700">{user.username}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-sm tracking-wider text-gray-500">••••••••</span>
+                  {canEdit && <button title="Atur ulang password" onClick={()=>{setPasswordUser(user);setNewPassword('')}} className="rounded p-1.5 text-blue-600 hover:bg-blue-50"><Eye className="h-4 w-4" /></button>}
                 </div>
                 <span className="text-sm">{user.roleName}</span>
                 <div className="flex flex-wrap gap-1">{(user.branchIds||[user.branchId]).map(id=><span key={id} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{data.branches.find(b=>b.id===id)?.name||id}</span>)}</div>
                 <span className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{user.isActive ? 'Aktif' : 'Nonaktif'}</span>
                 <div className="flex gap-2">
                   {canEdit && (
-                    <><button title="Edit" onClick={() => openUserModal(user)} className="rounded-lg border p-2 text-gray-700"><Edit className="h-4 w-4" /></button><button title="Ubah password" onClick={()=>{setPasswordUser(user);setNewPassword('')}} className="rounded-lg border p-2 text-blue-600"><KeyRound className="h-4 w-4"/></button></>
+                    <button title="Edit" onClick={() => openUserModal(user)} className="rounded-lg border p-2 text-gray-700"><Edit className="h-4 w-4" /></button>
                   )}
                   {canDelete && !user.isProtected && user.id !== currentUser?.id && (
                     <button title="Hapus" onClick={() => { if (window.confirm(`Hapus user ${user.name}?`)) deleteUser(user.id); }} className="rounded-lg border border-red-200 p-2 text-red-600"><Trash2 className="h-4 w-4" /></button>

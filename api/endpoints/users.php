@@ -60,6 +60,7 @@ if ($action === 'password' && $method === 'PUT') {
 
 switch ($method) {
     case 'GET':
+        requireAuthenticatedUserPermission($pdo, $actor, 'user:view');
         $rows = $pdo->query("
             SELECT u.*, r.name role_name, b.name branch_name
             FROM users u LEFT JOIN roles r ON u.role_id=r.id LEFT JOIN branches b ON u.branch_id=b.id
