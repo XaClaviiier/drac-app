@@ -2,6 +2,9 @@
 if (!class_exists('WorkOrderVersionConflictException')) {
     class WorkOrderVersionConflictException extends RuntimeException {}
 }
+if (!class_exists('WorkOrderAccessDeniedException')) {
+    class WorkOrderAccessDeniedException extends RuntimeException {}
+}
 
 $validateWorkOrderDate = static function ($value): string {
     $dateValue = trim((string)$value);
@@ -57,7 +60,7 @@ $timelineStageFromStatusLog = static function (array $statusLog, string $coreSta
 $isTimelineStageTransitionAllowed = static function (string $current, string $next): bool {
     $allowedTransitions = [
         'diagnosis' => ['working'],
-        'working' => ['approval', 'parts'],
+        'working' => ['working', 'approval', 'parts'],
         'approval' => ['working'],
         'parts' => ['working'],
         'lost' => [],
@@ -597,6 +600,7 @@ switch ($method) {
         $d = getInput();
         if ($action === 'timeline-stage') {
             $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+            requireAuthenticatedUserPermission($pdo, $actor, 'wo:edit');
             $allowedStages = ['diagnosis', 'approval', 'parts', 'working'];
             $stage = strtolower(trim((string)($d['stage'] ?? '')));
             if (!in_array($stage, $allowedStages, true)) {
@@ -609,7 +613,10 @@ switch ($method) {
                 $stageWorkOrder = $stageStmt->fetch();
                 if (!$stageWorkOrder) throw new InvalidArgumentException('WO tidak ditemukan.');
                 assertActiveBranch($pdo, (string)$stageWorkOrder['branch_id']);
-                requireAccessibleBranch($pdo, $actor, (string)$stageWorkOrder['branch_id']);
+                $accessibleBranchIds = getAccessibleBranchIds($pdo, $actor);
+                if (!in_array((string)$stageWorkOrder['branch_id'], $accessibleBranchIds, true)) {
+                    throw new WorkOrderAccessDeniedException('Akun tidak memiliki akses ke cabang tersebut.');
+                }
                 $coreStatus = (string)$stageWorkOrder['status'];
                 if (in_array($coreStatus, ['Selesai', 'Closed', 'Batal'], true) || !empty($stageWorkOrder['invoice_id'])) {
                     throw new DomainException('Tahap WO yang sudah selesai, Lost Sales, atau difakturkan tidak dapat diubah.');
@@ -624,6 +631,9 @@ switch ($method) {
                     throw new DomainException('Transisi tahap tidak sesuai. Status tunggu hanya dapat dipilih dari Dikerjakan.');
                 }
                 $note = trim((string)($d['note'] ?? ''));
+                if ($currentTimelineStage === 'working' && $stage === 'working' && $note === '') {
+                    throw new DomainException('Catatan progress wajib diisi saat mengonfirmasi pekerjaan masih Dikerjakan.');
+                }
                 $statusLog[] = [
                     'from' => $coreStatus,
                     'to' => $coreStatus,
@@ -640,6 +650,9 @@ switch ($method) {
                 $updatedAt = $formatWorkOrderVersion($versionStmt->fetchColumn());
                 $pdo->commit();
                 respondSuccess(['id' => $id, 'stage' => $stage, 'updatedAt' => $updatedAt], 'Tahap timeline diperbarui');
+            } catch (WorkOrderAccessDeniedException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError($e->getMessage(), 403);
             } catch (InvalidArgumentException | DomainException $e) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
                 respondError($e->getMessage(), 422);

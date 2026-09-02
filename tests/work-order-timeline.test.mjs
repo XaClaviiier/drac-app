@@ -47,11 +47,12 @@ test('transisi inti Proses yang lebih baru mengalahkan tahap tunggu sebelumnya',
   assert.equal(helper.timelineStageFromWorkOrder(wo), 'working');
 });
 
-test('tahap tunggu hanya dapat dipilih dari Dikerjakan', () => {
+test('tahap tunggu dan heartbeat progress hanya dapat dipilih dari Dikerjakan', () => {
   const stages = ['diagnosis', 'working', 'approval', 'parts', 'lost'];
   const nextStages = ['diagnosis', 'approval', 'parts', 'working'];
   const allowed = new Set([
     'diagnosis:working',
+    'working:working',
     'working:approval',
     'working:parts',
     'approval:working',
@@ -88,8 +89,9 @@ test('action bar dan API menegakkan urutan Diagnosa, Dikerjakan, lalu status tun
   assert.doesNotMatch(parts, /Tunggu Persetujuan|Selesai/);
   assert.match(working, /Tunggu Persetujuan/);
   assert.match(working, /Tunggu Parts/);
-  assert.match(context, /isTimelineStageTransitionAllowed\(timelineStageFromWorkOrder\(wo\), stage\)/);
-  assert.ok(context.indexOf('isTimelineStageTransitionAllowed(timelineStageFromWorkOrder(wo), stage)') < context.indexOf('if (isDemoMode)', context.indexOf('const changeWorkOrderTimelineStage')));
+  assert.match(context, /const currentTimelineStage = timelineStageFromWorkOrder\(wo\)/);
+  assert.match(context, /isTimelineStageTransitionAllowed\(currentTimelineStage, stage\)/);
+  assert.ok(context.indexOf('isTimelineStageTransitionAllowed(currentTimelineStage, stage)') < context.indexOf('if (isDemoMode)', context.indexOf('const changeWorkOrderTimelineStage')));
   assert.match(endpoint, /\$isTimelineStageTransitionAllowed\(\$currentTimelineStage, \$stage\)/);
   assert.match(endpoint, /Status tunggu hanya dapat dipilih dari Dikerjakan/);
 });
@@ -140,6 +142,8 @@ test('ringkasan finansial timeline hanya memberi stamp LUNAS dari pembayaran ter
     invoiceNumber: 'INV-1',
     isPaid: false,
     outstanding: 500_000,
+    hasLinkedInvoice: true,
+    detailsRestricted: false,
   });
 
   const paid = helper.timelineFinancialSummary({ total: 1_250_000 }, {
@@ -161,6 +165,8 @@ test('ringkasan finansial timeline hanya memberi stamp LUNAS dari pembayaran ter
     invoiceNumber: null,
     isPaid: false,
     outstanding: null,
+    hasLinkedInvoice: false,
+    detailsRestricted: false,
   });
 
   assert.equal(helper.timelineFinancialSummary({ total: 100_000 }, {
@@ -177,6 +183,8 @@ test('ringkasan finansial timeline hanya memberi stamp LUNAS dari pembayaran ter
     invoiceNumber: 'INV-6',
     isPaid: true,
     outstanding: 0,
+    hasLinkedInvoice: true,
+    detailsRestricted: false,
   });
 });
 

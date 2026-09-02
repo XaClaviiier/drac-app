@@ -727,8 +727,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (wo.status !== 'Proses') {
       return { ok: false, message: 'Tahap operasional hanya dapat diubah setelah WO berada pada Dikerjakan.' };
     }
-    if (!isTimelineStageTransitionAllowed(timelineStageFromWorkOrder(wo), stage)) {
+    const currentTimelineStage = timelineStageFromWorkOrder(wo);
+    if (!isTimelineStageTransitionAllowed(currentTimelineStage, stage)) {
       return { ok: false, message: 'Transisi tahap tidak sesuai. Status tunggu hanya dapat dipilih dari Dikerjakan.' };
+    }
+    const trimmedNote = note.trim();
+    if (currentTimelineStage === 'working' && stage === 'working' && trimmedNote === '') {
+      return { ok: false, message: 'Catatan progress wajib diisi saat mengonfirmasi pekerjaan masih Dikerjakan.' };
     }
     if (isDemoMode) {
       const now = new Date().toISOString();
@@ -736,15 +741,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...previous,
         workOrders: previous.workOrders.map(item => item.id === woId ? {
           ...item,
-          statusLog: appendTimelineStageLog(item, stage, now, { id: currentUser?.id, name: currentUser?.name }, note),
+          statusLog: appendTimelineStageLog(item, stage, now, { id: currentUser?.id, name: currentUser?.name }, trimmedNote),
           pendingAt: stage === 'approval' || stage === 'parts' ? now : undefined,
-          pendingReason: stage === 'approval' || stage === 'parts' ? note : undefined,
+          pendingReason: stage === 'approval' || stage === 'parts' ? trimmedNote : undefined,
           updatedAt: now,
         } : item),
       }));
       return { ok: true };
     }
-    const result = await api.update('work-orders', `${encodeURIComponent(woId)}/timeline-stage`, { stage, note });
+    const result = await api.update('work-orders', `${encodeURIComponent(woId)}/timeline-stage`, { stage, note: trimmedNote });
     if (!result?.success) return { ok: false, message: result?.message || result?.error || 'Tahap timeline gagal diubah.' };
     await refreshData();
     return { ok: true };

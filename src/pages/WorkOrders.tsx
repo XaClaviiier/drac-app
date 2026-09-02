@@ -23,6 +23,7 @@ import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import { timelineStageFromReason } from '../lib/workOrderTimeline';
 import { formatVehicleCompatibility } from '../components/VehicleCompatibilityPicker';
 import { compatibilityBadgeForRank, compareCompatibilityRanks, rankItemVehicleCompatibility } from '../lib/vehicleCompatibility';
+import { useMinuteClock } from '../hooks/useMinuteClock';
 
 // Layanan yang sering digunakan akan diambil otomatis dari Master Barang & Jasa (Type: Jasa / Group)
 
@@ -187,6 +188,7 @@ type WorkOrderEditorGuardWindow = Window & {
 };
 
 export default function WorkOrders() {
+  const attentionNow = useMinuteClock();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     data,
@@ -1011,7 +1013,7 @@ export default function WorkOrders() {
   const selectedBranch = data.branches.find(branch => branch.id === selectedBranchId);
   const selectedBranchLabel = selectedBranch?.name.replace('CABANG ', '') || 'Cabang Aktif';
   const toLocalDate = (date: Date) => localDateKey(date);
-  const todayDate = toLocalDate(new Date());
+  const todayDate = toLocalDate(attentionNow);
   // Dipakai oleh memo sortir di bawah. Harus diinisialisasi sebelum useMemo
   // dijalankan, terutama ketika konfigurasi sort tersimpan di browser.
   const statusLabel = workOrderStatusLabel;
@@ -1055,7 +1057,8 @@ export default function WorkOrders() {
     branchScopedWorkOrders,
     data.invoices,
     todayDate,
-  ), [branchScopedWorkOrders, data.invoices, todayDate]);
+    attentionNow,
+  ), [branchScopedWorkOrders, data.invoices, todayDate, attentionNow]);
   const attentionByWorkOrderId = useMemo(
     () => new Map(attentionItems.map(item => [item.workOrder.id, item])),
     [attentionItems],

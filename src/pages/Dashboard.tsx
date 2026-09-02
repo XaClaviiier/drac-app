@@ -14,6 +14,7 @@ import {
   type BranchPerformanceSummary,
   type BranchPerformanceRow,
 } from '../lib/branchPerformance';
+import { useMinuteClock } from '../hooks/useMinuteClock';
 
 type CustomerPayment = { id: string; date: string; amount: number; paymentMethod: string; branchId: string; invoiceNumber: string; customerName: string };
 type CashAccount = { id: string; name: string; accountType: 'cash' | 'bank' | 'qris'; branchId?: string; balance: number; unsubmitted: number; isActive: boolean };
@@ -40,6 +41,7 @@ const isBranchMonthlyTargets = (value: unknown): value is BranchMonthlyTargets =
 };
 
 export default function Dashboard() {
+  const attentionNow = useMinuteClock();
   const { data, currentBranchId, currentUser, hasPermission, refreshData } = useApp();
   const canViewFinancial = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('report:view'));
   const canUseInvoiceData = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('invoice:view') || hasPermission('payment:view'));
@@ -84,7 +86,7 @@ export default function Dashboard() {
   const visibleAccounts = accounts.filter(account => account.isActive && (matchesBranch(account.branchId) || !account.branchId));
   const visibleDeposits = depositSummary.filter(summary => matchesBranch(summary.branchId));
 
-  const today = new Date();
+  const today = attentionNow;
   const todayKey = dateKey(today);
   const tenDaysAgo = dateKey(addDays(today, -9));
   const receivables = visibleInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - Number(invoice.payment)), 0);
@@ -149,7 +151,7 @@ export default function Dashboard() {
   const previousExpenseTotal = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).flatMap(invoice => invoice.payments || []).filter(payment => payment.date >= previousMonthStart && payment.date <= previousMonthEnd).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const expenseChange = previousExpenseTotal > 0 ? Math.round(((currentExpenseTotal - previousExpenseTotal) / previousExpenseTotal) * 100) : currentExpenseTotal > 0 ? 100 : 0;
 
-  const attentionItems = buildWorkOrderAttentionItems(visibleWOs, visibleInvoices, todayKey);
+  const attentionItems = buildWorkOrderAttentionItems(visibleWOs, visibleInvoices, todayKey, attentionNow);
   const attentionCounts = countWorkOrderAttentionByKind(attentionItems);
   const activeWarehouseIds = new Set(data.warehouses
     .filter(warehouse => warehouse.isActive && matchesBranch(warehouse.branchId))
@@ -183,7 +185,7 @@ export default function Dashboard() {
   };
 
   return <>
-    <MobileDashboard branchPerformance={executiveBranchPerformance} canViewBranchPerformance={canViewBranchPerformance} />
+    <MobileDashboard branchPerformance={executiveBranchPerformance} canViewBranchPerformance={canViewBranchPerformance} attentionNow={attentionNow} />
     <div className="hidden space-y-3 pb-5 lg:block">
       <section className="flex items-center justify-between">
         <div>
