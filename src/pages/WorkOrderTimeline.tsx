@@ -11,7 +11,7 @@ import IndonesianDateInput from '../components/IndonesianDateInput';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import {
-  timelineStageFromReason, timelineStageFromWorkOrder, type TimelineStageKey,
+  timelineFinancialSummary, timelineStageFromReason, timelineStageFromWorkOrder, type TimelineStageKey,
 } from '../lib/workOrderTimeline';
 
 type BoardStageKey = TimelineStageKey | 'done';
@@ -31,6 +31,8 @@ const STAGES: Record<TimelineStageKey, {
 const AXIS_START_MINUTE = 8 * 60;
 const DEFAULT_AXIS_END_MINUTE = 17 * 60 + 30;
 const HALF_HOUR = 30;
+const MOBILE_IDENTITY_WIDTH = 144;
+const MOBILE_FINANCIAL_WIDTH = 124;
 
 function parseDateTime(value: string | undefined, fallbackDate: string, fallbackTime = '08:00') {
   const fallback = new Date(`${fallbackDate}T${fallbackTime}:00`);
@@ -114,6 +116,10 @@ function formatClock(value: Date) {
   return value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
 }
 
+function formatRupiah(value: number) {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+}
+
 export default function WorkOrderTimeline() {
   const navigate = useNavigate();
   const {
@@ -190,9 +196,9 @@ export default function WorkOrderTimeline() {
   const scrollMobileToNow = (behavior: ScrollBehavior = 'smooth') => {
     const scroller = mobileTimelineRef.current;
     if (!scroller) return;
-    const mobileIdentityWidth = 144;
-    const mobileIndicatorWidth = 84;
-    const availableTimelineWidth = Math.max(80, scroller.clientWidth - mobileIdentityWidth - mobileIndicatorWidth);
+    const mobileIdentityWidth = MOBILE_IDENTITY_WIDTH;
+    const mobileFinancialWidth = MOBILE_FINANCIAL_WIDTH;
+    const availableTimelineWidth = Math.max(80, scroller.clientWidth - mobileIdentityWidth - mobileFinancialWidth);
     const currentPosition = Math.max(0, Math.min(100, ((minuteOfDay(new Date()) - AXIS_START_MINUTE) / axisSpan) * 100));
     const absoluteNow = mobileIdentityWidth + (currentPosition / 100) * mobileTimelineWidth;
     const target = absoluteNow - mobileIdentityWidth - availableTimelineWidth / 2;
@@ -249,7 +255,7 @@ export default function WorkOrderTimeline() {
   const activeCount = rows.filter(row => !['done', 'lost'].includes(row.stage)).length;
   const selectedStage = selectedRow?.stage;
   const selectedInvoice = selectedRow?.invoice;
-  const selectedPaid = selectedInvoice?.status === 'Lunas';
+  const selectedPaid = selected ? timelineFinancialSummary(selected, selectedInvoice).isPaid : false;
 
   const renderAction = (label: string, onClick: () => void, tone: 'neutral' | 'warning' | 'primary' | 'danger' | 'success', Icon: typeof Wrench) => {
     const colors = {
@@ -262,13 +268,16 @@ export default function WorkOrderTimeline() {
     return <button type="button" disabled={actionBusy} onClick={onClick} className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 sm:h-9 sm:flex-none sm:px-3 ${colors[tone]}`}><Icon className="h-3.5 w-3.5 flex-none"/><span className="truncate">{label}</span></button>;
   };
 
-  const renderIndicators = (row: TimelineRow, compact = false) => {
-    const done = row.stage === 'done';
-    const paid = row.invoice?.status === 'Lunas';
-    return <div className={`flex items-center justify-center ${compact ? 'gap-1' : 'gap-1.5'}`}>
-      <span title={done ? 'Pekerjaan selesai' : 'Pekerjaan belum selesai'} className={`grid place-items-center rounded-full border font-black ${compact ? 'h-5 w-5 text-[9px]' : 'h-6 w-6 text-[10px]'} ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>✓</span>
-      <span title={row.invoice ? `Faktur ${row.invoice.invoiceNumber}` : 'Belum ada faktur'} className={`grid place-items-center rounded-md border font-black ${compact ? 'h-5 min-w-7 px-1 text-[8px]' : 'h-6 min-w-8 px-1 text-[9px]'} ${row.invoice ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>INV</span>
-      <span title={paid ? 'Pembayaran lunas' : 'Pembayaran belum lunas'} className={`grid place-items-center rounded-md border font-black ${compact ? 'h-5 w-6 text-[9px]' : 'h-6 w-7 text-[10px]'} ${paid ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-300'}`}>Rp</span>
+  const renderFinancialSummary = (row: TimelineRow, compact = false) => {
+    const financial = timelineFinancialSummary(row.wo, row.invoice);
+    return <div className={`flex min-w-0 flex-col justify-center ${compact ? 'px-1 py-1' : 'px-2 py-1.5'}`}>
+      <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">{financial.amountLabel}</span>
+      <b className={`truncate text-slate-900 ${compact ? 'text-[10px]' : 'text-xs'}`}>{formatRupiah(financial.amount)}</b>
+      {financial.isPaid
+        ? <span className={`mt-0.5 w-fit -rotate-2 rounded border-2 border-emerald-600 bg-emerald-50 font-black tracking-[0.12em] text-emerald-700 ${compact ? 'px-1 py-0.5 text-[7px]' : 'px-1.5 py-0.5 text-[8px]'}`}>LUNAS</span>
+        : financial.invoiceNumber
+          ? <span className="mt-0.5 truncate text-[8px] font-semibold text-blue-700" title={`Faktur ${financial.invoiceNumber}`}>{financial.invoiceNumber} · Sisa {formatRupiah(financial.outstanding || 0)}</span>
+          : <span className="mt-0.5 text-[8px] text-slate-400">Belum ditagih</span>}
     </div>;
   };
 
@@ -285,8 +294,8 @@ export default function WorkOrderTimeline() {
   });
 
   const renderFocusBoard = (mobile: boolean) => {
-    const identityWidth = mobile ? 144 : 260;
-    const indicatorWidth = mobile ? 84 : 112;
+    const identityWidth = mobile ? MOBILE_IDENTITY_WIDTH : 260;
+    const indicatorWidth = mobile ? MOBILE_FINANCIAL_WIDTH : 168;
     const boardTimelineWidth = mobile ? mobileTimelineWidth : timelineWidth;
     const gridColumns = `${identityWidth}px ${boardTimelineWidth}px ${indicatorWidth}px`;
     const stickyIdentity = mobile ? 'sticky left-0 z-30 border-r border-slate-200' : '';
@@ -299,7 +308,7 @@ export default function WorkOrderTimeline() {
             {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
             {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
           </div>
-          <div className={`flex items-end justify-center bg-slate-50 px-1 py-2.5 ${stickyIndicator}`}>{mobile ? '✓ · INV · Rp' : 'Selesai · INV · Rp'}</div>
+          <div className={`flex items-end justify-center bg-slate-50 px-1 py-2.5 ${stickyIndicator}`}>{mobile ? 'Total' : 'Total · Invoice'}</div>
         </div>
         {visibleRows.map(row => {
           const { wo, segments, stage } = row;
@@ -311,15 +320,14 @@ export default function WorkOrderTimeline() {
           const stickyBackground = isSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-slate-50';
           return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`group grid w-full border-b text-left last:border-b-0 ${isSelected ? 'bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-slate-50/80'}`} style={{ gridTemplateColumns: gridColumns }}>
             <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
-              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 truncate text-gray-950 ${mobile ? 'text-xs' : 'text-sm'}`}>{wo.plateNumber}</b>{warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
+              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 truncate text-gray-950 ${mobile ? 'text-xs' : 'text-sm'}`}>{wo.plateNumber}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
               <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'} · {wo.customerName}</p>
-              <p className={`mt-0.5 truncate text-[9px] font-bold uppercase ${isDone ? 'text-emerald-700' : currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.label}</p>
             </div>
             <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
               {renderSegments(segments, mobile ? 2.8 : 4.2)}
               <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
             </div>
-            <div className={`flex items-center justify-center bg-white px-1 group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderIndicators(row, mobile)}</div>
+            <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>
           </button>;
         })}
         {!visibleRows.length && <div className="p-14 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}{stageFilter ? ' untuk status yang dipilih' : ''}.</div>}
@@ -342,7 +350,7 @@ export default function WorkOrderTimeline() {
             <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'} · {wo.customerName}</p>
           </div>
           <span className={`rounded-md border px-1.5 py-1 text-[8px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>
-          {renderIndicators(row, true)}
+          {renderFinancialSummary(row, true)}
         </div>
         <div className="relative mt-5 h-9 rounded-md border border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)]" style={{ backgroundSize: `${(60 / axisSpan) * 100}% 100%` }}>
           <span className="absolute -top-4 left-0 text-[8px] font-semibold text-gray-400">08:00</span>
