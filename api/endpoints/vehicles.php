@@ -1,4 +1,35 @@
 <?php
+runVersionedApiBootstrap($pdo, 'vehicle_fitment_profile_20260902_v1', static function(PDO $pdo): void {
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_id VARCHAR(64) NULL AFTER model_id");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_name VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_cc SMALLINT UNSIGNED NULL AFTER generation_name");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant");
+    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission");
+});
+
+$resolveVehicleTechnicalProfile = static function(array $data): array {
+    foreach (['engineType', 'engineCode', 'variant', 'transmission', 'hvacType'] as $field) {
+        $value = $data[$field] ?? null;
+        if ($value !== null && !is_string($value)) {
+            throw new InvalidArgumentException('Atribut teknis kendaraan harus berupa teks atau null.');
+        }
+    }
+    $engineType = trim((string)($data['engineType'] ?? '')) ?: null;
+    $engineCode = strtoupper(trim((string)($data['engineCode'] ?? ''))) ?: null;
+    $variant = strtoupper(trim((string)($data['variant'] ?? ''))) ?: null;
+    $transmission = strtoupper(trim((string)($data['transmission'] ?? ''))) ?: null;
+    $hvacType = trim((string)($data['hvacType'] ?? '')) ?: null;
+    if ($engineType !== null && !in_array($engineType, ['Bensin','Diesel','Hybrid','Listrik'], true)) throw new InvalidArgumentException('Jenis mesin kendaraan tidak valid.');
+    if ($transmission !== null && !in_array($transmission, ['MT','AT','CVT','DCT'], true)) throw new InvalidArgumentException('Transmisi kendaraan tidak valid.');
+    if ($hvacType !== null && !in_array($hvacType, ['Manual','Digital','Dual Zone'], true)) throw new InvalidArgumentException('Sistem AC kendaraan tidak valid.');
+    if ($engineCode !== null && strlen($engineCode) > 50) throw new InvalidArgumentException('Kode mesin kendaraan terlalu panjang.');
+    if ($variant !== null && strlen($variant) > 100) throw new InvalidArgumentException('Varian kendaraan terlalu panjang.');
+    return compact('engineType', 'engineCode', 'variant', 'transmission', 'hvacType');
+};
+
 $resolveVehicleCatalog = static function (PDO $pdo, array $data): array {
     $brandInput = trim((string)($data['brand'] ?? ''));
     $modelInput = trim((string)($data['model'] ?? ''));
@@ -56,6 +87,11 @@ switch ($method) {
             $r['generationId']       = $r['generation_id'] ?? null;
             $r['generationName']     = $r['generation_name'] ?? '';
             $r['engineCc']           = isset($r['engine_cc']) ? (int)$r['engine_cc'] : null;
+            $r['engineType']         = $r['engine_type'] ?? null;
+            $r['engineCode']         = $r['engine_code'] ?? null;
+            $r['variant']            = $r['variant'] ?? null;
+            $r['transmission']       = $r['transmission'] ?? null;
+            $r['hvacType']           = $r['hvac_type'] ?? null;
             $r['customerRefId']      = $r['customer_id'];
             $r['customerId']         = $r['customer_code'] ?: $r['customer_id'];
             $r['customerName']       = $r['customer_name'];
@@ -75,7 +111,7 @@ switch ($method) {
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
             respondError('Merek, model, dan warna wajib diisi.', 422);
         }
-        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); $color = $resolveVehicleColor($pdo, $d); }
+        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); $technical = $resolveVehicleTechnicalProfile($d); $color = $resolveVehicleColor($pdo, $d); }
         catch (InvalidArgumentException $e) { respondError($e->getMessage(), 422); }
         $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
         $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
@@ -89,11 +125,12 @@ switch ($method) {
         requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
         $vehicleId = $d['id'] ?? generateId();
-        $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, brand_id, model_id, generation_id, generation_name, engine_cc, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO vehicles (id, plate_number, brand, model, brand_id, model_id, generation_id, generation_name, engine_cc, engine_type, engine_code, variant, transmission, hvac_type, year, color, customer_id, customer_name, customer_code, phone, address, registration_date, notes, branch_id, first_seen_branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $vehicleId,
             $plate, $brand['name'], $model['name'], $brand['id'], $model['id'],
             $generation['id']??null,$generation['name']??'',$engineCc,
+            $technical['engineType'],$technical['engineCode'],$technical['variant'],$technical['transmission'],$technical['hvacType'],
             $d['year'] ?? 0, $color['name'],
             $customer['id'], $customer['name'],
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',
@@ -120,7 +157,7 @@ switch ($method) {
         if (empty($d['brand']) || empty($d['model']) || empty($d['color'])) {
             respondError('Merek, model, dan warna wajib diisi.', 422);
         }
-        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); $color = $resolveVehicleColor($pdo, $d); }
+        try { [$brand, $model, $generation, $engineCc] = $resolveVehicleCatalog($pdo, $d); $technical = $resolveVehicleTechnicalProfile($d); $color = $resolveVehicleColor($pdo, $d); }
         catch (InvalidArgumentException $e) { respondError($e->getMessage(), 422); }
         $customerStmt = $pdo->prepare("SELECT id, customer_code, name, phone, address FROM customers WHERE id = ?");
         $customerStmt->execute([(string)($d['customerRefId'] ?? '')]);
@@ -128,10 +165,11 @@ switch ($method) {
         if (!$customer) respondError('Pelanggan kendaraan tidak ditemukan.', 422);
         $duplicate = findVehicleByNormalizedPlate($pdo, $plate, (string)$id);
         if ($duplicate) respondError('Plat sudah terdaftar atas nama ' . $duplicate['customer_name'] . '.', 409);
-        $stmt = $pdo->prepare("UPDATE vehicles SET plate_number=?, brand=?, model=?, brand_id=?, model_id=?, generation_id=?, generation_name=?, engine_cc=?, year=?, color=?, customer_id=?, customer_name=?, customer_code=?, phone=?, address=?, notes=?, branch_id=? WHERE id=?");
+        $stmt = $pdo->prepare("UPDATE vehicles SET plate_number=?, brand=?, model=?, brand_id=?, model_id=?, generation_id=?, generation_name=?, engine_cc=?, engine_type=?, engine_code=?, variant=?, transmission=?, hvac_type=?, year=?, color=?, customer_id=?, customer_name=?, customer_code=?, phone=?, address=?, notes=?, branch_id=? WHERE id=?");
         $stmt->execute([
             $plate, $brand['name'], $model['name'], $brand['id'], $model['id'],
             $generation['id']??null,$generation['name']??'',$engineCc,
+            $technical['engineType'],$technical['engineCode'],$technical['variant'],$technical['transmission'],$technical['hvacType'],
             $d['year'] ?? 0, $color['name'],
             $customer['id'], $customer['name'],
             $customer['customer_code'], $customer['phone'] ?? '', $customer['address'] ?? '',

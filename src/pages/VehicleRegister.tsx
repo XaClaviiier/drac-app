@@ -163,6 +163,11 @@ export default function VehicleRegister() {
     generationId: '',
     generationName: '',
     engineCc: 0,
+    engineType: '' as '' | NonNullable<Vehicle['engineType']>,
+    engineCode: '',
+    variant: '',
+    transmission: '' as '' | NonNullable<Vehicle['transmission']>,
+    hvacType: '' as '' | NonNullable<Vehicle['hvacType']>,
     year: 0,
     color: '',
     customerRefId: '',
@@ -211,6 +216,7 @@ export default function VehicleRegister() {
       brand: '',
       model: '',
       generationId: '', generationName: '', engineCc: 0,
+      engineType: '', engineCode: '', variant: '', transmission: '', hvacType: '',
       year: 0,
       color: '',
       customerRefId: '',
@@ -237,6 +243,11 @@ export default function VehicleRegister() {
         generationId: vehicle.generationId || '',
         generationName: vehicle.generationName || '',
         engineCc: vehicle.engineCc || 0,
+        engineType: vehicle.engineType || '',
+        engineCode: vehicle.engineCode || '',
+        variant: vehicle.variant || '',
+        transmission: vehicle.transmission || '',
+        hvacType: vehicle.hvacType || '',
         year: vehicle.year,
         color: vehicle.color,
         customerRefId: owner?.id || '',
@@ -289,6 +300,11 @@ export default function VehicleRegister() {
       address: customer.address,
       brandId: selectedBrand?.id,
       modelId: selectedModel?.id,
+      engineType: formData.engineType || null,
+      engineCode: formData.engineCode.trim() || null,
+      variant: formData.variant.trim() || null,
+      transmission: formData.transmission || null,
+      hvacType: formData.hvacType || null,
     };
 
     if (editingVehicle) {
@@ -657,7 +673,7 @@ export default function VehicleRegister() {
                     <select
                       required
                       value={formData.brand}
-                      onChange={(e) => setFormData({ ...formData, brand: e.target.value, model: '', generationId: '', generationName: '', engineCc: 0 })}
+                      onChange={(e) => setFormData({ ...formData, brand: e.target.value, model: '', generationId: '', generationName: '', engineCc: 0, engineType: '', engineCode: '', variant: '', transmission: '', hvacType: '' })}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     >
                       <option value="">Pilih merek</option>
@@ -674,7 +690,7 @@ export default function VehicleRegister() {
                     <select
                       required
                       value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value, generationId: '', generationName: '', engineCc: 0 })}
+                      onChange={(e) => setFormData({ ...formData, model: e.target.value, generationId: '', generationName: '', engineCc: 0, engineType: '', engineCode: '', variant: '', transmission: '', hvacType: '' })}
                       disabled={!formData.brand}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 bg-white"
                     >
@@ -687,7 +703,7 @@ export default function VehicleRegister() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Generasi / Nama Pasar <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
-                    <select value={formData.generationId} onChange={event => { const generation=availableGenerations.find(item=>item.id===event.target.value); setFormData({...formData,generationId:event.target.value,generationName:generation?.name||'',engineCc:0,year: formData.year && generation && ((generation.yearFrom&&formData.year<generation.yearFrom)||(generation.yearTo&&formData.year>generation.yearTo)) ? 0 : formData.year}); }} disabled={!formData.model} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 disabled:bg-gray-100">
+                    <select value={formData.generationId} onChange={event => { const generation=availableGenerations.find(item=>item.id===event.target.value); setFormData({...formData,generationId:event.target.value,generationName:generation?.name||'',engineCc:0,engineType:'',engineCode:'',variant:'',transmission:'',hvacType:'',year: formData.year && generation && ((generation.yearFrom&&formData.year<generation.yearFrom)||(generation.yearTo&&formData.year>generation.yearTo)) ? 0 : formData.year}); }} disabled={!formData.model} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 disabled:bg-gray-100">
                       <option value="">Belum diketahui</option>{availableGenerations.map(generation=><option key={generation.id} value={generation.id}>{generation.name}{generation.yearFrom ? ` (${generation.yearFrom}${generation.yearTo ? `–${generation.yearTo}` : '–sekarang'})` : ''}</option>)}
                     </select>
                   </div>
@@ -695,6 +711,32 @@ export default function VehicleRegister() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Kapasitas Mesin <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
                     <select value={formData.engineCc} onChange={event=>setFormData({...formData,engineCc:Number(event.target.value)||0})} disabled={!selectedGeneration} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 disabled:bg-gray-100">
                       <option value={0}>Belum diketahui</option>{(selectedGeneration?.engineCcs||[]).map(cc=><option key={cc} value={cc}>{(cc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})} L / {cc.toLocaleString('id-ID')} cc</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Mesin <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                    <select value={formData.engineType} onChange={event=>setFormData({...formData,engineType:event.target.value as typeof formData.engineType})} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5">
+                      <option value="">Belum diketahui</option>{(['Bensin','Diesel','Hybrid','Listrik'] as const).map(type=><option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Kode Mesin <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                    <input value={formData.engineCode} maxLength={50} onChange={event=>setFormData({...formData,engineCode:event.target.value.toUpperCase()})} placeholder="Contoh: L15A" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Varian <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                    <input value={formData.variant} maxLength={100} onChange={event=>setFormData({...formData,variant:event.target.value.toUpperCase()})} placeholder="Contoh: RS" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 uppercase" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Transmisi <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                    <select value={formData.transmission} onChange={event=>setFormData({...formData,transmission:event.target.value as typeof formData.transmission})} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5">
+                      <option value="">Belum diketahui</option>{(['MT','AT','CVT','DCT'] as const).map(type=><option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sistem AC <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
+                    <select value={formData.hvacType} onChange={event=>setFormData({...formData,hvacType:event.target.value as typeof formData.hvacType})} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5">
+                      <option value="">Belum diketahui</option>{(['Manual','Digital','Dual Zone'] as const).map(type=><option key={type} value={type}>{type}</option>)}
                     </select>
                   </div>
                   <div>

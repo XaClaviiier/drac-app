@@ -50,6 +50,11 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS vehicle_generation_engines (
 $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_id VARCHAR(64) NULL AFTER model_id");
 $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_name VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id");
 $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_cc SMALLINT UNSIGNED NULL AFTER generation_name");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission");
 
 // Istilah pasar yang umum dipakai bengkel. INSERT IGNORE menjaga edit user.
 $avanzaModel = $pdo->query("SELECT m.id FROM vehicle_models m JOIN vehicle_brands b ON b.id=m.brand_id WHERE b.name='Toyota' AND m.name='Avanza' LIMIT 1")->fetchColumn();
