@@ -13,6 +13,7 @@ import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import {
   timelineFinancialSummary, timelineStageFromReason, timelineStageFromWorkOrder, type TimelineStageKey,
 } from '../lib/workOrderTimeline';
+import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../lib/workOrderAttention';
 
 type BoardStageKey = TimelineStageKey | 'done';
 type Segment = { key: TimelineStageKey; start: Date; end: Date; duration: number; active: boolean };
@@ -165,6 +166,21 @@ export default function WorkOrderTimeline() {
     result[row.stage] = (result[row.stage] || 0) + 1;
     return result;
   }, {} as Partial<Record<BoardStageKey, number>>), [rows]);
+  const operationalAttentionItems = useMemo(() => buildWorkOrderAttentionItems(
+    data.workOrders.filter(wo => wo.date === date && (currentBranchId === 'ALL' || wo.branchId === currentBranchId)),
+    data.invoices,
+    localDateKey(clock),
+    clock,
+  ), [data.workOrders, data.invoices, date, currentBranchId, clock]);
+  const closingCounts = useMemo(
+    () => countWorkOrderAttentionByKind(operationalAttentionItems),
+    [operationalAttentionItems],
+  );
+  const attentionByWorkOrder = useMemo(
+    () => new Map(operationalAttentionItems.map(item => [item.workOrder.id, item])),
+    [operationalAttentionItems],
+  );
+  const criticalAttentionCount = operationalAttentionItems.filter(item => item.severity === 'critical').length;
   const visibleRows = stageFilter ? rows.filter(row => row.stage === stageFilter) : rows;
   const selectedRow = visibleRows.find(row => row.wo.id === selectedId);
   const selected = selectedRow?.wo;
@@ -248,6 +264,31 @@ export default function WorkOrderTimeline() {
     const reason = window.prompt('Alasan Lost Sales:')?.trim();
     if (reason) void setCoreStatus('Closed', reason);
   };
+  const confirmProgress = async () => {
+    if (!selected || actionBusy) return;
+    const note = window.prompt('Catatan progress wajib diisi:', '')?.trim();
+    if (!note) {
+      window.alert('Catatan progress wajib diisi.');
+      return;
+    }
+    setActionBusy(true);
+    const result = await changeWorkOrderTimelineStage(selected.id, 'working', note);
+    setActionBusy(false);
+    if (!result.ok) window.alert(result.message || 'Konfirmasi progress gagal disimpan.');
+  };
+  const completeSelectedWorkOrder = () => {
+    if (!selected || actionBusy) return;
+    const confirmed = window.confirm([
+      'Selesaikan pekerjaan ini?',
+      '',
+      'Pastikan sebelum melanjutkan:',
+      '✓ Layanan dan barang sudah final',
+      '✓ Hasil pengukuran dan catatan sudah lengkap',
+      '✓ Pemeriksaan akhir sudah dilakukan',
+      '✓ Kendaraan siap diserahkan',
+    ].join('\n'));
+    if (confirmed) void setCoreStatus('Selesai');
+  };
 
   const branchName = currentBranchId === 'ALL'
     ? 'Semua Cabang'
@@ -255,6 +296,7 @@ export default function WorkOrderTimeline() {
   const activeCount = rows.filter(row => !['done', 'lost'].includes(row.stage)).length;
   const selectedStage = selectedRow?.stage;
   const selectedInvoice = selectedRow?.invoice;
+  const selectedHasLinkedInvoice = Boolean(selected?.invoiceId || selectedInvoice);
   const selectedPaid = selected ? timelineFinancialSummary(selected, selectedInvoice).isPaid : false;
 
   const renderAction = (label: string, onClick: () => void, tone: 'neutral' | 'warning' | 'primary' | 'danger' | 'success', Icon: typeof Wrench) => {
@@ -275,7 +317,9 @@ export default function WorkOrderTimeline() {
       <b className={`truncate text-slate-900 ${compact ? 'text-[10px]' : 'text-xs'}`}>{formatRupiah(financial.amount)}</b>
       {financial.isPaid
         ? <span className={`mt-0.5 w-fit -rotate-2 rounded border-2 border-emerald-600 bg-emerald-50 font-black tracking-[0.12em] text-emerald-700 ${compact ? 'px-1 py-0.5 text-[7px]' : 'px-1.5 py-0.5 text-[8px]'}`}>LUNAS</span>
-        : financial.invoiceNumber
+        : financial.detailsRestricted
+          ? <span className="mt-0.5 text-[8px] font-semibold text-slate-500">Sudah difakturkan · detail terbatas</span>
+          : financial.invoiceNumber
           ? <span className="mt-0.5 truncate text-[8px] font-semibold text-blue-700" title={`Faktur ${financial.invoiceNumber}`}>{financial.invoiceNumber} · Sisa {formatRupiah(financial.outstanding || 0)}</span>
           : <span className="mt-0.5 text-[8px] text-slate-400">Belum ditagih</span>}
     </div>;
@@ -317,10 +361,11 @@ export default function WorkOrderTimeline() {
           const currentConfig = isDone ? null : STAGES[stage as TimelineStageKey];
           const activeSegment = [...segments].reverse().find(segment => segment.active);
           const warning = activeSegment && currentConfig?.warningMinutes && activeSegment.duration > currentConfig.warningMinutes * 60000;
+          const attention = attentionByWorkOrder.get(wo.id);
           const stickyBackground = isSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-slate-50';
           return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`group grid w-full border-b text-left last:border-b-0 ${isSelected ? 'bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-slate-50/80'}`} style={{ gridTemplateColumns: gridColumns }}>
             <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
-              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 truncate text-gray-950 ${mobile ? 'text-xs' : 'text-sm'}`}>{wo.plateNumber}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
+              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 truncate text-gray-950 ${mobile ? 'text-xs' : 'text-sm'}`}>{wo.plateNumber}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : '!'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
               <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'} · {wo.customerName}</p>
             </div>
             <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
@@ -343,10 +388,11 @@ export default function WorkOrderTimeline() {
       const currentConfig = isDone ? null : STAGES[stage as TimelineStageKey];
       const activeSegment = [...segments].reverse().find(segment => segment.active);
       const warning = activeSegment && currentConfig?.warningMinutes && activeSegment.duration > currentConfig.warningMinutes * 60000;
+      const attention = attentionByWorkOrder.get(wo.id);
       return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`w-full px-3 py-3 text-left ${isSelected ? 'bg-blue-50 shadow-[inset_3px_0_0_#2563eb]' : 'bg-white'}`}>
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5"><b className="truncate text-sm text-gray-950">{wo.plateNumber}</b>{warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
+            <div className="flex items-center gap-1.5"><b className="truncate text-sm text-gray-950">{wo.plateNumber}</b>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : 'Periksa'}</span> : warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
             <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'} · {wo.customerName}</p>
           </div>
           <span className={`rounded-md border px-1.5 py-1 text-[8px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>
@@ -389,6 +435,19 @@ export default function WorkOrderTimeline() {
         </div>
       </header>
 
+      {operationalAttentionItems.length > 0 && <section className={`rounded-xl border p-3 shadow-sm ${criticalAttentionCount > 0 ? 'border-red-200 bg-red-50/70' : 'border-amber-200 bg-amber-50/70'}`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2"><CircleAlert className={`h-5 w-5 ${criticalAttentionCount > 0 ? 'text-red-600' : 'text-amber-600'}`}/><div><h2 className="text-sm font-bold text-gray-900">Penutupan Operasional</h2><p className="text-[11px] text-gray-600">{operationalAttentionItems.length} WO perlu tindakan · {criticalAttentionCount} kritis</p></div></div>
+          <button type="button" onClick={() => navigate('/workorders?attention=1')} className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-xs font-bold text-gray-700 hover:bg-gray-50">Periksa Semua</button>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2 text-center text-[10px] sm:flex sm:text-left">
+          <span className="rounded-lg border border-amber-200 bg-white px-2 py-1.5"><b className="text-amber-700">{closingCounts.register}</b> Register Mengambang</span>
+          <span className="rounded-lg border border-orange-200 bg-white px-2 py-1.5"><b className="text-orange-700">{closingCounts.process}</b> Dikerjakan Terlambat</span>
+          <span className="rounded-lg border border-blue-200 bg-white px-2 py-1.5"><b className="text-blue-700">{closingCounts.invoice}</b> Belum Difakturkan</span>
+          <span className="rounded-lg border border-rose-200 bg-white px-2 py-1.5"><b className="text-rose-700">{closingCounts.payment}</b> Belum Lunas</span>
+        </div>
+      </section>}
+
       {selected && selectedRow && <section className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <span className={`grid h-10 w-10 flex-none place-items-center rounded-lg border ${selectedStage === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : STAGES[selectedStage as TimelineStageKey].soft + ' ' + STAGES[selectedStage as TimelineStageKey].text}`}>
@@ -414,16 +473,18 @@ export default function WorkOrderTimeline() {
             {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
           </>}
           {hasPermission('wo:edit') && selectedStage === 'working' && selected.status === 'Proses' && <>
+            {renderAction('Konfirmasi Progress', () => void confirmProgress(), 'primary', Activity)}
             {renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
             {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
-            {renderAction('Selesai', () => void setCoreStatus('Selesai'), 'success', Check)}
+            {renderAction('Selesai', () => void completeSelectedWorkOrder(), 'success', Check)}
           </>}
-          {hasPermission('invoice:create') && selectedStage === 'done' && !selectedInvoice && (selected.total > 0
+          {hasPermission('invoice:create') && selectedStage === 'done' && !selectedHasLinkedInvoice && (selected.total > 0
             ? renderAction('Buat Faktur', () => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`), 'primary', FileText)
             : <span className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500">Lengkapi layanan &amp; harga</span>)}
+          {selectedHasLinkedInvoice && !selectedInvoice && <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Sudah difakturkan · detail terbatas</span>}
           {hasPermission('payment:create') && selectedInvoice && !selectedPaid && renderAction('Pembayaran', () => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`), 'success', Banknote)}
           {selectedPaid && <span className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
-          <button type="button" onClick={() => navigate(`/workorders?${selectedInvoice || selected.status === 'Closed' ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)} className="col-span-2 h-10 rounded-lg border px-3 text-xs font-bold text-gray-600 hover:bg-gray-50 sm:h-9">Detail WO</button>
+          <button type="button" onClick={() => navigate(`/workorders?${selectedHasLinkedInvoice || selected.status === 'Closed' ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)} className="col-span-2 h-10 rounded-lg border px-3 text-xs font-bold text-gray-600 hover:bg-gray-50 sm:h-9">Detail WO</button>
         </div>
       </section>}
 

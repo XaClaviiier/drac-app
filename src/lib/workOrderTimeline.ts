@@ -6,7 +6,7 @@ export const TIMELINE_STAGE_MARKER = 'WO_TIMELINE_STAGE';
 
 const ALLOWED_TIMELINE_TRANSITIONS: Record<TimelineStageKey, WorkOrderTimelineStage[]> = {
   diagnosis: ['working'],
-  working: ['approval', 'parts'],
+  working: ['working', 'approval', 'parts'],
   approval: ['working'],
   parts: ['working'],
   lost: [],
@@ -67,16 +67,19 @@ export function appendTimelineStageLog(
 }
 
 export function timelineFinancialSummary(
-  wo: Pick<WorkOrder, 'total'>,
+  wo: Pick<WorkOrder, 'total' | 'invoiceId'>,
   invoice?: Pick<SalesInvoice, 'invoiceNumber' | 'total' | 'payment' | 'status'>,
 ) {
   if (!invoice) {
+    const hasLinkedInvoice = Boolean(wo.invoiceId);
     return {
       amount: Math.max(0, wo.total || 0),
-      amountLabel: 'Estimasi' as const,
+      amountLabel: hasLinkedInvoice ? 'Total' as const : 'Estimasi' as const,
       invoiceNumber: null,
       isPaid: false,
       outstanding: null,
+      hasLinkedInvoice,
+      detailsRestricted: hasLinkedInvoice,
     };
   }
 
@@ -88,5 +91,7 @@ export function timelineFinancialSummary(
     invoiceNumber: invoice.invoiceNumber,
     isPaid: amount > 0 && invoice.status === 'Lunas' && payment >= amount,
     outstanding: Math.max(0, amount - payment),
+    hasLinkedInvoice: true,
+    detailsRestricted: false,
   };
 }

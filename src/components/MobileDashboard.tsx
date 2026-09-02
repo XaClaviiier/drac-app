@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext';
 import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../lib/workOrderAttention';
 import type { BranchPerformanceSummary } from '../lib/branchPerformance';
 
-export default function MobileDashboard({branchPerformance,canViewBranchPerformance}:{branchPerformance: BranchPerformanceSummary | null;canViewBranchPerformance:boolean}){
+export default function MobileDashboard({branchPerformance,canViewBranchPerformance,attentionNow}:{branchPerformance: BranchPerformanceSummary | null;canViewBranchPerformance:boolean;attentionNow:Date}){
   const {data,currentUser,currentBranchId,setCurrentBranchId,hasPermission,logout}=useApp();
   const navigate=useNavigate(); const [branchesOpen,setBranchesOpen]=useState(false); const [userOpen,setUserOpen]=useState(false); const [notificationOpen,setNotificationOpen]=useState(false); const [moreOpen,setMoreOpen]=useState(false); const [addOpen,setAddOpen]=useState(false);
   const isAll=currentBranchId==='ALL'; const activeBranch=data.branches.find(b=>b.id===currentBranchId);
@@ -15,9 +15,9 @@ export default function MobileDashboard({branchPerformance,canViewBranchPerforma
   const accessibleBranches=data.branches.filter(b=>b.isActive);
   const hasAssignedBranch=Boolean(accessibleBranches.length);
   const filter=<T extends {branchId:string}>(items:T[])=>items.filter(i=>isAll||i.branchId===currentBranchId);
-  const dateNow=new Date(); const today=`${dateNow.getFullYear()}-${String(dateNow.getMonth()+1).padStart(2,'0')}-${String(dateNow.getDate()).padStart(2,'0')}`; const workOrders=filter(data.workOrders);
+  const dateNow=attentionNow; const today=`${dateNow.getFullYear()}-${String(dateNow.getMonth()+1).padStart(2,'0')}-${String(dateNow.getDate()).padStart(2,'0')}`; const workOrders=filter(data.workOrders);
   const notificationWorkOrders=data.workOrders.filter(workOrder=>isAll?accessibleBranches.some(branch=>branch.id===workOrder.branchId):workOrder.branchId===currentBranchId);
-  const attentionItems=buildWorkOrderAttentionItems(notificationWorkOrders,data.invoices,today); const attentionCounts=countWorkOrderAttentionByKind(attentionItems);
+  const attentionItems=buildWorkOrderAttentionItems(notificationWorkOrders,data.invoices,today,attentionNow); const attentionCounts=countWorkOrderAttentionByKind(attentionItems);
   const openAttention=()=>{setNotificationOpen(false);navigate('/workorders?attention=1')};
   const orderNew=workOrders.filter(w=>w.status==='Register').length;
   const lowStock=data.items.filter(i=>i.type==='Persediaan'&&i.stock<=0).length;

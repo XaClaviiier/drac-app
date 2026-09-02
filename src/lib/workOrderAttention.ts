@@ -8,7 +8,38 @@ export type WorkOrderAttentionItem = {
   invoice?: SalesInvoice;
   label: string;
   description: string;
+  severity: 'warning' | 'critical';
+  elapsedMinutes?: number;
 };
+
+const WORKING_WARNING_MINUTES = 2 * 60;
+const WORKING_CRITICAL_MINUTES = 4 * 60;
+const INVOICE_WARNING_MINUTES = 15;
+const INVOICE_CRITICAL_MINUTES = 30;
+
+function workOrderOperationalActivityAt(workOrder: WorkOrder) {
+  const operationalLogs = (workOrder.statusLog || [])
+    .filter(log => log.to !== log.from || (log.reason || '').includes('[WO_TIMELINE_STAGE:'))
+    .map(log => new Date(log.at))
+    .filter(value => !Number.isNaN(value.getTime()))
+    .sort((left, right) => right.getTime() - left.getTime());
+  if (operationalLogs[0]) return operationalLogs[0];
+
+  const fallback = new Date(workOrder.updatedAt || workOrder.createdAt || `${workOrder.date}T${workOrder.transactionTime || '08:00'}:00`);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function workOrderCompletedAt(workOrder: WorkOrder) {
+  const completedLog = [...(workOrder.statusLog || [])].reverse().find(log => log.to === 'Selesai');
+  const completedAt = new Date(completedLog?.at || workOrder.updatedAt || workOrder.createdAt || `${workOrder.date}T${workOrder.transactionTime || '08:00'}:00`);
+  return Number.isNaN(completedAt.getTime()) ? null : completedAt;
+}
+
+function elapsedLabel(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours > 0 ? `${hours}j${rest ? ` ${rest}m` : ''}` : `${rest}m`;
+}
 
 export const WORK_ORDER_ATTENTION_LABELS: Record<WorkOrderAttentionKind, string> = {
   register: 'Register Mengambang',
@@ -21,6 +52,7 @@ export function buildWorkOrderAttentionItems(
   workOrders: WorkOrder[],
   invoices: SalesInvoice[],
   today: string,
+  now = new Date(),
 ): WorkOrderAttentionItem[] {
   const invoiceById = new Map(invoices.map(invoice => [invoice.id, invoice]));
   const invoiceByWorkOrder = new Map(
@@ -36,27 +68,46 @@ export function buildWorkOrderAttentionItems(
         workOrder,
         label: WORK_ORDER_ATTENTION_LABELS.register,
         description: 'Belum diputuskan menjadi Dikerjakan atau Lost Sales sampai lewat hari transaksi.',
+        severity: 'critical',
       }];
     }
 
-    if (workOrder.status === 'Proses' && workOrder.date < today) {
+    const operationalActivityAt = workOrder.status === 'Proses' ? workOrderOperationalActivityAt(workOrder) : null;
+    const elapsedMinutes = operationalActivityAt
+      ? Math.max(0, Math.floor((now.getTime() - operationalActivityAt.getTime()) / 60000))
+      : 0;
+    if (workOrder.status === 'Proses' && (workOrder.date < today || elapsedMinutes >= WORKING_WARNING_MINUTES)) {
+      const severity = workOrder.date < today || elapsedMinutes >= WORKING_CRITICAL_MINUTES ? 'critical' : 'warning';
       return [{
         kind: 'process',
         workOrder,
         label: WORK_ORDER_ATTENTION_LABELS.process,
-        description: 'Pekerjaan masih berstatus Dikerjakan setelah melewati hari transaksi.',
+        description: workOrder.date < today
+          ? 'Pekerjaan masih berstatus Dikerjakan setelah melewati hari transaksi.'
+          : `Tidak ada konfirmasi progress selama ${elapsedLabel(elapsedMinutes)}.`,
+        severity,
+        elapsedMinutes,
       }];
     }
 
     const invoice = (workOrder.invoiceId ? invoiceById.get(workOrder.invoiceId) : undefined)
       || invoiceByWorkOrder.get(workOrder.id);
 
-    if (workOrder.status === 'Selesai' && !invoice) {
+    const hasLinkedInvoice = Boolean(workOrder.invoiceId || invoice);
+    const completedAt = workOrder.status === 'Selesai' && !hasLinkedInvoice ? workOrderCompletedAt(workOrder) : null;
+    const completedElapsedMinutes = completedAt
+      ? Math.max(0, Math.floor((now.getTime() - completedAt.getTime()) / 60000))
+      : 0;
+    if (workOrder.status === 'Selesai' && !hasLinkedInvoice && (
+      workOrder.date < today || completedElapsedMinutes >= INVOICE_WARNING_MINUTES
+    )) {
       return [{
         kind: 'invoice',
         workOrder,
         label: WORK_ORDER_ATTENTION_LABELS.invoice,
-        description: 'Pekerjaan sudah selesai tetapi belum dibuatkan faktur penjualan.',
+        description: `Pekerjaan selesai ${elapsedLabel(completedElapsedMinutes)} lalu tetapi belum dibuatkan faktur penjualan.`,
+        severity: workOrder.date < today || completedElapsedMinutes >= INVOICE_CRITICAL_MINUTES ? 'critical' : 'warning',
+        elapsedMinutes: completedElapsedMinutes,
       }];
     }
 
@@ -67,6 +118,7 @@ export function buildWorkOrderAttentionItems(
         invoice,
         label: WORK_ORDER_ATTENTION_LABELS.payment,
         description: `Sisa tagihan Rp ${Math.max(invoice.total - invoice.payment, 0).toLocaleString('id-ID')}.`,
+        severity: workOrder.date < today ? 'critical' : 'warning',
       }];
     }
 

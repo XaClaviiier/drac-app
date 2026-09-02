@@ -7,7 +7,7 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'u
 test('dashboard menjadi pusat kendali yang dapat membuka daftar terfilter', () => {
   const dashboard = source('src/pages/Dashboard.tsx');
 
-  assert.match(dashboard, /buildWorkOrderAttentionItems\(visibleWOs, visibleInvoices, todayKey\)/);
+  assert.match(dashboard, /buildWorkOrderAttentionItems\(visibleWOs, visibleInvoices, todayKey, attentionNow\)/);
   assert.match(dashboard, /countWorkOrderAttentionByKind\(attentionItems\)/);
   assert.doesNotMatch(dashboard, /label="WO Hari Ini"/);
   assert.doesNotMatch(dashboard, /label="Sedang Dikerjakan"/);
