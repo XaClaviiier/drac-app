@@ -667,6 +667,11 @@ export default function WorkOrders() {
       modelId: selectedWorkOrderVehicle.modelId,
       generationId: selectedWorkOrderVehicle.generationId,
       engineCc: selectedWorkOrderVehicle.engineCc,
+      engineType: selectedWorkOrderVehicle.engineType,
+      engineCode: selectedWorkOrderVehicle.engineCode,
+      variant: selectedWorkOrderVehicle.variant,
+      transmission: selectedWorkOrderVehicle.transmission,
+      hvacType: selectedWorkOrderVehicle.hvacType,
       year: selectedWorkOrderVehicle.year,
     }, item.vehicleCompatibilities || []);
   };

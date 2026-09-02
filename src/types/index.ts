@@ -10,6 +10,11 @@ export interface Vehicle {
   generationId?: string;
   generationName?: string;
   engineCc?: number | null;
+  engineType?: 'Bensin' | 'Diesel' | 'Hybrid' | 'Listrik' | null;
+  engineCode?: string | null;
+  variant?: string | null;
+  transmission?: 'MT' | 'AT' | 'CVT' | 'DCT' | null;
+  hvacType?: 'Manual' | 'Digital' | 'Dual Zone' | null;
   year: number;
   color: string;
   /** Relasi internal ke customers.id */

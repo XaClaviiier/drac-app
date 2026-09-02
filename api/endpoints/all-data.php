@@ -1,5 +1,13 @@
 <?php
-runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260829_v2', static function(PDO $pdo): void {
+runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260902_v3', static function(PDO $pdo): void {
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_id VARCHAR(64) NULL AFTER model_id");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_name VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_cc SMALLINT UNSIGNED NULL AFTER generation_name");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant");
+$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
 $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
@@ -240,6 +248,11 @@ try {
         $r['generationId']      = $r['generation_id'] ?? null;
         $r['generationName']    = $r['generation_name'] ?? '';
         $r['engineCc']          = isset($r['engine_cc']) ? (int)$r['engine_cc'] : null;
+        $r['engineType']        = $r['engine_type'] ?? null;
+        $r['engineCode']        = $r['engine_code'] ?? null;
+        $r['variant']           = $r['variant'] ?? null;
+        $r['transmission']      = $r['transmission'] ?? null;
+        $r['hvacType']          = $r['hvac_type'] ?? null;
         $r['customerRefId']     = $r['customer_id'];
         $r['customerId']        = $r['customer_code'] ?: $r['customer_id'];
         $r['customerName']      = $r['customer_name'];
