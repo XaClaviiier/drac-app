@@ -1,4 +1,4 @@
-import type { LegacyWOStatus, WorkOrder, WorkOrderTimelineStage, WOStatus, WOStatusLog } from '../types';
+import type { LegacyWOStatus, SalesInvoice, WorkOrder, WorkOrderTimelineStage, WOStatus, WOStatusLog } from '../types';
 
 export type TimelineStageKey = WorkOrderTimelineStage | 'lost';
 
@@ -64,4 +64,29 @@ export function appendTimelineStageLog(
       reason: timelineStageReason(stage, note),
     },
   ];
+}
+
+export function timelineFinancialSummary(
+  wo: Pick<WorkOrder, 'total'>,
+  invoice?: Pick<SalesInvoice, 'invoiceNumber' | 'total' | 'payment' | 'status'>,
+) {
+  if (!invoice) {
+    return {
+      amount: Math.max(0, wo.total || 0),
+      amountLabel: 'Estimasi' as const,
+      invoiceNumber: null,
+      isPaid: false,
+      outstanding: null,
+    };
+  }
+
+  const amount = Math.max(0, invoice.total || 0);
+  const payment = Math.max(0, invoice.payment || 0);
+  return {
+    amount,
+    amountLabel: 'Total' as const,
+    invoiceNumber: invoice.invoiceNumber,
+    isPaid: amount > 0 && invoice.status === 'Lunas' && payment >= amount,
+    outstanding: Math.max(0, amount - payment),
+  };
 }

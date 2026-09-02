@@ -104,8 +104,9 @@ test('kontrak Control Board menyimpan audit tahap dan mempertahankan alur faktur
   assert.match(page, /changeWorkOrderTimelineStage/);
   assert.match(page, /\/invoices\?woId=/);
   assert.match(page, /\/customer-payments\?invoiceId=/);
-  assert.match(page, />INV<\/span>/);
-  assert.match(page, />Rp<\/span>/);
+  assert.match(page, /timelineFinancialSummary/);
+  assert.match(page, /financial\.invoiceNumber/);
+  assert.match(page, /financial\.isPaid/);
   assert.match(context, /appendTimelineStageLog/);
   assert.match(endpoint, /\$action === 'timeline-stage'/);
   assert.match(endpoint, /\[WO_TIMELINE_STAGE:/);
@@ -125,6 +126,83 @@ test('WO Timeline HP menjaga identitas, indikator, fokus sekarang, dan mode hari
   assert.match(page, />Hari Penuh<\/button>/);
   assert.match(page, /md:hidden.*mobileView === 'full'/);
   assert.match(page, /hidden md:block.*renderFocusBoard\(false\)/);
-  assert.match(page, /const done = row\.stage === 'done'/);
-  assert.doesNotMatch(page, /const done = row\.stage === 'done' \|\| Boolean\(row\.invoice\)/);
+  assert.match(page, /renderFinancialSummary\(row, true\)/);
+  assert.doesNotMatch(page, /Boolean\(row\.invoice\).*stage === 'done'|stage === 'done'.*Boolean\(row\.invoice\)/);
+});
+
+test('ringkasan finansial timeline hanya memberi stamp LUNAS dari pembayaran terverifikasi', () => {
+  const unpaid = helper.timelineFinancialSummary({ total: 1_250_000 }, {
+    invoiceNumber: 'INV-1', total: 1_250_000, payment: 750_000, status: 'Belum Lunas',
+  });
+  assert.deepEqual(unpaid, {
+    amount: 1_250_000,
+    amountLabel: 'Total',
+    invoiceNumber: 'INV-1',
+    isPaid: false,
+    outstanding: 500_000,
+  });
+
+  const paid = helper.timelineFinancialSummary({ total: 1_250_000 }, {
+    invoiceNumber: 'INV-2', total: 1_250_000, payment: 1_250_000, status: 'Lunas',
+  });
+  assert.equal(paid.isPaid, true);
+  assert.equal(paid.outstanding, 0);
+
+  const inconsistent = helper.timelineFinancialSummary({ total: 1_250_000 }, {
+    invoiceNumber: 'INV-3', total: 1_250_000, payment: 500_000, status: 'Lunas',
+  });
+  assert.equal(inconsistent.isPaid, false);
+  assert.equal(inconsistent.outstanding, 750_000);
+
+  const estimate = helper.timelineFinancialSummary({ total: 850_000 });
+  assert.deepEqual(estimate, {
+    amount: 850_000,
+    amountLabel: 'Estimasi',
+    invoiceNumber: null,
+    isPaid: false,
+    outstanding: null,
+  });
+
+  assert.equal(helper.timelineFinancialSummary({ total: 100_000 }, {
+    invoiceNumber: 'INV-4', total: 100_000, payment: 100_000, status: 'Belum Lunas',
+  }).isPaid, false);
+  assert.equal(helper.timelineFinancialSummary({ total: 0 }, {
+    invoiceNumber: 'INV-5', total: 0, payment: 0, status: 'Lunas',
+  }).isPaid, false);
+  assert.deepEqual(helper.timelineFinancialSummary({ total: 100_000 }, {
+    invoiceNumber: 'INV-6', total: 100_000, payment: 125_000, status: 'Lunas',
+  }), {
+    amount: 100_000,
+    amountLabel: 'Total',
+    invoiceNumber: 'INV-6',
+    isPaid: true,
+    outstanding: 0,
+  });
+});
+
+test('Control Board menempatkan badge status di identitas dan ringkasan finansial di kanan', () => {
+  const page = source('src/pages/WorkOrderTimeline.tsx');
+
+  assert.match(page, /timelineFinancialSummary/);
+  assert.match(page, /const renderFinancialSummary =/);
+  assert.match(page, /financial\.amountLabel/);
+  assert.match(page, /formatRupiah\(financial\.amount\)/);
+  assert.match(page, /financial\.invoiceNumber/);
+  assert.match(page, /financial\.outstanding/);
+  assert.match(page, /financial\.isPaid[\s\S]*?LUNAS/);
+  assert.match(page, /wo\.plateNumber[\s\S]*?currentConfig\?\.short/);
+  assert.match(page, /Total · Invoice/);
+  assert.doesNotMatch(page, /const renderIndicators =/);
+});
+
+test('lebar kolom mobile dipakai konsisten oleh grid dan centering Sekarang', () => {
+  const page = source('src/pages/WorkOrderTimeline.tsx');
+
+  assert.match(page, /const MOBILE_IDENTITY_WIDTH = 144/);
+  assert.match(page, /const MOBILE_FINANCIAL_WIDTH = 124/);
+  assert.match(page, /mobileIdentityWidth = MOBILE_IDENTITY_WIDTH/);
+  assert.match(page, /mobileFinancialWidth = MOBILE_FINANCIAL_WIDTH/);
+  assert.match(page, /identityWidth = mobile \? MOBILE_IDENTITY_WIDTH : 260/);
+  assert.match(page, /indicatorWidth = mobile \? MOBILE_FINANCIAL_WIDTH : 168/);
+  assert.doesNotMatch(page, /mobileIndicatorWidth = 84/);
 });
