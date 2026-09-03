@@ -7,6 +7,7 @@ import { localDateKey } from '../lib/date';
 import {
   appendTimelineStageLog, isTimelineStageTransitionAllowed, timelineStageFromWorkOrder,
 } from '../lib/workOrderTimeline';
+import { applyDemoWorkOrderEstimateClock } from '../lib/workOrderEstimate';
 
 interface AppContextType {
   data: AppData;
@@ -41,12 +42,12 @@ interface AppContextType {
   continueWorkOrder: (
     sourceWoId: string,
     targetBranchId: string,
-    options?: { resetJob?: boolean }
+    options?: { resetJob?: boolean; estimatedDurationMinutes?: number }
   ) => Promise<WorkOrder | null>;
   /** Cari WO aktif (Register/Proses dan belum dilanjutkan) untuk plat nomor tertentu. */
   findActiveWoByPlate: (plateNumber: string) => WorkOrder | null;
   /** Ubah status WO dengan validasi urutan dan pencatatan jejak audit. */
-  changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string) => Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder; changed?: boolean }>;
+  changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string, estimatedDurationMinutes?: number) => Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder; changed?: boolean }>;
   /** Catat tahap operasional timeline tanpa mengubah status inti WO. */
   changeWorkOrderTimelineStage: (woId: string, stage: WorkOrderTimelineStage, note?: string) => Promise<{ ok: boolean; message?: string }>;
   createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string) => Promise<SalesInvoice | null>;
@@ -533,8 +534,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createdByName: wo.createdByName || currentUser?.name,
     };
     if (isDemoMode) {
-      setData(prev => ({ ...prev, workOrders: [...prev.workOrders, createdWorkOrder] }));
-      return createdWorkOrder;
+      const demoWorkOrder = applyDemoWorkOrderEstimateClock(createdWorkOrder, undefined);
+      setData(prev => ({ ...prev, workOrders: [...prev.workOrders, demoWorkOrder] }));
+      return demoWorkOrder;
     }
     const result = await api.create('work-orders', createdWorkOrder);
     if (!result?.success) {
@@ -545,7 +547,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: result.data?.id || createdWorkOrder.id,
       woNumber: result.data?.woNumber || createdWorkOrder.woNumber,
       updatedAt: result.data?.updatedAt || createdWorkOrder.updatedAt,
-      status: 'Register',
+      status: result.data?.status || 'Register',
+      estimatedDurationMinutes: result.data?.estimatedDurationMinutes ?? createdWorkOrder.estimatedDurationMinutes,
+      workStartedAt: result.data?.workStartedAt ?? createdWorkOrder.workStartedAt,
+      estimatedCompletionAt: result.data?.estimatedCompletionAt ?? createdWorkOrder.estimatedCompletionAt,
     };
     // Aktifkan WO yang baru diregister seketika. Jangan menahan editor sampai
     // pemuatan ulang seluruh data selesai karena kolom layanan bergantung pada
@@ -561,8 +566,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const updateWorkOrder = async (id: string, wo: WorkOrder): Promise<WorkOrder> => {
     if (isDemoMode) {
-      setData(prev => ({ ...prev, workOrders: prev.workOrders.map(x => x.id === id ? wo : x) }));
-      return wo;
+      const previousWorkOrder = data.workOrders.find(item => item.id === id);
+      const demoWorkOrder = applyDemoWorkOrderEstimateClock(wo, previousWorkOrder?.status);
+      setData(prev => ({ ...prev, workOrders: prev.workOrders.map(x => x.id === id ? demoWorkOrder : x) }));
+      return demoWorkOrder;
     }
     const result = await api.update('work-orders', id, wo);
     if (!result?.success) {
@@ -577,6 +584,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const savedWorkOrder: WorkOrder = {
       ...wo,
       updatedAt: result.data?.updatedAt || wo.updatedAt,
+      estimatedDurationMinutes: result.data?.estimatedDurationMinutes ?? wo.estimatedDurationMinutes,
+      workStartedAt: result.data?.workStartedAt ?? wo.workStartedAt,
+      estimatedCompletionAt: result.data?.estimatedCompletionAt ?? wo.estimatedCompletionAt,
     };
     setData(prev => ({
       ...prev,
@@ -620,7 +630,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const changeWorkOrderStatus = async (
     woId: string,
     nextStatus: WOStatus,
-    reason?: string
+    reason?: string,
+    estimatedDurationMinutes?: number,
   ): Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder; changed?: boolean }> => {
     const wo = data.workOrders.find(w => w.id === woId);
     if (!wo) return { ok: false, message: 'WO tidak ditemukan.' };
@@ -662,12 +673,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Lost Sales wajib punya alasan.
     const isReopen = wo.status === 'Selesai' && nextStatus === 'Proses';
+    const isStartingWork = wo.status !== 'Proses' && nextStatus === 'Proses';
     const needsReason = nextStatus === 'Closed' || isReopen;
     if (needsReason && !reason?.trim()) {
       return { ok: false, message: isReopen ? 'Alasan mengembalikan WO ke Dikerjakan wajib diisi.' : 'Alasan wajib diisi untuk perubahan ini.' };
     }
+    if (isStartingWork && (!Number.isInteger(estimatedDurationMinutes) || Number(estimatedDurationMinutes) < 15 || Number(estimatedDurationMinutes) > 1440)) {
+      return { ok: false, message: 'Estimasi lama pekerjaan wajib diisi antara 15 menit sampai 24 jam.' };
+    }
 
-    const now = new Date().toISOString();
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
+    const estimatedCompletionAt = isStartingWork
+      ? new Date(nowDate.getTime() + Number(estimatedDurationMinutes) * 60_000).toISOString()
+      : wo.estimatedCompletionAt;
     const currentRole = data.roles.find(role => role.id === currentUser?.roleId);
     const normalizedRoleName = (currentRole?.name || currentUser?.roleName || '').trim().toLowerCase();
     const currentUserIsTechnician = currentRole?.code?.trim().toUpperCase() === 'TKN'
@@ -684,7 +703,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         at: now,
         byUserId: currentUser?.id || '-',
         byUserName: currentUser?.name || 'System',
-        reason: reason?.trim() || undefined,
+        reason: [
+          reason?.trim(),
+          isStartingWork ? `Estimasi lama pekerjaan ${estimatedDurationMinutes} menit; target selesai ${estimatedCompletionAt}.` : '',
+        ].filter(Boolean).join(' ') || undefined,
       },
     ];
 
@@ -702,6 +724,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       estimateTotal: (wo.status === 'Register' || wo.status === 'Closed') && nextStatus === 'Proses'
         ? positiveTotal
         : wo.estimateTotal,
+      estimatedDurationMinutes: isStartingWork ? estimatedDurationMinutes : wo.estimatedDurationMinutes,
+      workStartedAt: isStartingWork ? now : wo.workStartedAt,
+      estimatedCompletionAt,
       technicianId: nextStatus === 'Proses' && !wo.technicianId && currentUserIsTechnician
         ? currentUser?.id
         : wo.technicianId,
@@ -758,7 +783,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const continueWorkOrder = async (
     sourceWoId: string,
     targetBranchId: string,
-    options?: { resetJob?: boolean }
+    options?: { resetJob?: boolean; estimatedDurationMinutes?: number }
   ): Promise<WorkOrder | null> => {
     const src = data.workOrders.find(w => w.id === sourceWoId);
     if (!src) return null;
@@ -793,6 +818,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const currentItem = data.items.find(item => item.id === service.itemId);
           return sum + (currentItem?.sellingPrice ?? service.price) * service.qty;
         }, 0);
+    const requestedDuration = Number(options?.estimatedDurationMinutes);
+    const canStartImmediately = !resetJob
+      && src.status === 'Closed'
+      && copiedTotal > 0
+      && Boolean(src.technicianId)
+      && Number.isInteger(requestedDuration)
+      && requestedDuration >= 15
+      && requestedDuration <= 1440;
+    const continuationStartedAt = canStartImmediately ? new Date() : null;
 
     const newWo: WorkOrder = {
       id: newId,
@@ -815,7 +849,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       services: copiedServices,
       total: copiedTotal,
       estimateTotal: undefined,
-      status: resetJob ? 'Register' : (src.status === 'Closed' && copiedTotal > 0 ? 'Proses' : 'Register'),
+      status: canStartImmediately ? 'Proses' : 'Register',
+      estimatedDurationMinutes: canStartImmediately ? requestedDuration : undefined,
+      workStartedAt: canStartImmediately ? continuationStartedAt!.toISOString() : undefined,
+      estimatedCompletionAt: canStartImmediately
+        ? new Date(continuationStartedAt!.getTime() + requestedDuration * 60_000).toISOString()
+        : undefined,
+      technicianId: canStartImmediately ? src.technicianId : undefined,
+      technicianName: canStartImmediately ? src.technicianName : undefined,
       notes: resetJob
         ? `Masalah berbeda. Referensi data pelanggan dan kendaraan dari ${src.woNumber} (${srcBranch?.name || '-'}).`
         : `Lanjutan dari ${src.woNumber} (${srcBranch?.name || '-'}).${src.notes ? `\n${src.notes}` : ''}`,

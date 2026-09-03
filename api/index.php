@@ -11,6 +11,7 @@ try {
     $pdo->exec("SET time_zone = '+08:00'");
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260829_goods_receipt_queue_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260830_device_limits_v1');
+    ensureApiSupportTablesVersioned($pdo, 'api_support_20260903_work_order_estimated_duration_v1');
 } catch (Throwable $e) {
     $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
     error_log(sprintf(

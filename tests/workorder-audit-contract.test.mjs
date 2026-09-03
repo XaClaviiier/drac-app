@@ -97,7 +97,7 @@ test('Register ke Dikerjakan melewati satu pintu dengan prasyarat operasional', 
   ], 'backend harus memvalidasi keluhan, layanan bernilai positif, lalu teknisi');
 
   const technicianContract = sectionBetween(endpoint, '$syncWorkOrderTechnicians =', '$formatAuditTimestamp =');
-  assert.match(technicianContract, /assertActiveBranch\(\$pdo, \$branchId\)/);
+  assert.match(technicianContract, /\$assertActiveBranchWithinTransaction\(\$pdo, \$branchId\)/);
   assert.match(technicianContract, /user_branch_access[\s\S]*?uba\.branch_id=\?/);
   assert.match(technicianContract, /\$roleCode !== 'TKN'[\s\S]*?str_contains\(\$roleName, 'teknisi'\)[\s\S]*?str_contains\(\$roleName, 'technician'\)/);
 });
@@ -176,7 +176,7 @@ test('update WO membawa version token dan server menolak overwrite data usang de
   // Field opsional menjaga kompatibilitas client lama, tetapi bila dikirim wajib dibandingkan.
   assert.match(updateContract, /array_key_exists\('updatedAt',\s*\$d\)|isset\(\$d\['updatedAt'\]\)/);
   assert.match(updateContract, /normalizeWorkOrderVersion|\$normalizeWorkOrderVersion/);
-  assert.match(updateContract, /respondSuccess\(\['updatedAt'\s*=>\s*\$updatedVersion\],\s*'WO diupdate'\)/);
+  assert.match(updateContract, /respondSuccess\(\[[\s\S]*?'updatedAt'\s*=>\s*\$updatedVersion[\s\S]*?\],\s*'WO diupdate'\)/);
 });
 
 test('editor memakai version token server untuk catatan dan penyelesaian WO', () => {

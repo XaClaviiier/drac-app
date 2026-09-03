@@ -14,6 +14,7 @@ export type WorkOrderAttentionItem = {
 
 const WORKING_WARNING_MINUTES = 2 * 60;
 const WORKING_CRITICAL_MINUTES = 4 * 60;
+const ESTIMATE_CRITICAL_GRACE_MINUTES = 2 * 60;
 const INVOICE_WARNING_MINUTES = 15;
 const INVOICE_CRITICAL_MINUTES = 30;
 
@@ -72,11 +73,44 @@ export function buildWorkOrderAttentionItems(
       }];
     }
 
-    const operationalActivityAt = workOrder.status === 'Proses' ? workOrderOperationalActivityAt(workOrder) : null;
+    const estimatedCompletionAt = workOrder.status === 'Proses' && workOrder.estimatedCompletionAt
+      ? new Date(workOrder.estimatedCompletionAt)
+      : null;
+    const workStartedAt = workOrder.status === 'Proses' && workOrder.workStartedAt
+      ? new Date(workOrder.workStartedAt)
+      : null;
+    const estimatedDurationMinutes = Number(workOrder.estimatedDurationMinutes);
+    const hasValidEstimatedCompletion = Boolean(
+      estimatedCompletionAt
+      && workStartedAt
+      && !Number.isNaN(estimatedCompletionAt.getTime())
+      && !Number.isNaN(workStartedAt.getTime())
+      && Number.isInteger(estimatedDurationMinutes)
+      && estimatedDurationMinutes >= 15
+      && estimatedDurationMinutes <= 1440
+      && Math.abs(
+        estimatedCompletionAt.getTime() - workStartedAt.getTime() - (estimatedDurationMinutes * 60_000),
+      ) < 1_000
+    );
+    const overdueEstimateMinutes = hasValidEstimatedCompletion && estimatedCompletionAt
+      ? Math.max(0, Math.floor((now.getTime() - estimatedCompletionAt.getTime()) / 60000))
+      : 0;
+    if (workOrder.status === 'Proses' && hasValidEstimatedCompletion && estimatedCompletionAt && now >= estimatedCompletionAt) {
+      return [{
+        kind: 'process',
+        workOrder,
+        label: WORK_ORDER_ATTENTION_LABELS.process,
+        description: `Pekerjaan melewati target selesai ${estimatedCompletionAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}${overdueEstimateMinutes > 0 ? ` selama ${elapsedLabel(overdueEstimateMinutes)}` : ''}.`,
+        severity: overdueEstimateMinutes >= ESTIMATE_CRITICAL_GRACE_MINUTES ? 'critical' : 'warning',
+        elapsedMinutes: overdueEstimateMinutes,
+      }];
+    }
+
+    const operationalActivityAt = workOrder.status === 'Proses' && !hasValidEstimatedCompletion ? workOrderOperationalActivityAt(workOrder) : null;
     const elapsedMinutes = operationalActivityAt
       ? Math.max(0, Math.floor((now.getTime() - operationalActivityAt.getTime()) / 60000))
       : 0;
-    if (workOrder.status === 'Proses' && (workOrder.date < today || elapsedMinutes >= WORKING_WARNING_MINUTES)) {
+    if (workOrder.status === 'Proses' && !hasValidEstimatedCompletion && (workOrder.date < today || elapsedMinutes >= WORKING_WARNING_MINUTES)) {
       const severity = workOrder.date < today || elapsedMinutes >= WORKING_CRITICAL_MINUTES ? 'critical' : 'warning';
       return [{
         kind: 'process',

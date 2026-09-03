@@ -6,6 +6,16 @@ function normalizeVehiclePlate(string $value): string {
     return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $value));
 }
 
+function formatWitaTimestamp($value): ?string {
+    if ($value === null || trim((string)$value) === '') return null;
+    try {
+        return (new DateTimeImmutable((string)$value, new DateTimeZone('Asia/Makassar')))
+            ->format(DateTimeInterface::ATOM);
+    } catch (Throwable $error) {
+        return (string)$value;
+    }
+}
+
 function seedChartOfAccounts(PDO $pdo): array {
     $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
         migration_key VARCHAR(100) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -178,6 +188,9 @@ function ensureApiSupportTables(PDO $pdo): void {
     if (!in_array('technician_id', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_id VARCHAR(64) NULL AFTER created_by_name");
     if (!in_array('technician_name', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD technician_name VARCHAR(150) NULL AFTER technician_id");
     if (!in_array('complaint_comment', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD complaint_comment TEXT NULL AFTER description");
+    if (!in_array('estimated_duration_minutes', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD estimated_duration_minutes SMALLINT UNSIGNED NULL AFTER estimate_total");
+    if (!in_array('work_started_at', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD work_started_at DATETIME NULL AFTER estimated_duration_minutes");
+    if (!in_array('estimated_completion_at', $workOrderColumns, true)) $pdo->exec("ALTER TABLE work_orders ADD estimated_completion_at DATETIME NULL AFTER work_started_at");
     $pdo->exec("CREATE TABLE IF NOT EXISTS work_order_technicians (
         wo_id VARCHAR(64) NOT NULL,
         user_id VARCHAR(64) NOT NULL,
