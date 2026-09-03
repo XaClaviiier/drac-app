@@ -41,8 +41,14 @@ import {
   AlertCircle,
   Coins,
   CalendarClock,
-  Upload,
   CircleHelp,
+  PackageOpen,
+  PackageMinus,
+  ClipboardCheck,
+  FilePlus2,
+  PackageSearch,
+  Tags,
+  ChartNoAxesColumnIncreasing,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
@@ -442,7 +448,7 @@ const desktopGroups = [
       {
         label: "Penerimaan Barang",
         path: "/receipts",
-        icon: PackageCheck,
+        icon: PackageOpen,
         perm: "receipt:view",
         tone: "green",
       },
@@ -456,23 +462,23 @@ const desktopGroups = [
       {
         label: "Penyesuaian Stok",
         path: "/warehouses",
-        icon: ClipboardList,
+        icon: PackageMinus,
         perm: "item:edit",
         tone: "green",
       },
       {
         label: "Penyesuaian Stok",
         path: "/opening-stock",
-        icon: Upload,
+        icon: ClipboardCheck,
         perm: "item:edit",
         tone: "green",
       },
-      { label: "Stok Opname", path: "/reports/stock-count-sheet", icon: ClipboardList, perm: "item:view", tone: "green" },
-      { label: "Permintaan Barang", icon: FileText, tone: "blue" },
+      { label: "Stok Opname", path: "/reports/stock-count-sheet", icon: ClipboardCheck, perm: "item:view", tone: "green" },
+      { label: "Permintaan Barang", icon: FilePlus2, tone: "green" },
       {
         label: "Barang & Jasa",
         path: "/items",
-        icon: Boxes,
+        icon: PackageSearch,
         perm: "item:view",
         tone: "blue",
       },
@@ -486,9 +492,9 @@ const desktopGroups = [
       {
         label: "Stok per Gudang",
         path: "/warehouses",
-        icon: Warehouse,
+        icon: Boxes,
         perm: "item:view",
-        tone: "blue",
+        tone: "purple",
       },
       {
         label: "Kartu Stok",
@@ -500,23 +506,23 @@ const desktopGroups = [
       {
         label: "Stok Minimum",
         path: "/items",
-        icon: BarChart3,
+        icon: ChartNoAxesColumnIncreasing,
         perm: "item:view",
         tone: "purple",
       },
       {
         label: "Kategori Barang",
         path: "/categories",
-        icon: FolderTree,
+        icon: Tags,
         perm: "item:view",
-        tone: "purple",
+        tone: "blue",
       },
       {
         label: "Merek Barang",
         path: "/items?master=item-brands",
-        icon: Boxes,
+        icon: PackageCheck,
         perm: "item:view",
-        tone: "purple",
+        tone: "blue",
       },
     ],
   },
@@ -871,6 +877,13 @@ export default function Layout() {
             orange:
               "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100",
           };
+          const accurateInventoryTones: Record<DesktopMenuItem["tone"], string> = {
+            green: "border-[#58cd42] bg-[#e1fadd] text-[#519700] hover:bg-[#d4f6cf]",
+            blue: "border-[#43a3ea] bg-[#dceeff] text-[#007aba] hover:bg-[#cfe7fc]",
+            purple: "border-[#b557ed] bg-[#f4e6ff] text-[#6d04a7] hover:bg-[#ecd7fc]",
+            orange: "border-orange-400 bg-orange-100 text-orange-700 hover:bg-orange-200",
+          };
+          const isAccurateInventoryMenu = group.id === "inventory";
           return (
             <>
               <button
@@ -880,7 +893,8 @@ export default function Layout() {
                 className="fixed inset-0 z-30 hidden bg-transparent lg:block"
               />
               <section
-                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] w-[min(520px,calc(100vw-18rem))] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${sidebarOpen ? "left-64" : "left-[84px]"}`}
+                data-menu-model={isAccurateInventoryMenu ? "accurate" : "standard"}
+                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
               >
                 <div className="px-4 pb-0 pt-4">
                   <div className="flex items-center justify-between">
@@ -896,10 +910,10 @@ export default function Layout() {
                       <X className="h-5 w-5" />
                     </button>
                   </div>
-                  <div className="mt-3 h-0.5 w-full bg-blue-600" />
+                  <div className={`mt-3 h-0.5 w-full ${isAccurateInventoryMenu ? "bg-green-500" : "bg-blue-600"}`} />
                 </div>
                 <div className="p-4">
-                  <div className="grid max-h-[calc(100vh-8rem)] grid-cols-3 gap-2.5 overflow-y-auto pr-1">
+                  <div className={`grid max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 ${isAccurateInventoryMenu ? "grid-cols-[repeat(auto-fit,120px)] gap-2.5" : "grid-cols-3 gap-2.5"}`}>
                     {items.map((item, index) => {
                       const Icon = item.icon;
                       const available = !!item.path;
@@ -913,10 +927,10 @@ export default function Layout() {
                             void navigateWithEditorGuard(item.path);
                             setDesktopMenuOpen(null);
                           }}
-                          className={`relative flex h-20 flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-center transition-all duration-150 ${tones[item.tone]} ${available ? "shadow-[0_2px_7px_rgba(15,23,42,0.10)] hover:-translate-y-0.5 hover:shadow-[0_5px_12px_rgba(15,23,42,0.16)] active:translate-y-0" : "cursor-not-allowed opacity-40 shadow-none"}`}
+                          className={`relative flex flex-col items-center justify-center border text-center transition-all duration-150 ${isAccurateInventoryMenu ? "h-[120px] w-[120px] gap-1.5 rounded-md px-2 py-2" : "h-20 gap-1.5 rounded-lg px-2 py-2"} ${(isAccurateInventoryMenu ? accurateInventoryTones : tones)[item.tone]} ${available ? "shadow-[0_2px_7px_rgba(15,23,42,0.10)] hover:-translate-y-0.5 hover:shadow-[0_5px_12px_rgba(15,23,42,0.16)] active:translate-y-0" : "cursor-not-allowed opacity-40 shadow-none"}`}
                         >
-                          <Icon className="h-6 w-6 stroke-[1.8]" />
-                          <span className="text-[13px] font-medium leading-tight text-gray-700">
+                          <Icon className={isAccurateInventoryMenu ? "h-12 w-12 stroke-[1.7]" : "h-6 w-6 stroke-[1.8]"} />
+                          <span className={isAccurateInventoryMenu ? "text-sm font-normal leading-tight text-gray-700" : "text-[13px] font-medium leading-tight text-gray-700"}>
                             {item.label}
                           </span>
                         </button>
