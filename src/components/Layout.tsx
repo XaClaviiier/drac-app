@@ -884,6 +884,7 @@ export default function Layout() {
             orange: "border-orange-400 bg-orange-100 text-orange-700 hover:bg-orange-200",
           };
           const isAccurateInventoryMenu = group.id === "inventory";
+          const usesAccurateTileMenu = group.id === "inventory" || group.id === "sales";
           return (
             <>
               <button
@@ -893,8 +894,8 @@ export default function Layout() {
                 className="fixed inset-0 z-30 hidden bg-transparent lg:block"
               />
               <section
-                data-menu-model={isAccurateInventoryMenu ? "accurate" : "standard"}
-                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
+                data-menu-model={usesAccurateTileMenu ? "accurate" : "standard"}
+                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${usesAccurateTileMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
               >
                 <div className="px-4 pb-0 pt-4">
                   <div className="flex items-center justify-between">
@@ -913,7 +914,7 @@ export default function Layout() {
                   <div className={`mt-3 h-0.5 w-full ${isAccurateInventoryMenu ? "bg-green-500" : "bg-blue-600"}`} />
                 </div>
                 <div className="p-4">
-                  <div className={`grid max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 ${isAccurateInventoryMenu ? "grid-cols-[repeat(auto-fit,120px)] gap-2.5" : "grid-cols-3 gap-2.5"}`}>
+                  <div className={`grid max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 ${usesAccurateTileMenu ? "grid-cols-[repeat(auto-fit,120px)] gap-2.5" : "grid-cols-3 gap-2.5"}`}>
                     {items.map((item, index) => {
                       const Icon = item.icon;
                       const available = !!item.path;
@@ -927,10 +928,10 @@ export default function Layout() {
                             void navigateWithEditorGuard(item.path);
                             setDesktopMenuOpen(null);
                           }}
-                          className={`relative flex flex-col items-center justify-center border text-center transition-all duration-150 ${isAccurateInventoryMenu ? "h-[120px] w-[120px] gap-1.5 rounded-md px-2 py-2" : "h-20 gap-1.5 rounded-lg px-2 py-2"} ${(isAccurateInventoryMenu ? accurateInventoryTones : tones)[item.tone]} ${available ? "shadow-[0_2px_7px_rgba(15,23,42,0.10)] hover:-translate-y-0.5 hover:shadow-[0_5px_12px_rgba(15,23,42,0.16)] active:translate-y-0" : "cursor-not-allowed opacity-40 shadow-none"}`}
+                          className={`relative flex flex-col items-center justify-center border text-center transition-all duration-150 ${usesAccurateTileMenu ? "h-[120px] w-[120px] gap-1.5 rounded-md px-2 py-2" : "h-20 gap-1.5 rounded-lg px-2 py-2"} ${(usesAccurateTileMenu ? accurateInventoryTones : tones)[item.tone]} ${available ? "shadow-[0_2px_7px_rgba(15,23,42,0.10)] hover:-translate-y-0.5 hover:shadow-[0_5px_12px_rgba(15,23,42,0.16)] active:translate-y-0" : "cursor-not-allowed opacity-40 shadow-none"}`}
                         >
-                          <Icon className={isAccurateInventoryMenu ? "h-12 w-12 stroke-[1.7]" : "h-6 w-6 stroke-[1.8]"} />
-                          <span className={isAccurateInventoryMenu ? "text-sm font-normal leading-tight text-gray-700" : "text-[13px] font-medium leading-tight text-gray-700"}>
+                          <Icon className={usesAccurateTileMenu ? "h-12 w-12 stroke-[1.7]" : "h-6 w-6 stroke-[1.8]"} />
+                          <span className={usesAccurateTileMenu ? "text-sm font-normal leading-tight text-gray-700" : "text-[13px] font-medium leading-tight text-gray-700"}>
                             {item.label}
                           </span>
                         </button>
