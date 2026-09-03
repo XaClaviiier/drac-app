@@ -14,12 +14,13 @@ const sectionBetween = (source, start, end) => {
 
 test('menu Persediaan memakai grid kotak enam kolom model Accurate', () => {
   assert.match(layout, /const isAccurateInventoryMenu = group\.id === "inventory"/);
-  assert.match(layout, /data-menu-model=\{isAccurateInventoryMenu \? "accurate" : "standard"\}/);
-  assert.match(layout, /isAccurateInventoryMenu\s*\? "w-\[min\(828px,calc\(100vw-18rem\)\)\]"/);
-  assert.match(layout, /isAccurateInventoryMenu\s*\? "grid-cols-\[repeat\(auto-fit,120px\)\] gap-2\.5"/);
-  assert.match(layout, /isAccurateInventoryMenu\s*\? "h-\[120px\] w-\[120px\] gap-1\.5 rounded-md px-2 py-2"/);
-  assert.match(layout, /isAccurateInventoryMenu \? "h-12 w-12 stroke-\[1\.7\]"/);
-  assert.match(layout, /isAccurateInventoryMenu\s*\? "text-sm font-normal leading-tight text-gray-700"/);
+  assert.match(layout, /const usesAccurateTileMenu = group\.id === "inventory" \|\| group\.id === "sales"/);
+  assert.match(layout, /data-menu-model=\{usesAccurateTileMenu \? "accurate" : "standard"\}/);
+  assert.match(layout, /usesAccurateTileMenu\s*\? "w-\[min\(828px,calc\(100vw-18rem\)\)\]"/);
+  assert.match(layout, /usesAccurateTileMenu\s*\? "grid-cols-\[repeat\(auto-fit,120px\)\] gap-2\.5"/);
+  assert.match(layout, /usesAccurateTileMenu\s*\? "h-\[120px\] w-\[120px\] gap-1\.5 rounded-md px-2 py-2"/);
+  assert.match(layout, /usesAccurateTileMenu \? "h-12 w-12 stroke-\[1\.7\]"/);
+  assert.match(layout, /usesAccurateTileMenu\s*\? "text-sm font-normal leading-tight text-gray-700"/);
 });
 
 test('warna menu Persediaan membedakan transaksi master dan laporan seperti Accurate', () => {
