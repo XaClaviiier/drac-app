@@ -884,6 +884,7 @@ export default function Layout() {
             orange: "border-orange-400 bg-orange-100 text-orange-700 hover:bg-orange-200",
           };
           const isAccurateInventoryMenu = group.id === "inventory";
+          const isAccurateServiceMenu = group.id === "sales";
           const usesAccurateTileMenu = group.id === "inventory" || group.id === "sales";
           return (
             <>
@@ -895,7 +896,7 @@ export default function Layout() {
               />
               <section
                 data-menu-model={usesAccurateTileMenu ? "accurate" : "standard"}
-                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${usesAccurateTileMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
+                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateServiceMenu ? "w-[420px]" : isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
               >
                 <div className="px-4 pb-0 pt-4">
                   <div className="flex items-center justify-between">
@@ -914,7 +915,7 @@ export default function Layout() {
                   <div className={`mt-3 h-0.5 w-full ${isAccurateInventoryMenu ? "bg-green-500" : "bg-blue-600"}`} />
                 </div>
                 <div className="p-4">
-                  <div className={`grid max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 ${usesAccurateTileMenu ? "grid-cols-[repeat(auto-fit,120px)] gap-2.5" : "grid-cols-3 gap-2.5"}`}>
+                  <div className={`grid max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 ${isAccurateServiceMenu ? "grid-cols-[repeat(3,120px)] gap-2.5" : isAccurateInventoryMenu ? "grid-cols-[repeat(auto-fit,120px)] gap-2.5" : "grid-cols-3 gap-2.5"}`}>
                     {items.map((item, index) => {
                       const Icon = item.icon;
                       const available = !!item.path;
