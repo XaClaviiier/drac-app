@@ -1,0 +1,52 @@
+name: Verify WO Estimate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  php-mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: drac_verify
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Lint PHP API
+        run: |
+          php -l api/endpoints/work-orders.php
+          find api -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Create pre-migration work_orders table
+        run: |
+          docker exec "${{ job.services.mysql.id }}" mysql -uroot -proot drac_verify -e "
+            CREATE TABLE work_orders (
+              id VARCHAR(50) NOT NULL PRIMARY KEY,
+              estimate_total DECIMAL(15,2) NULL
+            ) ENGINE=InnoDB;
+          "
+      - name: Run MySQL 5.7 migration twice
+        run: |
+          docker exec -i "${{ job.services.mysql.id }}" mysql -uroot -proot drac_verify < database/migrate_work_order_estimated_duration.sql
+          docker exec -i "${{ job.services.mysql.id }}" mysql -uroot -proot drac_verify < database/migrate_work_order_estimated_duration.sql
+          COLUMN_COUNT=$(docker exec "${{ job.services.mysql.id }}" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = 'drac_verify'
+              AND TABLE_NAME = 'work_orders'
+              AND COLUMN_NAME IN ('estimated_duration_minutes', 'work_started_at', 'estimated_completion_at');
+          ")
+          test "$COLUMN_COUNT" = "3"

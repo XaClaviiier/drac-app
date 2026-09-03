@@ -154,6 +154,9 @@ export interface WorkOrder {
   services: WorkOrderService[];
   total: number;
   estimateTotal?: number;     // estimasi saat pengecekan (dikunci saat masuk Proses)
+  estimatedDurationMinutes?: number; // estimasi lama pekerjaan saat mulai Dikerjakan
+  workStartedAt?: string;     // waktu mulai Dikerjakan yang ditetapkan server
+  estimatedCompletionAt?: string; // target selesai yang ditetapkan server
   approvedServices?: WorkOrderService[]; // snapshot layanan/harga yang disetujui pelanggan
   approvedAt?: string;        // tanggal pelanggan menyetujui estimasi
   pendingAt?: string;

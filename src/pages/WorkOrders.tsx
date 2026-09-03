@@ -97,6 +97,7 @@ const workOrderEditorFingerprint = (source: Partial<WorkOrder>) => JSON.stringif
   finalTemperature: source.finalTemperature ?? null,
   finalLp: source.finalLp ?? null,
   finalHp: source.finalHp ?? null,
+  estimatedDurationMinutes: source.estimatedDurationMinutes ?? null,
   services: (source.services || []).map(service => ({
     id: service.id,
     itemId: service.itemId || '',
@@ -170,7 +171,7 @@ const WORK_ORDER_COLUMN_WIDTHS: Record<WorkOrderColumnKey, number> = {
   customer: 330,
   services: 260,
   total: 150,
-  attention: 92,
+  attention: 180,
   createdBy: 165,
   actions: 150,
 };
@@ -211,6 +212,7 @@ export default function WorkOrders() {
   const autoRegisteringRef = useRef(false);
   const [activeWoConflict, setActiveWoConflict] = useState<WorkOrder | null>(null);
   const [statusDialog, setStatusDialog] = useState<{ wo: WorkOrder; next: WorkOrder['status'] } | null>(null);
+  const [estimatedDurationInput, setEstimatedDurationInput] = useState('');
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [completionWO, setCompletionWO] = useState<WorkOrder | null>(null);
   const [completionForm, setCompletionForm] = useState({ temperature: '', lp: '', hp: '', note: '' });
@@ -555,6 +557,7 @@ export default function WorkOrders() {
     finalTemperature: undefined as number | undefined,
     finalLp: undefined as number | undefined,
     finalHp: undefined as number | undefined,
+    estimatedDurationMinutes: undefined as number | undefined,
     services: [] as WorkOrderService[],
     findings: '',
     notes: '',
@@ -1201,6 +1204,7 @@ export default function WorkOrders() {
       finalTemperature: undefined,
       finalLp: undefined,
       finalHp: undefined,
+      estimatedDurationMinutes: undefined,
       services: [],
       findings: '',
       notes: '',
@@ -1270,6 +1274,7 @@ export default function WorkOrders() {
         finalTemperature: wo.finalTemperature,
         finalLp: wo.finalLp,
         finalHp: wo.finalHp,
+        estimatedDurationMinutes: wo.estimatedDurationMinutes,
         services: wo.services,
         findings: wo.findings || '',
         notes: wo.notes || '',
@@ -1631,7 +1636,11 @@ export default function WorkOrders() {
     if (!formData.description.trim()) issues.push('Keluhan pelanggan harus diisi');
     if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length === 0) issues.push('Rincian Barang / Jasa harus diisi');
     if ((diagnosisMode || serviceEditMode || shouldProcessNew || shouldProcessEditing) && formData.services.length > 0 && totalServices <= 0) issues.push('Total estimasi harus lebih dari Rp0');
-    if ((shouldProcessNew || shouldProcessEditing || shouldCreateInvoice) && !formData.technicianId) issues.push('Teknisi utama harus dipilih pada tab Info lainnya');
+    if ((shouldProcessNew || shouldProcessEditing || resumeLostSalesAfterEstimate || shouldCreateInvoice) && !formData.technicianId) issues.push('Teknisi utama harus dipilih pada tab Info lainnya');
+    const startsWorkFromEditor = shouldProcessNew || shouldProcessEditing || resumeLostSalesAfterEstimate || (shouldCreateInvoice && editingWO?.status === 'Register');
+    if (startsWorkFromEditor && (!Number.isInteger(formData.estimatedDurationMinutes) || Number(formData.estimatedDurationMinutes) < 15 || Number(formData.estimatedDurationMinutes) > 1440)) {
+      issues.push('Estimasi lama pekerjaan wajib diisi antara 15 menit sampai 24 jam');
+    }
     const diagnosisMeasurements = [formData.diagnosisTemperature, formData.diagnosisLp, formData.diagnosisHp];
     const hasAnyMeasurement = diagnosisMeasurements.some(value => value !== undefined && value !== null);
     const hasCompleteMeasurements = diagnosisMeasurements
@@ -1642,7 +1651,7 @@ export default function WorkOrders() {
       if (!hasCompleteMeasurements && !hasCompletionNote) issues.push('Hasil pengukuran atau Hasil Kerja pada tab Info lainnya harus diisi');
     }
     if (issues.length > 0) {
-      if ((shouldProcessNew || shouldProcessEditing || shouldCreateInvoice) && !formData.technicianId) {
+      if ((shouldProcessNew || shouldProcessEditing || resumeLostSalesAfterEstimate || shouldCreateInvoice) && !formData.technicianId) {
         setDocumentTab('info');
       }
       setSuccessMsg('');
@@ -1953,6 +1962,7 @@ export default function WorkOrders() {
     const latestWorkOrder = showModal && editingWO?.id === canonicalWorkOrder.id
       ? { ...canonicalWorkOrder, ...formData, status: canonicalWorkOrder.status, total: totalServices }
       : canonicalWorkOrder;
+    setEstimatedDurationInput(canonicalWorkOrder.estimatedDurationMinutes ? String(canonicalWorkOrder.estimatedDurationMinutes) : '120');
     setStatusDialog({ wo: latestWorkOrder, next });
   };
 
@@ -2175,7 +2185,8 @@ export default function WorkOrders() {
         await handleSubmit();
         return;
       }
-      const result = await changeWorkOrderStatus(wo.id, next, reasonOverride ?? statusReason);
+      const estimatedDurationMinutes = next === 'Proses' ? Number(estimatedDurationInput) : undefined;
+      const result = await changeWorkOrderStatus(wo.id, next, reasonOverride ?? statusReason, estimatedDurationMinutes);
       if (!result.ok) {
         showAccurateNotice(result.message || 'Perubahan status ditolak.');
         return;
@@ -2186,6 +2197,7 @@ export default function WorkOrders() {
       setTimeout(() => setSuccessMsg(''), 4000);
       setStatusDialog(null);
       setStatusReason('');
+      setEstimatedDurationInput('');
       setCancelStep(1);
       setCancelReasonChoice('');
       setCancelReasonNotes('');
@@ -2233,7 +2245,16 @@ export default function WorkOrders() {
         confirmLabel: 'Kembalikan',
       });
       if (!reason) return;
-      const result = await changeWorkOrderStatus(canonicalWorkOrder.id, 'Proses', reason.trim());
+      const estimatedDuration = await askAccurateText({
+        title: 'Estimasi Lama Pekerjaan',
+        message: 'Masukkan estimasi baru untuk pengerjaan ulang.',
+        label: 'Durasi (menit)',
+        initialValue: String(canonicalWorkOrder.estimatedDurationMinutes || 120),
+        placeholder: 'Contoh: 120',
+        confirmLabel: 'Lanjutkan',
+      });
+      if (!estimatedDuration) return;
+      const result = await changeWorkOrderStatus(canonicalWorkOrder.id, 'Proses', reason.trim(), Number(estimatedDuration));
       if (!result.ok) {
         showAccurateNotice(result.message || 'WO tidak dapat dikembalikan ke Dikerjakan.');
         return;
@@ -2702,12 +2723,26 @@ export default function WorkOrders() {
       openDetailTab(activeWO);
       return;
     }
+    let sameIssueEstimatedDuration: string | undefined;
+    if (sourceWO.status === 'Closed') {
+      const entered = await askAccurateText({
+        title: 'Estimasi Lama Pekerjaan',
+        message: 'Masukkan estimasi baru sebelum WO Lost Sales dikembalikan ke Dikerjakan.',
+        label: 'Durasi (menit)',
+        initialValue: String(sourceWO.estimatedDurationMinutes || 120),
+        placeholder: 'Contoh: 120',
+        confirmLabel: 'Lanjutkan',
+      });
+      if (!entered) return;
+      sameIssueEstimatedDuration = entered;
+    }
     setIsFollowingUpLostSales(true);
     try {
       const result = await changeWorkOrderStatus(
         sourceWO.id,
         'Proses',
         'Pelanggan kembali dengan masalah yang sama.',
+        sameIssueEstimatedDuration === undefined ? undefined : Number(sameIssueEstimatedDuration),
       );
       if (!result.ok) {
         showAccurateNotice(result.message || 'WO Lost Sales tidak dapat dilanjutkan.');
@@ -3114,6 +3149,11 @@ export default function WorkOrders() {
                       <span className="mt-0.5 block text-xs text-gray-500">
                         {wo.transactionTime ? wo.transactionTime.slice(0, 5) : '—'}
                       </span>
+                      {wo.status === 'Proses' && wo.estimatedCompletionAt && (
+                        <span data-wo-estimated-deadline className="mt-1 block text-[10px] font-semibold text-blue-700" title={formatAuditTime(wo.estimatedCompletionAt)}>
+                          Target selesai {formatAuditTime(wo.estimatedCompletionAt)}
+                        </span>
+                      )}
                     </td>;
                       if (key === 'attention') return <td key={key} className="overflow-hidden px-2 py-3 text-center">
                       {attentionByWorkOrderId.has(wo.id) && (
@@ -3125,11 +3165,12 @@ export default function WorkOrders() {
                             else if (attention?.kind === 'invoice' && hasPermission('invoice:create')) handleOpenInvoiceModal(wo);
                             else openWorkOrderStandard(wo);
                           }}
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded ${['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
+                          className={`inline-flex min-h-8 max-w-full items-center justify-center gap-1.5 rounded px-2 py-1 text-[10px] font-bold leading-tight ${attentionByWorkOrderId.get(wo.id)?.severity === 'critical' ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
                           title={`${attentionByWorkOrderId.get(wo.id)?.label}: ${attentionByWorkOrderId.get(wo.id)?.description}`}
                           aria-label={attentionByWorkOrderId.get(wo.id)?.label}
                         >
                           {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                          <span data-wo-attention-label>{attentionByWorkOrderId.get(wo.id)?.label}</span>
                         </button>
                       )}
                     </td>;
@@ -3243,10 +3284,15 @@ export default function WorkOrders() {
                   <span className="font-semibold text-gray-700">Layanan:</span>{' '}
                   {serviceNames.length ? `${serviceNames.slice(0, 2).join(', ')}${serviceNames.length > 2 ? ` +${serviceNames.length - 2}` : ''}` : 'Belum ada layanan'}
                 </p>
+                {wo.status === 'Proses' && wo.estimatedCompletionAt && (
+                  <p data-wo-estimated-deadline className="mt-1 text-xs font-semibold text-blue-700">
+                    Target selesai {formatAuditTime(wo.estimatedCompletionAt)}
+                  </p>
+                )}
               </button>
               <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
                 {attentionByWorkOrderId.has(wo.id) && (
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`} title={attentionByWorkOrderId.get(wo.id)?.description}>
+                  <span data-wo-attention-label className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${attentionByWorkOrderId.get(wo.id)?.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`} title={attentionByWorkOrderId.get(wo.id)?.description}>
                     {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
                     {attentionByWorkOrderId.get(wo.id)?.label}
                   </span>
@@ -4598,6 +4644,13 @@ export default function WorkOrders() {
                             {eligibleTechnicians.map(user => <option key={user.id} value={user.id}>{user.name} · {user.roleName}</option>)}
                           </select>
                         </label>
+                        <label className="grid items-center gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)]">
+                          <span className="font-semibold text-slate-700">Estimasi Lama Pekerjaan <span className="text-red-500">*</span></span>
+                          <span className="flex items-center gap-2">
+                            <input type="number" min={15} max={1440} step={15} disabled={infoPanelLocked || formData.status === 'Proses'} value={formData.estimatedDurationMinutes ?? ''} onChange={event => setFormData(previous => ({ ...previous, estimatedDurationMinutes: event.target.value === '' ? undefined : Number(event.target.value) }))} placeholder="Contoh: 120" className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 sm:h-10" />
+                            <span className="text-xs font-medium text-slate-500">menit</span>
+                          </span>
+                        </label>
                         <div className="grid gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)]">
                           <span className="font-semibold text-slate-700 sm:pt-2.5">Teknisi Pendamping</span>
                           <div className="min-w-0">
@@ -5062,6 +5115,17 @@ export default function WorkOrders() {
                   <p>Layanan: {wo.services.length} item</p>
                   <p>Total: Rp {wo.total.toLocaleString('id-ID')}</p>
                 </div>
+                {next === 'Proses' && (
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">Estimasi Lama Pekerjaan <span className="text-red-500">*</span></label>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={15} max={1440} step={15} value={estimatedDurationInput} onChange={event => setEstimatedDurationInput(event.target.value)} className="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 px-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                      <span className="text-xs text-gray-500">menit</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">{[30, 60, 90, 120, 180, 240].map(minutes => <button key={minutes} type="button" onClick={() => setEstimatedDurationInput(String(minutes))} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${estimatedDurationInput === String(minutes) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>{minutes < 60 ? `${minutes}m` : `${minutes / 60}j`}</button>)}</div>
+                    <p className="mt-1.5 text-[11px] text-gray-500">Target selesai dihitung server saat pekerjaan mulai. Jika terlewati, tabel WO menampilkan Dikerjakan Terlambat.</p>
+                  </div>
+                )}
                 {needsReason && cancelStep === 1 && (
                   <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-800">
                     <strong>Apakah betul pekerjaan ini mau dibatalkan?</strong>
@@ -5091,7 +5155,7 @@ export default function WorkOrders() {
                     ? cancelStep === 1
                       ? <button onClick={() => setCancelStep(2)} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Ya, Lanjutkan</button>
                       : <button onClick={() => void confirmStatusChange(finalCancelReason)} disabled={!finalCancelEnabled || isChangingStatus} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-gray-300">{isChangingStatus ? 'Memproses...' : 'Batalkan &amp; Jadikan Lost Sales'}</button>
-                    : <button onClick={() => void confirmStatusChange()} disabled={isChangingStatus} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">{isChangingStatus ? 'Memproses...' : 'Ya, Ubah Status'}</button>}
+                    : <button onClick={() => void confirmStatusChange()} disabled={isChangingStatus || (next === 'Proses' && (!Number.isInteger(Number(estimatedDurationInput)) || Number(estimatedDurationInput) < 15 || Number(estimatedDurationInput) > 1440))} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">{isChangingStatus ? 'Memproses...' : 'Ya, Ubah Status'}</button>}
                 </div>
               </div>
             </div>

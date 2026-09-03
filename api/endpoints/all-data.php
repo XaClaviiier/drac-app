@@ -418,6 +418,9 @@ try {
         $r['finalLp']                 = isset($r['final_lp']) ? (float)$r['final_lp'] : null;
         $r['finalHp']                 = isset($r['final_hp']) ? (float)$r['final_hp'] : null;
         $r['estimateTotal']           = isset($r['estimate_total']) ? (float)$r['estimate_total'] : null;
+        $r['estimatedDurationMinutes'] = isset($r['estimated_duration_minutes']) ? (int)$r['estimated_duration_minutes'] : null;
+        $r['workStartedAt']           = formatWitaTimestamp($r['work_started_at'] ?? null);
+        $r['estimatedCompletionAt']   = formatWitaTimestamp($r['estimated_completion_at'] ?? null);
         $r['approvedAt']              = $r['approved_at'] ?? null;
         $r['approvedServices']        = isset($r['approved_services_json']) && $r['approved_services_json'] ? json_decode($r['approved_services_json'], true) : [];
         $r['pendingAt']               = $r['pending_at'] ?? null;

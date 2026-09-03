@@ -248,6 +248,16 @@ export default function WorkOrderTimeline() {
   const setStage = async (next: WorkOrderTimelineStage, promptLabel?: string) => {
     if (!selected || actionBusy) return;
     let note = '';
+    let estimatedDurationMinutes: number | undefined;
+    if (next === 'working' && selected.status === 'Register') {
+      const entered = window.prompt('Estimasi lama pekerjaan (menit, 15–1440):', String(selected.estimatedDurationMinutes || 120));
+      if (entered === null) return;
+      estimatedDurationMinutes = Number(entered);
+      if (!Number.isInteger(estimatedDurationMinutes) || estimatedDurationMinutes < 15 || estimatedDurationMinutes > 1440) {
+        window.alert('Estimasi lama pekerjaan wajib diisi antara 15 menit sampai 24 jam.');
+        return;
+      }
+    }
     if (promptLabel) {
       const entered = window.prompt(`${promptLabel}. Keterangan (opsional):`, selected.pendingReason || '');
       if (entered === null) return;
@@ -255,7 +265,7 @@ export default function WorkOrderTimeline() {
     }
     setActionBusy(true);
     const result = next === 'working' && selected.status === 'Register'
-      ? await changeWorkOrderStatus(selected.id, 'Proses')
+      ? await changeWorkOrderStatus(selected.id, 'Proses', undefined, estimatedDurationMinutes)
       : await changeWorkOrderTimelineStage(selected.id, next, note);
     setActionBusy(false);
     if (!result.ok) window.alert(result.message || 'Tahap WO gagal diubah.');
