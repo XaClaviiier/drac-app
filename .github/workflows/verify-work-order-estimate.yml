@@ -239,12 +239,17 @@ jobs:
           test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_runtime -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='drac_runtime' AND TABLE_NAME='stock_count_result_items' AND COLUMN_NAME IN ('system_version','movement_in','movement_out','is_manual','added_by','added_at');")" = "6"
 
       - name: Execute inventory endpoint schema prologues on MySQL 5.7
+        env:
+          DRAC_DB_HOST: 127.0.0.1
+          DRAC_DB_NAME: drac_runtime
+          DRAC_DB_USER: root
+          DRAC_DB_PASS: root
         run: |
           set -euo pipefail
-          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/goods-receipts.php";' >/dev/null
-          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/warehouse-transfers.php";' >/dev/null
-          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/sales-invoices.php";' >/dev/null
-          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1,"role_id"=>"ROLE-OWNER","branch_id"=>""];$method="GET";$id=null;require "api/endpoints/all-data.php";' >/dev/null
+          php -r '$_SERVER["REQUEST_METHOD"]="GET";require "api/config.php";require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/goods-receipts.php";' >/dev/null
+          php -r '$_SERVER["REQUEST_METHOD"]="GET";require "api/config.php";require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/warehouse-transfers.php";' >/dev/null
+          php -r '$_SERVER["REQUEST_METHOD"]="GET";require "api/config.php";require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/sales-invoices.php";' >/dev/null
+          php -r '$_SERVER["REQUEST_METHOD"]="GET";require "api/config.php";require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1,"role_id"=>"ROLE-OWNER","branch_id"=>""];$method="GET";$id=null;require "api/endpoints/all-data.php";' >/dev/null
 
       - name: Verify legacy inventory ledger remediation on MySQL 5.7
         run: |

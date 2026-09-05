@@ -269,6 +269,8 @@ test('endpoint startup dan transaksi stok tidak memakai ADD COLUMN IF NOT EXISTS
   assert.match(migrationWorkflow,/api\/endpoints\/warehouse-transfers\.php/);
   assert.match(migrationWorkflow,/api\/endpoints\/sales-invoices\.php/);
   assert.match(migrationWorkflow,/api\/endpoints\/all-data\.php/);
+  assert.match(migrationWorkflow,/DRAC_DB_HOST: 127\.0\.0\.1/);
+  assert.match(migrationWorkflow,/require .*api\/config\.php.*require .*api\/helpers\.php/);
 });
 
 test('schema dasar memakai collation UTF8MB4 yang konsisten untuk foreign key MySQL 5.7', () => {
