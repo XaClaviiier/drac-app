@@ -1,33 +1,23 @@
 <?php
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER branch_id");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS received_by_id VARCHAR(64) NULL AFTER received_by");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_method VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_other VARCHAR(100) NULL AFTER delivery_method");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS shipping_notes VARCHAR(500) NULL AFTER delivery_other");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_type VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER shipping_notes");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_warehouse_id VARCHAR(20) NULL AFTER source_type");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_branch_id VARCHAR(20) NULL AFTER source_warehouse_id");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS transfer_number VARCHAR(40) NULL AFTER source_branch_id");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS unit_price DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER qty_invoiced");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS discount_percent DECIMAL(8,4) NOT NULL DEFAULT 0 AFTER unit_price");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_percent");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS subtotal DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_amount");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS technician_id VARCHAR(64) NULL AFTER subtotal");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS technician_name VARCHAR(160) NULL AFTER technician_id");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS line_notes VARCHAR(500) NULL AFTER technician_name");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS is_deferred TINYINT(1) NOT NULL DEFAULT 0 AFTER line_notes");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS defer_reason VARCHAR(255) NULL AFTER is_deferred");
-$pdo->exec("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS defer_until DATE NULL AFTER defer_reason");
-$pdo->exec("UPDATE goods_receipts r JOIN warehouses w ON w.branch_id=r.branch_id AND w.is_default=1 SET r.warehouse_id=w.id WHERE r.warehouse_id IS NULL OR r.warehouse_id=''");
-$receiptJournalMigration='backfill_receipt_stock_journal_20260820_v1';
-$migrationCheck=$pdo->prepare("SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?");$migrationCheck->execute([$receiptJournalMigration]);
-if(!(int)$migrationCheck->fetchColumn()){$pdo->beginTransaction();try{
-    $pdo->exec("INSERT IGNORE INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by,created_at)
-        SELECT CONCAT('MOV-BFR-',d.id),d.item_id,IF(r.source_type='Transfer Gudang',r.source_warehouse_id,NULL),r.warehouse_id,d.qty,IF(r.source_type='Transfer Gudang','transfer','receipt'),'goods_receipt',r.id,r.receipt_number,CONCAT('Migrasi penerimaan ',r.receipt_number),NULL,CONCAT(r.date,' 12:00:00')
-        FROM goods_receipt_items d JOIN goods_receipts r ON r.id=d.receipt_id JOIN items i ON i.id=d.item_id
-        WHERE r.status IN ('Diterima','Difakturkan','Sebagian') AND i.type='Persediaan' AND r.warehouse_id IS NOT NULL");
-    $pdo->prepare("INSERT INTO app_schema_migrations(migration_key) VALUES(?)")->execute([$receiptJournalMigration]);$pdo->commit();
-}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}}
+ensureTableColumn($pdo,'goods_receipts','warehouse_id','VARCHAR(20) NULL AFTER branch_id');
+ensureTableColumn($pdo,'goods_receipts','received_by_id','VARCHAR(64) NULL AFTER received_by');
+ensureTableColumn($pdo,'goods_receipts','delivery_method',"VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number");
+ensureTableColumn($pdo,'goods_receipts','delivery_other','VARCHAR(100) NULL AFTER delivery_method');
+ensureTableColumn($pdo,'goods_receipts','shipping_notes','VARCHAR(500) NULL AFTER delivery_other');
+ensureTableColumn($pdo,'goods_receipts','source_type',"VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER shipping_notes");
+ensureTableColumn($pdo,'goods_receipts','source_warehouse_id','VARCHAR(20) NULL AFTER source_type');
+ensureTableColumn($pdo,'goods_receipts','source_branch_id','VARCHAR(20) NULL AFTER source_warehouse_id');
+ensureTableColumn($pdo,'goods_receipts','transfer_number','VARCHAR(40) NULL AFTER source_branch_id');
+ensureTableColumn($pdo,'goods_receipt_items','unit_price','DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER qty_invoiced');
+ensureTableColumn($pdo,'goods_receipt_items','discount_percent','DECIMAL(8,4) NOT NULL DEFAULT 0 AFTER unit_price');
+ensureTableColumn($pdo,'goods_receipt_items','discount_amount','DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_percent');
+ensureTableColumn($pdo,'goods_receipt_items','subtotal','DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_amount');
+ensureTableColumn($pdo,'goods_receipt_items','technician_id','VARCHAR(64) NULL AFTER subtotal');
+ensureTableColumn($pdo,'goods_receipt_items','technician_name','VARCHAR(160) NULL AFTER technician_id');
+ensureTableColumn($pdo,'goods_receipt_items','line_notes','VARCHAR(500) NULL AFTER technician_name');
+ensureTableColumn($pdo,'goods_receipt_items','is_deferred','TINYINT(1) NOT NULL DEFAULT 0 AFTER line_notes');
+ensureTableColumn($pdo,'goods_receipt_items','defer_reason','VARCHAR(255) NULL AFTER is_deferred');
+ensureTableColumn($pdo,'goods_receipt_items','defer_until','DATE NULL AFTER defer_reason');
 function nextManualTransferNumber(PDO $pdo,string $sourceBranchId,string $destinationBranchId,string $date):string{
     $stmt=$pdo->prepare("SELECT code FROM branches WHERE id=?");$stmt->execute([$sourceBranchId]);$sourceCode=(string)$stmt->fetchColumn();$stmt->execute([$destinationBranchId]);$destinationCode=(string)$stmt->fetchColumn();
     $sourceLetter=substr(preg_replace('/[^A-Z0-9]/','',strtoupper($sourceCode)),0,1)?:'X';$destinationLetter=substr(preg_replace('/[^A-Z0-9]/','',strtoupper($destinationCode)),0,1)?:'X';
@@ -145,6 +135,19 @@ switch ($method) {
         if (!in_array($newStatus, ['Draft', 'Diterima'], true)) respondError('Status awal penerimaan tidak valid', 422);
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $delegatedUserIds=array_merge([$receiverId],array_column($d['items'],'technicianId'));
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'receipt:create',$delegatedUserIds);
+            $actor=$authorization['actor'];
+            $lockedWarehouseMap=lockActiveInventoryWarehouses($pdo,array_filter([$warehouseId,$sourceWarehouseId]));
+            if((string)$lockedWarehouseMap[$warehouseId]['branch_id']!==$branchId)throw new InvalidArgumentException('Gudang tujuan tidak lagi berada di cabang yang dipilih');
+            assertLockedInventoryBranchAccess($authorization,$branchId);
+            if($sourceType==='Transfer Gudang'){
+                $sourceBranchId=(string)$lockedWarehouseMap[$sourceWarehouseId]['branch_id'];
+                assertLockedInventoryBranchAccess($authorization,$sourceBranchId);
+            }
+            $receiver=lockedInventoryDelegatedUserForBranch($authorization,$receiverId,$branchId,'Petugas penerima');
+            $lockedItems=lockActiveInventoryItems($pdo,array_column($d['items'],'itemId'));
             [$deliveryMethod,$deliveryOther]=normalizeGoodsReceiptDelivery($d);
             $rId = $d['id'] ?? generateId();
             // Nomor dari browser hanya pratinjau. Nomor final wajib diambil dari
@@ -162,18 +165,16 @@ switch ($method) {
 
             if (!empty($d['items'])) {
                 $iStmt = $pdo->prepare("INSERT INTO goods_receipt_items (receipt_id,item_id,item_code,item_name,qty,unit,qty_invoiced,unit_price,discount_percent,discount_amount,subtotal,technician_id,technician_name,line_notes,is_deferred,defer_reason,defer_until) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-                $itemCheck = $pdo->prepare("SELECT code,name,unit,type FROM items WHERE id=? AND is_active=1");
-                $technicianCheck = $pdo->prepare("SELECT id,name,is_active FROM users WHERE id=? LIMIT 1");
                 $seenItems = [];
-                foreach ($d['items'] as $i) {
-                    $itemCheck->execute([$i['itemId'] ?? '']);
-                    $item = $itemCheck->fetch();
-                    $qty = (int)($i['qty'] ?? 0);
+                foreach ($d['items'] as $lineIndex=>$i) {
+                    $item = $lockedItems[(string)($i['itemId'] ?? '')]??null;
+                    $qty=parseBoundedDecimalInteger($i['qty']??null,'1','2147483647','Kuantitas penerimaan baris '.($lineIndex+1));
+                    $d['items'][$lineIndex]['qty']=$qty;
                     if (!$item || $item['type'] !== 'Persediaan' || $qty <= 0) throw new InvalidArgumentException('Penerimaan hanya boleh berisi barang persediaan aktif dengan qty lebih dari 0');
                     if (isset($seenItems[(string)$i['itemId']])) throw new InvalidArgumentException('Barang yang sama tidak boleh diduplikasi dalam satu penerimaan');
                     $seenItems[(string)$i['itemId']] = true;
                     $unitPrice=max(0,(float)($i['unitPrice']??0));$discountPercent=min(100,max(0,(float)($i['discountPercent']??0)));$gross=$qty*$unitPrice;$discountAmount=min($gross,max(0,(float)($i['discountAmount']??($gross*$discountPercent/100))));$subtotal=max(0,$gross-$discountAmount);
-                    $technicianId=trim((string)($i['technicianId']??''));$technicianName='';if($technicianId!==''){$technicianCheck->execute([$technicianId]);$technician=$technicianCheck->fetch();if(!$technician||!(bool)$technician['is_active'])throw new InvalidArgumentException('Petugas/teknisi rincian tidak valid');$technicianName=(string)$technician['name'];}
+                    $technicianId=trim((string)($i['technicianId']??''));$technicianName='';if($technicianId!==''){$technician=lockedInventoryDelegatedUser($authorization,$technicianId,'Petugas/teknisi rincian');$technicianName=(string)$technician['name'];}
                     $isDeferred=!empty($i['isDeferred']);$deferReason=trim((string)($i['deferReason']??''));$deferUntil=trim((string)($i['deferUntil']??''))?:null;if($isDeferred&&$deferReason==='')throw new InvalidArgumentException('Alasan penangguhan wajib diisi');
                     $iStmt->execute([$rId,$i['itemId'],$item['code'],$item['name'],$qty,$item['unit'],0,$unitPrice,$discountPercent,$discountAmount,$subtotal,$technicianId?:null,$technicianName?:null,trim((string)($i['lineNotes']??'')),$isDeferred?1:0,$isDeferred?$deferReason:null,$isDeferred?$deferUntil:null]);
                 }
@@ -182,9 +183,9 @@ switch ($method) {
             // Auto-increment stock jika status Diterima
             if ($newStatus === 'Diterima' && !empty($d['items'])) {
                 foreach ($d['items'] as $i) {
-                    if($sourceType==='Transfer Gudang')adjustWarehouseStock($pdo,$sourceWarehouseId,$sourceBranchId,$i['itemId'],-(int)$i['qty']);
-                    adjustWarehouseStockAllowNegative($pdo,$warehouseId,$branchId,$i['itemId'],(int)$i['qty']);
-                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$receiptNumber,'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],(int)$i['qty'],false,$actor,'POST-'.$rId,null,'goods_receipt:'.$rId.':'.$i['itemId'].':post',max(0,(float)($i['unitPrice']??0)));
+                    if($sourceType==='Transfer Gudang')adjustWarehouseStock($pdo,$sourceWarehouseId,$sourceBranchId,$i['itemId'],-$i['qty']);
+                    adjustWarehouseStockAllowNegative($pdo,$warehouseId,$branchId,$i['itemId'],$i['qty']);
+                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$receiptNumber,'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],$i['qty'],false,$actor,'POST-'.$rId,null,'goods_receipt:'.$rId.':'.$i['itemId'].':post',max(0,(float)($i['unitPrice']??0)));
                 }
             }
 
@@ -192,7 +193,7 @@ switch ($method) {
             respondSuccess(['id' => $rId, 'receiptNumber' => $receiptNumber], 'Penerimaan disimpan');
         } catch (InvalidArgumentException | DomainException $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError($e->getMessage(), 422);
+            respondError($e->getMessage(), transactionExceptionStatus($e, 422));
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             $isDuplicate = (string)$e->getCode() === '23000' || (int)($e->errorInfo[1] ?? 0) === 1062;
@@ -213,23 +214,42 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        if (empty($d['items']) || !is_array($d['items'])) respondError('Tambahkan minimal satu barang', 422);
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        $preflightBranchIds=getAccessibleBranchIds($pdo,$actor);
+        if(!$preflightBranchIds)respondError('Penerimaan tidak ditemukan',404);
+        $preflightMarks=implode(',',array_fill(0,count($preflightBranchIds),'?'));
+        $receiverPreflightStmt=$pdo->prepare("SELECT received_by_id FROM goods_receipts WHERE id=? AND branch_id IN ($preflightMarks)");
+        $receiverPreflightStmt->execute(array_merge([$id],$preflightBranchIds));$receiverPreflightId=$receiverPreflightStmt->fetchColumn();
+        if($receiverPreflightId===false)respondError('Penerimaan tidak ditemukan',404);
+        $receiverId=(string)($d['receivedById']??($receiverPreflightId?:($actor['id']??'')));
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $delegatedUserIds=array_merge([$receiverId],array_column($d['items'],'technicianId'));
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'receipt:edit',$delegatedUserIds);
+            $actor=$authorization['actor'];
             // Get old status untuk logic stock
             $oldRowStmt = $pdo->prepare("SELECT * FROM goods_receipts WHERE id=? FOR UPDATE");
             $oldRowStmt->execute([$id]);
             $oldRow = $oldRowStmt->fetch();
             if (!$oldRow) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
+            if(!array_key_exists('receivedById',$d)&&(string)($oldRow['received_by_id']??'')!==(string)$receiverPreflightId)throw new DomainException('Petugas penerima berubah, silakan ulangi',409);
             [$deliveryMethod,$deliveryOther]=normalizeGoodsReceiptDelivery($d,(string)($oldRow['delivery_method']??'Diantar Supplier'),(string)($oldRow['delivery_other']??''));
             $oldStatus = $oldRow['status'] ?? '';
             $oldBranchId = $oldRow['branch_id'] ?? ($d['branchId'] ?? 'BR-001');
             $newBranchId = (string)($d['branchId'] ?? $oldBranchId);
             $oldWarehouseId=(string)($oldRow['warehouse_id']??defaultWarehouseId($pdo,(string)$oldBranchId));
             $newWarehouseId=(string)($d['warehouseId']??$oldWarehouseId);
-            $actor = $requestUser ?? requireAuthenticatedUser($pdo);
-            requireAccessibleBranch($pdo, $actor, (string)$oldBranchId);
-            requireAccessibleBranch($pdo, $actor, $newBranchId);
-            if (empty($d['items']) || !is_array($d['items'])) throw new InvalidArgumentException('Tambahkan minimal satu barang');
+            $lockedWarehouseMap=lockActiveInventoryWarehouses($pdo,array_filter([$oldWarehouseId,$newWarehouseId,$oldRow['source_warehouse_id']??null]));
+            if((string)$lockedWarehouseMap[$oldWarehouseId]['branch_id']!==(string)$oldBranchId||(string)$lockedWarehouseMap[$newWarehouseId]['branch_id']!==$newBranchId)throw new InvalidArgumentException('Gudang penerimaan tidak lagi sesuai dengan cabang');
+            assertLockedInventoryBranchAccess($authorization,(string)$oldBranchId);
+            assertLockedInventoryBranchAccess($authorization,$newBranchId);
+            if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])){
+                $lockedSourceBranchId=(string)$lockedWarehouseMap[(string)$oldRow['source_warehouse_id']]['branch_id'];
+                if($lockedSourceBranchId!==(string)($oldRow['source_branch_id']??''))throw new InvalidArgumentException('Gudang asal tidak lagi sesuai dengan cabang');
+                assertLockedInventoryBranchAccess($authorization,$lockedSourceBranchId);
+            }
             $newStatus = (string)($d['status'] ?? 'Draft');
             if (!in_array($newStatus, ['Draft', 'Diterima', 'Batal'], true)) throw new InvalidArgumentException('Status penerimaan hanya boleh Draft, Diterima, atau Batal');
             $oldItems = $pdo->prepare("SELECT * FROM goods_receipt_items WHERE receipt_id = ?");
@@ -238,12 +258,10 @@ switch ($method) {
             foreach ($oldItemsList as $oldItem) {
                 if ((int)$oldItem['qty_invoiced'] > 0) throw new DomainException('Penerimaan yang sudah difakturkan tidak boleh diubah. Koreksi atau hapus faktur pembelian terlebih dahulu.');
             }
-            $warehouseCheck=$pdo->prepare("SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1");$warehouseCheck->execute([$newWarehouseId,$newBranchId]);
-            if(!$warehouseCheck->fetch())throw new InvalidArgumentException('Gudang tujuan tidak valid');
             $supplier=null;
             if(canSeeReceiptSupplier($pdo,$actor)&&!empty($d['supplierId'])){$supplierCheck=$pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");$supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();if(!$supplier)throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');}
             if(!canSeeReceiptSupplier($pdo,$actor)&&!empty($oldRow['supplier_id']))$supplier=['id'=>$oldRow['supplier_id'],'name'=>$oldRow['supplier_name']];
-            $receiverId=(string)($d['receivedById']??($oldRow['received_by_id']??($actor['id']??'')));$receiverStmt=$pdo->prepare("SELECT id,name,is_active FROM users WHERE id=? LIMIT 1");$receiverStmt->execute([$receiverId]);$receiver=$receiverStmt->fetch();if(!$receiver||!(bool)$receiver['is_active'])throw new InvalidArgumentException('Petugas penerima tidak valid');
+            $receiver=lockedInventoryDelegatedUserForBranch($authorization,$receiverId,$newBranchId,'Petugas penerima');
 
             $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,delivery_method=?,delivery_other=?,shipping_notes=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");
             $stmt->execute([
@@ -260,10 +278,11 @@ switch ($method) {
                 $itemCheck = $pdo->prepare("SELECT code,name,unit,type FROM items WHERE id=? AND is_active=1");
                 $technicianCheck = $pdo->prepare("SELECT id,name,is_active FROM users WHERE id=? LIMIT 1");
                 $seenItems = [];
-                foreach ($d['items'] as $i) {
+                foreach ($d['items'] as $lineIndex=>$i) {
                     $itemCheck->execute([$i['itemId'] ?? '']);
                     $item = $itemCheck->fetch();
-                    $qty = (int)($i['qty'] ?? 0);
+                    $qty=parseBoundedDecimalInteger($i['qty']??null,'1','2147483647','Kuantitas penerimaan baris '.($lineIndex+1));
+                    $d['items'][$lineIndex]['qty']=$qty;
                     if (!$item || $item['type'] !== 'Persediaan' || $qty <= 0) throw new InvalidArgumentException('Penerimaan hanya boleh berisi barang persediaan aktif dengan qty lebih dari 0');
                     if (isset($seenItems[(string)$i['itemId']])) throw new InvalidArgumentException('Barang yang sama tidak boleh diduplikasi dalam satu penerimaan');
                     $seenItems[(string)$i['itemId']] = true;
@@ -278,14 +297,15 @@ switch ($method) {
             $wasReceived = in_array($oldStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
             $isReceived = in_array($newStatus, ['Diterima', 'Difakturkan', 'Sebagian']);
             $oldStockLines=[];foreach($oldItemsList as $line){$key=(string)$line['item_id'];$oldStockLines[$key]=($oldStockLines[$key]??0)+(int)$line['qty'];}ksort($oldStockLines);
-            $newStockLines=[];foreach($d['items'] as $line){$key=(string)$line['itemId'];$newStockLines[$key]=($newStockLines[$key]??0)+(int)$line['qty'];}ksort($newStockLines);
+            $newStockLines=[];foreach($d['items'] as $line){$key=(string)$line['itemId'];$newStockLines[$key]=($newStockLines[$key]??0)+$line['qty'];}ksort($newStockLines);
             $stockImpactChanged=$wasReceived!==$isReceived
                 ||($wasReceived&&$isReceived&&(
                     $oldStockLines!==$newStockLines
                     ||$oldWarehouseId!==$newWarehouseId
                     ||(string)$oldBranchId!==$newBranchId
                 ));
-            $movementMetadataChanged=(string)$oldRow['date']!==(string)$d['date']
+            $movementDateChanged=(string)$oldRow['date']!==(string)$d['date'];
+            $movementMetadataChanged=$movementDateChanged
                 ||(string)$oldRow['receipt_number']!==(string)$d['receiptNumber'];
             $correctionGroupId=$stockImpactChanged?'CORR-GR-'.date('YmdHis').'-'.substr(bin2hex(random_bytes(4)),0,8):null;
 
@@ -302,11 +322,12 @@ switch ($method) {
             if($stockImpactChanged)$pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason='Penerimaan diedit' WHERE reference_type='goods_receipt' AND reference_id=? AND is_voided=0")->execute([$actor['id']??null,$id]);
             if ($stockImpactChanged && $isReceived) {
                 foreach ($d['items'] as $lineIndex=>$i) {
-                    if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStock($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['itemId'],-(int)$i['qty']);
-                    adjustWarehouseStockAllowNegative($pdo,$newWarehouseId,$newBranchId,$i['itemId'],(int)$i['qty']);
-                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],(int)$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':'.$lineIndex.':apply',max(0,(float)($i['unitPrice']??0)));
+                    if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStock($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['itemId'],-$i['qty']);
+                    adjustWarehouseStockAllowNegative($pdo,$newWarehouseId,$newBranchId,$i['itemId'],$i['qty']);
+                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':'.$lineIndex.':apply',max(0,(float)($i['unitPrice']??0)));
                 }
             }
+            if(!$stockImpactChanged&&$movementDateChanged)bumpStockVersionsForMovementReference($pdo,'goods_receipt',$id);
             if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET reference_number=?,occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='goods_receipt' AND reference_id=? AND is_voided=0")
                 ->execute([$d['receiptNumber'],$d['date'],$id]);
             $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('goods_receipt',?,?,'update',?,?,?,?)")
@@ -316,8 +337,8 @@ switch ($method) {
             respondSuccess(null, $stockImpactChanged?'Penerimaan dan stok berhasil diperbarui':'Penerimaan berhasil diperbarui tanpa mengubah saldo stok');
         } catch (InvalidArgumentException | DomainException $e) {
             $pdo->rollBack();
-            respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
+            respondError($e->getMessage(), transactionExceptionStatus($e, 422));
+        } catch (Throwable $e) {
             $pdo->rollBack();
             respondError('Gagal update penerimaan', 500, $e->getMessage());
         }
@@ -327,14 +348,26 @@ switch ($method) {
         if (!$id) respondError('ID required');
         $deleteInput=getInput();
         $deleteReason=trim((string)($deleteInput['reason']??''))?:'Dihapus oleh pengguna';
+        $actor=$requestUser ?? requireAuthenticatedUser($pdo);
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'receipt:delete');
+            $actor=$authorization['actor'];
             $rowStmt=$pdo->prepare("SELECT * FROM goods_receipts WHERE id=? FOR UPDATE");
             $rowStmt->execute([$id]);
             $row = $rowStmt->fetch();
             if (!$row) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
-            $deleteActor=$requestUser ?? requireAuthenticatedUser($pdo);
-            requireAccessibleBranch($pdo, $deleteActor, (string)$row['branch_id']);
+            $deleteActor=$actor;
+            $deleteWarehouseId=(string)($row['warehouse_id']?:defaultWarehouseId($pdo,(string)$row['branch_id']));
+            $lockedWarehouseMap=lockActiveInventoryWarehouses($pdo,array_filter([$deleteWarehouseId,$row['source_warehouse_id']??null]));
+            if((string)$lockedWarehouseMap[$deleteWarehouseId]['branch_id']!==(string)$row['branch_id'])throw new InvalidArgumentException('Gudang penerimaan tidak lagi sesuai dengan cabang');
+            assertLockedInventoryBranchAccess($authorization,(string)$row['branch_id']);
+            if(($row['source_type']??'Supplier')==='Transfer Gudang'&&!empty($row['source_warehouse_id'])){
+                $lockedSourceBranchId=(string)$lockedWarehouseMap[(string)$row['source_warehouse_id']]['branch_id'];
+                if($lockedSourceBranchId!==(string)($row['source_branch_id']??''))throw new InvalidArgumentException('Gudang asal tidak lagi sesuai dengan cabang');
+                assertLockedInventoryBranchAccess($authorization,$lockedSourceBranchId);
+            }
             $linked = $pdo->prepare("SELECT COUNT(*) FROM purchase_invoice_items WHERE receipt_id=?");
             $linked->execute([$id]);
             if ((int)$linked->fetchColumn() > 0) throw new DomainException('Penerimaan sudah dipakai pada faktur pembelian dan tidak dapat dihapus');
@@ -359,8 +392,8 @@ switch ($method) {
             respondSuccess(['status'=>'Deleted'], 'Penerimaan dihapus, stok dikembalikan, dan jejak tersimpan di Log Aktivitas');
         } catch (InvalidArgumentException | DomainException $e) {
             $pdo->rollBack();
-            respondError($e->getMessage(), 409);
-        } catch (Exception $e) {
+            respondError($e->getMessage(), transactionExceptionStatus($e, 409));
+        } catch (Throwable $e) {
             $pdo->rollBack();
             respondError('Gagal menghapus penerimaan', 500, $e->getMessage());
         }

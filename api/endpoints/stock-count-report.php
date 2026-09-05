@@ -9,13 +9,15 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) respondError('Tanggal laporan t
 if ($date > date('Y-m-d')) respondError('Tanggal laporan tidak boleh melewati hari ini', 422);
 if ($warehouseId === '') respondError('Gudang wajib dipilih', 422);
 
+$accessibleBranchIds=getAccessibleBranchIds($pdo,$actor);
+if(!$accessibleBranchIds)respondError('Gudang tidak ditemukan atau nonaktif',404);
+$branchMarks=implode(',',array_fill(0,count($accessibleBranchIds),'?'));
 $warehouseStmt = $pdo->prepare("SELECT w.id,w.code,w.name,w.branch_id,b.name branch_name,w.is_default
     FROM warehouses w JOIN branches b ON b.id=w.branch_id
-    WHERE w.id=? AND w.is_active=1 AND w.is_system=0 LIMIT 1");
-$warehouseStmt->execute([$warehouseId]);
+    WHERE w.id=? AND w.branch_id IN ($branchMarks) AND w.is_active=1 AND w.is_system=0 LIMIT 1");
+$warehouseStmt->execute(array_merge([$warehouseId],$accessibleBranchIds));
 $warehouse = $warehouseStmt->fetch();
 if (!$warehouse) respondError('Gudang tidak ditemukan atau nonaktif', 404);
-requireAccessibleBranch($pdo, $actor, (string)$warehouse['branch_id']);
 if ($branchId !== 'ALL' && $branchId !== (string)$warehouse['branch_id']) respondError('Gudang bukan milik cabang yang dipilih', 422);
 
 $items = $pdo->query("SELECT id,code,name,unit,category_id,category_name,brand
@@ -46,17 +48,15 @@ $rollback = function(string $itemId, int $delta) use (&$quantities): void {
     if (array_key_exists($itemId, $quantities)) $quantities[$itemId] += $delta;
 };
 
-// Penjualan mengurangi gudang utama. Untuk saldo lampau, penjualan setelah
-// tanggal laporan dikembalikan ke saldo gudang utama terpilih.
-if ((bool)$warehouse['is_default']) {
-    $stmt = $pdo->prepare("SELECT d.item_id,SUM(d.qty) qty
-        FROM sales_invoices i JOIN sales_invoice_items d ON d.invoice_id=i.id
-        JOIN items it ON it.id=d.item_id COLLATE utf8mb4_unicode_ci
-        WHERE i.branch_id=? AND i.date>? AND it.type='Persediaan'
-        GROUP BY d.item_id");
-    $stmt->execute([$warehouse['branch_id'], $date]);
-    foreach ($stmt->fetchAll() as $row) $rollback((string)$row['item_id'], (int)$row['qty']);
-}
+// Penjualan dikembalikan hanya ke gudang aktual yang dipakai oleh tiap baris faktur.
+$stmt = $pdo->prepare("SELECT d.item_id,SUM(d.qty) qty
+    FROM sales_invoices i JOIN sales_invoice_items d ON d.invoice_id=i.id
+    JOIN items it ON it.id=d.item_id COLLATE utf8mb4_unicode_ci
+    WHERE i.branch_id=? AND d.warehouse_id=? AND i.date>? AND it.type='Persediaan'
+      AND COALESCE(i.backdate_reason,'')<>'Input Cepat Historis (stok tidak dipotong)'
+    GROUP BY d.item_id");
+$stmt->execute([$warehouse['branch_id'], $warehouseId, $date]);
+foreach ($stmt->fetchAll() as $row) $rollback((string)$row['item_id'], (int)$row['qty']);
 
 // Penerimaan setelah tanggal laporan belum menjadi bagian dari saldo lampau.
 $receiptStatuses = "'Diterima','Difakturkan','Sebagian'";

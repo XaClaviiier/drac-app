@@ -63,7 +63,7 @@ test('aturan baku Accurate: faktur terhapus dari transaksi dan mutasi aktif teta
   const allData = source('api/endpoints/all-data.php');
   const help = source('src/data/helpArticles.ts');
   assert.match(helpers, /transaction_activity_logs/);
-  assert.match(helpers, /is_voided TINYINT\(1\) NOT NULL DEFAULT 0/);
+  assert.match(helpers, /ensureTableColumn\(\$pdo,'stock_movements','is_voided','TINYINT\(1\) NOT NULL DEFAULT 0/);
   assert.match(invoices, /action_type,reason,snapshot_json/);
   assert.match(invoices, /VALUES\('sales_invoice',\?,\?,'delete'/);
   assert.match(invoices, /UPDATE stock_movements SET is_voided=1/);
@@ -144,10 +144,13 @@ test('stok opname mengikuti Perintah, Hasil, lalu Penyesuaian otomatis', () => {
   assert.match(endpoint, /adjustment_type.*stock_opname/);
   assert.match(endpoint, /system_version/);
   assert.match(endpoint, /stock_opname:post/);
-  assert.match(endpoint, /Hapus Penyesuaian Stok/);
+  assert.match(endpoint, /result_status'\]==='Posted'[\s\S]*?Hasil Stok Opname yang sudah diposting tidak dapat dihapus/);
   assert.match(page, /Perintah → Hasil Penghitungan → Penyesuaian Stok/);
-  assert.match(page, /Hitung #1/);
-  assert.match(page, /Hitung #2/);
+  assert.match(page, />In<\/th>/);
+  assert.match(page, />Out<\/th>/);
+  assert.match(page, />Stok<\/th>/);
+  assert.match(page, />Opname<\/th>/);
+  assert.match(page, />Selisih<\/th>/);
   assert.match(page, /Setujui & Posting/);
 });
 
@@ -207,7 +210,7 @@ test('ledger stok berurutan, dapat direkonsiliasi, dan edit header tidak membuat
   const allData = source('api/endpoints/all-data.php');
   const items = source('src/pages/ItemsAndServices.tsx');
   assert.match(helpers, /movement_sequence BIGINT UNSIGNED/);
-  assert.match(helpers, /occurred_at DATETIME/);
+  assert.match(helpers, /ensureTableColumn\(\$pdo,'stock_movements','occurred_at','DATETIME NULL/);
   assert.match(helpers, /reversal_of_id/);
   assert.match(helpers, /correction_group_id/);
   assert.match(helpers, /idempotency_key/);
@@ -309,10 +312,10 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /Aktifkan No\. Seri\/Produksi/);
   assert.match(page, /grid-cols-2 gap-2 border-t/);
   const receiptEndpoint = source('api/endpoints/goods-receipts.php');
-  assert.match(receiptEndpoint, /unit_price DECIMAL/);
-  assert.match(receiptEndpoint, /discount_percent DECIMAL/);
-  assert.match(receiptEndpoint, /technician_id VARCHAR/);
-  assert.match(receiptEndpoint, /is_deferred TINYINT/);
+  assert.match(receiptEndpoint, /ensureTableColumn\(\$pdo,'goods_receipt_items','unit_price','DECIMAL/);
+  assert.match(receiptEndpoint, /ensureTableColumn\(\$pdo,'goods_receipt_items','discount_percent','DECIMAL/);
+  assert.match(receiptEndpoint, /ensureTableColumn\(\$pdo,'goods_receipt_items','technician_id','VARCHAR/);
+  assert.match(receiptEndpoint, /ensureTableColumn\(\$pdo,'goods_receipt_items','is_deferred','TINYINT/);
   assert.match(receiptEndpoint, /Alasan penangguhan wajib diisi/);
   const purchaseInvoice = source('src/pages/PurchaseInvoices.tsx');
   assert.match(purchaseInvoice, /unitPrice: it\.unitPrice \?\?/);

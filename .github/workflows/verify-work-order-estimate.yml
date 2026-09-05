@@ -16,6 +16,8 @@ jobs:
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: drac_verify
+        ports:
+          - 3306:3306
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
           --health-interval=10s
@@ -23,6 +25,12 @@ jobs:
           --health-retries=12
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run check
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
@@ -50,3 +58,379 @@ jobs:
               AND COLUMN_NAME IN ('estimated_duration_minutes', 'work_started_at', 'estimated_completion_at');
           ")
           test "$COLUMN_COUNT" = "3"
+
+      - name: Create pre-migration stock opname tables
+        run: |
+          docker exec "${{ job.services.mysql.id }}" mysql -uroot -proot drac_verify -e "
+            CREATE TABLE stock_count_orders (
+              id VARCHAR(30) NOT NULL PRIMARY KEY,
+              start_date DATE NOT NULL,
+              end_date DATE NULL,
+              category_id VARCHAR(20) NULL,
+              include_zero_unused TINYINT(1) NULL DEFAULT NULL,
+              status VARCHAR(30) NOT NULL DEFAULT 'Menunggu Eksekusi'
+            ) ENGINE=InnoDB;
+            CREATE TABLE stock_count_result_items (
+              id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+              result_id VARCHAR(30) NOT NULL,
+              item_id VARCHAR(20) NOT NULL,
+              system_quantity INT NOT NULL DEFAULT 0,
+              system_version INT NULL DEFAULT NULL,
+              movement_in INT NULL DEFAULT NULL,
+              is_manual INT NULL DEFAULT NULL,
+              UNIQUE KEY uq_stock_count_result_item (result_id,item_id)
+            ) ENGINE=InnoDB;
+            CREATE TABLE stock_count_results (
+              id VARCHAR(30) NOT NULL PRIMARY KEY,
+              order_id VARCHAR(30) NOT NULL,
+              result_date DATE NOT NULL,
+              status VARCHAR(20) NOT NULL DEFAULT 'Draft',
+              adjustment_id VARCHAR(30) NULL
+            ) ENGINE=InnoDB;
+            CREATE TABLE app_schema_migrations (
+              migration_key VARCHAR(100) NOT NULL PRIMARY KEY,
+              applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB;
+            INSERT INTO stock_count_orders(id,start_date,end_date,category_id) VALUES
+              ('SC-LEGACY','2026-08-01',NULL,NULL),
+              ('SC-PARTIAL','2026-08-07',NULL,NULL);
+            INSERT INTO stock_count_results(id,order_id,result_date) VALUES('SCR-LEGACY','SC-LEGACY','2026-08-05');
+            INSERT INTO stock_count_result_items(result_id,item_id,system_quantity,system_version,movement_in,is_manual)
+              VALUES('SCR-LEGACY','ITEM-PARTIAL',0,NULL,NULL,NULL);
+          "
+
+      - name: Verify stock opname migration and rollback on MySQL 5.7
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          ADOPTED_DEFINITION_BEFORE=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT GROUP_CONCAT(CONCAT(TABLE_NAME,'.',COLUMN_NAME,':',COLUMN_TYPE,':',IS_NULLABLE,':',COALESCE(COLUMN_DEFAULT,'<NULL>'),':',EXTRA,':',COALESCE(CHARACTER_SET_NAME,''),':',COALESCE(COLLATION_NAME,''),':',COLUMN_COMMENT) ORDER BY TABLE_NAME,COLUMN_NAME SEPARATOR '|')
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA='drac_verify' AND (
+              (TABLE_NAME='stock_count_orders' AND COLUMN_NAME IN ('end_date','include_zero_unused')) OR
+              (TABLE_NAME='stock_count_result_items' AND COLUMN_NAME IN ('system_version','movement_in','is_manual'))
+            );
+          ")
+          ADOPTED_VALUES_BEFORE=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT CONCAT(
+              (SELECT COUNT(*) FROM stock_count_orders WHERE end_date IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_orders WHERE include_zero_unused IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_result_items WHERE system_version IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_result_items WHERE movement_in IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_result_items WHERE is_manual IS NULL)
+            );
+          ")
+          for run in 1 2; do
+            docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_verify < database/migrate_stock_opname_history.sql
+          done
+          COLUMN_COUNT=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA='drac_verify' AND (
+              (TABLE_NAME='stock_count_orders' AND COLUMN_NAME IN ('end_date','include_zero_unused')) OR
+              (TABLE_NAME='stock_count_result_items' AND COLUMN_NAME IN ('movement_in','movement_out','is_manual','added_by','added_at'))
+            );
+          ")
+          SYSTEM_VERSION_COUNT=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA='drac_verify' AND TABLE_NAME='stock_count_result_items' AND COLUMN_NAME='system_version';
+          ")
+          INDEX_DEF=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT CONCAT(MIN(NON_UNIQUE), ':', GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX), ':', SUM(SUB_PART IS NOT NULL))
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA='drac_verify' AND TABLE_NAME='stock_count_result_items' AND INDEX_NAME='uq_stock_count_result_item';
+          ")
+          BACKFILLED_DATE=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT end_date FROM stock_count_orders WHERE id='SC-LEGACY';")
+          PARTIAL_DATE=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT end_date FROM stock_count_orders WHERE id='SC-PARTIAL';")
+          END_DATE_NULLABLE=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='drac_verify' AND TABLE_NAME='stock_count_orders' AND COLUMN_NAME='end_date';")
+          STOCK_OPNAME_COLUMN_DEF=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT GROUP_CONCAT(CONCAT(COLUMN_NAME,':',COLUMN_TYPE,':',IS_NULLABLE,':',COALESCE(COLUMN_DEFAULT,'NULL')) ORDER BY FIELD(COLUMN_NAME,'include_zero_unused','system_version','movement_in','movement_out','is_manual') SEPARATOR '|')
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA='drac_verify' AND (
+              (TABLE_NAME='stock_count_orders' AND COLUMN_NAME='include_zero_unused') OR
+              (TABLE_NAME='stock_count_result_items' AND COLUMN_NAME IN ('system_version','movement_in','movement_out','is_manual'))
+            );
+          ")
+          PARTIAL_NULL_COUNT=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT COUNT(*) FROM stock_count_result_items
+            WHERE system_version IS NULL OR movement_in IS NULL OR movement_out IS NULL OR is_manual IS NULL;
+          ")
+          test "$COLUMN_COUNT" = "7"
+          test "$SYSTEM_VERSION_COUNT" = "1"
+          test "$INDEX_DEF" = "0:result_id,item_id:0"
+          test "$BACKFILLED_DATE" = "2026-08-05"
+          test "$PARTIAL_DATE" = "2026-08-07"
+          test "$END_DATE_NULLABLE" = "NO"
+          test "$STOCK_OPNAME_COLUMN_DEF" = "include_zero_unused:tinyint(1):NO:1|system_version:bigint(20) unsigned:NO:0|movement_in:bigint(20) unsigned:NO:0|movement_out:bigint(20) unsigned:NO:0|is_manual:tinyint(1):NO:0"
+          test "$PARTIAL_NULL_COUNT" = "0"
+
+          for run in 1 2; do
+            docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_verify < database/rollback_stock_opname_history.sql
+          done
+          ROLLED_BACK=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA='drac_verify' AND COLUMN_NAME IN ('end_date','include_zero_unused','system_version','movement_in','movement_out','is_manual','added_by','added_at')
+              AND TABLE_NAME IN ('stock_count_orders','stock_count_result_items');
+          ")
+          ADOPTED_INDEX_DEF=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT CONCAT(MIN(NON_UNIQUE), ':', GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX), ':', SUM(SUB_PART IS NOT NULL))
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA='drac_verify' AND TABLE_NAME='stock_count_result_items' AND INDEX_NAME='uq_stock_count_result_item';
+          ")
+          test "$ROLLED_BACK" = "5"
+          test "$ADOPTED_INDEX_DEF" = "0:result_id,item_id:0"
+          ADOPTED_DEFINITION_AFTER=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT GROUP_CONCAT(CONCAT(TABLE_NAME,'.',COLUMN_NAME,':',COLUMN_TYPE,':',IS_NULLABLE,':',COALESCE(COLUMN_DEFAULT,'<NULL>'),':',EXTRA,':',COALESCE(CHARACTER_SET_NAME,''),':',COALESCE(COLLATION_NAME,''),':',COLUMN_COMMENT) ORDER BY TABLE_NAME,COLUMN_NAME SEPARATOR '|')
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA='drac_verify' AND (
+              (TABLE_NAME='stock_count_orders' AND COLUMN_NAME IN ('end_date','include_zero_unused')) OR
+              (TABLE_NAME='stock_count_result_items' AND COLUMN_NAME IN ('system_version','movement_in','is_manual'))
+            );
+          ")
+          ADOPTED_VALUES_AFTER=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "
+            SELECT CONCAT(
+              (SELECT COUNT(*) FROM stock_count_orders WHERE end_date IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_orders WHERE include_zero_unused IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_result_items WHERE system_version IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_result_items WHERE movement_in IS NULL),':',
+              (SELECT COUNT(*) FROM stock_count_result_items WHERE is_manual IS NULL)
+            );
+          ")
+          test "$ADOPTED_DEFINITION_AFTER" = "$ADOPTED_DEFINITION_BEFORE"
+          test "$ADOPTED_VALUES_AFTER" = "$ADOPTED_VALUES_BEFORE"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='drac_verify' AND TABLE_NAME IN ('inventory_operation_locks','inventory_import_batches');")" = "2"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='schema_20260904_historical_stock_opname_v2';")" = "0"
+
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_verify < database/migrate_stock_opname_history.sql
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT end_date FROM stock_count_orders WHERE id='SC-LEGACY';")" = "2026-08-05"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT COUNT(*) FROM stock_count_orders WHERE id='SC-LEGACY';")" = "1"
+
+      - name: Verify fresh stock opname migration ownership rollback
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "
+            CREATE DATABASE drac_fresh;
+            USE drac_fresh;
+            CREATE TABLE stock_count_orders(id VARCHAR(30) PRIMARY KEY,start_date DATE NOT NULL,category_id VARCHAR(20) NULL) ENGINE=InnoDB;
+            CREATE TABLE stock_count_results(id VARCHAR(30) PRIMARY KEY,order_id VARCHAR(30) NOT NULL,result_date DATE NOT NULL) ENGINE=InnoDB;
+            CREATE TABLE stock_count_result_items(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,result_id VARCHAR(30) NOT NULL,item_id VARCHAR(20) NOT NULL,system_quantity INT NOT NULL DEFAULT 0) ENGINE=InnoDB;
+          "
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_fresh < database/migrate_stock_opname_history.sql
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_fresh < database/rollback_stock_opname_history.sql
+          FRESH_REMAINING_COLUMNS=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_fresh -e "
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA='drac_fresh' AND TABLE_NAME IN ('stock_count_orders','stock_count_result_items')
+              AND COLUMN_NAME IN ('end_date','include_zero_unused','system_version','movement_in','movement_out','is_manual','added_by','added_at');
+          ")
+          test "$FRESH_REMAINING_COLUMNS" = "0"
+          FRESH_INDEX_COUNT=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_fresh -e "
+            SELECT COUNT(*) FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA='drac_fresh' AND TABLE_NAME='stock_count_result_items' AND INDEX_NAME='uq_stock_count_result_item';
+          ")
+          test "$FRESH_INDEX_COUNT" = "0"
+
+      - name: Verify runtime API bootstrap on MySQL 5.7
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "CREATE DATABASE drac_runtime CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_runtime < database/dokterac_schema.sql
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";ensureApiSupportTables($pdo);ensureApiSupportTables($pdo);'
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_runtime -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='drac_runtime' AND TABLE_NAME='stock_count_result_items' AND COLUMN_NAME IN ('system_version','movement_in','movement_out','is_manual','added_by','added_at');")" = "6"
+
+      - name: Execute inventory endpoint schema prologues on MySQL 5.7
+        run: |
+          set -euo pipefail
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/goods-receipts.php";' >/dev/null
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/warehouse-transfers.php";' >/dev/null
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/sales-invoices.php";' >/dev/null
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_runtime;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1,"role_id"=>"ROLE-OWNER","branch_id"=>""];$method="GET";$id=null;require "api/endpoints/all-data.php";' >/dev/null
+
+      - name: Verify legacy inventory ledger remediation on MySQL 5.7
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "DROP DATABASE IF EXISTS drac_ledger_fixture; CREATE DATABASE drac_ledger_fixture CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          DB_HOST=127.0.0.1 DB_NAME=drac_ledger_fixture DB_USER=root DB_PASSWORD=root php tests/fixtures/inventory-ledger-remediation.php
+
+      - name: Verify standalone migration then API ledger bootstrap
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "CREATE DATABASE drac_rollout CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_rollout < database/dokterac_schema.sql
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_rollout < database/migrate_stock_opname_history.sql
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_rollout;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";ensureApiSupportTablesVersioned($pdo,"api_support_20260903_historical_stock_opname_v1");'
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_rollout -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key IN ('schema_20260904_historical_stock_opname_v2','api_support_20260903_historical_stock_opname_v1','backfill_sales_stock_journal_20260820_v1','backfill_receipt_stock_journal_20260820_v1');")" = "4"
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_rollout < database/rollback_stock_opname_history.sql
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_rollout -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='api_support_20260903_historical_stock_opname_v1';")" = "0"
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_rollout;charset=utf8mb4","root","root",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);require "api/helpers.php";ensureApiSupportTablesVersioned($pdo,"api_support_20260903_historical_stock_opname_v1");'
+          POST_ROLLBACK_API_MARKER=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_rollout -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='api_support_20260903_historical_stock_opname_v1';")
+          test "$POST_ROLLBACK_API_MARKER" = "1"
+
+      - name: Reject negative partial stock opname schema and recover
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "
+            CREATE DATABASE drac_negative;
+            USE drac_negative;
+            CREATE TABLE stock_count_orders(id VARCHAR(30) PRIMARY KEY,start_date DATE NOT NULL,end_date DATE NULL,category_id VARCHAR(20) NULL,include_zero_unused INT NULL,status VARCHAR(30) NOT NULL DEFAULT 'Menunggu Eksekusi') ENGINE=InnoDB;
+            CREATE TABLE stock_count_results(id VARCHAR(30) PRIMARY KEY,order_id VARCHAR(30) NOT NULL,result_date DATE NOT NULL) ENGINE=InnoDB;
+            CREATE TABLE stock_count_result_items(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,result_id VARCHAR(30) NOT NULL,item_id VARCHAR(20) NOT NULL,system_quantity INT NOT NULL DEFAULT 0,system_version BIGINT NULL,movement_in BIGINT NULL,movement_out BIGINT NULL,is_manual INT NULL,added_by VARCHAR(20) NULL) ENGINE=InnoDB;
+            CREATE TABLE app_schema_migrations(migration_key VARCHAR(100) PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB;
+            INSERT INTO stock_count_orders(id,start_date,end_date,category_id,include_zero_unused) VALUES('SC-NEG','2026-08-01','2026-08-01',NULL,2);
+            INSERT INTO stock_count_result_items(result_id,item_id,system_version,movement_in,movement_out,is_manual) VALUES('SCR-NEG','ITEM-NEG',-1,-1,-1,2);
+          "
+          if docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_negative < database/migrate_stock_opname_history.sql; then
+            echo "Migration harus gagal ketika snapshot berisi nilai negatif"
+            exit 1
+          fi
+          NEGATIVE_ADDED_AT_COUNT=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_negative -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='drac_negative' AND TABLE_NAME='stock_count_result_items' AND COLUMN_NAME='added_at';")
+          test "$NEGATIVE_ADDED_AT_COUNT" = "0"
+          docker exec "$MYSQL_ID" mysql -uroot -proot drac_negative -e "UPDATE stock_count_orders SET include_zero_unused=1; UPDATE stock_count_result_items SET system_version=0,movement_in=0,movement_out=0,is_manual=0;"
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_negative < database/migrate_stock_opname_history.sql
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_negative -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='schema_20260904_historical_stock_opname_v2';")" = "1"
+
+      - name: Reject an incompatible pre-existing stock opname index without replacing it
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "
+            CREATE DATABASE drac_bad_index;
+            USE drac_bad_index;
+            CREATE TABLE stock_count_orders(id VARCHAR(30) PRIMARY KEY,start_date DATE NOT NULL,category_id VARCHAR(20) NULL) ENGINE=InnoDB;
+            CREATE TABLE stock_count_results(id VARCHAR(30) PRIMARY KEY,order_id VARCHAR(30) NOT NULL,result_date DATE NOT NULL) ENGINE=InnoDB;
+            CREATE TABLE stock_count_result_items(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,result_id VARCHAR(30) NOT NULL,item_id VARCHAR(20) NOT NULL,system_quantity INT NOT NULL DEFAULT 0,KEY uq_stock_count_result_item (item_id)) ENGINE=InnoDB;
+          "
+          if docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_bad_index < database/migrate_stock_opname_history.sql; then
+            echo "Migration harus gagal untuk index asing bernama canonical"
+            exit 1
+          fi
+          BAD_INDEX_DEF=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_bad_index -e "
+            SELECT CONCAT(MIN(NON_UNIQUE), ':', GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX), ':', SUM(SUB_PART IS NOT NULL))
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA='drac_bad_index' AND TABLE_NAME='stock_count_result_items' AND INDEX_NAME='uq_stock_count_result_item';
+          ")
+          test "$BAD_INDEX_DEF" = "1:item_id:0"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_bad_index -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='drac_bad_index' AND TABLE_NAME='stock_count_orders' AND COLUMN_NAME='end_date';")" = "0"
+
+      - name: Verify historical movement aggregate above signed INT
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot drac_negative -e "CREATE TABLE historical_movement_probe(quantity INT UNSIGNED NOT NULL); INSERT INTO historical_movement_probe(quantity) VALUES(1500000000),(1500000000);"
+          HISTORICAL_SUM=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_negative -e "SELECT SUM(quantity) FROM historical_movement_probe;")
+          test "$HISTORICAL_SUM" = "3000000000"
+          php -r 'require "api/helpers.php";if(parseBoundedDecimalInteger("3000000000","0","9007199254740991","In")!==3000000000)exit(1);'
+
+      - name: Reject duplicate legacy stock opname items
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "
+            CREATE DATABASE drac_duplicate;
+            USE drac_duplicate;
+            CREATE TABLE stock_count_orders(id VARCHAR(30) PRIMARY KEY,start_date DATE NOT NULL,category_id VARCHAR(20) NULL) ENGINE=InnoDB;
+            CREATE TABLE stock_count_results(id VARCHAR(30) PRIMARY KEY,order_id VARCHAR(30) NOT NULL,result_date DATE NOT NULL) ENGINE=InnoDB;
+            CREATE TABLE stock_count_result_items(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,result_id VARCHAR(30) NOT NULL,item_id VARCHAR(20) NOT NULL,system_quantity INT NOT NULL DEFAULT 0) ENGINE=InnoDB;
+            INSERT INTO stock_count_result_items(result_id,item_id) VALUES('SCR-DUP','ITEM-1'),('SCR-DUP','ITEM-1');
+          "
+          if docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_duplicate < database/migrate_stock_opname_history.sql; then
+            echo "Migration harus gagal ketika data legacy berisi duplikat"
+            exit 1
+          fi
+          DUPLICATE_END_DATE_COUNT=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_duplicate -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='drac_duplicate' AND TABLE_NAME='stock_count_orders' AND COLUMN_NAME='end_date';")
+          test "$DUPLICATE_END_DATE_COUNT" = "0"
+
+      - name: Verify occurred_at edit bumps stock version
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot drac_verify -e "
+            CREATE TABLE warehouse_stocks(warehouse_id VARCHAR(20) NOT NULL,item_id VARCHAR(20) NOT NULL,quantity INT NOT NULL DEFAULT 0,stock_version BIGINT UNSIGNED NOT NULL DEFAULT 0,PRIMARY KEY(warehouse_id,item_id)) ENGINE=InnoDB;
+            CREATE TABLE stock_movements(id VARCHAR(30) PRIMARY KEY,item_id VARCHAR(20) NOT NULL,source_warehouse_id VARCHAR(20) NULL,destination_warehouse_id VARCHAR(20) NULL,reference_type VARCHAR(30) NOT NULL,reference_id VARCHAR(30) NOT NULL,is_voided TINYINT(1) NOT NULL DEFAULT 0) ENGINE=InnoDB;
+            INSERT INTO warehouse_stocks(warehouse_id,item_id,quantity,stock_version) VALUES('WH-1','ITEM-1',8,7),('WH-2','ITEM-1',8,3),('WH-VOID','ITEM-2',0,11);
+            INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,reference_type,reference_id,is_voided) VALUES
+              ('MOV-1','ITEM-1','WH-1',NULL,'sales_invoice','SI-1',0),
+              ('MOV-2','ITEM-1',NULL,'WH-2','goods_receipt','GR-1',0),
+              ('MOV-VOID','ITEM-2','WH-VOID',NULL,'sales_invoice','SI-1',1);
+          "
+          php -r '$pdo=new PDO("mysql:host=127.0.0.1;dbname=drac_verify","root","root");require "api/helpers.php";bumpStockVersionsForMovementReference($pdo,"sales_invoice","SI-1");bumpStockVersionsForMovementReference($pdo,"goods_receipt","GR-1");'
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT GROUP_CONCAT(stock_version ORDER BY warehouse_id) FROM warehouse_stocks;")" = "8,4,11"
+
+      - name: Verify production-shaped stock opname posting and cancellation under concurrency
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot drac_verify -e "
+            CREATE TABLE roles(id VARCHAR(20) PRIMARY KEY,code VARCHAR(20),name VARCHAR(50),permissions LONGTEXT,is_active TINYINT(1) NOT NULL) ENGINE=InnoDB;
+            CREATE TABLE users(id VARCHAR(20) PRIMARY KEY,role_id VARCHAR(20),is_active TINYINT(1) NOT NULL,is_owner TINYINT(1) NOT NULL,branch_id VARCHAR(20)) ENGINE=InnoDB;
+            CREATE TABLE user_branch_access(user_id VARCHAR(20) NOT NULL,branch_id VARCHAR(20) NOT NULL,PRIMARY KEY(user_id,branch_id)) ENGINE=InnoDB;
+            CREATE TABLE stock_adjustments(id VARCHAR(30) PRIMARY KEY,status VARCHAR(20) NOT NULL) ENGINE=InnoDB;
+            INSERT INTO roles(id,code,name,permissions,is_active) VALUES
+              ('ROLE-LOCK-A','SUP-A','Supervisor A','[\"stock_opname:post\",\"stock_adjustment:edit\"]',1),
+              ('ROLE-LOCK-B','SUP-B','Supervisor B','[\"stock_opname:post\",\"stock_adjustment:edit\"]',1);
+            INSERT INTO users(id,role_id,is_active,is_owner,branch_id) VALUES('USER-A','ROLE-LOCK-A',1,0,'BR-1'),('USER-B','ROLE-LOCK-B',1,0,'BR-1');
+            INSERT INTO user_branch_access(user_id,branch_id) VALUES('USER-A','BR-1'),('USER-B','BR-1');
+            INSERT INTO stock_count_orders(id,start_date,end_date,category_id,status) VALUES('SC-LOCK','2026-08-01','2026-08-05',NULL,'Dalam Penghitungan');
+            INSERT INTO stock_adjustments(id,status) VALUES('ADJ-LOCK','Draft');
+            INSERT INTO stock_count_results(id,order_id,result_date,status,adjustment_id) VALUES('SCR-LOCK','SC-LOCK','2026-08-05','Draft','ADJ-LOCK');
+          "
+          SIGNAL_DIR="$RUNNER_TEMP/stock-opname-lock-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$SIGNAL_DIR"
+          php tests/fixtures/stock-opname-lock-worker.php post USER-A,USER-B SC-LOCK SCR-LOCK ADJ-LOCK "$SIGNAL_DIR" >post-worker.log 2>&1 &
+          FIRST_PID=$!
+          for attempt in $(seq 1 200); do
+            test -f "$SIGNAL_DIR/post-ready" && break
+            kill -0 "$FIRST_PID" 2>/dev/null || { cat post-worker.log; exit 1; }
+            sleep 0.05
+          done
+          test -f "$SIGNAL_DIR/post-ready"
+          POST_CONNECTION=$(cat "$SIGNAL_DIR/post-ready")
+
+          php tests/fixtures/stock-opname-lock-worker.php observe-without-mutex USER-A SC-LOCK SCR-LOCK ADJ-LOCK "$SIGNAL_DIR"
+          NEGATIVE_CONTROL=$(cat "$SIGNAL_DIR/negative-control")
+          test "$NEGATIVE_CONTROL" = "Draft:Draft:8"
+
+          php tests/fixtures/stock-opname-lock-worker.php cancel USER-B,USER-A SC-LOCK SCR-LOCK ADJ-LOCK "$SIGNAL_DIR" >/dev/null 2>cancel-worker.log &
+          SECOND_PID=$!
+          for attempt in $(seq 1 200); do
+            test -f "$SIGNAL_DIR/cancel-attempting" && break
+            kill -0 "$SECOND_PID" 2>/dev/null || { cat cancel-worker.log; exit 1; }
+            sleep 0.05
+          done
+          test -f "$SIGNAL_DIR/cancel-attempting"
+          CANCEL_CONNECTION=$(cat "$SIGNAL_DIR/cancel-attempting")
+          LOCK_WAIT_OBSERVED=0
+          for attempt in $(seq 1 200); do
+            LOCK_WAIT_OBSERVED=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot -e "
+              SELECT COUNT(*)
+              FROM INFORMATION_SCHEMA.INNODB_LOCK_WAITS w
+              JOIN INFORMATION_SCHEMA.INNODB_TRX requester ON requester.trx_id=w.requesting_trx_id
+              JOIN INFORMATION_SCHEMA.INNODB_TRX blocker ON blocker.trx_id=w.blocking_trx_id
+              WHERE requester.trx_mysql_thread_id=${CANCEL_CONNECTION}
+                AND blocker.trx_mysql_thread_id=${POST_CONNECTION};
+            ")
+            test "$LOCK_WAIT_OBSERVED" = "1" && break
+            kill -0 "$SECOND_PID" 2>/dev/null || { cat cancel-worker.log; exit 1; }
+            sleep 0.05
+          done
+          test "$LOCK_WAIT_OBSERVED" = "1"
+          test ! -f "$SIGNAL_DIR/cancel-acquired"
+          touch "$SIGNAL_DIR/release"
+          wait "$FIRST_PID"
+          set +e
+          wait "$SECOND_PID"
+          CANCEL_STATUS=$?
+          set -e
+          test "$CANCEL_STATUS" = "3"
+          grep -q 'linked-stock-opname-adjustment' cancel-worker.log
+          CANCEL_OBSERVED=$(cat "$SIGNAL_DIR/cancel-observed")
+          test "$CANCEL_OBSERVED" = "Posted:Posted"
+          FINAL_RESULT_STATUS=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT status FROM stock_count_results WHERE id='SCR-LOCK';")
+          FINAL_ADJUSTMENT_STATUS=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT status FROM stock_adjustments WHERE id='ADJ-LOCK';")
+          FINAL_QUANTITY=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_verify -e "SELECT quantity FROM warehouse_stocks WHERE warehouse_id='WH-1' AND item_id='ITEM-1';")
+          test "$FINAL_RESULT_STATUS" = "Posted"
+          test "$FINAL_ADJUSTMENT_STATUS" = "Posted"
+          test "$FINAL_QUANTITY" = "9"

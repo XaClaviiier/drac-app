@@ -498,16 +498,16 @@ const desktopGroups = [
       },
       {
         label: "Kartu Stok",
-        path: "/warehouses",
+        path: "/items?mode=stock-card",
         icon: History,
         perm: "item:view",
         tone: "purple",
       },
       {
-        label: "Stok Minimum",
-        path: "/items",
+        label: "Stok Kosong / Minus",
+        path: "/reports/inventory?availability=ATTENTION",
         icon: ChartNoAxesColumnIncreasing,
-        perm: "item:view",
+        perm: "report:view",
         tone: "purple",
       },
       {

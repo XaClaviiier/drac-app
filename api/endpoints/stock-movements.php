@@ -8,6 +8,16 @@ if($method==='GET'){
     $dateTo=trim((string)($_GET['dateTo']??''));
     $search=trim((string)($_GET['search']??''));
     $validDate=fn($value)=>$value===''||preg_match('/^\d{4}-\d{2}-\d{2}$/',$value);
+    $classifyMovement=static function(array $row,bool $sourceVisible,bool $destinationVisible):array{
+        $qty=(int)$row['quantity'];$type=(string)$row['movement_type'];
+        $incoming=$qty>=0
+            ?($destinationVisible&&$type!=='transfer_send'?$qty:0)
+            :($sourceVisible&&$type!=='transfer_receive'?-$qty:0);
+        $outgoing=$qty>=0
+            ?($sourceVisible&&$type!=='transfer_receive'?$qty:0)
+            :($destinationVisible&&$type!=='transfer_send'?-$qty:0);
+        return [$incoming,$outgoing];
+    };
     if(!$validDate($dateFrom)||!$validDate($dateTo)||($dateFrom!==''&&$dateTo!==''&&$dateFrom>$dateTo))respondError('Periode mutasi tidak valid',422);
     if($warehouseId!==''){$warehouseAccess=$pdo->prepare("SELECT branch_id FROM warehouses WHERE id=? AND is_active=1");$warehouseAccess->execute([$warehouseId]);$warehouseBranch=$warehouseAccess->fetchColumn();if($warehouseBranch===false||!isset($allowed[(string)$warehouseBranch]))respondError('Gudang tidak ditemukan atau tidak dapat diakses',403);}
     if(($_GET['reconcile']??'')==='1'){
@@ -50,13 +60,9 @@ if($method==='GET'){
     foreach($allRows as $row){
         $sourceAllowed=!empty($row['source_branch_id'])&&isset($allowed[(string)$row['source_branch_id']]);
         $destinationAllowed=!empty($row['destination_branch_id'])&&isset($allowed[(string)$row['destination_branch_id']]);
-        if($warehouseId!==''){
-            $incoming=(string)$row['destination_warehouse_id']===$warehouseId&&$row['movement_type']!=='transfer_send'?(int)$row['quantity']:0;
-            $outgoing=(string)$row['source_warehouse_id']===$warehouseId&&$row['movement_type']!=='transfer_receive'?(int)$row['quantity']:0;
-        }else{
-            $incoming=$destinationAllowed&&$row['movement_type']!=='transfer_send'?(int)$row['quantity']:0;
-            $outgoing=$sourceAllowed&&$row['movement_type']!=='transfer_receive'?(int)$row['quantity']:0;
-        }
+        $sourceVisible=$warehouseId!==''?(string)$row['source_warehouse_id']===$warehouseId:$sourceAllowed;
+        $destinationVisible=$warehouseId!==''?(string)$row['destination_warehouse_id']===$warehouseId:$destinationAllowed;
+        [$incoming,$outgoing]=$classifyMovement($row,$sourceVisible,$destinationVisible);
         if($warehouseId!==''&&$incoming===0&&$outgoing===0)continue;
         $effectiveAt=(string)($row['occurred_at']??$row['created_at']);$rowDate=substr($effectiveAt,0,10);$searchable=strtolower(implode(' ',[$row['movement_type'],$row['notes'],$row['source_name'],$row['destination_name']]));
         $row['running_balance']=$runningBalance;$runningBalance-=$incoming-$outgoing;
@@ -75,23 +81,55 @@ if(($d['action']??'')==='opening_balance_import'){
     $rows=is_array($d['rows']??null)?$d['rows']:[];$date=(string)($d['date']??date('Y-m-d'));$batchKey=preg_replace('/[^A-Z0-9_-]/','',strtoupper((string)($d['batchKey']??'')));
     if(!$rows||count($rows)>5000||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date)||strlen($batchKey)<8)respondError('Data import saldo awal tidak valid',422);
     $marker='OPENING_BALANCE:'.$batchKey;
-    $duplicate=$pdo->prepare("SELECT COUNT(*) FROM stock_movements WHERE notes LIKE ?");$duplicate->execute([$marker.'%']);if((int)$duplicate->fetchColumn()>0)respondError('File/batch saldo awal ini sudah pernah diimport',409);
+    $normalizedRows=[];$seen=[];
+    foreach($rows as $index=>$row){
+        $itemId=trim((string)($row['itemId']??''));$warehouseId=trim((string)($row['warehouseId']??''));$quantityRaw=$row['quantity']??null;
+        if($itemId===''||$warehouseId===''||!is_scalar($quantityRaw)||!preg_match('/^-?\d+$/',(string)$quantityRaw))respondError('Kuantitas saldo awal baris '.($index+1).' tidak valid',422);
+        $quantity=filter_var($quantityRaw,FILTER_VALIDATE_INT,['options'=>['min_range'=>-2147483647,'max_range'=>2147483647]]);
+        if($quantity===false)respondError('Kuantitas saldo awal baris '.($index+1).' di luar batas',422);
+        if($quantity===0)continue;
+        $rowKey=$warehouseId."\0".$itemId;
+        if(isset($seen[$rowKey]))respondError('Barang dan gudang duplikat pada baris '.($index+1),422);
+        $seen[$rowKey]=true;$normalizedRows[]=compact('itemId','warehouseId','quantity');
+    }
+    if(!$normalizedRows)respondError('Tidak ada kuantitas saldo awal yang dapat diproses',422);
+    usort($normalizedRows,static fn(array $a,array $b):int=>strcmp($a['warehouseId']."\0".$a['itemId'],$b['warehouseId']."\0".$b['itemId']));
+    $payloadJson=json_encode(['date'=>$date,'rows'=>$normalizedRows],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    if($payloadJson===false)respondError('Data import saldo awal tidak dapat diproses',422);
+    $payloadHash=hash('sha256',$payloadJson);
     $warehouseStmt=$pdo->prepare("SELECT id,branch_id,is_active FROM warehouses WHERE id=?");$itemStmt=$pdo->prepare("SELECT id,code,name,type,is_active FROM items WHERE id=?");
     $pdo->beginTransaction();
     try{
+        lockInventoryMutation($pdo);
+        $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:create');
+        $actor=$authorization['actor'];
+        assertLockedInventoryOwnerOrAdministrator($authorization);
+        $lockedWarehouseMap=lockActiveInventoryWarehouses($pdo,array_column($normalizedRows,'warehouseId'));
+        $batchStmt=$pdo->prepare("SELECT payload_sha256,status,row_count,detail_json FROM inventory_import_batches WHERE batch_key=? FOR UPDATE");$batchStmt->execute([$batchKey]);$existingBatch=$batchStmt->fetch();
+        if($existingBatch){
+            if(!hash_equals((string)$existingBatch['payload_sha256'],$payloadHash))throw new DomainException('Batch saldo awal sudah dipakai dengan data berbeda',409);
+            if((string)$existingBatch['status']!=='completed')throw new DomainException('Batch saldo awal sedang diproses',409);
+            $detail=json_decode((string)($existingBatch['detail_json']??''),true);$detail=is_array($detail)?$detail:['batchKey'=>$batchKey,'created'=>(int)$existingBatch['row_count']];
+            $pdo->commit();respondSuccess($detail,'Saldo awal stok sudah pernah diimport');
+        }
+        $duplicate=$pdo->prepare("SELECT COUNT(*) FROM stock_movements WHERE LEFT(notes,CHAR_LENGTH(?))=?");$duplicate->execute([$marker,$marker]);
+        if((int)$duplicate->fetchColumn()>0)throw new DomainException('File/batch saldo awal ini sudah pernah diimport',409);
+        $claim=$pdo->prepare("INSERT INTO inventory_import_batches(batch_key,payload_sha256,status,import_type,effective_date,created_by) VALUES(?,?,'processing','opening_balance',?,?)");
+        $claim->execute([$batchKey,$payloadHash,$date,$actor['id']]);
         $created=0;
-        foreach($rows as $index=>$row){$itemId=(string)($row['itemId']??'');$warehouseId=(string)($row['warehouseId']??'');$quantity=(int)($row['quantity']??0);if($quantity===0)continue;
-            $warehouseStmt->execute([$warehouseId]);$warehouse=$warehouseStmt->fetch();if(!$warehouse||!(bool)$warehouse['is_active'])throw new InvalidArgumentException('Gudang baris '.($index+1).' tidak valid');requireAccessibleBranch($pdo,$actor,(string)$warehouse['branch_id']);
+        foreach($normalizedRows as $index=>$row){$itemId=$row['itemId'];$warehouseId=$row['warehouseId'];$quantity=$row['quantity'];
+            $warehouse=$lockedWarehouseMap[$warehouseId]??null;if(!$warehouse)throw new InvalidArgumentException('Gudang baris '.($index+1).' tidak valid');assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);
             $itemStmt->execute([$itemId]);$item=$itemStmt->fetch();if(!$item||$item['type']!=='Persediaan'||!(bool)$item['is_active'])throw new InvalidArgumentException('Barang baris '.($index+1).' tidak valid atau bukan persediaan aktif');
             adjustWarehouseStockAllowNegative($pdo,$warehouseId,(string)$warehouse['branch_id'],$itemId,$quantity);
-            $mid='MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);$notes=$marker.' Saldo awal '.$item['code'];
-            $pdo->prepare("INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,notes,created_by,created_at) VALUES(?,?,NULL,?,?,'adjustment',?,?,CONCAT(?,' 00:00:00'))")->execute([$mid,$itemId,$warehouseId,$quantity,$notes,$actor['id'],$date]);$created++;
+            $notes=$marker.' Saldo awal '.$item['code'];
+            recordStockMovement($pdo,$itemId,$quantity<0?$warehouseId:null,$quantity>0?$warehouseId:null,abs($quantity),'adjustment','opening_balance_import',$batchKey,$batchKey,$notes,(string)$actor['id'],$date.' 00:00:00',null,null,'opening_balance:'.$batchKey.':'.$warehouseId.':'.$itemId);$created++;
         }
-        if($created===0)throw new InvalidArgumentException('Tidak ada kuantitas saldo awal yang dapat diproses');
-        $pdo->commit();respondSuccess(['batchKey'=>$batchKey,'created'=>$created],'Saldo awal stok berhasil diimport');
-    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
+        $detail=['batchKey'=>$batchKey,'created'=>$created];$detailJson=json_encode($detail,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        $pdo->prepare("UPDATE inventory_import_batches SET status='completed',row_count=?,detail_json=?,completed_at=NOW() WHERE batch_key=?")->execute([$created,$detailJson,$batchKey]);
+        $pdo->commit();respondSuccess($detail,'Saldo awal stok berhasil diimport');
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),transactionExceptionStatus($e,422));}
 }
-$qty=(int)($d['quantity']??0);$source=$d['sourceWarehouseId']??'';$destination=$d['destinationWarehouseId']??'';
+$qty=(int)parseBoundedDecimalInteger($d['quantity']??null,'1','2147483647','Kuantitas mutasi');$source=$d['sourceWarehouseId']??'';$destination=$d['destinationWarehouseId']??'';
 if($qty<=0||!$source||!$destination||$source===$destination)respondError('Data mutasi tidak valid',422);
 $warehouseStmt=$pdo->prepare("SELECT id,branch_id,is_active FROM warehouses WHERE id IN (?,?)");$warehouseStmt->execute([$source,$destination]);$warehouseRows=$warehouseStmt->fetchAll();
 if(count($warehouseRows)!==2)respondError('Gudang sumber atau tujuan tidak ditemukan',422);
@@ -99,6 +137,12 @@ $warehouseMap=[];foreach($warehouseRows as $warehouse){if(!(bool)$warehouse['is_
 $itemStmt=$pdo->prepare("SELECT type,is_active FROM items WHERE id=?");$itemStmt->execute([$d['itemId']??'']);$item=$itemStmt->fetch();if(!$item||$item['type']!=='Persediaan'||!(bool)$item['is_active'])respondError('Barang persediaan tidak ditemukan atau nonaktif',422);
 $pdo->beginTransaction();
 try{
+    lockInventoryMutation($pdo);
+    $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:create');
+    $actor=$authorization['actor'];
+    $warehouseMap=lockActiveInventoryWarehouses($pdo,[$source,$destination]);
+    foreach($warehouseMap as $warehouse)assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);
+    lockActiveInventoryItems($pdo,[(string)($d['itemId']??'')]);
     $stmt=$pdo->prepare("SELECT quantity FROM warehouse_stocks WHERE warehouse_id=? AND item_id=? FOR UPDATE");$stmt->execute([$source,$d['itemId']]);$available=(int)($stmt->fetchColumn()?:0);
     if($available<$qty)throw new Exception("Stok sumber tidak mencukupi (tersedia {$available})");
     $sourceBranch=(string)$warehouseMap[$source]['branch_id'];$destinationBranch=(string)$warehouseMap[$destination]['branch_id'];
@@ -106,4 +150,4 @@ try{
     adjustWarehouseStockAllowNegative($pdo,$destination,$destinationBranch,(string)$d['itemId'],$qty);
     $mid=recordStockMovement($pdo,(string)$d['itemId'],$source,$destination,$qty,'transfer','manual_transfer',null,null,(string)($d['notes']??''),(string)$actor['id']);
     $pdo->commit();respondSuccess(['id'=>$mid],'Mutasi stok berhasil');
-}catch(Exception $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
+}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),transactionExceptionStatus($e,422));}

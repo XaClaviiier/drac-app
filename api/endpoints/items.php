@@ -243,7 +243,9 @@ switch ($method) {
         assertItemTextLength($d['oemPartNumber'] ?? '', 100, 'Nomor OEM');
         assertItemTextLength($d['alternatePartNumbers'] ?? '', 500, 'Nomor part alternatif');
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
-        if (!authenticatedUserHasPermission($pdo,$actor,'item:create') && empty($d['provisional'])) respondError('Hak penerimaan hanya boleh membuat barang sementara',403);
+        $isProvisional=!empty($d['provisional']);
+        $createPermission=authenticatedUserHasPermission($pdo,$actor,'item:create')?'item:create':'receipt:create';
+        if(!$isProvisional&&$createPermission!=='item:create')respondError('Hak penerimaan hanya boleh membuat barang sementara',403);
         $branchId = (string)($d['branchId'] ?? '');
         requireAccessibleBranch($pdo, $actor, $branchId);
         $type = (string)($d['type'] ?? '');
@@ -257,6 +259,9 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,$createPermission);
+            $actor=$authorization['actor'];
             $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=? FOR UPDATE");
             $categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
@@ -289,7 +294,6 @@ switch ($method) {
             if($codeCheck->fetch())throw new InvalidArgumentException("Kode {$code} sudah digunakan");
             if($type==='Group'&&empty($d['groupMembers']))throw new InvalidArgumentException('Group/Paket wajib memiliki minimal satu komponen');
             $itemId = $d['id'] ?? generateId();
-            $isProvisional=!empty($d['provisional']);
             $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, product_type_id, product_type_name, type, brand, item_brand_id, vehicle_brand_id, vehicle_brand_name, unit, stock, sellable_stock, purchase_price, selling_price, is_active, verification_status, created_by, verified_by, is_quick_service, description, receipt_description, barcode, oem_part_number, alternate_part_numbers, technical_notes, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $itemId, $code, $name,
@@ -348,10 +352,10 @@ switch ($method) {
             }
             $pdo->commit();
             respondSuccess(['id' => $itemId, 'code'=>$code], 'Barang/Jasa ditambahkan');
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException | DomainException $e) {
             $pdo->rollBack();
-            respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
+            respondError($e->getMessage(), transactionExceptionStatus($e,422));
+        } catch (Throwable $e) {
             $pdo->rollBack();
             respondError('Gagal menambah item', 500, $e->getMessage());
         }
@@ -365,32 +369,23 @@ switch ($method) {
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         if (in_array((string)($d['action']??''), ['verify','merge'], true)) {
             if($d['action']==='verify'){
+                $pdo->beginTransaction();
                 try {
-                    $isAdmin=!empty($actor['is_owner']);
-                    if(!$isAdmin){
-                        $roleStmt=$pdo->prepare("SELECT name FROM roles WHERE id=? LIMIT 1");
-                        $roleStmt->execute([$actor['role_id']??'']);
-                        $roleName=(string)($roleStmt->fetchColumn()?:'');
-                        $isAdmin=strtolower(trim($roleName))==='administrator';
-                    }
-                    if(!$isAdmin)throw new DomainException('Verifikasi barang hanya untuk Owner atau Administrator',403);
-                    if($pdo->inTransaction())$pdo->rollBack();
-                    $pdo->beginTransaction();
+                    lockInventoryMutation($pdo);
+                    $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:edit');
+                    assertLockedInventoryOwnerOrAdministrator($authorization);
+                    $actor=$authorization['actor'];
                     $pendingStmt=$pdo->prepare("SELECT id FROM items WHERE id=? AND verification_status='Pending' FOR UPDATE");$pendingStmt->execute([$id]);
                     if(!$pendingStmt->fetchColumn())throw new InvalidArgumentException('Barang tidak ditemukan atau sudah tidak menunggu verifikasi');
                     $pdo->prepare("UPDATE items SET verification_status='Verified',verified_by=? WHERE id=?")->execute([$actor['id']??null,$id]);
-                    try {
-                        $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,user_id,user_name) VALUES (?,'Verified',?,?)")->execute([$id,$actor['id']??null,$actor['name']??$actor['username']??'']);
-                    } catch (Throwable $auditError) {
-                        error_log('item verification audit failed: '.$auditError->getMessage());
-                    }
+                    $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,user_id,user_name) VALUES (?,'Verified',?,?)")->execute([$id,$actor['id']??null,$actor['name']??$actor['username']??'']);
                     $pdo->commit();respondSuccess(null,'Barang berhasil diverifikasi');
                 } catch (DomainException $e) {
                     if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),$e->getCode()?:403);
                 } catch (InvalidArgumentException $e) {
                     if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);
                 } catch (Throwable $e) {
-                    if($pdo->inTransaction())$pdo->rollBack();error_log('item verification failed: '.$e->getMessage());respondError('Verifikasi barang gagal: '.$e->getMessage(),500);
+                    if($pdo->inTransaction())$pdo->rollBack();error_log('item verification failed: '.$e->getMessage());respondError('Verifikasi barang gagal',500);
                 }
             }
             $isAdmin=!empty($actor['is_owner']);
@@ -403,17 +398,32 @@ switch ($method) {
             if($targetId===''||$targetId===$id)respondError('Barang tujuan penggabungan tidak valid',422);
             $pdo->beginTransaction();
             try{
+                lockInventoryMutation($pdo);
+                $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:edit');
+                assertLockedInventoryOwnerOrAdministrator($authorization);
+                $actor=$authorization['actor'];
                 $sourceStmt=$pdo->prepare("SELECT * FROM items WHERE id=? AND verification_status='Pending' FOR UPDATE");$sourceStmt->execute([$id]);$source=$sourceStmt->fetch();
                 $targetStmt=$pdo->prepare("SELECT * FROM items WHERE id=? AND is_active=1 AND verification_status='Verified' FOR UPDATE");$targetStmt->execute([$targetId]);$target=$targetStmt->fetch();
                 if(!$source||!$target)throw new InvalidArgumentException('Barang asal Pending atau barang tujuan terverifikasi tidak ditemukan');
                 if((string)$source['type']!==(string)$target['type'])throw new InvalidArgumentException('Jenis barang asal dan tujuan penggabungan harus sama');
-                foreach(['warehouse_stocks'=>['warehouse_id','quantity','reserved_quantity'],'branch_item_stocks'=>['branch_id','stock','sellable_stock']] as $table=>$cols){
-                    [$scope,$qty,$reserved]=$cols;$rows=$pdo->prepare("SELECT * FROM {$table} WHERE item_id=?");$rows->execute([$id]);
-                    foreach($rows->fetchAll() as $row){$up=$pdo->prepare("INSERT INTO {$table} ({$scope},item_id,{$qty},{$reserved}) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE {$qty}={$qty}+VALUES({$qty}),{$reserved}={$reserved}+VALUES({$reserved})");$up->execute([$row[$scope],$targetId,$row[$qty],$row[$reserved]]);}
-                    $pdo->prepare("DELETE FROM {$table} WHERE item_id=?")->execute([$id]);
-                }
-                foreach(['goods_receipt_items','purchase_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,item_code=?,item_name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
-                foreach(['work_order_services','sales_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,code=?,name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
+                $sourceStockStmt=$pdo->prepare("SELECT item_id FROM warehouse_stocks WHERE item_id=? AND (quantity<>0 OR reserved_quantity<>0) LIMIT 1 FOR UPDATE");
+                $sourceStockStmt->execute([$id]);
+                $sourceBranchStockStmt=$pdo->prepare("SELECT item_id FROM branch_item_stocks WHERE item_id=? AND (stock<>0 OR sellable_stock<>0) LIMIT 1 FOR UPDATE");
+                $sourceBranchStockStmt->execute([$id]);
+                $usageQueries=[
+                    "SELECT item_id FROM stock_movements WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM stock_adjustment_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM stock_count_result_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM goods_receipt_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM purchase_invoice_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM work_order_services WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM sales_invoice_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                ];
+                $sourceWasUsed=(bool)$sourceStockStmt->fetchColumn()||(bool)$sourceBranchStockStmt->fetchColumn();
+                foreach($usageQueries as $usageSql){$usageStmt=$pdo->prepare($usageSql);$usageStmt->execute([$id]);if($usageStmt->fetchColumn()){$sourceWasUsed=true;break;}}
+                if($sourceWasUsed)throw new DomainException('Barang asal sudah pernah digunakan dan tidak dapat digabungkan',409);
+                $pdo->prepare("DELETE FROM warehouse_stocks WHERE item_id=?")->execute([$id]);
+                $pdo->prepare("DELETE FROM branch_item_stocks WHERE item_id=?")->execute([$id]);
                 if(in_array((string)$target['type'],['Jasa','Group'],true)){
                     $pdo->prepare("DELETE FROM item_vehicle_compatibilities WHERE item_id=?")->execute([$targetId]);
                     $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$targetId]);
@@ -435,9 +445,10 @@ switch ($method) {
                 $pdo->prepare("UPDATE items SET product_type_id=COALESCE(product_type_id,?),product_type_name=COALESCE(product_type_name,?),oem_part_number=?,alternate_part_numbers=?,technical_notes=? WHERE id=?")->execute([$sourceProductTypeId,$sourceProductTypeName,$mergedOem?:null,$candidateAlternatePartNumbers,$technicalNotes?implode("\n",$technicalNotes):null,$targetId]);
                 $pdo->prepare("UPDATE items SET is_active=0,verification_status='Merged',merged_into_item_id=?,verified_by=?,stock=0,sellable_stock=0 WHERE id=?")->execute([$targetId,$actor['id']??null,$id]);
                 $pdo->prepare("UPDATE items SET stock=(SELECT COALESCE(SUM(stock),0) FROM branch_item_stocks WHERE item_id=?),sellable_stock=(SELECT COALESCE(SUM(sellable_stock),0) FROM branch_item_stocks WHERE item_id=?) WHERE id=?")->execute([$targetId,$targetId,$targetId]);
-                try{$pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??$actor['username']??'']);}catch(Throwable$auditError){error_log('item merge audit failed: '.$auditError->getMessage());}
-                $pdo->commit();respondSuccess(null,'Barang duplikat berhasil dikonversi dan stok digabungkan');
-            }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('item merge failed: '.$e->getMessage());respondError($e instanceof InvalidArgumentException?$e->getMessage():'Penggabungan barang gagal disimpan. Silakan muat ulang dan coba lagi.',$e instanceof InvalidArgumentException?422:500);}
+                $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??$actor['username']??'']);
+                $pdo->commit();respondSuccess(null,'Barang duplikat belum terpakai berhasil digabungkan');
+            }catch(InvalidArgumentException | DomainException $e){if($pdo->inTransaction())$pdo->rollBack();error_log('item merge failed: '.$e->getMessage());respondError($e->getMessage(),transactionExceptionStatus($e,422));
+            }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('item merge failed: '.$e->getMessage());respondError('Penggabungan barang gagal disimpan. Silakan muat ulang dan coba lagi.',500);}
         }
         $type = (string)($d['type'] ?? '');
         if (!in_array($type, ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'], true)) respondError('Jenis barang/jasa tidak valid', 422);
@@ -450,6 +461,9 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:edit');
+            $actor=$authorization['actor'];
             $currentStmt=$pdo->prepare("SELECT * FROM items WHERE id=? FOR UPDATE");$currentStmt->execute([$id]);$current=$currentStmt->fetch();
             if(!$current)throw new InvalidArgumentException('Barang/Jasa tidak ditemukan');
             $canVerifyFitment=authenticatedUserIsOwnerOrAdministrator($pdo,$actor);
@@ -536,13 +550,10 @@ switch ($method) {
             }
             $pdo->commit();
             respondSuccess(null, 'Item diupdate');
-        } catch (DomainException $e) {
+        } catch (DomainException | InvalidArgumentException $e) {
             $pdo->rollBack();
-            respondError($e->getMessage(), $e->getCode() ?: 403);
-        } catch (InvalidArgumentException $e) {
-            $pdo->rollBack();
-            respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
+            respondError($e->getMessage(), transactionExceptionStatus($e,422));
+        } catch (Throwable $e) {
             $pdo->rollBack();
             respondError('Gagal update item', 500, $e->getMessage());
         }
@@ -553,6 +564,9 @@ switch ($method) {
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:delete');
+            $actor=$authorization['actor'];
             $deleteItemLockStmt = $pdo->prepare("SELECT id FROM items WHERE id=? FOR UPDATE");
             $deleteItemLockStmt->execute([$id]);
             if (!$deleteItemLockStmt->fetchColumn()) throw new DomainException('Barang/jasa tidak ditemukan',404);
@@ -580,7 +594,7 @@ switch ($method) {
             $pdo->commit();
         } catch (DomainException $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError($e->getMessage(),$e->getCode()?:422);
+            respondError($e->getMessage(),transactionExceptionStatus($e,422));
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             respondError('Item gagal dihapus',500,$e->getMessage());

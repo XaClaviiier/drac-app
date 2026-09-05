@@ -1,48 +1,55 @@
 <?php
 runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260902_v3', static function(PDO $pdo): void {
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_id VARCHAR(64) NULL AFTER model_id");
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_name VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id");
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_cc SMALLINT UNSIGNED NULL AFTER generation_name");
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc");
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type");
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code");
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant");
-$pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand");
+foreach ([
+    ['vehicles','generation_id','VARCHAR(64) NULL AFTER model_id'],
+    ['vehicles','generation_name',"VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id"],
+    ['vehicles','engine_cc','SMALLINT UNSIGNED NULL AFTER generation_name'],
+    ['vehicles','engine_type','VARCHAR(20) NULL AFTER engine_cc'],
+    ['vehicles','engine_code','VARCHAR(50) NULL AFTER engine_type'],
+    ['vehicles','variant','VARCHAR(100) NULL AFTER engine_code'],
+    ['vehicles','transmission','VARCHAR(20) NULL AFTER variant'],
+    ['vehicles','hvac_type','VARCHAR(30) NULL AFTER transmission'],
+    ['items','vehicle_brand_id','VARCHAR(64) NULL AFTER brand'],
+    ['items','vehicle_brand_name','VARCHAR(100) NULL AFTER vehicle_brand_id'],
+    ['items','item_brand_id','VARCHAR(64) NULL AFTER brand'],
+] as [$table,$column,$definition]) ensureTableColumn($pdo,$table,$column,$definition);
 $pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 $pdo->exec("CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_from SMALLINT UNSIGNED NULL AFTER generation_id");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_to SMALLINT UNSIGNED NULL AFTER year_from");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS fitment_status VARCHAR(20) NOT NULL DEFAULT 'Pending' AFTER hvac_type");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS source VARCHAR(255) NULL AFTER fitment_status");
-$pdo->exec("ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS notes VARCHAR(500) NULL AFTER source");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS oem_part_number VARCHAR(100) NULL AFTER barcode");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS alternate_part_numbers VARCHAR(500) NULL AFTER oem_part_number");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS technical_notes TEXT NULL AFTER alternate_part_numbers");
+foreach ([
+    ['item_vehicle_compatibilities','engine_type','VARCHAR(20) NULL AFTER engine_cc'],
+    ['item_vehicle_compatibilities','year_from','SMALLINT UNSIGNED NULL AFTER generation_id'],
+    ['item_vehicle_compatibilities','year_to','SMALLINT UNSIGNED NULL AFTER year_from'],
+    ['item_vehicle_compatibilities','engine_code','VARCHAR(50) NULL AFTER engine_type'],
+    ['item_vehicle_compatibilities','variant','VARCHAR(100) NULL AFTER engine_code'],
+    ['item_vehicle_compatibilities','transmission','VARCHAR(20) NULL AFTER variant'],
+    ['item_vehicle_compatibilities','hvac_type','VARCHAR(30) NULL AFTER transmission'],
+    ['item_vehicle_compatibilities','fitment_status',"VARCHAR(20) NOT NULL DEFAULT 'Pending' AFTER hvac_type"],
+    ['item_vehicle_compatibilities','source','VARCHAR(255) NULL AFTER fitment_status'],
+    ['item_vehicle_compatibilities','notes','VARCHAR(500) NULL AFTER source'],
+    ['items','oem_part_number','VARCHAR(100) NULL AFTER barcode'],
+    ['items','alternate_part_numbers','VARCHAR(500) NULL AFTER oem_part_number'],
+    ['items','technical_notes','TEXT NULL AFTER alternate_part_numbers'],
+] as [$table,$column,$definition]) ensureTableColumn($pdo,$table,$column,$definition);
 $pdo->exec("CREATE TABLE IF NOT EXISTS item_product_types(id VARCHAR(64) NOT NULL PRIMARY KEY,code VARCHAR(20) NOT NULL UNIQUE,name VARCHAR(100) NOT NULL UNIQUE,category_id VARCHAR(64) NULL,is_active TINYINT(1) NOT NULL DEFAULT 1,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_id VARCHAR(64) NULL AFTER category_name");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_name VARCHAR(100) NULL AFTER product_type_id");
+$inventoryColumns = [
+    ['items','product_type_id','VARCHAR(64) NULL AFTER category_name'],
+    ['items','product_type_name','VARCHAR(100) NULL AFTER product_type_id'],
+    ['items','verification_status',"VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active"],
+    ['items','created_by','VARCHAR(64) NULL AFTER verification_status'],
+    ['items','verified_by','VARCHAR(64) NULL AFTER created_by'],
+    ['items','merged_into_item_id','VARCHAR(64) NULL AFTER verified_by'],
+    ['goods_receipts','warehouse_id','VARCHAR(20) NULL AFTER branch_id'],
+    ['goods_receipts','received_by_id','VARCHAR(64) NULL AFTER received_by'],
+    ['goods_receipts','delivery_method',"VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number"],
+    ['goods_receipts','delivery_other','VARCHAR(100) NULL AFTER delivery_method'],
+    ['goods_receipts','shipping_notes','VARCHAR(500) NULL AFTER delivery_other'],
+    ['goods_receipts','source_type',"VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER shipping_notes"],
+    ['goods_receipts','source_warehouse_id','VARCHAR(20) NULL AFTER source_type'],
+    ['goods_receipts','source_branch_id','VARCHAR(20) NULL AFTER source_warehouse_id'],
+    ['goods_receipts','transfer_number','VARCHAR(40) NULL AFTER source_branch_id'],
+];
+foreach ($inventoryColumns as [$table,$column,$definition]) ensureTableColumn($pdo,$table,$column,$definition);
 $pdo->exec("INSERT IGNORE INTO item_product_types(id,code,name,category_id,is_active) VALUES ('IPT-MOTOR-BLOWER','MB','MOTOR BLOWER',(SELECT id FROM item_categories WHERE LOWER(TRIM(name))='sparepart ac' LIMIT 1),1)");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by");
-$pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS merged_into_item_id VARCHAR(64) NULL AFTER verified_by");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER branch_id");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS received_by_id VARCHAR(64) NULL AFTER received_by");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_method VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS delivery_other VARCHAR(100) NULL AFTER delivery_method");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS shipping_notes VARCHAR(500) NULL AFTER delivery_other");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_type VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER shipping_notes");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_warehouse_id VARCHAR(20) NULL AFTER source_type");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_branch_id VARCHAR(20) NULL AFTER source_warehouse_id");
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS transfer_number VARCHAR(40) NULL AFTER source_branch_id");
 });
 // ==========================================================
 // ALL DATA - Load semua data sekaligus untuk aplikasi
@@ -81,33 +88,40 @@ try {
 
     // Bootstrap historis dijalankan sekali per versi, bukan setiap GET all-data.
     runVersionedApiBootstrap($pdo, 'all_data_transaction_schema_and_repairs_20260827_v1', static function(PDO $pdo): void {
-    $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS receipt_description VARCHAR(255) NULL AFTER description");
-    $pdo->exec("ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) NULL AFTER receipt_description");
-    try { $pdo->exec("ALTER TABLE items ADD UNIQUE INDEX IF NOT EXISTS uq_items_barcode (barcode)"); } catch (Throwable $e) {}
-    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS brand_id VARCHAR(64) NULL AFTER model");
-    $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS model_id VARCHAR(64) NULL AFTER brand_id");
+    foreach ([
+        ['items','receipt_description','VARCHAR(255) NULL AFTER description'],
+        ['items','barcode','VARCHAR(100) NULL AFTER receipt_description'],
+        ['vehicles','brand_id','VARCHAR(64) NULL AFTER model'],
+        ['vehicles','model_id','VARCHAR(64) NULL AFTER brand_id'],
+    ] as [$table,$column,$definition]) ensureTableColumn($pdo,$table,$column,$definition);
+    $barcodeIndex = $pdo->query("SHOW INDEX FROM items WHERE Key_name='uq_items_barcode'")->fetch();
+    if (!$barcodeIndex) $pdo->exec("CREATE UNIQUE INDEX uq_items_barcode ON items(barcode)");
     if ($pdo->query("SHOW TABLES LIKE 'vehicle_brands'")->fetch() && $pdo->query("SHOW TABLES LIKE 'vehicle_models'")->fetch()) {
         $pdo->exec("UPDATE vehicles v JOIN vehicle_brands b ON LOWER(TRIM(b.name))=LOWER(TRIM(v.brand)) JOIN vehicle_models m ON m.brand_id=b.id AND LOWER(TRIM(m.name))=LOWER(TRIM(v.model)) SET v.brand_id=b.id,v.model_id=m.id,v.brand=b.name,v.model=m.name WHERE v.brand_id IS NULL OR v.model_id IS NULL OR v.brand<>b.name OR v.model<>m.name");
     }
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER date");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS transaction_time TIME NOT NULL DEFAULT '00:00:00' AFTER date");
+    foreach ([
+        ['work_orders','backdate_reason','VARCHAR(255) NULL AFTER date'],
+        ['work_orders','transaction_time',"TIME NOT NULL DEFAULT '00:00:00' AFTER date"],
+        ['work_orders','pending_at','DATETIME NULL AFTER approved_at'],
+        ['work_orders','pending_until','DATETIME NULL AFTER pending_at'],
+        ['work_orders','pending_reason','VARCHAR(255) NULL AFTER pending_until'],
+        ['work_orders','diagnosis_temperature','DECIMAL(6,2) NULL AFTER findings'],
+        ['work_orders','complaint_comment','TEXT NULL AFTER description'],
+    ] as [$table,$column,$definition]) ensureTableColumn($pdo,$table,$column,$definition);
     $pdo->exec("UPDATE work_orders SET transaction_time=TIME(created_at) WHERE transaction_time='00:00:00' AND created_at IS NOT NULL");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_at DATETIME NULL AFTER approved_at");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_until DATETIME NULL AFTER pending_at");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS pending_reason VARCHAR(255) NULL AFTER pending_until");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_temperature DECIMAL(6,2) NULL AFTER findings");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS complaint_comment TEXT NULL AFTER description");
     $pdo->exec("CREATE TABLE IF NOT EXISTS work_order_technicians (
         wo_id VARCHAR(64) NOT NULL, user_id VARCHAR(64) NOT NULL, user_name VARCHAR(150) NOT NULL,
         assignment_role ENUM('primary','assistant') NOT NULL DEFAULT 'assistant', sort_order INT NOT NULL DEFAULT 0,
         PRIMARY KEY(wo_id,user_id), KEY idx_work_order_technicians_user(user_id), KEY idx_work_order_technicians_role(wo_id,assignment_role,sort_order)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_lp DECIMAL(8,2) NULL AFTER diagnosis_temperature");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS diagnosis_hp DECIMAL(8,2) NULL AFTER diagnosis_lp");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_temperature DECIMAL(6,2) NULL AFTER diagnosis_hp");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_lp DECIMAL(8,2) NULL AFTER final_temperature");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS final_hp DECIMAL(8,2) NULL AFTER final_lp");
-    $pdo->exec("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS approved_services_json LONGTEXT NULL AFTER approved_at");
+    foreach ([
+        ['work_orders','diagnosis_lp','DECIMAL(8,2) NULL AFTER diagnosis_temperature'],
+        ['work_orders','diagnosis_hp','DECIMAL(8,2) NULL AFTER diagnosis_lp'],
+        ['work_orders','final_temperature','DECIMAL(6,2) NULL AFTER diagnosis_hp'],
+        ['work_orders','final_lp','DECIMAL(8,2) NULL AFTER final_temperature'],
+        ['work_orders','final_hp','DECIMAL(8,2) NULL AFTER final_lp'],
+        ['work_orders','approved_services_json','LONGTEXT NULL AFTER approved_at'],
+    ] as [$table,$column,$definition]) ensureTableColumn($pdo,$table,$column,$definition);
 
     // Bersihkan nama pelanggan yang pernah ikut menyimpan kata perintah AI.
     // customer_ref_id dipakai agar seluruh salinan nama pada kendaraan dan
@@ -162,9 +176,11 @@ try {
         ];
         $repairInvalid->execute([json_encode($statusLog), $invalidRow['id']]);
     }
-    $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_date DATE NULL AFTER payment");
-    $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS backdate_reason VARCHAR(255) NULL AFTER payment_date");
-    $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS manual_receipt_number VARCHAR(50) NULL AFTER invoice_number");
+    foreach ([
+        ['sales_invoices','payment_date','DATE NULL AFTER payment'],
+        ['sales_invoices','backdate_reason','VARCHAR(255) NULL AFTER payment_date'],
+        ['sales_invoices','manual_receipt_number','VARCHAR(50) NULL AFTER invoice_number'],
+    ] as [$table,$column,$definition]) ensureTableColumn($pdo,$table,$column,$definition);
     $pdo->exec("UPDATE sales_invoices SET manual_receipt_number=NULL WHERE manual_receipt_number IS NOT NULL AND TRIM(manual_receipt_number)=''");
     $manualReceiptIndex = $pdo->query("SHOW INDEX FROM sales_invoices WHERE Key_name='uniq_sales_manual_receipt_number'")->fetch();
     if (!$manualReceiptIndex) $pdo->exec("CREATE UNIQUE INDEX uniq_sales_manual_receipt_number ON sales_invoices(manual_receipt_number)");

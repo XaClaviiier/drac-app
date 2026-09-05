@@ -46,6 +46,7 @@ type AdjustmentDocument = {
   adjustmentType: string;
   date: string;
   status: "Draft" | "Posted" | "Cancelled";
+  isStockOpnameLinked: boolean;
   itemCount: number;
   totalQuantity: number;
   cancellationReason?: string;
@@ -61,6 +62,11 @@ type AdjustmentDetail = AdjustmentDocument & {
     unit: string;
   }>;
 };
+
+const canDeleteAdjustment = (document: AdjustmentDocument) =>
+  document.status === "Draft" && !document.isStockOpnameLinked;
+const canCancelAdjustment = (document: AdjustmentDocument) =>
+  document.status === "Posted" && !document.isStockOpnameLinked;
 
 const parseCsv = (text: string) =>
   text
@@ -444,6 +450,14 @@ export default function OpeningStockImport() {
     document: AdjustmentDocument,
     action: "post" | "cancel" | "delete",
   ) => {
+    if (action === "delete" && !canDeleteAdjustment(document)) {
+      setMessage("Dokumen ini tidak dapat dihapus.");
+      return;
+    }
+    if (action === "cancel" && !canCancelAdjustment(document)) {
+      setMessage("Dokumen ini tidak dapat dibatalkan.");
+      return;
+    }
     const reason = action === "cancel" ? window.prompt(`Alasan pembatalan ${document.adjustmentNumber}:`)?.trim() || "" : "";
     if (action === "cancel" && !reason) return;
     if (action === "delete") {
@@ -967,25 +981,18 @@ export default function OpeningStockImport() {
                                 >
                                   <Send className="h-4 w-4" />
                                 </button>
-                                <button
-                                  title="Hapus Draft"
-                                  onClick={() =>
-                                    processDocument(document, "delete")
-                                  }
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
+                                {canDeleteAdjustment(document) && (
+                                  <button
+                                    title="Hapus Draft"
+                                    onClick={() =>
+                                      processDocument(document, "delete")
+                                    }
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
                               </>
-                            )}
-                            {document.status !== "Draft" && (
-                              <button
-                                title="Hapus penyesuaian dan koreksi stok otomatis"
-                                onClick={() => processDocument(document, "delete")}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
                             )}
                           </div>
                         </td>
@@ -1085,11 +1092,11 @@ export default function OpeningStockImport() {
               </table>
             </div>
             <div className="flex justify-end gap-2 border-t bg-[#eeeeee] px-5 py-3">
-              {selectedDocument.status === "Draft" && <button
+              {canDeleteAdjustment(selectedDocument) && <button
                 onClick={() => processDocument(selectedDocument, "delete")}
                 className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
               >Hapus Draft</button>}
-              {selectedDocument.status === "Posted" && <button
+              {canCancelAdjustment(selectedDocument) && <button
                 onClick={() => processDocument(selectedDocument, "cancel")}
                 className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
               >Batalkan dengan Mutasi Pembalik</button>}
