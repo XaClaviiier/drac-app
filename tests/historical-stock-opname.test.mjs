@@ -275,12 +275,8 @@ test('endpoint startup dan transaksi stok tidak memakai ADD COLUMN IF NOT EXISTS
 
 test('schema dasar memakai collation UTF8MB4 yang konsisten untuk foreign key MySQL 5.7', () => {
   const schema = read('database/dokterac_schema.sql');
-  for (const table of ['branches','roles','users','customers','vehicles','suppliers','work_orders','sales_invoices','goods_receipts','purchase_invoices']) {
-    const start = schema.indexOf(`CREATE TABLE IF NOT EXISTS \`${table}\``);
-    const end = schema.indexOf(';', start);
-    assert.ok(start >= 0 && end > start, `schema ${table} harus tersedia`);
-    assert.match(schema.slice(start, end + 1), /DEFAULT CHARSET=utf8mb4;/, `collation ${table}`);
-  }
+  assert.doesNotMatch(schema,/DEFAULT CHARSET=utf8mb4;/);
+  assert.match(schema,/DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;/);
 });
 
 test('runtime bootstrap membuat kolom lost-sales sebelum migration lama menggunakannya', () => {

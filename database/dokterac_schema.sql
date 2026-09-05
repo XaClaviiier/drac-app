@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS `branches` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sample Data
 INSERT INTO `branches` (`id`, `code`, `name`, `address`, `phone`, `is_active`) VALUES
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS `roles` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `roles` (`id`, `code`, `name`, `description`, `permissions`, `is_active`) VALUES
 ('1', 'ADM', 'Administrator', 'Akses penuh semua fitur & cabang', JSON_ARRAY('dashboard:view', 'ai:view'), 1),
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `username` (`username`),
   FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default users (password: admin123, kasir123, teknisi123, spv123)
 -- CATATAN: Ini masih plain text, di Laravel nanti akan di-hash bcrypt
@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS `customers` (
   UNIQUE KEY `customer_code` (`customer_code`),
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 5. TABEL VEHICLES (KENDARAAN)
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS `vehicles` (
   KEY `idx_customer` (`customer_id`),
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 6. TABEL SUPPLIERS
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS `suppliers` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 7. TABEL ITEM CATEGORIES (KATEGORI BARANG)
@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS `item_categories` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),
   UNIQUE KEY `unique_category_name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `item_categories` (`id`, `code`, `name`, `type`, `description`, `is_active`) VALUES
 ('1', 'KAT-001', 'Sparepart AC', 'Persediaan', 'Komponen utama sistem AC mobil', 1),
@@ -238,7 +238,7 @@ CREATE TABLE IF NOT EXISTS `items` (
   UNIQUE KEY `uq_items_barcode` (`barcode`),
   KEY `idx_type` (`type`),
   KEY `idx_branch` (`branch_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `item_vehicle_brands` (
   `item_id` VARCHAR(64) NOT NULL,
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS `item_group_members` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   KEY `idx_group` (`group_item_id`),
   FOREIGN KEY (`group_item_id`) REFERENCES `items`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 10. TABEL WORK ORDERS (ORDER KERJA)
@@ -346,7 +346,7 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   KEY `idx_status` (`status`),
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `work_order_technicians` (
   `wo_id` VARCHAR(64) NOT NULL,
@@ -357,7 +357,7 @@ CREATE TABLE IF NOT EXISTS `work_order_technicians` (
   PRIMARY KEY (`wo_id`, `user_id`),
   KEY `idx_work_order_technicians_user` (`user_id`),
   KEY `idx_work_order_technicians_role` (`wo_id`, `assignment_role`, `sort_order`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 11. TABEL WO SERVICES (RINCIAN LAYANAN WO)
@@ -375,7 +375,7 @@ CREATE TABLE IF NOT EXISTS `work_order_services` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   KEY `idx_wo` (`wo_id`),
   FOREIGN KEY (`wo_id`) REFERENCES `work_orders`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 12. TABEL SALES INVOICES (FAKTUR PENJUALAN)
@@ -409,7 +409,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoices` (
   KEY `idx_branch` (`branch_id`),
   KEY `idx_date` (`date`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 13. TABEL SALES INVOICE ITEMS
@@ -426,7 +426,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoice_items` (
   `subtotal` DECIMAL(15,2) DEFAULT 0,
   KEY `idx_invoice` (`invoice_id`),
   FOREIGN KEY (`invoice_id`) REFERENCES `sales_invoices`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 14. TABEL GOODS RECEIPTS (PENERIMAAN BARANG)
@@ -450,7 +450,7 @@ CREATE TABLE IF NOT EXISTS `goods_receipts` (
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 15. TABEL GOODS RECEIPT ITEMS
@@ -467,7 +467,7 @@ CREATE TABLE IF NOT EXISTS `goods_receipt_items` (
   KEY `idx_receipt` (`receipt_id`),
   KEY `idx_item` (`item_id`),
   FOREIGN KEY (`receipt_id`) REFERENCES `goods_receipts`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Nomor antrian penerimaan per cabang dan tahun. Baris ini dikunci saat
 -- penyimpanan agar dua perangkat tidak pernah memperoleh nomor yang sama.
@@ -506,7 +506,7 @@ CREATE TABLE IF NOT EXISTS `purchase_invoices` (
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 17. TABEL PURCHASE INVOICE ITEMS
@@ -526,7 +526,7 @@ CREATE TABLE IF NOT EXISTS `purchase_invoice_items` (
   `subtotal` DECIMAL(15,2) DEFAULT 0,
   KEY `idx_invoice` (`invoice_id`),
   FOREIGN KEY (`invoice_id`) REFERENCES `purchase_invoices`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 18. TABEL PURCHASE PAYMENTS (PEMBAYARAN HUTANG)
@@ -544,7 +544,7 @@ CREATE TABLE IF NOT EXISTS `purchase_payments` (
   PRIMARY KEY (`id`),
   KEY `idx_invoice` (`invoice_id`),
   FOREIGN KEY (`invoice_id`) REFERENCES `purchase_invoices`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- SELESAI
