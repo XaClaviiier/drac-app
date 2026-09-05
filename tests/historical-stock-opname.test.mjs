@@ -295,6 +295,14 @@ test('runtime bootstrap membuat flag owner sebelum backfill akses cabang menggun
   assert.ok(column >= 0 && backfill > column);
 });
 
+test('helper kolom memakai information_schema yang dapat diprepare di MySQL 5.7', () => {
+  const start = helpers.indexOf('function ensureTableColumn');
+  const end = helpers.indexOf('function ensureOwnedStockOpnameColumn', start);
+  const source = helpers.slice(start, end);
+  assert.doesNotMatch(source,/SHOW COLUMNS[\s\S]*LIKE \?/);
+  assert.match(source,/information_schema\.COLUMNS WHERE TABLE_SCHEMA=DATABASE\(\) AND TABLE_NAME=\? AND COLUMN_NAME=\?/);
+});
+
 test('aggregate snapshot divalidasi sebagai decimal sebelum cast PHP dan JSON', () => {
   assert.match(helpers,/function parseBoundedDecimalInteger\(mixed \$value, string \$minimum, string \$maximum, string \$label\): int/);
   const snapshotBlock=endpoint.slice(endpoint.indexOf('$loadItemSnapshots='),endpoint.indexOf('$loadOrder ='));
@@ -743,7 +751,7 @@ test('upgrade ledger membuat mutex sebelum semantic data backfill dan mengunciny
 
 test('bootstrap shared memakai penambahan kolom yang kompatibel dengan MySQL 5.7', () => {
   assert.match(helpers, /function ensureTableColumn\(PDO \$pdo, string \$table, string \$column, string \$definition\): void/);
-  assert.match(helpers, /SHOW COLUMNS FROM `"\.\$table\."` LIKE \?/);
+  assert.match(helpers, /information_schema\.COLUMNS WHERE TABLE_SCHEMA=DATABASE\(\) AND TABLE_NAME=\? AND COLUMN_NAME=\?/);
   assert.match(helpers, /ALTER TABLE `"\.\$table\."` ADD COLUMN `"\.\$column\."`/);
   const bootstrap = helpers.slice(helpers.indexOf('function ensureApiSupportTables'),helpers.indexOf('function ensureApiMigrationTable'));
   assert.doesNotMatch(bootstrap,/ADD COLUMN IF NOT EXISTS/);

@@ -241,8 +241,8 @@ function ensureTableColumn(PDO $pdo, string $table, string $column, string $defi
     if(!preg_match('/^[A-Za-z0-9_]+$/',$table)||!preg_match('/^[A-Za-z0-9_]+$/',$column)){
         throw new InvalidArgumentException('Nama tabel atau kolom bootstrap tidak valid.');
     }
-    $columnStmt=$pdo->prepare("SHOW COLUMNS FROM `".$table."` LIKE ?");
-    $columnStmt->execute([$column]);
+    $columnStmt=$pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+    $columnStmt->execute([$table,$column]);
     if($columnStmt->fetch())return;
     $pdo->exec("ALTER TABLE `".$table."` ADD COLUMN `".$column."` ".$definition);
 }
