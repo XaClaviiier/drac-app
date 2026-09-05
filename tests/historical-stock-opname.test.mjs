@@ -281,6 +281,12 @@ test('schema dasar memakai collation UTF8MB4 yang konsisten untuk foreign key My
   }
 });
 
+test('runtime bootstrap membuat kolom lost-sales sebelum migration lama menggunakannya', () => {
+  const column = helpers.indexOf("ensureTableColumn($pdo,'work_orders','cancel_reason'");
+  const migration = helpers.indexOf("$lostSalesMigrationKey = 'legacy_floating_work_orders_to_lost_sales_20260810_v1'");
+  assert.ok(column >= 0 && migration > column);
+});
+
 test('aggregate snapshot divalidasi sebagai decimal sebelum cast PHP dan JSON', () => {
   assert.match(helpers,/function parseBoundedDecimalInteger\(mixed \$value, string \$minimum, string \$maximum, string \$label\): int/);
   const snapshotBlock=endpoint.slice(endpoint.indexOf('$loadItemSnapshots='),endpoint.indexOf('$loadOrder ='));

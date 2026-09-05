@@ -488,6 +488,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             throw $e;
         }
     }
+    ensureTableColumn($pdo,'work_orders','cancel_reason','TEXT NULL');
     $lostSalesMigrationKey = 'legacy_floating_work_orders_to_lost_sales_20260810_v1';
     $lostSalesMigrationCheck = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
     $lostSalesMigrationCheck->execute([$lostSalesMigrationKey]);
