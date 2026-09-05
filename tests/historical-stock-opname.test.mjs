@@ -271,6 +271,16 @@ test('endpoint startup dan transaksi stok tidak memakai ADD COLUMN IF NOT EXISTS
   assert.match(migrationWorkflow,/api\/endpoints\/all-data\.php/);
 });
 
+test('schema dasar memakai collation UTF8MB4 yang konsisten untuk foreign key MySQL 5.7', () => {
+  const schema = read('database/dokterac_schema.sql');
+  for (const table of ['branches','roles','users','customers','vehicles','suppliers','work_orders','sales_invoices','goods_receipts','purchase_invoices']) {
+    const start = schema.indexOf(`CREATE TABLE IF NOT EXISTS \`${table}\``);
+    const end = schema.indexOf(';', start);
+    assert.ok(start >= 0 && end > start, `schema ${table} harus tersedia`);
+    assert.match(schema.slice(start, end + 1), /DEFAULT CHARSET=utf8mb4;/, `collation ${table}`);
+  }
+});
+
 test('aggregate snapshot divalidasi sebagai decimal sebelum cast PHP dan JSON', () => {
   assert.match(helpers,/function parseBoundedDecimalInteger\(mixed \$value, string \$minimum, string \$maximum, string \$label\): int/);
   const snapshotBlock=endpoint.slice(endpoint.indexOf('$loadItemSnapshots='),endpoint.indexOf('$loadOrder ='));

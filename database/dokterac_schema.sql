@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS `branches` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Sample Data
 INSERT INTO `branches` (`id`, `code`, `name`, `address`, `phone`, `is_active`) VALUES
