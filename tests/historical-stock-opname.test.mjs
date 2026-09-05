@@ -287,6 +287,12 @@ test('runtime bootstrap membuat kolom lost-sales sebelum migration lama mengguna
   assert.ok(column >= 0 && migration > column);
 });
 
+test('runtime bootstrap membuat flag owner sebelum backfill akses cabang menggunakannya', () => {
+  const column = helpers.indexOf("ensureTableColumn($pdo,'users','is_owner'");
+  const backfill = helpers.indexOf('WHERE u.is_owner = 1');
+  assert.ok(column >= 0 && backfill > column);
+});
+
 test('aggregate snapshot divalidasi sebagai decimal sebelum cast PHP dan JSON', () => {
   assert.match(helpers,/function parseBoundedDecimalInteger\(mixed \$value, string \$minimum, string \$maximum, string \$label\): int/);
   const snapshotBlock=endpoint.slice(endpoint.indexOf('$loadItemSnapshots='),endpoint.indexOf('$loadOrder ='));

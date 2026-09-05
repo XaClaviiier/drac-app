@@ -1125,6 +1125,7 @@ function ensureApiSupportTables(PDO $pdo): void {
         throw $error;
     }
     ensureInventoryLedgerReady($pdo);
+    ensureTableColumn($pdo,'users','is_owner','TINYINT(1) NOT NULL DEFAULT 0');
     $pdo->exec("
         INSERT IGNORE INTO user_branch_access (user_id, branch_id)
         SELECT u.id, b.id FROM users u JOIN branches b WHERE u.is_owner = 1
