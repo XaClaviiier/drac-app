@@ -626,7 +626,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             branch_id VARCHAR(20) NOT NULL,
             PRIMARY KEY (user_id, branch_id),
             INDEX idx_user_branch (branch_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS warehouses (
@@ -639,7 +639,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_warehouse_branch (branch_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     ensureTableColumn($pdo,'warehouses','address','VARCHAR(255) NULL AFTER name');
     ensureTableColumn($pdo,'warehouses','is_system','TINYINT(1) NOT NULL DEFAULT 0 AFTER is_sellable');
@@ -652,7 +652,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (warehouse_id, item_id),
             INDEX idx_stock_item (item_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     ensureTableColumn($pdo,'warehouse_stocks','stock_version','BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER reserved_quantity');
     $pdo->exec("
@@ -669,7 +669,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_movement_item (item_id),
             INDEX idx_movement_created (created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     // VARCHAR keeps the journal extensible (send/receive/reversal) and avoids
     // silently coercing new movement types to an empty MySQL ENUM value.

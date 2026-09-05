@@ -299,6 +299,10 @@ test('helper kolom memakai information_schema yang dapat diprepare di MySQL 5.7'
   assert.match(source,/information_schema\.COLUMNS WHERE TABLE_SCHEMA=DATABASE\(\) AND TABLE_NAME=\? AND COLUMN_NAME=\?/);
 });
 
+test('tabel runtime persediaan memakai collation yang sama dengan schema dasar', () => {
+  assert.doesNotMatch(helpers,/DEFAULT CHARSET=utf8mb4\r?\n/);
+});
+
 test('aggregate snapshot divalidasi sebagai decimal sebelum cast PHP dan JSON', () => {
   assert.match(helpers,/function parseBoundedDecimalInteger\(mixed \$value, string \$minimum, string \$maximum, string \$label\): int/);
   const snapshotBlock=endpoint.slice(endpoint.indexOf('$loadItemSnapshots='),endpoint.indexOf('$loadOrder ='));
