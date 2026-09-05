@@ -273,6 +273,85 @@ jobs:
           POST_ROLLBACK_API_MARKER=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_rollout -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='api_support_20260903_historical_stock_opname_v1';")
           test "$POST_ROLLBACK_API_MARKER" = "1"
 
+      - name: Reject corrupt persisted transfer quantities through the real API
+        run: |
+          set -euo pipefail
+          SERVER_LOG="$RUNNER_TEMP/drac-transfer-api.log"
+          DB_HOST=127.0.0.1 DB_NAME=drac_rollout DB_USER=root DB_PASSWORD=root php -S 127.0.0.1:8099 -t . >"$SERVER_LOG" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
+          READY=0
+          for _ in $(seq 1 30); do
+            if curl --silent --show-error --output /dev/null 'http://127.0.0.1:8099/api/index.php?route=branches'; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          test "$READY" = "1"
+          DB_HOST=127.0.0.1 DB_NAME=drac_rollout DB_USER=root DB_PASSWORD=root BASE_URL=http://127.0.0.1:8099 php tests/fixtures/warehouse-transfer-persisted-quantity.php
+
+      - name: Serialize runtime schema bootstrap with standalone migration and rollback
+        run: |
+          set -euo pipefail
+          MYSQL_ID="${{ job.services.mysql.id }}"
+          docker exec "$MYSQL_ID" mysql -uroot -proot -e "DROP DATABASE IF EXISTS drac_schema_lock; CREATE DATABASE drac_schema_lock CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_schema_lock < database/dokterac_schema.sql
+          SIGNAL_DIR="$RUNNER_TEMP/inventory-schema-lock-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$SIGNAL_DIR"
+
+          DB_HOST=127.0.0.1 DB_USER=root DB_PASSWORD=root php tests/fixtures/inventory-schema-lock-worker.php drac_schema_lock "$SIGNAL_DIR/migrate-ready" "$SIGNAL_DIR/migrate-release" >schema-lock-migrate.log 2>&1 &
+          LOCK_PID=$!
+          for _ in $(seq 1 200); do
+            test -f "$SIGNAL_DIR/migrate-ready" && break
+            kill -0 "$LOCK_PID" 2>/dev/null || exit 1
+            sleep 0.05
+          done
+          test -f "$SIGNAL_DIR/migrate-ready"
+          LOCK_CONNECTION=$(cat "$SIGNAL_DIR/migrate-ready")
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot -e "SELECT IS_USED_LOCK('drac_inventory_schema_migration');")" = "$LOCK_CONNECTION"
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_schema_lock < database/migrate_stock_opname_history.sql >schema-migration.log 2>&1 &
+          MIGRATION_PID=$!
+          MIGRATION_WAITING=0
+          for _ in $(seq 1 200); do
+            MIGRATION_WAITING=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot -e "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE STATE='User lock' AND ID<>${LOCK_CONNECTION};")
+            test "$MIGRATION_WAITING" = "1" && break
+            kill -0 "$MIGRATION_PID" 2>/dev/null || exit 1
+            sleep 0.05
+          done
+          test "$MIGRATION_WAITING" = "1"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_schema_lock -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='schema_20260904_historical_stock_opname_v2';")" = "0"
+          touch "$SIGNAL_DIR/migrate-release"
+          wait "$LOCK_PID"
+          wait "$MIGRATION_PID"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_schema_lock -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='schema_20260904_historical_stock_opname_v2';")" = "1"
+
+          DB_HOST=127.0.0.1 DB_USER=root DB_PASSWORD=root php tests/fixtures/inventory-schema-lock-worker.php drac_schema_lock "$SIGNAL_DIR/rollback-ready" "$SIGNAL_DIR/rollback-release" >schema-lock-rollback.log 2>&1 &
+          LOCK_PID=$!
+          for _ in $(seq 1 200); do
+            test -f "$SIGNAL_DIR/rollback-ready" && break
+            kill -0 "$LOCK_PID" 2>/dev/null || exit 1
+            sleep 0.05
+          done
+          test -f "$SIGNAL_DIR/rollback-ready"
+          LOCK_CONNECTION=$(cat "$SIGNAL_DIR/rollback-ready")
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot -e "SELECT IS_USED_LOCK('drac_inventory_schema_migration');")" = "$LOCK_CONNECTION"
+          docker exec -i "$MYSQL_ID" mysql -uroot -proot drac_schema_lock < database/rollback_stock_opname_history.sql >schema-rollback.log 2>&1 &
+          ROLLBACK_PID=$!
+          ROLLBACK_WAITING=0
+          for _ in $(seq 1 200); do
+            ROLLBACK_WAITING=$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot -e "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE STATE='User lock' AND ID<>${LOCK_CONNECTION};")
+            test "$ROLLBACK_WAITING" = "1" && break
+            kill -0 "$ROLLBACK_PID" 2>/dev/null || exit 1
+            sleep 0.05
+          done
+          test "$ROLLBACK_WAITING" = "1"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_schema_lock -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='schema_20260904_historical_stock_opname_v2';")" = "1"
+          touch "$SIGNAL_DIR/rollback-release"
+          wait "$LOCK_PID"
+          wait "$ROLLBACK_PID"
+          test "$(docker exec "$MYSQL_ID" mysql -N -B -uroot -proot drac_schema_lock -e "SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key='schema_20260904_historical_stock_opname_v2';")" = "0"
+
       - name: Reject negative partial stock opname schema and recover
         run: |
           set -euo pipefail

@@ -237,6 +237,30 @@ function ensureInventoryLedgerReady(PDO $pdo): void {
     });
 }
 
+function historicalWarehouseQuantitiesFromLedger(PDO $pdo, string $warehouseId, string $date): array {
+    if($warehouseId===''||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date))throw new InvalidArgumentException('Parameter histori stok tidak valid');
+    ensureInventoryLedgerReady($pdo);
+    $quantities=[];
+    $current=$pdo->prepare('SELECT item_id,quantity FROM warehouse_stocks WHERE warehouse_id=?');
+    $current->execute([$warehouseId]);
+    foreach($current->fetchAll() as $row)$quantities[(string)$row['item_id']]=(int)$row['quantity'];
+    $movements=$pdo->prepare("SELECT item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type
+        FROM stock_movements
+        WHERE is_voided=0
+          AND COALESCE(occurred_at,created_at)>CONCAT(?,' 23:59:59')
+          AND (source_warehouse_id=? OR destination_warehouse_id=?)");
+    $movements->execute([$date,$warehouseId,$warehouseId]);
+    foreach($movements->fetchAll() as $row){
+        $itemId=(string)$row['item_id'];
+        $quantity=parseBoundedDecimalInteger($row['quantity']??null,'1','2147483647','Kuantitas jurnal stok');
+        $type=(string)$row['movement_type'];
+        if(!array_key_exists($itemId,$quantities))$quantities[$itemId]=0;
+        if((string)$row['source_warehouse_id'] === $warehouseId&&$type!=='transfer_receive')$quantities[$itemId]+=$quantity;
+        if((string)$row['destination_warehouse_id'] === $warehouseId&&$type!=='transfer_send')$quantities[$itemId]-=$quantity;
+    }
+    return $quantities;
+}
+
 function ensureTableColumn(PDO $pdo, string $table, string $column, string $definition): void {
     if(!preg_match('/^[A-Za-z0-9_]+$/',$table)||!preg_match('/^[A-Za-z0-9_]+$/',$column)){
         throw new InvalidArgumentException('Nama tabel atau kolom bootstrap tidak valid.');
@@ -1229,6 +1253,29 @@ function ensureApiMigrationTable(PDO $pdo): void {
     }
 }
 
+function withInventorySchemaMigrationLock(PDO $pdo, callable $callback): void {
+    $lockName='drac_inventory_schema_migration';
+    $lockStmt=$pdo->prepare('SELECT GET_LOCK(?, 60)');
+    $lockStmt->execute([$lockName]);
+    if((int)$lockStmt->fetchColumn()!==1)throw new RuntimeException('Tidak dapat memperoleh kunci migration persediaan');
+    try{
+        $pdo->exec("CREATE TABLE IF NOT EXISTS inventory_operation_locks (
+            lock_key VARCHAR(30) NOT NULL PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("INSERT IGNORE INTO inventory_operation_locks(lock_key) VALUES('global')");
+        $pdo->beginTransaction();
+        $pdo->query("SELECT `lock_key` FROM `inventory_operation_locks` WHERE `lock_key`='global' FOR UPDATE")->fetchColumn();
+        $pdo->commit();
+        $callback($pdo);
+    }catch(Throwable $error){
+        if($pdo->inTransaction())$pdo->rollBack();
+        throw $error;
+    }finally{
+        try{$release=$pdo->prepare('SELECT RELEASE_LOCK(?)');$release->execute([$lockName]);}catch(Throwable $ignored){}
+    }
+}
+
 function withApiMigrationLock(PDO $pdo, string $key, callable $callback): void {
     $lockName = 'drac:' . substr(hash('sha256', $key), 0, 48);
     $lockStmt = $pdo->prepare('SELECT GET_LOCK(?, 15)');
@@ -1253,14 +1300,16 @@ function runVersionedApiBootstrap(PDO $pdo, string $version, callable $bootstrap
     $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
     $check->execute([$version]);
     if ((int)$check->fetchColumn() > 0) return;
-    withApiMigrationLock($pdo, 'bootstrap:' . $version, static function(PDO $pdo) use ($version, $bootstrap): void {
+    $apply=static function(PDO $pdo) use ($version, $bootstrap): void {
         // Request yang menunggu lock wajib memeriksa marker kembali.
         $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
         $check->execute([$version]);
         if ((int)$check->fetchColumn() > 0) return;
         $bootstrap($pdo);
         $pdo->prepare('INSERT IGNORE INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$version]);
-    });
+    };
+    if($version==='api_support_20260903_historical_stock_opname_v1')withInventorySchemaMigrationLock($pdo,$apply);
+    else withApiMigrationLock($pdo,'bootstrap:'.$version,$apply);
 }
 
 function getBearerToken(): string {
@@ -1336,8 +1385,9 @@ function lockAuthenticatedActor(PDO $pdo, array $actor): array {
 function lockInventoryMutation(PDO $pdo): void {
     $lock = $pdo->query("SELECT lock_key FROM inventory_operation_locks WHERE lock_key='global' FOR UPDATE")->fetchColumn();
     if ($lock !== 'global') throw new RuntimeException('Kunci transaksi persediaan tidak tersedia');
+    $currentConnection=(int)$pdo->query('SELECT CONNECTION_ID()')->fetchColumn();
     $migrationConnection = $pdo->query("SELECT IS_USED_LOCK('drac_inventory_schema_migration')")->fetchColumn();
-    if ($migrationConnection !== false && $migrationConnection !== null) throw new DomainException('Pemeliharaan schema persediaan sedang berlangsung', 409);
+    if ($migrationConnection !== false && $migrationConnection !== null && (int)$migrationConnection!==$currentConnection) throw new DomainException('Pemeliharaan schema persediaan sedang berlangsung', 409);
 }
 
 function permissionsFromRoleRecord(array $role): array {

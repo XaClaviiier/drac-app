@@ -21,6 +21,23 @@ test('warehouse transfer cancellation authorizes both locked branches before lif
   assert.doesNotMatch(deleteBlock, /assertAccessibleBranch/);
 });
 
+test('warehouse transfer revalidates every persisted line after lock before send receive or cancel arithmetic', () => {
+  const source = read('api/endpoints/warehouse-transfers.php');
+  assert.match(source, /parseBoundedDecimalInteger\(\$item\['qty_sent'\]\?\?null,'1','2147483647','Kuantitas kirim tersimpan'\)/);
+  assert.match(source, /parseBoundedDecimalInteger\(\$item\['qty_received'\]\?\?null,'0',\(string\)\$sent,'Kuantitas terima tersimpan'\)/);
+  assert.equal((source.match(/\$validatePersistedTransferLine\(\$item\)/g)||[]).length,3);
+  for(const [startMarker,endMarker] of [
+    ["if($requestedAction==='send')","if($requestedAction==='cancel')"],
+    ["if($requestedAction==='cancel')","if($requestedAction!=='receive')"],
+    ["if($requestedAction!=='receive')","if($method==='DELETE'"],
+  ]){
+    const block=source.slice(source.indexOf(startMarker),source.indexOf(endMarker));
+    const validation=block.indexOf('$validatePersistedTransferLine($item)');
+    const arithmetic=Math.min(...['$available<$sent','$remaining=$sent-$received','$qty>$remaining'].map(token=>{const index=block.indexOf(token);return index<0?Number.POSITIVE_INFINITY:index;}));
+    assert.ok(validation>=0&&validation<arithmetic);
+  }
+});
+
 test('stock adjustment update and delete authorize all locked warehouse scopes before sensitive validation', () => {
   const source = read('api/endpoints/stock-adjustments.php');
   const helpers = read('api/helpers.php');
@@ -112,9 +129,12 @@ test('stock count report scopes warehouse lookup in SQL before exposing warehous
 });
 
 test('stock count report excludes non-stock historical invoices from balance rollback', () => {
-  const source = read('api/endpoints/stock-count-report.php');
-  const salesRollback = source.slice(source.indexOf('// Penjualan'), source.indexOf('// Penerimaan'));
-  assert.match(salesRollback, /COALESCE\(i\.backdate_reason,''\)<>'Input Cepat Historis \(stok tidak dipotong\)'/);
+  const report = read('api/endpoints/stock-count-report.php');
+  const helpers = read('api/helpers.php');
+  const readiness = helpers.slice(helpers.indexOf('function ensureInventoryLedgerReady'), helpers.indexOf('function historicalWarehouseQuantitiesFromLedger'));
+  assert.match(report, /historicalWarehouseQuantitiesFromLedger/);
+  assert.match(readiness, /Input Cepat Historis \(stok tidak dipotong\)/);
+  assert.match(readiness, /SET m\.is_voided=1/);
 });
 
 test('user authorization writers replace authoritative fields and branch scopes atomically under inventory mutex', () => {
@@ -210,12 +230,19 @@ test('stock adjustment rejects INT minimum before a Draft can reach post or canc
   assert.ok(persistedValidation >= 0 && deltaUse > persistedValidation, 'persisted quantity wajib divalidasi sebelum post/cancel delta');
 });
 
-test('stock count report reconstructs sales by the actual selected warehouse', () => {
+test('stock count report reconstructs every lifecycle from the canonical scoped movement ledger', () => {
   const report = read('api/endpoints/stock-count-report.php');
-  const salesRollback = report.slice(report.indexOf('// Penjualan'), report.indexOf('// Penerimaan'));
-  assert.match(salesRollback, /WHERE i\.branch_id=\? AND d\.warehouse_id=\? AND i\.date>\?/);
-  assert.match(salesRollback, /execute\(\[\$warehouse\['branch_id'\], \$warehouseId, \$date\]\)/);
-  assert.doesNotMatch(salesRollback, /if \(\(bool\)\$warehouse\['is_default'\]\)/);
+  const helpers = read('api/helpers.php');
+  assert.match(report, /historicalWarehouseQuantitiesFromLedger\(\$pdo,\$warehouseId,\$date\)/);
+  assert.doesNotMatch(report, /FROM (?:sales_invoices|goods_receipts|warehouse_transfers|stock_adjustments)/);
+  const start = helpers.indexOf('function historicalWarehouseQuantitiesFromLedger');
+  const end = helpers.indexOf('\nfunction ', start + 10);
+  const block = helpers.slice(start, end);
+  assert.match(block, /is_voided=0/);
+  assert.match(block, /COALESCE\(occurred_at,created_at\)>CONCAT\(\?,' 23:59:59'\)/);
+  assert.match(block, /\(source_warehouse_id=\? OR destination_warehouse_id=\?\)/);
+  assert.match(block,/source_warehouse_id'] === \$warehouseId&&\$type!=='transfer_receive'/);
+  assert.match(block,/destination_warehouse_id'] === \$warehouseId&&\$type!=='transfer_send'/);
 });
 
 test('stock card reports signed legacy reversals as positive movement in the opposite direction', () => {

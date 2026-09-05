@@ -20,6 +20,7 @@ const warehousesEndpoint = read('api/endpoints/warehouses.php');
 const branchesEndpoint = read('api/endpoints/branches.php');
 const rollback = read('database/rollback_stock_opname_history.sql');
 const apiIndex = read('api/index.php');
+const ledgerFixture = read('tests/fixtures/inventory-ledger-remediation.php');
 const openingStockImport = read('src/pages/OpeningStockImport.tsx');
 
 test('Perintah Stok Opname menerima periode historis yang berakhir paling lambat hari ini', () => {
@@ -286,6 +287,33 @@ test('schema dasar menyediakan aggregate inti sebelum migration histori Stok Opn
   }
 });
 
+test('base schema menolak duplikat item per hasil Stok Opname sebelum bootstrap', () => {
+  const schema = read('database/dokterac_schema.sql');
+  const table = schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS `stock_count_result_items`'), schema.indexOf('-- ==========================================================\n-- SELESAI'));
+  assert.match(table,/UNIQUE KEY `uq_stock_count_result_item` \(`result_id`,`item_id`\)/);
+});
+
+test('runtime bootstrap Stok Opname memakai advisory lock dan mutex domain migration standalone', () => {
+  const bootstrap = helpers.slice(helpers.indexOf('function runVersionedApiBootstrap'), helpers.indexOf('function getBearerToken'));
+  const sharedLock = helpers.slice(helpers.indexOf('function withInventorySchemaMigrationLock'), helpers.indexOf('function withApiMigrationLock'));
+  assert.match(bootstrap,/api_support_20260903_historical_stock_opname_v1[\s\S]*?withInventorySchemaMigrationLock/);
+  assert.match(sharedLock,/drac_inventory_schema_migration/);
+  assert.match(sharedLock,/SELECT `lock_key` FROM `inventory_operation_locks` WHERE `lock_key`='global' FOR UPDATE/);
+  assert.ok(sharedLock.indexOf('GET_LOCK') < sharedLock.indexOf('FOR UPDATE'));
+  assert.ok(sharedLock.indexOf('FOR UPDATE') < sharedLock.indexOf('$callback($pdo)'));
+  const mutationLock = helpers.slice(helpers.indexOf('function lockInventoryMutation'), helpers.indexOf('function permissionsFromRoleRecord'));
+  assert.match(mutationLock,/SELECT CONNECTION_ID\(\)/);
+  assert.match(mutationLock,/\(int\)\$migrationConnection!==\$currentConnection/);
+});
+
+test('CI merace runtime schema lock dengan migration dan rollback standalone nyata', () => {
+  assert.equal(existsSync(new URL('../tests/fixtures/inventory-schema-lock-worker.php', import.meta.url)), true);
+  assert.match(migrationWorkflow, /inventory-schema-lock-worker\.php/);
+  assert.match(migrationWorkflow, /IS_USED_LOCK\('drac_inventory_schema_migration'\)/);
+  assert.match(migrationWorkflow, /migrate_stock_opname_history\.sql/);
+  assert.match(migrationWorkflow, /rollback_stock_opname_history\.sql/);
+});
+
 test('runtime bootstrap membuat kolom lost-sales sebelum migration lama menggunakannya', () => {
   const column = helpers.indexOf("ensureTableColumn($pdo,'work_orders','cancel_reason'");
   const migration = helpers.indexOf("$lostSalesMigrationKey = 'legacy_floating_work_orders_to_lost_sales_20260810_v1'");
@@ -361,6 +389,14 @@ test('izin khusus Stok Opname dapat dicabut tanpa fallback item', () => {
 test('fixture PHP dapat mencapai service MySQL 5.7 dari runner', () => {
   assert.match(migrationWorkflow, /services:[\s\S]*?mysql:[\s\S]*?ports:\s*\n\s*- 3306:3306/);
   assert.match(migrationWorkflow, /new PDO\("mysql:host=127\.0\.0\.1;dbname=drac_verify"/);
+  assert.match(ledgerFixture, /historicalWarehouseQuantitiesFromLedger/);
+  for (const cutoff of ['2026-08-09','2026-08-10','2026-08-11','2026-08-12']) assert.match(ledgerFixture,new RegExp(cutoff));
+});
+
+test('CI MySQL 5.7 memanggil endpoint transfer nyata untuk persisted quantity korup', () => {
+  assert.equal(existsSync(new URL('../tests/fixtures/warehouse-transfer-persisted-quantity.php', import.meta.url)), true);
+  assert.match(migrationWorkflow, /php -S 127\.0\.0\.1:8099 -t \./);
+  assert.match(migrationWorkflow, /php tests\/fixtures\/warehouse-transfer-persisted-quantity\.php/);
 });
 
 test('barang aktif stok nol dan tanpa mutasi tetap masuk sesuai filter kategori', () => {

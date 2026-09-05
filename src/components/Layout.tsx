@@ -473,7 +473,7 @@ const desktopGroups = [
         perm: "item:edit",
         tone: "green",
       },
-      { label: "Stok Opname", path: "/reports/stock-count-sheet", icon: ClipboardCheck, perm: "item:view", tone: "green" },
+      { label: "Stok Opname", path: "/reports/stock-count-sheet", icon: ClipboardCheck, perm: "stock_opname:view", tone: "green" },
       { label: "Permintaan Barang", icon: FilePlus2, tone: "green" },
       {
         label: "Barang & Jasa",

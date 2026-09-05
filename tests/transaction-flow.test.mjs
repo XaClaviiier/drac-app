@@ -159,6 +159,8 @@ test('lembar penghitungan stok terpisah dari transaksi opname dan memakai saldo 
   const catalog = source('src/pages/ReportsIndex.tsx');
   const page = source('src/pages/StockCountSheetPrintReport.tsx');
   const endpoint = source('api/endpoints/stock-count-report.php');
+  const helpers = source('api/helpers.php');
+  const historicalBalance = helpers.slice(helpers.indexOf('function historicalWarehouseQuantitiesFromLedger'), helpers.indexOf('\nfunction ', helpers.indexOf('function historicalWarehouseQuantitiesFromLedger') + 10));
   assert.match(app, /reports\/stock-count-sheet-print/);
   assert.match(catalog, /path: '\/reports\/stock-count-sheet-print'/);
   assert.match(page, /Parameter Laporan/);
@@ -170,8 +172,9 @@ test('lembar penghitungan stok terpisah dari transaksi opname dan memakai saldo 
   assert.match(page, /Hitung #1/);
   assert.match(page, /Hitung #2/);
   assert.match(endpoint, /Tanggal laporan tidak boleh melewati hari ini/);
-  assert.match(endpoint, /warehouse_stocks/);
-  assert.match(endpoint, /COALESCE\(occurred_at,created_at\)>CONCAT/);
+  assert.match(endpoint, /historicalWarehouseQuantitiesFromLedger/);
+  assert.match(historicalBalance, /warehouse_stocks/);
+  assert.match(historicalBalance, /COALESCE\(occurred_at,created_at\)>CONCAT/);
   assert.doesNotMatch(page, /api\.create\(|api\.update\(|api\.remove/);
 });
 

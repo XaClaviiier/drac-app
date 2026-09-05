@@ -6,6 +6,8 @@ const layout = fs.readFileSync(new URL('../src/components/Layout.tsx', import.me
 const itemsPage = fs.readFileSync(new URL('../src/pages/ItemsAndServices.tsx', import.meta.url), 'utf8');
 const inventoryReport = fs.readFileSync(new URL('../src/pages/InventoryReport.tsx', import.meta.url), 'utf8');
 const dashboard = fs.readFileSync(new URL('../src/pages/Dashboard.tsx', import.meta.url), 'utf8');
+const app = fs.readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const stockOpname = fs.readFileSync(new URL('../src/pages/StockCountSheetReport.tsx', import.meta.url), 'utf8');
 
 const sectionBetween = (source, start, end) => {
   const from = source.indexOf(start);
@@ -83,4 +85,18 @@ test('deep-link laporan stok membuka mode operasional yang nyata dan tidak mengk
   assert.doesNotMatch(inventoryReport, /label="Nilai Persediaan"/);
   assert.match(dashboard, /to="\/reports\/inventory\?availability=ATTENTION"/);
   assert.doesNotMatch(dashboard, /to="\/inventory-report"/);
+});
+
+test('route menu dan seluruh aksi Stok Opname mengikuti permission granular authoritative', () => {
+  assert.match(app,/reports\/stock-count-sheet" element=\{protectedPage\('stock_opname:view'/);
+  assert.match(layout,/label: "Stok Opname"[\s\S]*?perm: "stock_opname:view"/);
+  for(const [flag,permission] of [['canCreate','create'],['canCount','count'],['canPost','post'],['canDelete','delete']]){
+    assert.match(stockOpname,new RegExp(`const ${flag}=hasPermission\\('stock_opname:${permission}'\\)`));
+  }
+  assert.match(stockOpname,/if\(!canCreate\)return/);
+  assert.match(stockOpname,/if\(type==='post-result'\?!canPost:!canCount\)return/);
+  assert.match(stockOpname,/if\(!canDelete\)return/);
+  assert.match(stockOpname,/canCreate&&<button[^>]*>[\s\S]*?Perintah Baru/);
+  assert.match(stockOpname,/canCount&&selected\.status==='Menunggu Eksekusi'/);
+  assert.match(stockOpname,/canDelete&&selected\.status==='Menunggu Eksekusi'/);
 });

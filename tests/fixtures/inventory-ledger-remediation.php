@@ -102,4 +102,26 @@ try {
 }
 $assert($intMinRejected, 'Legacy quantity minimum INT tidak ditolak sebelum backfill');
 
+$pdo->exec("DELETE FROM sales_invoice_items WHERE invoice_id='S-MIN'; DELETE FROM sales_invoices WHERE id='S-MIN'; DELETE FROM stock_movements");
+$pdo->exec("INSERT INTO warehouse_stocks(warehouse_id,item_id,quantity,reserved_quantity,stock_version) VALUES
+    ('W1','I1',100,0,0),('W2','I1',0,0,0)
+    ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),reserved_quantity=0,stock_version=0");
+$pdo->exec("INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,created_at,occurred_at,is_voided) VALUES
+    ('H-SEND','I1','W1','W2',10,'transfer_send','warehouse_transfer','T-HIST','TR-HIST','2026-08-10 12:00:00','2026-08-10 12:00:00',0),
+    ('H-RECEIVE','I1','W1','W2',6,'transfer_receive','warehouse_transfer','T-HIST','TR-HIST','2026-08-11 12:00:00','2026-08-11 12:00:00',0),
+    ('H-CANCEL-RECEIVED','I1','W2','W1',6,'reversal','warehouse_transfer_cancel','T-HIST','TR-HIST','2026-08-12 12:00:00','2026-08-12 12:00:00',0),
+    ('H-CANCEL-REMAINING','I1',NULL,'W1',4,'reversal','warehouse_transfer_cancel','T-HIST','TR-HIST','2026-08-12 12:00:00','2026-08-12 12:00:00',0)");
+$historicalExpectations = [
+    '2026-08-09' => ['W1' => 100, 'W2' => 0],
+    '2026-08-10' => ['W1' => 90, 'W2' => 0],
+    '2026-08-11' => ['W1' => 90, 'W2' => 6],
+    '2026-08-12' => ['W1' => 100, 'W2' => 0],
+];
+foreach ($historicalExpectations as $cutoff => $warehouseExpectations) {
+    foreach ($warehouseExpectations as $warehouseId => $expectedQuantity) {
+        $quantities = historicalWarehouseQuantitiesFromLedger($pdo, $warehouseId, $cutoff);
+        $assert(($quantities['I1'] ?? null) === $expectedQuantity, "Saldo {$warehouseId} pada {$cutoff} tidak merekonstruksi lifecycle cancel transfer");
+    }
+}
+
 fwrite(STDOUT, "inventory-ledger-remediation-ok\n");

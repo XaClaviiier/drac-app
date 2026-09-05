@@ -612,6 +612,7 @@ CREATE TABLE IF NOT EXISTS `stock_count_result_items` (
   `count_2` INT NULL,
   `final_quantity` INT NULL,
   `variance` INT NULL,
+  UNIQUE KEY `uq_stock_count_result_item` (`result_id`,`item_id`),
   KEY `idx_stock_count_result_parent` (`result_id`),
   KEY `idx_stock_count_result_item` (`item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
