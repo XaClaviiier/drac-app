@@ -278,9 +278,9 @@ jobs:
           set -euo pipefail
           # Tabel transfer dibuat oleh prolog endpoint, bukan schema dasar;
           # hangatkan drac_rollout dengan prolog yang sama sebelum fixture berjalan.
-          DRAC_DB_HOST=127.0.0.1 DRAC_DB_NAME=drac_rollout DRAC_DB_USER=root DRAC_DB_PASS=root php -r '$_SERVER["REQUEST_METHOD"]="GET";require "api/config.php";require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/warehouse-transfers.php";' >/dev/null
+          DB_HOST=127.0.0.1 DB_NAME=drac_rollout DB_USER=root DB_PASSWORD=root php -r '$_SERVER["REQUEST_METHOD"]="GET";require "api/config.php";require "api/helpers.php";$requestUser=["id"=>"CI-OWNER","is_owner"=>1];$method="GET";$id=null;require "api/endpoints/warehouse-transfers.php";' >/dev/null
           SERVER_LOG="$RUNNER_TEMP/drac-transfer-api.log"
-          DRAC_DB_HOST=127.0.0.1 DRAC_DB_NAME=drac_rollout DRAC_DB_USER=root DRAC_DB_PASS=root php -S 127.0.0.1:8099 -t . >"$SERVER_LOG" 2>&1 &
+          DB_HOST=127.0.0.1 DB_NAME=drac_rollout DB_USER=root DB_PASSWORD=root php -S 127.0.0.1:8099 -t . >"$SERVER_LOG" 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
           READY=0
