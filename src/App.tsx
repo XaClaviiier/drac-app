@@ -90,7 +90,7 @@ function AppRoutes() {
         <Route path="reports/sales" element={protectedPage('report:view', <SalesReport />)} />
         <Route path="reports/purchases" element={protectedPage('report:view', <PurchaseReport />)} />
         <Route path="reports/inventory" element={protectedPage('report:view', <InventoryReport />)} />
-        <Route path="reports/stock-count-sheet" element={protectedPage('item:view', <StockCountSheetReport />)} />
+        <Route path="reports/stock-count-sheet" element={protectedPage('stock_opname:view', <StockCountSheetReport />)} />
         <Route path="reports/stock-count-sheet-print" element={protectedPage('report:view', <StockCountSheetPrintReport />)} />
         <Route path="reports/cash-bank" element={protectedPage('report:view', <CashBankReport />)} />
         <Route path="reports" element={protectedPage('report:view', <ReportsIndex />)} />

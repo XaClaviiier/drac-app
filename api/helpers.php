@@ -6,6 +6,32 @@ function normalizeVehiclePlate(string $value): string {
     return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $value));
 }
 
+function normalizeBoundedDecimalInteger(mixed $value, string $minimum, string $maximum, string $label): string {
+    if(is_bool($value)||(!is_int($value)&&!is_string($value)))throw new InvalidArgumentException($label.' bukan bilangan bulat yang valid.');
+    if(is_string($value)&&$value!==trim($value))throw new InvalidArgumentException($label.' bukan bilangan bulat yang valid.');
+    $raw=trim((string)$value);
+    if(!preg_match('/^-?\d+$/',$raw))throw new InvalidArgumentException($label.' bukan bilangan bulat yang valid.');
+    $negative=str_starts_with($raw,'-');
+    $digits=ltrim($negative?substr($raw,1):$raw,'0');
+    if($digits==='')$digits='0';
+    $canonical=$negative&&$digits!=='0'?'-'.$digits:$digits;
+    $compare=static function(string $left,string $right):int{
+        $leftNegative=str_starts_with($left,'-');$rightNegative=str_starts_with($right,'-');
+        if($leftNegative!==$rightNegative)return $leftNegative?-1:1;
+        $leftDigits=$leftNegative?substr($left,1):$left;$rightDigits=$rightNegative?substr($right,1):$right;
+        $magnitude=strlen($leftDigits)<=>strlen($rightDigits);
+        if($magnitude===0)$magnitude=strcmp($leftDigits,$rightDigits)<=>0;
+        return $leftNegative?-$magnitude:$magnitude;
+    };
+    if($compare($canonical,$minimum)<0||$compare($canonical,$maximum)>0)throw new InvalidArgumentException($label.' berada di luar batas yang didukung.');
+    return $canonical;
+}
+
+function parseBoundedDecimalInteger(mixed $value, string $minimum, string $maximum, string $label): int {
+    $canonical=normalizeBoundedDecimalInteger($value,$minimum,$maximum,$label);
+    return (int)$canonical;
+}
+
 function formatWitaTimestamp($value): ?string {
     if ($value === null || trim((string)$value) === '') return null;
     try {
@@ -119,6 +145,226 @@ function assertNoActiveWorkOrder(PDO $pdo, string $vehicleRefId, ?string $exclud
     $stmt->execute($params);
     $activeNumber = $stmt->fetchColumn();
     if ($activeNumber) throw new DomainException("Kendaraan masih memiliki WO aktif: {$activeNumber}.");
+}
+
+function runInventoryLedgerBackfill(PDO $pdo, string $migrationKey, callable $backfill): void {
+    $check=$pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $check->execute([$migrationKey]);
+    if((int)$check->fetchColumn()>0)return;
+    $pdo->beginTransaction();
+    try{
+        lockInventoryMutation($pdo);
+        $lockedCheck=$pdo->prepare('SELECT migration_key FROM app_schema_migrations WHERE migration_key=? FOR UPDATE');
+        $lockedCheck->execute([$migrationKey]);
+        if($lockedCheck->fetchColumn()){$pdo->commit();return;}
+        $backfill($pdo);
+        $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$migrationKey]);
+        $pdo->commit();
+    }catch(Throwable $error){
+        if($pdo->inTransaction())$pdo->rollBack();
+        throw $error;
+    }
+}
+
+function ensureInventoryLedgerReady(PDO $pdo): void {
+    if(!$pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()||!$pdo->query("SHOW TABLES LIKE 'goods_receipts'")->fetch())return;
+    $salesItemColumns=array_column($pdo->query('SHOW COLUMNS FROM sales_invoice_items')->fetchAll(),'Field');
+    if(!in_array('warehouse_id',$salesItemColumns,true))$pdo->exec('ALTER TABLE sales_invoice_items ADD warehouse_id VARCHAR(20) NULL AFTER item_id');
+    $receiptColumns=array_column($pdo->query('SHOW COLUMNS FROM goods_receipts')->fetchAll(),'Field');
+    if(!in_array('warehouse_id',$receiptColumns,true))$pdo->exec('ALTER TABLE goods_receipts ADD warehouse_id VARCHAR(20) NULL AFTER branch_id');
+    if(!in_array('source_type',$receiptColumns,true))$pdo->exec("ALTER TABLE goods_receipts ADD source_type VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER warehouse_id");
+    if(!in_array('source_warehouse_id',$receiptColumns,true))$pdo->exec('ALTER TABLE goods_receipts ADD source_warehouse_id VARCHAR(20) NULL AFTER source_type');
+
+    $unsupportedLegacyQuantity=$pdo->query("SELECT 1 FROM sales_invoice_items WHERE qty=-2147483648 UNION ALL SELECT 1 FROM goods_receipt_items WHERE qty=-2147483648 LIMIT 1")->fetchColumn();
+    if($unsupportedLegacyQuantity!==false)throw new DomainException('Legacy quantity minimum INT tidak dapat dinormalisasi');
+
+    runInventoryLedgerBackfill($pdo,'backfill_sales_stock_journal_20260820_v1',static function(PDO $pdo):void{
+        $pdo->exec("UPDATE sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id JOIN warehouses w ON w.branch_id=i.branch_id AND w.is_default=1 AND w.is_active=1 SET d.warehouse_id=w.id WHERE d.warehouse_id IS NULL OR d.warehouse_id=''");
+        $pdo->exec("INSERT IGNORE INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by,occurred_at,idempotency_key)
+            SELECT CONCAT('MOV-BFS-',d.id),d.item_id,IF(d.qty>0,d.warehouse_id,NULL),IF(d.qty<0,d.warehouse_id,NULL),ABS(d.qty),'sale','sales_invoice',i.id,i.invoice_number,CONCAT('Migrasi penjualan ',i.invoice_number),NULL,CONCAT(i.date,' 12:00:00'),CONCAT('legacy-sales:',d.id)
+            FROM sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id JOIN items m ON m.id=d.item_id
+            WHERE m.type='Persediaan' AND d.item_id IS NOT NULL AND d.warehouse_id IS NOT NULL AND d.qty<>0 AND COALESCE(i.backdate_reason,'')<>'Input Cepat Historis (stok tidak dipotong)'");
+        $pdo->exec("INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity,stock_version)
+            SELECT DISTINCT d.warehouse_id,d.item_id,0,0,1 FROM sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id JOIN items m ON m.id=d.item_id
+            WHERE m.type='Persediaan' AND d.item_id IS NOT NULL AND d.warehouse_id IS NOT NULL AND d.qty<>0 AND COALESCE(i.backdate_reason,'')<>'Input Cepat Historis (stok tidak dipotong)'
+            ON DUPLICATE KEY UPDATE stock_version=stock_version+1");
+    });
+
+    runInventoryLedgerBackfill($pdo,'backfill_receipt_stock_journal_20260820_v1',static function(PDO $pdo):void{
+        $pdo->exec("UPDATE goods_receipts r JOIN warehouses w ON w.branch_id=r.branch_id AND w.is_default=1 AND w.is_active=1 SET r.warehouse_id=w.id WHERE r.warehouse_id IS NULL OR r.warehouse_id=''");
+        $pdo->exec("INSERT IGNORE INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by,occurred_at,idempotency_key)
+            SELECT CONCAT('MOV-BFR-',d.id),d.item_id,IF(d.qty<0,r.warehouse_id,IF(r.source_type='Transfer Gudang',r.source_warehouse_id,NULL)),IF(d.qty<0,IF(r.source_type='Transfer Gudang',r.source_warehouse_id,NULL),r.warehouse_id),ABS(d.qty),IF(r.source_type='Transfer Gudang','transfer','receipt'),'goods_receipt',r.id,r.receipt_number,CONCAT('Migrasi penerimaan ',r.receipt_number),NULL,CONCAT(r.date,' 12:00:00'),CONCAT('legacy-receipt:',d.id)
+            FROM goods_receipt_items d JOIN goods_receipts r ON r.id=d.receipt_id JOIN items i ON i.id=d.item_id
+            WHERE r.status IN ('Diterima','Difakturkan','Sebagian') AND i.type='Persediaan' AND r.warehouse_id IS NOT NULL AND d.qty<>0");
+        $pdo->exec("INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity,stock_version)
+            SELECT pairs.warehouse_id,pairs.item_id,0,0,1 FROM (
+                SELECT DISTINCT r.warehouse_id AS warehouse_id,d.item_id FROM goods_receipt_items d JOIN goods_receipts r ON r.id=d.receipt_id JOIN items i ON i.id=d.item_id WHERE r.status IN ('Diterima','Difakturkan','Sebagian') AND i.type='Persediaan' AND r.warehouse_id IS NOT NULL AND d.qty<>0
+                UNION
+                SELECT DISTINCT r.source_warehouse_id AS warehouse_id,d.item_id FROM goods_receipt_items d JOIN goods_receipts r ON r.id=d.receipt_id JOIN items i ON i.id=d.item_id WHERE r.status IN ('Diterima','Difakturkan','Sebagian') AND i.type='Persediaan' AND r.source_type='Transfer Gudang' AND r.source_warehouse_id IS NOT NULL AND d.qty<>0
+            ) pairs ON DUPLICATE KEY UPDATE stock_version=stock_version+1");
+    });
+
+    if($pdo->query("SHOW TABLES LIKE 'warehouse_transfers'")->fetch()&&$pdo->query("SHOW TABLES LIKE 'warehouse_transfer_items'")->fetch()){
+        runInventoryLedgerBackfill($pdo,'repair_transfer_stock_journal_20260820_v1',static function(PDO $pdo):void{
+            $pdo->exec("UPDATE stock_movements m JOIN warehouse_transfers t ON m.notes=CONCAT('Kirim ',t.transfer_number) SET m.movement_type='transfer_send',m.reference_type='warehouse_transfer',m.reference_id=t.id,m.reference_number=t.transfer_number WHERE m.reference_id IS NULL");
+            $pdo->exec("UPDATE stock_movements m JOIN warehouse_transfers t ON m.notes=CONCAT('Terima ',t.transfer_number) SET m.movement_type='transfer_receive',m.reference_type='warehouse_transfer',m.reference_id=t.id,m.reference_number=t.transfer_number WHERE m.reference_id IS NULL");
+            $pdo->exec("INSERT IGNORE INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by,created_at) SELECT CONCAT('MOV-BFTS-',d.id),d.item_id,t.source_warehouse_id,t.destination_warehouse_id,d.qty_sent,'transfer_send','warehouse_transfer',t.id,t.transfer_number,CONCAT('Migrasi kirim ',t.transfer_number),t.created_by,COALESCE(t.sent_at,t.created_at) FROM warehouse_transfer_items d JOIN warehouse_transfers t ON t.id=d.transfer_id WHERE t.status NOT IN('Draft','Dibatalkan') AND NOT EXISTS(SELECT 1 FROM stock_movements m WHERE m.reference_type='warehouse_transfer' AND m.reference_id=t.id AND m.item_id=d.item_id AND m.movement_type='transfer_send')");
+            $pdo->exec("INSERT IGNORE INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by,created_at) SELECT CONCAT('MOV-BFTR-',d.id),d.item_id,t.source_warehouse_id,t.destination_warehouse_id,d.qty_received,'transfer_receive','warehouse_transfer',t.id,t.transfer_number,CONCAT('Migrasi terima ',t.transfer_number),t.created_by,COALESCE(t.received_at,t.updated_at) FROM warehouse_transfer_items d JOIN warehouse_transfers t ON t.id=d.transfer_id WHERE d.qty_received>0 AND t.status<>'Dibatalkan' AND NOT EXISTS(SELECT 1 FROM stock_movements m WHERE m.reference_type='warehouse_transfer' AND m.reference_id=t.id AND m.item_id=d.item_id AND m.movement_type='transfer_receive')");
+        });
+    }
+
+    runInventoryLedgerBackfill($pdo,'canonicalize_signed_legacy_stock_journal_20260905_v2',static function(PDO $pdo):void{
+        $pdo->exec("UPDATE stock_movements m JOIN sales_invoice_items d ON m.id=CONCAT('MOV-BFS-',d.id) SET m.source_warehouse_id=IF(d.qty>0,d.warehouse_id,NULL),m.destination_warehouse_id=IF(d.qty<0,d.warehouse_id,NULL),m.quantity=ABS(d.qty) WHERE d.qty<0");
+        $pdo->exec("UPDATE stock_movements m JOIN goods_receipt_items d ON m.id=CONCAT('MOV-BFR-',d.id) JOIN goods_receipts r ON r.id=d.receipt_id SET m.source_warehouse_id=IF(d.qty<0,r.warehouse_id,IF(r.source_type='Transfer Gudang',r.source_warehouse_id,NULL)),m.destination_warehouse_id=IF(d.qty<0,IF(r.source_type='Transfer Gudang',r.source_warehouse_id,NULL),r.warehouse_id),m.quantity=ABS(d.qty) WHERE d.qty<0");
+        $pdo->exec("INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity,stock_version)
+            SELECT affected.warehouse_id,affected.item_id,0,0,1 FROM (
+                SELECT DISTINCT d.warehouse_id,d.item_id FROM sales_invoice_items d WHERE d.warehouse_id IS NOT NULL AND d.qty<0
+                UNION
+                SELECT DISTINCT r.warehouse_id,d.item_id FROM goods_receipt_items d JOIN goods_receipts r ON r.id=d.receipt_id WHERE r.warehouse_id IS NOT NULL AND d.qty<0
+                UNION
+                SELECT DISTINCT r.source_warehouse_id,d.item_id FROM goods_receipt_items d JOIN goods_receipts r ON r.id=d.receipt_id WHERE r.source_type='Transfer Gudang' AND r.source_warehouse_id IS NOT NULL AND d.qty<0
+            ) affected ON DUPLICATE KEY UPDATE stock_version=stock_version+1");
+    });
+
+    runInventoryLedgerBackfill($pdo,'void_nonstock_historical_sales_20260905_v1',static function(PDO $pdo):void{
+        $pdo->exec("INSERT INTO warehouse_stocks (warehouse_id,item_id,quantity,reserved_quantity,stock_version)
+            SELECT affected.warehouse_id,affected.item_id,0,0,1 FROM (
+                SELECT DISTINCT m.source_warehouse_id AS warehouse_id,m.item_id FROM stock_movements m JOIN sales_invoice_items d ON m.id=CONCAT('MOV-BFS-',d.id) JOIN sales_invoices i ON i.id=d.invoice_id WHERE i.backdate_reason='Input Cepat Historis (stok tidak dipotong)' AND m.is_voided=0 AND m.source_warehouse_id IS NOT NULL
+                UNION
+                SELECT DISTINCT m.destination_warehouse_id AS warehouse_id,m.item_id FROM stock_movements m JOIN sales_invoice_items d ON m.id=CONCAT('MOV-BFS-',d.id) JOIN sales_invoices i ON i.id=d.invoice_id WHERE i.backdate_reason='Input Cepat Historis (stok tidak dipotong)' AND m.is_voided=0 AND m.destination_warehouse_id IS NOT NULL
+            ) affected ON DUPLICATE KEY UPDATE stock_version=stock_version+1");
+        $pdo->exec("UPDATE stock_movements m JOIN sales_invoice_items d ON m.id=CONCAT('MOV-BFS-',d.id) JOIN sales_invoices i ON i.id=d.invoice_id SET m.is_voided=1 WHERE i.backdate_reason='Input Cepat Historis (stok tidak dipotong)' AND m.is_voided=0");
+    });
+}
+
+function historicalWarehouseQuantitiesFromLedger(PDO $pdo, string $warehouseId, string $date): array {
+    if($warehouseId===''||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date))throw new InvalidArgumentException('Parameter histori stok tidak valid');
+    ensureInventoryLedgerReady($pdo);
+    $quantities=[];
+    $current=$pdo->prepare('SELECT item_id,quantity FROM warehouse_stocks WHERE warehouse_id=?');
+    $current->execute([$warehouseId]);
+    foreach($current->fetchAll() as $row)$quantities[(string)$row['item_id']]=(int)$row['quantity'];
+    $movements=$pdo->prepare("SELECT item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type
+        FROM stock_movements
+        WHERE is_voided=0
+          AND COALESCE(occurred_at,created_at)>CONCAT(?,' 23:59:59')
+          AND (source_warehouse_id=? OR destination_warehouse_id=?)");
+    $movements->execute([$date,$warehouseId,$warehouseId]);
+    foreach($movements->fetchAll() as $row){
+        $itemId=(string)$row['item_id'];
+        $quantity=parseBoundedDecimalInteger($row['quantity']??null,'1','2147483647','Kuantitas jurnal stok');
+        $type=(string)$row['movement_type'];
+        if(!array_key_exists($itemId,$quantities))$quantities[$itemId]=0;
+        if((string)$row['source_warehouse_id'] === $warehouseId&&$type!=='transfer_receive')$quantities[$itemId]+=$quantity;
+        if((string)$row['destination_warehouse_id'] === $warehouseId&&$type!=='transfer_send')$quantities[$itemId]-=$quantity;
+    }
+    return $quantities;
+}
+
+function ensureTableColumn(PDO $pdo, string $table, string $column, string $definition): void {
+    if(!preg_match('/^[A-Za-z0-9_]+$/',$table)||!preg_match('/^[A-Za-z0-9_]+$/',$column)){
+        throw new InvalidArgumentException('Nama tabel atau kolom bootstrap tidak valid.');
+    }
+    $columnStmt=$pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+    $columnStmt->execute([$table,$column]);
+    if($columnStmt->fetch())return;
+    $pdo->exec("ALTER TABLE `".$table."` ADD COLUMN `".$column."` ".$definition);
+}
+
+function ensureOwnedStockOpnameColumn(PDO $pdo, string $table, string $column, string $definition): void {
+    if(!preg_match('/^[A-Za-z0-9_]+$/',$table)||!preg_match('/^[A-Za-z0-9_]+$/',$column)){
+        throw new InvalidArgumentException('Nama tabel atau kolom ownership tidak valid.');
+    }
+    $pdo->exec("CREATE TABLE IF NOT EXISTS stock_opname_schema_ownership (
+        component_type VARCHAR(20) NOT NULL, table_name VARCHAR(64) NOT NULL,
+        component_name VARCHAR(64) NOT NULL, prior_definition LONGTEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(component_type,table_name,component_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensureTableColumn($pdo,'stock_opname_schema_ownership','prior_definition','LONGTEXT NULL AFTER component_name');
+    $columnStmt=$pdo->prepare("SELECT COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA,CHARACTER_SET_NAME,COLLATION_NAME,COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+    $columnStmt->execute([$table,$column]);
+    $existing=$columnStmt->fetch()?:null;
+    $priorDefinition=null;
+    if($existing){
+        $priorDefinition=(string)$existing['COLUMN_TYPE'];
+        if(!empty($existing['CHARACTER_SET_NAME']))$priorDefinition.=' CHARACTER SET '.$existing['CHARACTER_SET_NAME'].' COLLATE '.$existing['COLLATION_NAME'];
+        $priorDefinition.=$existing['IS_NULLABLE']==='YES'?' NULL':' NOT NULL';
+        if($existing['COLUMN_DEFAULT']===null){if($existing['IS_NULLABLE']==='YES')$priorDefinition.=' DEFAULT NULL';}
+        else $priorDefinition.=' DEFAULT '.$pdo->quote((string)$existing['COLUMN_DEFAULT']);
+        if(!empty($existing['EXTRA']))$priorDefinition.=' '.$existing['EXTRA'];
+        if((string)$existing['COLUMN_COMMENT']!=='')$priorDefinition.=' COMMENT '.$pdo->quote((string)$existing['COLUMN_COMMENT']);
+    }
+    // Intent disimpan sebelum DDL yang auto-commit. Bila koneksi putus setelah
+    // ALTER, retry tetap tahu bahwa kolom tersebut dibuat oleh fitur ini.
+    $pdo->prepare("INSERT IGNORE INTO stock_opname_schema_ownership(component_type,table_name,component_name,prior_definition) VALUES('column',?,?,?)")
+        ->execute([$table,$column,$priorDefinition]);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS stock_opname_schema_value_backups (
+        table_name VARCHAR(64) NOT NULL, column_name VARCHAR(64) NOT NULL,
+        row_key VARCHAR(191) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(table_name,column_name,row_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    if($existing&&$existing['IS_NULLABLE']==='YES'){
+        $pdo->exec("INSERT IGNORE INTO stock_opname_schema_value_backups(table_name,column_name,row_key) SELECT ".$pdo->quote($table).", ".$pdo->quote($column).", CAST(id AS CHAR) FROM `".$table."` WHERE `".$column."` IS NULL");
+    }
+    if($existing)return;
+    ensureTableColumn($pdo,$table,$column,$definition);
+}
+
+function assertCompatibleStockCountResultItemIndex(PDO $pdo): bool {
+    if (!$pdo->query("SHOW TABLES LIKE 'stock_count_result_items'")->fetch()) return false;
+    $indexes=$pdo->query("SHOW INDEX FROM stock_count_result_items WHERE Key_name='uq_stock_count_result_item'")->fetchAll();
+    usort($indexes,static fn(array $a,array $b):int=>(int)$a['Seq_in_index']<=>(int)$b['Seq_in_index']);
+    $isValid=count($indexes)===2
+        &&(int)$indexes[0]['Non_unique']===0
+        &&(int)$indexes[0]['Seq_in_index']===1
+        &&(string)$indexes[0]['Column_name']==='result_id'
+        &&$indexes[0]['Sub_part']===null
+        &&(int)$indexes[1]['Seq_in_index']===2
+        &&(string)$indexes[1]['Column_name']==='item_id'
+        &&$indexes[1]['Sub_part']===null;
+    if($indexes&&!$isValid)throw new RuntimeException('Index uq_stock_count_result_item memiliki definisi yang tidak kompatibel.');
+    return $isValid;
+}
+
+function ensureCanonicalStockCountResultItemIndex(PDO $pdo): void {
+    $isCanonical=assertCompatibleStockCountResultItemIndex($pdo);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS stock_opname_schema_ownership (
+        component_type VARCHAR(20) NOT NULL, table_name VARCHAR(64) NOT NULL,
+        component_name VARCHAR(64) NOT NULL, prior_definition LONGTEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(component_type,table_name,component_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensureTableColumn($pdo,'stock_opname_schema_ownership','prior_definition','LONGTEXT NULL AFTER component_name');
+    $pdo->prepare("INSERT IGNORE INTO stock_opname_schema_ownership(component_type,table_name,component_name,prior_definition) VALUES('index','stock_count_result_items','uq_stock_count_result_item',?)")
+        ->execute([$isCanonical?'0:result_id,item_id:0':null]);
+    if(!$isCanonical)$pdo->exec("ALTER TABLE stock_count_result_items ADD UNIQUE KEY uq_stock_count_result_item(result_id,item_id)");
+}
+
+function assertValidExistingStockOpnameSnapshotValues(PDO $pdo): void {
+    if($pdo->query("SHOW TABLES LIKE 'stock_count_orders'")->fetch()){
+        $columns=array_column($pdo->query("SHOW COLUMNS FROM stock_count_orders")->fetchAll(),'Field');
+        if(in_array('include_zero_unused',$columns,true)){
+            $invalid=(int)$pdo->query("SELECT COUNT(*) FROM stock_count_orders WHERE include_zero_unused IS NOT NULL AND include_zero_unused NOT IN (0,1)")->fetchColumn();
+            if($invalid>0)throw new RuntimeException('Schema Stok Opname memiliki nilai snapshot di luar domain');
+        }
+    }
+    if(!$pdo->query("SHOW TABLES LIKE 'stock_count_result_items'")->fetch())return;
+    $columns=array_column($pdo->query("SHOW COLUMNS FROM stock_count_result_items")->fetchAll(),'Field');
+    $predicates=[];
+    foreach(['system_version','movement_in','movement_out'] as $column){
+        if(in_array($column,$columns,true))$predicates[]=$column.'<0';
+    }
+    if(in_array('is_manual',$columns,true))$predicates[]='(is_manual IS NOT NULL AND is_manual NOT IN (0,1))';
+    if($predicates&&(int)$pdo->query('SELECT COUNT(*) FROM stock_count_result_items WHERE '.implode(' OR ',$predicates))->fetchColumn()>0){
+        throw new RuntimeException('Schema Stok Opname memiliki nilai snapshot di luar domain');
+    }
+}
+
+function assertNoDuplicateStockCountResultItems(PDO $pdo): void {
+    if(!$pdo->query("SHOW TABLES LIKE 'stock_count_result_items'")->fetch())return;
+    $duplicates=(int)$pdo->query("SELECT COUNT(*) FROM (SELECT result_id,item_id FROM stock_count_result_items GROUP BY result_id,item_id HAVING COUNT(*)>1) duplicate_items")->fetchColumn();
+    if($duplicates>0)throw new RuntimeException('Data Stok Opname memiliki item hasil duplikat');
 }
 
 function ensureApiSupportTables(PDO $pdo): void {
@@ -266,6 +512,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             throw $e;
         }
     }
+    ensureTableColumn($pdo,'work_orders','cancel_reason','TEXT NULL');
     $lostSalesMigrationKey = 'legacy_floating_work_orders_to_lost_sales_20260810_v1';
     $lostSalesMigrationCheck = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
     $lostSalesMigrationCheck->execute([$lostSalesMigrationKey]);
@@ -403,7 +650,7 @@ function ensureApiSupportTables(PDO $pdo): void {
             branch_id VARCHAR(20) NOT NULL,
             PRIMARY KEY (user_id, branch_id),
             INDEX idx_user_branch (branch_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS warehouses (
@@ -416,10 +663,10 @@ function ensureApiSupportTables(PDO $pdo): void {
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_warehouse_branch (branch_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    $pdo->exec("ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS address VARCHAR(255) NULL AFTER name");
-    $pdo->exec("ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS is_system TINYINT(1) NOT NULL DEFAULT 0 AFTER is_sellable");
+    ensureTableColumn($pdo,'warehouses','address','VARCHAR(255) NULL AFTER name');
+    ensureTableColumn($pdo,'warehouses','is_system','TINYINT(1) NOT NULL DEFAULT 0 AFTER is_sellable');
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS warehouse_stocks (
             warehouse_id VARCHAR(20) NOT NULL,
@@ -429,9 +676,9 @@ function ensureApiSupportTables(PDO $pdo): void {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (warehouse_id, item_id),
             INDEX idx_stock_item (item_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    $pdo->exec("ALTER TABLE warehouse_stocks ADD COLUMN IF NOT EXISTS stock_version BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER reserved_quantity");
+    ensureTableColumn($pdo,'warehouse_stocks','stock_version','BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER reserved_quantity');
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_movements (
             id VARCHAR(30) NOT NULL PRIMARY KEY,
@@ -446,15 +693,22 @@ function ensureApiSupportTables(PDO $pdo): void {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_movement_item (item_id),
             INDEX idx_movement_created (created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     // VARCHAR keeps the journal extensible (send/receive/reversal) and avoids
     // silently coercing new movement types to an empty MySQL ENUM value.
     $movementTypeColumn=$pdo->query("SHOW COLUMNS FROM stock_movements LIKE 'movement_type'")->fetch();
     if($movementTypeColumn&&str_starts_with(strtolower((string)$movementTypeColumn['Type']),'enum('))$pdo->exec("ALTER TABLE stock_movements MODIFY movement_type VARCHAR(30) NOT NULL DEFAULT 'transfer'");
-    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_type VARCHAR(40) NULL AFTER movement_type");
-    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id VARCHAR(64) NULL AFTER reference_type");
-    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_number VARCHAR(60) NULL AFTER reference_id");
+    ensureTableColumn($pdo,'stock_movements','reference_type','VARCHAR(40) NULL AFTER movement_type');
+    ensureTableColumn($pdo,'stock_movements','reference_id','VARCHAR(64) NULL AFTER reference_type');
+    ensureTableColumn($pdo,'stock_movements','reference_number','VARCHAR(60) NULL AFTER reference_id');
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS inventory_operation_locks (
+            lock_key VARCHAR(30) NOT NULL PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $pdo->exec("INSERT IGNORE INTO inventory_operation_locks(lock_key) VALUES('global')");
     $ledgerV2Migration='stock_movement_ledger_v2_20260821';
     $ledgerV2Check=$pdo->prepare("SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?");
     $ledgerV2Check->execute([$ledgerV2Migration]);
@@ -464,19 +718,27 @@ function ensureApiSupportTables(PDO $pdo): void {
             if(!in_array('movement_sequence',$movementColumns,true)){
                 $pdo->exec("ALTER TABLE stock_movements ADD COLUMN movement_sequence BIGINT UNSIGNED NULL AFTER id");
             }
+            ensureTableColumn($pdo,'stock_movements','occurred_at','DATETIME NULL AFTER notes');
+            ensureTableColumn($pdo,'stock_movements','unit_cost','DECIMAL(15,2) NULL AFTER quantity');
+            ensureTableColumn($pdo,'stock_movements','reversal_of_id','VARCHAR(30) NULL AFTER reference_number');
+            ensureTableColumn($pdo,'stock_movements','correction_group_id','VARCHAR(64) NULL AFTER reversal_of_id');
+            ensureTableColumn($pdo,'stock_movements','idempotency_key','VARCHAR(160) NULL AFTER correction_group_id');
             $movementSequenceColumn=$pdo->query("SHOW COLUMNS FROM stock_movements LIKE 'movement_sequence'")->fetch();
-            if($movementSequenceColumn&&!str_contains(strtolower((string)($movementSequenceColumn['Extra']??'')),'auto_increment')){
-                $pdo->exec("SET @drac_movement_sequence := (SELECT COALESCE(MAX(movement_sequence),0) FROM stock_movements)");
-                $pdo->exec("UPDATE stock_movements SET movement_sequence=(@drac_movement_sequence:=@drac_movement_sequence+1) WHERE movement_sequence IS NULL ORDER BY created_at,id");
+            $sequenceNeedsUpgrade=$movementSequenceColumn&&!str_contains(strtolower((string)($movementSequenceColumn['Extra']??'')),'auto_increment');
+            $pdo->beginTransaction();
+            try{
+                lockInventoryMutation($pdo);
+                if($sequenceNeedsUpgrade){
+                    $pdo->exec("SET @drac_movement_sequence := (SELECT COALESCE(MAX(movement_sequence),0) FROM stock_movements)");
+                    $pdo->exec("UPDATE stock_movements SET movement_sequence=(@drac_movement_sequence:=@drac_movement_sequence+1) WHERE movement_sequence IS NULL ORDER BY created_at,id");
+                }
+                $pdo->exec("UPDATE stock_movements SET occurred_at=created_at WHERE occurred_at IS NULL");
+                $pdo->commit();
+            }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+            if($sequenceNeedsUpgrade){
                 $sequenceIndex=$pdo->query("SHOW INDEX FROM stock_movements WHERE Key_name='uq_stock_movement_sequence'")->fetch();
                 $pdo->exec("ALTER TABLE stock_movements MODIFY movement_sequence BIGINT UNSIGNED NOT NULL AUTO_INCREMENT".($sequenceIndex?'':", ADD UNIQUE KEY uq_stock_movement_sequence(movement_sequence)"));
             }
-            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS occurred_at DATETIME NULL AFTER notes");
-            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(15,2) NULL AFTER quantity");
-            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reversal_of_id VARCHAR(30) NULL AFTER reference_number");
-            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS correction_group_id VARCHAR(64) NULL AFTER reversal_of_id");
-            $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(160) NULL AFTER correction_group_id");
-            $pdo->exec("UPDATE stock_movements SET occurred_at=created_at WHERE occurred_at IS NULL");
             $indexRows=$pdo->query("SHOW INDEX FROM stock_movements")->fetchAll();
             $indexNames=array_column($indexRows,'Key_name');
             if(!in_array('uq_stock_movement_idempotency',$indexNames,true))$pdo->exec("ALTER TABLE stock_movements ADD UNIQUE KEY uq_stock_movement_idempotency(idempotency_key)");
@@ -485,10 +747,10 @@ function ensureApiSupportTables(PDO $pdo): void {
             $pdo->prepare("INSERT INTO app_schema_migrations(migration_key) VALUES(?)")->execute([$ledgerV2Migration]);
         }catch(Throwable $e){throw $e;}
     }
-    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS is_voided TINYINT(1) NOT NULL DEFAULT 0 AFTER idempotency_key");
-    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS voided_at DATETIME NULL AFTER is_voided");
-    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS voided_by VARCHAR(20) NULL AFTER voided_at");
-    $pdo->exec("ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS void_reason VARCHAR(255) NULL AFTER voided_by");
+    ensureTableColumn($pdo,'stock_movements','is_voided','TINYINT(1) NOT NULL DEFAULT 0 AFTER idempotency_key');
+    ensureTableColumn($pdo,'stock_movements','voided_at','DATETIME NULL AFTER is_voided');
+    ensureTableColumn($pdo,'stock_movements','voided_by','VARCHAR(20) NULL AFTER voided_at');
+    ensureTableColumn($pdo,'stock_movements','void_reason','VARCHAR(255) NULL AFTER voided_by');
     $voidIndex=$pdo->query("SHOW INDEX FROM stock_movements WHERE Key_name='idx_stock_movements_active'")->fetch();
     if(!$voidIndex)$pdo->exec("CREATE INDEX idx_stock_movements_active ON stock_movements(is_voided,reference_type,reference_id)");
     $pdo->exec("
@@ -558,14 +820,33 @@ function ensureApiSupportTables(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
+        CREATE TABLE IF NOT EXISTS inventory_import_batches (
+            batch_key VARCHAR(100) NOT NULL PRIMARY KEY,
+            payload_sha256 CHAR(64) NOT NULL,
+            status VARCHAR(20) NOT NULL,
+            import_type VARCHAR(30) NOT NULL,
+            effective_date DATE NOT NULL,
+            row_count INT UNSIGNED NOT NULL DEFAULT 0,
+            created_by VARCHAR(20) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME NULL,
+            detail_json LONGTEXT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    assertCompatibleStockCountResultItemIndex($pdo);
+    assertNoDuplicateStockCountResultItems($pdo);
+    assertValidExistingStockOpnameSnapshotValues($pdo);
+    $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_count_orders (
             id VARCHAR(30) NOT NULL PRIMARY KEY,
             order_number VARCHAR(40) NOT NULL UNIQUE,
             order_date DATE NOT NULL,
             start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
             warehouse_id VARCHAR(20) NOT NULL,
             branch_id VARCHAR(20) NOT NULL,
             category_id VARCHAR(20) NULL,
+            include_zero_unused TINYINT(1) NOT NULL DEFAULT 1,
             assigned_user_id VARCHAR(20) NOT NULL,
             assigned_user_name VARCHAR(120) NOT NULL,
             status VARCHAR(30) NOT NULL DEFAULT 'Menunggu Eksekusi',
@@ -605,6 +886,12 @@ function ensureApiSupportTables(PDO $pdo): void {
             category_name VARCHAR(120) NOT NULL DEFAULT '',
             unit VARCHAR(30) NOT NULL DEFAULT '',
             system_quantity INT NOT NULL DEFAULT 0,
+            system_version BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            movement_in BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            movement_out BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            is_manual TINYINT(1) NOT NULL DEFAULT 0,
+            added_by VARCHAR(20) NULL,
+            added_at DATETIME NULL,
             count_1 INT NULL,
             count_2 INT NULL,
             final_quantity INT NULL,
@@ -613,7 +900,35 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_stock_count_result_item (item_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
-    $pdo->exec("ALTER TABLE stock_count_result_items ADD COLUMN IF NOT EXISTS system_version BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER system_quantity");
+    $stockCountOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM stock_count_orders")->fetchAll(), 'Field');
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_orders','end_date','DATE NULL AFTER start_date');
+    $pdo->exec("UPDATE stock_count_orders o LEFT JOIN stock_count_results r ON r.order_id=o.id SET o.end_date=COALESCE(r.result_date,o.start_date) WHERE o.end_date IS NULL");
+    $stockCountEndDateColumn = $pdo->query("SHOW COLUMNS FROM stock_count_orders LIKE 'end_date'")->fetch();
+    if ($stockCountEndDateColumn && $stockCountEndDateColumn['Null'] === 'YES') $pdo->exec("ALTER TABLE stock_count_orders MODIFY end_date DATE NOT NULL");
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_orders','include_zero_unused','TINYINT(1) NOT NULL DEFAULT 1 AFTER category_id');
+    if((int)$pdo->query("SELECT COUNT(*) FROM stock_count_orders WHERE include_zero_unused NOT IN (0,1)")->fetchColumn()>0)throw new RuntimeException('Schema Stok Opname memiliki nilai snapshot di luar domain');
+    $pdo->exec("UPDATE stock_count_orders SET include_zero_unused=1 WHERE include_zero_unused IS NULL");
+    $pdo->exec("ALTER TABLE stock_count_orders MODIFY include_zero_unused TINYINT(1) NOT NULL DEFAULT 1");
+    $stockCountItemColumns = array_column($pdo->query("SHOW COLUMNS FROM stock_count_result_items")->fetchAll(), 'Field');
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_result_items','system_version','BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER system_quantity');
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_result_items','movement_in','BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER system_version');
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_result_items','movement_out','BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER movement_in');
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_result_items','is_manual','TINYINT(1) NOT NULL DEFAULT 0 AFTER movement_out');
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_result_items','added_by','VARCHAR(20) NULL AFTER is_manual');
+    ensureOwnedStockOpnameColumn($pdo,'stock_count_result_items','added_at','DATETIME NULL AFTER added_by');
+    $invalidSnapshotValues=(int)$pdo->query("SELECT COUNT(*) FROM stock_count_result_items WHERE system_version<0 OR movement_in<0 OR movement_out<0 OR is_manual NOT IN (0,1)")->fetchColumn();
+    if($invalidSnapshotValues>0)throw new RuntimeException('Schema Stok Opname memiliki nilai snapshot di luar domain');
+    $pdo->exec("UPDATE stock_count_result_items SET system_version=0 WHERE system_version IS NULL");
+    $pdo->exec("UPDATE stock_count_result_items SET movement_in=0 WHERE movement_in IS NULL");
+    $pdo->exec("UPDATE stock_count_result_items SET movement_out=0 WHERE movement_out IS NULL");
+    $pdo->exec("UPDATE stock_count_result_items SET is_manual=0 WHERE is_manual IS NULL");
+    $pdo->exec("ALTER TABLE stock_count_result_items MODIFY system_version BIGINT UNSIGNED NOT NULL DEFAULT 0");
+    $pdo->exec("ALTER TABLE stock_count_result_items MODIFY movement_in BIGINT UNSIGNED NOT NULL DEFAULT 0");
+    $pdo->exec("ALTER TABLE stock_count_result_items MODIFY movement_out BIGINT UNSIGNED NOT NULL DEFAULT 0");
+    $pdo->exec("ALTER TABLE stock_count_result_items MODIFY is_manual TINYINT(1) NOT NULL DEFAULT 0");
+    $pdo->exec("ALTER TABLE stock_count_result_items MODIFY added_by VARCHAR(20) NULL");
+    $pdo->exec("ALTER TABLE stock_count_result_items MODIFY added_at DATETIME NULL");
+    ensureCanonicalStockCountResultItemIndex($pdo);
     $pdo->exec("CREATE TABLE IF NOT EXISTS cash_accounts (
         id VARCHAR(64) PRIMARY KEY, code VARCHAR(30) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL,
         account_type ENUM('cash','bank','qris') NOT NULL, branch_id VARCHAR(20) NULL,
@@ -804,23 +1119,37 @@ function ensureApiSupportTables(PDO $pdo): void {
             $roleCode = strtoupper(trim((string)($roleRow['code'] ?? '')));
             $roleName = strtolower(trim((string)($roleRow['name'] ?? '')));
             if ($roleCode === 'ADM' || str_contains($roleName, 'administrator')) $next[] = 'payment:edit';
-            if (in_array('item:view', $permissions, true)) {
-                $next[]='stock_opname:view';
-                $next[]='stock_opname:count';
-            }
-            if (in_array('item:create', $permissions, true)) $next[]='stock_opname:create';
-            if (in_array('item:delete', $permissions, true)) $next[]='stock_opname:delete';
-            if ($roleCode === 'ADM' || str_contains($roleName, 'administrator')) $next[]='stock_opname:post';
             $next = array_values(array_unique($next));
             if ($next !== $permissions) $roleUpdate->execute([json_encode($next), $roleRow['id']]);
         }
     }
-    $pdo->exec("
-        INSERT IGNORE INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity)
-        SELECT w.id, s.item_id, s.stock, GREATEST(0, s.stock - s.sellable_stock)
-        FROM branch_item_stocks s
-        JOIN warehouses w ON w.branch_id COLLATE utf8mb4_unicode_ci = s.branch_id AND w.is_default = 1
-    ");
+    $pdo->beginTransaction();
+    try {
+        lockInventoryMutation($pdo);
+        $invalidDefaultWarehouse=$pdo->query("
+            SELECT s.branch_id
+            FROM (SELECT DISTINCT branch_id FROM branch_item_stocks) s
+            LEFT JOIN warehouses w ON w.branch_id COLLATE utf8mb4_unicode_ci = s.branch_id
+                AND w.is_default=1 AND w.is_active=1
+            GROUP BY s.branch_id
+            HAVING COUNT(w.id)<>1
+            LIMIT 1 FOR UPDATE
+        ")->fetchColumn();
+        if($invalidDefaultWarehouse!==false)throw new RuntimeException('Setiap cabang bersaldo wajib memiliki tepat satu gudang default aktif');
+        $pdo->exec("
+            INSERT IGNORE INTO warehouse_stocks (warehouse_id, item_id, quantity, reserved_quantity, stock_version)
+            SELECT w.id, s.item_id, s.stock, GREATEST(0, s.stock - s.sellable_stock),
+                CASE WHEN s.stock<>0 OR GREATEST(0, s.stock - s.sellable_stock)<>0 THEN 1 ELSE 0 END
+            FROM branch_item_stocks s
+            JOIN warehouses w ON w.branch_id COLLATE utf8mb4_unicode_ci = s.branch_id AND w.is_default = 1 AND w.is_active=1
+        ");
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
+    }
+    ensureInventoryLedgerReady($pdo);
+    ensureTableColumn($pdo,'users','is_owner','TINYINT(1) NOT NULL DEFAULT 0');
     $pdo->exec("
         INSERT IGNORE INTO user_branch_access (user_id, branch_id)
         SELECT u.id, b.id FROM users u JOIN branches b WHERE u.is_owner = 1
@@ -834,6 +1163,48 @@ function ensureApiSupportTables(PDO $pdo): void {
         if (!in_array('payment_method', $invoiceColumns, true)) {
             $pdo->exec("ALTER TABLE sales_invoices ADD payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai' AFTER payment");
         }
+    }
+}
+
+function grantInitialStockOpnamePermissions(PDO $pdo): void {
+    if (!$pdo->query("SHOW TABLES LIKE 'roles'")->fetch()) return;
+    $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (
+        migration_key VARCHAR(100) NOT NULL PRIMARY KEY,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $marker = 'api_support_20260903_historical_stock_opname_permissions_v1';
+    $pdo->beginTransaction();
+    try {
+        $markerLock = $pdo->prepare("SELECT migration_key FROM app_schema_migrations WHERE migration_key=? FOR UPDATE");
+        $markerLock->execute([$marker]);
+        if ($markerLock->fetchColumn() !== false) {
+            $pdo->commit();
+            return;
+        }
+        $roleRows = $pdo->query("SELECT id,code,name,permissions FROM roles ORDER BY id FOR UPDATE")->fetchAll();
+        $roleUpdate = $pdo->prepare("UPDATE roles SET permissions=? WHERE id=?");
+        foreach ($roleRows as $roleRow) {
+            $permissions = json_decode((string)($roleRow['permissions'] ?? '[]'), true);
+            if (!is_array($permissions)) $permissions = [];
+            $next = $permissions;
+            if (in_array('item:view', $permissions, true)) {
+                $next[] = 'stock_opname:view';
+                $next[] = 'stock_opname:count';
+            }
+            if (in_array('item:create', $permissions, true)) $next[] = 'stock_opname:create';
+            if (in_array('item:delete', $permissions, true)) $next[] = 'stock_opname:delete';
+            $roleCode = strtoupper(trim((string)($roleRow['code'] ?? '')));
+            $roleName = strtolower(trim((string)($roleRow['name'] ?? '')));
+            if ($roleCode === 'ADM' || str_contains($roleName, 'administrator')) $next[] = 'stock_opname:post';
+            $next = array_values(array_unique($next));
+            if ($next !== $permissions) $roleUpdate->execute([json_encode($next), $roleRow['id']]);
+        }
+        $markerInsert = $pdo->prepare("INSERT INTO app_schema_migrations (migration_key) VALUES (?)");
+        $markerInsert->execute([$marker]);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
     }
 }
 
@@ -851,6 +1222,9 @@ function ensureApiSupportTablesVersioned(PDO $pdo, string $version): void {
     if ($version === '') {
         ensureApiSupportTables($pdo);
     } else {
+        if ($version === 'api_support_20260903_historical_stock_opname_v1') {
+            grantInitialStockOpnamePermissions($pdo);
+        }
         runVersionedApiBootstrap($pdo, $version, static function(PDO $pdo): void {
             ensureApiSupportTables($pdo);
         });
@@ -879,6 +1253,29 @@ function ensureApiMigrationTable(PDO $pdo): void {
     }
 }
 
+function withInventorySchemaMigrationLock(PDO $pdo, callable $callback): void {
+    $lockName='drac_inventory_schema_migration';
+    $lockStmt=$pdo->prepare('SELECT GET_LOCK(?, 60)');
+    $lockStmt->execute([$lockName]);
+    if((int)$lockStmt->fetchColumn()!==1)throw new RuntimeException('Tidak dapat memperoleh kunci migration persediaan');
+    try{
+        $pdo->exec("CREATE TABLE IF NOT EXISTS inventory_operation_locks (
+            lock_key VARCHAR(30) NOT NULL PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("INSERT IGNORE INTO inventory_operation_locks(lock_key) VALUES('global')");
+        $pdo->beginTransaction();
+        $pdo->query("SELECT `lock_key` FROM `inventory_operation_locks` WHERE `lock_key`='global' FOR UPDATE")->fetchColumn();
+        $pdo->commit();
+        $callback($pdo);
+    }catch(Throwable $error){
+        if($pdo->inTransaction())$pdo->rollBack();
+        throw $error;
+    }finally{
+        try{$release=$pdo->prepare('SELECT RELEASE_LOCK(?)');$release->execute([$lockName]);}catch(Throwable $ignored){}
+    }
+}
+
 function withApiMigrationLock(PDO $pdo, string $key, callable $callback): void {
     $lockName = 'drac:' . substr(hash('sha256', $key), 0, 48);
     $lockStmt = $pdo->prepare('SELECT GET_LOCK(?, 15)');
@@ -903,14 +1300,16 @@ function runVersionedApiBootstrap(PDO $pdo, string $version, callable $bootstrap
     $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
     $check->execute([$version]);
     if ((int)$check->fetchColumn() > 0) return;
-    withApiMigrationLock($pdo, 'bootstrap:' . $version, static function(PDO $pdo) use ($version, $bootstrap): void {
+    $apply=static function(PDO $pdo) use ($version, $bootstrap): void {
         // Request yang menunggu lock wajib memeriksa marker kembali.
         $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
         $check->execute([$version]);
         if ((int)$check->fetchColumn() > 0) return;
         $bootstrap($pdo);
         $pdo->prepare('INSERT IGNORE INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$version]);
-    });
+    };
+    if($version==='api_support_20260903_historical_stock_opname_v1')withInventorySchemaMigrationLock($pdo,$apply);
+    else withApiMigrationLock($pdo,'bootstrap:'.$version,$apply);
 }
 
 function getBearerToken(): string {
@@ -965,19 +1364,35 @@ function requireAuthenticatedUser(PDO $pdo): array {
     return $authenticatedUser;
 }
 
-function getUserPermissions(PDO $pdo, array $user): array {
-    if (!empty($user['is_owner'])) return ['*'];
-    $stmt = $pdo->prepare("SELECT code, name, permissions FROM roles WHERE id = ? AND is_active = 1 LIMIT 1");
-    $stmt->execute([$user['role_id'] ?? '']);
-    $role = $stmt->fetch();
-    if (!$role) return [];
+function lockAuthenticatedActor(PDO $pdo, array $actor): array {
+    $userStmt = $pdo->prepare('SELECT * FROM users WHERE id=? AND is_active=1 FOR UPDATE');
+    $userStmt->execute([(string)($actor['id'] ?? '')]);
+    $lockedActor = $userStmt->fetch();
+    if (!$lockedActor) throw new DomainException('Akun tidak lagi aktif', 403);
 
+    $roleId = trim((string)($lockedActor['role_id'] ?? ''));
+    if ($roleId !== '') {
+        $roleStmt = $pdo->prepare('SELECT id FROM roles WHERE id=? FOR UPDATE');
+        $roleStmt->execute([$roleId]);
+        $roleStmt->fetch();
+    }
+    $accessStmt = $pdo->prepare('SELECT branch_id FROM user_branch_access WHERE user_id=? FOR UPDATE');
+    $accessStmt->execute([(string)$lockedActor['id']]);
+    $accessStmt->fetchAll();
+    return $lockedActor;
+}
+
+function lockInventoryMutation(PDO $pdo): void {
+    $lock = $pdo->query("SELECT lock_key FROM inventory_operation_locks WHERE lock_key='global' FOR UPDATE")->fetchColumn();
+    if ($lock !== 'global') throw new RuntimeException('Kunci transaksi persediaan tidak tersedia');
+    $currentConnection=(int)$pdo->query('SELECT CONNECTION_ID()')->fetchColumn();
+    $migrationConnection = $pdo->query("SELECT IS_USED_LOCK('drac_inventory_schema_migration')")->fetchColumn();
+    if ($migrationConnection !== false && $migrationConnection !== null && (int)$migrationConnection!==$currentConnection) throw new DomainException('Pemeliharaan schema persediaan sedang berlangsung', 409);
+}
+
+function permissionsFromRoleRecord(array $role): array {
     $permissions = json_decode((string)($role['permissions'] ?? '[]'), true);
     $permissions = is_array($permissions) ? array_map('strval', $permissions) : [];
-
-    // Role Teknisi dari instalasi lama belum selalu memiliki izin mobile
-    // untuk registrasi WO. Berikan baseline operasional yang sama seperti
-    // role Teknisi baru, tanpa membuka invoice, laporan, atau pengaturan.
     $roleCode = strtoupper(trim((string)($role['code'] ?? '')));
     $roleName = strtolower(trim((string)($role['name'] ?? '')));
     if ($roleCode === 'TKN' || str_contains($roleName, 'teknisi') || str_contains($roleName, 'technician')) {
@@ -989,8 +1404,198 @@ function getUserPermissions(PDO $pdo, array $user): array {
             'item:view',
         ]);
     }
-
     return array_values(array_unique($permissions));
+}
+
+function assertLockedInventoryPermission(array $authorization, string $permission): void {
+    if (!empty($authorization['actor']['is_owner']) || in_array('*', $authorization['permissions'], true) || in_array($permission, $authorization['permissions'], true)) return;
+    throw new DomainException('Akun tidak memiliki izin ' . $permission, 403);
+}
+
+function assertLockedInventoryBranchAccess(array $authorization, string $branchId): void {
+    if ($branchId === '') throw new InvalidArgumentException('Cabang wajib dipilih');
+    $actor = $authorization['actor'] ?? [];
+    if (!empty($actor['is_owner']) || in_array('*', $authorization['permissions'] ?? [], true) || in_array('all_branches', $authorization['permissions'] ?? [], true)) return;
+    $actorId = (string)($actor['id'] ?? '');
+    $branches = $authorization['branchAccess'][$actorId] ?? [];
+    if (!empty($actor['branch_id'])) $branches[] = (string)$actor['branch_id'];
+    if (in_array($branchId, $branches, true)) return;
+    throw new DomainException('Akun tidak memiliki akses ke cabang tersebut', 403);
+}
+
+function lockedInventoryDelegatedUser(array $authorization, string $userId, string $label): array {
+    $user = $authorization['users'][$userId] ?? null;
+    if (!$user || empty($user['is_active'])) throw new InvalidArgumentException($label . ' tidak lagi aktif');
+    if (empty($user['is_owner']) && empty($authorization['rolesByUser'][$userId]['is_active'])) throw new InvalidArgumentException($label . ' tidak lagi memiliki peran aktif');
+    return $user;
+}
+
+function lockedInventoryDelegatedUserForBranch(array $authorization, string $userId, string $branchId, string $label): array {
+    $user = lockedInventoryDelegatedUser($authorization, $userId, $label);
+    $permissions=$authorization['permissionsByUser'][$userId]??[];
+    if (!empty($user['is_owner']) || in_array('*',$permissions,true) || in_array('all_branches',$permissions,true)) return $user;
+    $branches = $authorization['branchAccess'][$userId] ?? [];
+    if (!empty($user['branch_id'])) $branches[] = (string)$user['branch_id'];
+    if (!in_array($branchId, $branches, true)) throw new InvalidArgumentException($label . ' tidak lagi bertugas di cabang tersebut');
+    return $user;
+}
+
+function lockInventoryWarehousesForAuthorization(PDO $pdo, array $authorization, array $warehouseIds, string $deniedMessage='Gudang tidak tersedia untuk akun ini', int $deniedStatus=403): array {
+    $ids=array_values(array_unique(array_filter(array_map(static fn($id):string=>trim((string)$id),$warehouseIds),static fn(string $id):bool=>$id!=='')));
+    sort($ids,SORT_STRING);
+    if(!$ids)throw new DomainException($deniedMessage,$deniedStatus);
+    $placeholders=implode(',',array_fill(0,count($ids),'?'));
+    $stmt=$pdo->prepare("SELECT id,branch_id,is_active,is_system FROM warehouses WHERE id IN ($placeholders) ORDER BY id FOR UPDATE");
+    $stmt->execute($ids);
+    $warehouses=[];
+    foreach($stmt->fetchAll() as $warehouse){
+        try{assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);}
+        catch(DomainException $error){throw new DomainException($deniedMessage,$deniedStatus,$error);}
+        $warehouses[(string)$warehouse['id']]=$warehouse;
+    }
+    if(count($warehouses)!==count($ids))throw new DomainException($deniedMessage,$deniedStatus);
+    return $warehouses;
+}
+
+function lockActiveInventoryWarehouses(PDO $pdo, array $warehouseIds): array {
+    $ids = array_values(array_unique(array_filter(array_map(static fn($id): string => trim((string)$id), $warehouseIds), static fn(string $id): bool => $id !== '')));
+    sort($ids, SORT_STRING);
+    if (!$ids) throw new InvalidArgumentException('Gudang wajib dipilih');
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $pdo->prepare("SELECT * FROM warehouses WHERE id IN ($placeholders) ORDER BY id FOR UPDATE");
+    $stmt->execute($ids);
+    $warehouses = [];
+    foreach ($stmt->fetchAll() as $warehouse) {
+        if (empty($warehouse['is_active']) || !empty($warehouse['is_system'])) throw new InvalidArgumentException('Gudang sudah nonaktif atau tidak dapat digunakan');
+        $warehouses[(string)$warehouse['id']] = $warehouse;
+    }
+    if (count($warehouses) !== count($ids)) throw new InvalidArgumentException('Gudang tidak ditemukan');
+    $branchIds = array_values(array_unique(array_map(static fn(array $warehouse): string => (string)$warehouse['branch_id'], array_values($warehouses))));
+    sort($branchIds, SORT_STRING);
+    $branchPlaceholders = implode(',', array_fill(0, count($branchIds), '?'));
+    $branchStmt = $pdo->prepare("SELECT id,is_active FROM branches WHERE id IN ($branchPlaceholders) ORDER BY id FOR UPDATE");
+    $branchStmt->execute($branchIds);
+    $activeBranches = [];
+    foreach ($branchStmt->fetchAll() as $branch) if (!empty($branch['is_active'])) $activeBranches[(string)$branch['id']] = true;
+    if (count($activeBranches) !== count($branchIds)) throw new InvalidArgumentException('Cabang gudang sudah nonaktif');
+    return $warehouses;
+}
+
+function lockActiveInventoryItems(PDO $pdo, array $itemIds): array {
+    $ids = array_values(array_unique(array_filter(array_map(static fn($id): string => trim((string)$id), $itemIds), static fn(string $id): bool => $id !== '')));
+    sort($ids, SORT_STRING);
+    if (!$ids) throw new InvalidArgumentException('Barang persediaan wajib dipilih');
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $pdo->prepare("SELECT id,code,name,category_name,unit,type,is_active FROM items WHERE id IN ($placeholders) ORDER BY id FOR UPDATE");
+    $stmt->execute($ids);
+    $items = [];
+    foreach ($stmt->fetchAll() as $item) {
+        if (empty($item['is_active']) || (string)$item['type'] !== 'Persediaan') throw new InvalidArgumentException('Barang persediaan sudah nonaktif atau tidak valid');
+        $items[(string)$item['id']] = $item;
+    }
+    if (count($items) !== count($ids)) throw new InvalidArgumentException('Barang persediaan tidak ditemukan');
+    return $items;
+}
+
+function assertLockedInventoryOwnerOrAdministrator(array $authorization): void {
+    if (!empty($authorization['actor']['is_owner'])) return;
+    $roleCode = strtoupper(trim((string)($authorization['role']['code'] ?? '')));
+    $roleName = strtolower(trim((string)($authorization['role']['name'] ?? '')));
+    if ($roleCode === 'ADM' || $roleName === 'administrator') return;
+    throw new DomainException('Hanya Owner atau Administrator yang dapat mengubah penyesuaian stok', 403);
+}
+
+function assertLockedInventoryOwner(array $authorization): void {
+    if (!empty($authorization['actor']['is_owner'])) return;
+    throw new DomainException('Hanya Owner yang dapat melakukan pemeliharaan data', 403);
+}
+
+function lockInventoryMutationAuthorization(PDO $pdo, array $requestActor, string $requiredPermission, array $delegatedUserIds = []): array {
+    $actorId = trim((string)($requestActor['id'] ?? ''));
+    if ($actorId === '') throw new DomainException('Akun tidak lagi aktif', 403);
+    $actorStmt = $pdo->prepare('SELECT * FROM users WHERE id=? FOR UPDATE');
+    $actorStmt->execute([$actorId]);
+    $lockedActor = $actorStmt->fetch() ?: null;
+    if (!$lockedActor || empty($lockedActor['is_active'])) throw new DomainException('Akun tidak lagi aktif', 403);
+
+    $role = [];
+    if (empty($lockedActor['is_owner'])) {
+        $roleStmt = $pdo->prepare('SELECT id,code,name,permissions,is_active FROM roles WHERE id=? FOR UPDATE');
+        $roleStmt->execute([(string)($lockedActor['role_id'] ?? '')]);
+        $role = $roleStmt->fetch() ?: [];
+        if (!$role || empty($role['is_active'])) throw new DomainException('Peran akun tidak lagi aktif', 403);
+    }
+    $actorAccessStmt = $pdo->prepare('SELECT user_id,branch_id FROM user_branch_access WHERE user_id=? ORDER BY branch_id FOR UPDATE');
+    $actorAccessStmt->execute([$actorId]);
+    $branchAccess = [];
+    foreach ($actorAccessStmt->fetchAll() as $access) $branchAccess[$actorId][] = (string)$access['branch_id'];
+
+    $users = [$actorId => $lockedActor];
+    $rolesByUser = empty($lockedActor['is_owner']) ? [$actorId => $role] : [];
+    $permissionsByUser = [$actorId => !empty($lockedActor['is_owner']) ? ['*'] : permissionsFromRoleRecord($role)];
+    $delegateIds = array_values(array_unique(array_filter(array_map(static fn($id): string => trim((string)$id), $delegatedUserIds), static fn(string $id): bool => $id !== '' && $id !== $actorId)));
+    sort($delegateIds, SORT_STRING);
+    if ($delegateIds) {
+        $placeholders = implode(',', array_fill(0, count($delegateIds), '?'));
+        $userStmt = $pdo->prepare("SELECT * FROM users WHERE id IN ($placeholders) ORDER BY id FOR UPDATE");
+        $userStmt->execute($delegateIds);
+        foreach ($userStmt->fetchAll() as $user) $users[(string)$user['id']] = $user;
+        if(count($users)-1!==count($delegateIds))throw new InvalidArgumentException('Pengguna delegasi tidak lagi tersedia');
+        $delegateRoleIds=[];
+        foreach($delegateIds as $delegateId){
+            $delegate=$users[$delegateId];
+            if(empty($delegate['is_active']))throw new InvalidArgumentException('Pengguna delegasi tidak lagi aktif');
+            if(empty($delegate['is_owner']))$delegateRoleIds[]=(string)($delegate['role_id']??'');
+        }
+        $delegateRoleIds=array_values(array_unique(array_filter($delegateRoleIds,static fn(string $id):bool=>$id!==''&&(string)($role['id']??'')!==$id)));
+        sort($delegateRoleIds,SORT_STRING);
+        $rolesById=[];
+        if(!empty($role['id']))$rolesById[(string)$role['id']]=$role;
+        if($delegateRoleIds){
+            $rolePlaceholders=implode(',',array_fill(0,count($delegateRoleIds),'?'));
+            $delegateRoleStmt=$pdo->prepare("SELECT id,code,name,permissions,is_active FROM roles WHERE id IN ($rolePlaceholders) ORDER BY id FOR UPDATE");
+            $delegateRoleStmt->execute($delegateRoleIds);
+            foreach($delegateRoleStmt->fetchAll() as $delegateRole)$rolesById[(string)$delegateRole['id']]=$delegateRole;
+        }
+        foreach($delegateIds as $delegateId){
+            $delegate=$users[$delegateId];
+            if(!empty($delegate['is_owner'])){$permissionsByUser[$delegateId]=['*'];continue;}
+            $delegateRole=$rolesById[(string)($delegate['role_id']??'')]??null;
+            if(!$delegateRole||empty($delegateRole['is_active']))throw new InvalidArgumentException('Peran pengguna delegasi tidak lagi aktif');
+            $rolesByUser[$delegateId]=$delegateRole;
+            $permissionsByUser[$delegateId]=permissionsFromRoleRecord($delegateRole);
+        }
+        $accessStmt = $pdo->prepare("SELECT user_id,branch_id FROM user_branch_access WHERE user_id IN ($placeholders) ORDER BY user_id,branch_id FOR UPDATE");
+        $accessStmt->execute($delegateIds);
+        foreach ($accessStmt->fetchAll() as $access) $branchAccess[(string)$access['user_id']][] = (string)$access['branch_id'];
+    }
+    $authorization = [
+        'actor' => $lockedActor,
+        'role' => $role,
+        'permissions' => !empty($lockedActor['is_owner']) ? ['*'] : permissionsFromRoleRecord($role),
+        'rolesByUser' => $rolesByUser,
+        'permissionsByUser' => $permissionsByUser,
+        'users' => $users,
+        'branchAccess' => $branchAccess,
+    ];
+    assertLockedInventoryPermission($authorization, $requiredPermission);
+    return $authorization;
+}
+
+function lockStockOpnameResultForAdjustment(PDO $pdo, string $adjustmentId): ?array {
+    $stmt = $pdo->prepare('SELECT id,order_id,status FROM stock_count_results WHERE adjustment_id=? FOR UPDATE');
+    $stmt->execute([$adjustmentId]);
+    return $stmt->fetch() ?: null;
+}
+
+function getUserPermissions(PDO $pdo, array $user): array {
+    if (!empty($user['is_owner'])) return ['*'];
+    $stmt = $pdo->prepare("SELECT code, name, permissions FROM roles WHERE id = ? AND is_active = 1 LIMIT 1");
+    $stmt->execute([$user['role_id'] ?? '']);
+    $role = $stmt->fetch();
+    if (!$role) return [];
+
+    return permissionsFromRoleRecord($role);
 }
 
 function authenticatedUserHasPermission(PDO $pdo, array $user, string $permission): bool {
@@ -1013,7 +1618,7 @@ function requireAuthenticatedUserPermission(PDO $pdo, array $user, string $permi
 
 function getAccessibleBranchIds(PDO $pdo, array $user): array {
     if (!empty($user['is_owner']) || authenticatedUserHasPermission($pdo, $user, 'all_branches')) {
-        return array_map('strval', array_column($pdo->query("SELECT id FROM branches WHERE is_active = 1 ORDER BY id")->fetchAll(), 'id'));
+        return array_map('strval', array_column($pdo->query("SELECT id FROM branches ORDER BY id")->fetchAll(), 'id'));
     }
 
     $ids = getUserBranchIds($pdo, (string)$user['id']);
@@ -1026,6 +1631,17 @@ function requireAccessibleBranch(PDO $pdo, array $user, ?string $branchId): void
     if (!in_array($branchId, getAccessibleBranchIds($pdo, $user), true)) {
         respondError('Akun tidak memiliki akses ke cabang tersebut', 403);
     }
+}
+
+function assertAccessibleBranch(PDO $pdo, array $user, ?string $branchId): void {
+    if ($branchId === null || $branchId === '') throw new InvalidArgumentException('Cabang wajib dipilih');
+    if (!in_array($branchId, getAccessibleBranchIds($pdo, $user), true)) {
+        throw new DomainException('Akun tidak memiliki akses ke cabang tersebut', 403);
+    }
+}
+
+function transactionExceptionStatus(Throwable $error, int $fallback): int {
+    return in_array($error->getCode(), [403,404,409], true) ? $error->getCode() : $fallback;
 }
 
 /**
@@ -1398,6 +2014,21 @@ function adjustBranchStockAllowNegative(PDO $pdo, string $branchId, string $item
     $sync->execute([$itemId, $branchId]);
 }
 
+function bumpStockVersionsForMovementReference(PDO $pdo, string $referenceType, string $referenceId): void {
+    $stmt = $pdo->prepare("UPDATE warehouse_stocks ws
+        JOIN (
+            SELECT item_id,source_warehouse_id warehouse_id
+            FROM stock_movements
+            WHERE reference_type=? AND reference_id=? AND is_voided=0 AND source_warehouse_id IS NOT NULL
+            UNION
+            SELECT item_id,destination_warehouse_id warehouse_id
+            FROM stock_movements
+            WHERE reference_type=? AND reference_id=? AND is_voided=0 AND destination_warehouse_id IS NOT NULL
+        ) affected ON affected.item_id=ws.item_id AND affected.warehouse_id=ws.warehouse_id
+        SET ws.stock_version=ws.stock_version+1");
+    $stmt->execute([$referenceType,$referenceId,$referenceType,$referenceId]);
+}
+
 function adjustWarehouseStockAllowNegative(PDO $pdo, string $warehouseId, string $branchId, string $itemId, int $delta): void {
     $warehouseStmt = $pdo->prepare("SELECT id,branch_id,is_active FROM warehouses WHERE id=?");
     $warehouseStmt->execute([$warehouseId]);
@@ -1492,6 +2123,7 @@ function runProductionIntegrityRepair20260808(PDO $pdo): void {
         if (!$pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()) return;
 
         $pdo->beginTransaction();
+        lockInventoryMutation($pdo);
         $snapshotStmt = $pdo->prepare("INSERT INTO data_repair_snapshots
             (repair_key,entity_type,entity_id,snapshot_json) VALUES(?,?,?,?)");
         $snapshot = static function (string $type, string $id, array $row) use ($snapshotStmt, $repairKey): void {

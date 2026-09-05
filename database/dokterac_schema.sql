@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS `roles` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `roles` (`id`, `code`, `name`, `description`, `permissions`, `is_active`) VALUES
 ('1', 'ADM', 'Administrator', 'Akses penuh semua fitur & cabang', JSON_ARRAY('dashboard:view', 'ai:view'), 1),
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `username` (`username`),
   FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default users (password: admin123, kasir123, teknisi123, spv123)
 -- CATATAN: Ini masih plain text, di Laravel nanti akan di-hash bcrypt
@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS `customers` (
   UNIQUE KEY `customer_code` (`customer_code`),
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 5. TABEL VEHICLES (KENDARAAN)
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS `vehicles` (
   KEY `idx_customer` (`customer_id`),
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 6. TABEL SUPPLIERS
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS `suppliers` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 7. TABEL ITEM CATEGORIES (KATEGORI BARANG)
@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS `item_categories` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),
   UNIQUE KEY `unique_category_name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `item_categories` (`id`, `code`, `name`, `type`, `description`, `is_active`) VALUES
 ('1', 'KAT-001', 'Sparepart AC', 'Persediaan', 'Komponen utama sistem AC mobil', 1),
@@ -238,7 +238,7 @@ CREATE TABLE IF NOT EXISTS `items` (
   UNIQUE KEY `uq_items_barcode` (`barcode`),
   KEY `idx_type` (`type`),
   KEY `idx_branch` (`branch_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `item_vehicle_brands` (
   `item_id` VARCHAR(64) NOT NULL,
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS `item_group_members` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   KEY `idx_group` (`group_item_id`),
   FOREIGN KEY (`group_item_id`) REFERENCES `items`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 10. TABEL WORK ORDERS (ORDER KERJA)
@@ -346,7 +346,7 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   KEY `idx_status` (`status`),
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `work_order_technicians` (
   `wo_id` VARCHAR(64) NOT NULL,
@@ -357,7 +357,7 @@ CREATE TABLE IF NOT EXISTS `work_order_technicians` (
   PRIMARY KEY (`wo_id`, `user_id`),
   KEY `idx_work_order_technicians_user` (`user_id`),
   KEY `idx_work_order_technicians_role` (`wo_id`, `assignment_role`, `sort_order`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 11. TABEL WO SERVICES (RINCIAN LAYANAN WO)
@@ -375,7 +375,7 @@ CREATE TABLE IF NOT EXISTS `work_order_services` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   KEY `idx_wo` (`wo_id`),
   FOREIGN KEY (`wo_id`) REFERENCES `work_orders`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 12. TABEL SALES INVOICES (FAKTUR PENJUALAN)
@@ -409,7 +409,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoices` (
   KEY `idx_branch` (`branch_id`),
   KEY `idx_date` (`date`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 13. TABEL SALES INVOICE ITEMS
@@ -426,7 +426,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoice_items` (
   `subtotal` DECIMAL(15,2) DEFAULT 0,
   KEY `idx_invoice` (`invoice_id`),
   FOREIGN KEY (`invoice_id`) REFERENCES `sales_invoices`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 14. TABEL GOODS RECEIPTS (PENERIMAAN BARANG)
@@ -450,7 +450,7 @@ CREATE TABLE IF NOT EXISTS `goods_receipts` (
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 15. TABEL GOODS RECEIPT ITEMS
@@ -467,7 +467,7 @@ CREATE TABLE IF NOT EXISTS `goods_receipt_items` (
   KEY `idx_receipt` (`receipt_id`),
   KEY `idx_item` (`item_id`),
   FOREIGN KEY (`receipt_id`) REFERENCES `goods_receipts`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Nomor antrian penerimaan per cabang dan tahun. Baris ini dikunci saat
 -- penyimpanan agar dua perangkat tidak pernah memperoleh nomor yang sama.
@@ -506,7 +506,7 @@ CREATE TABLE IF NOT EXISTS `purchase_invoices` (
   KEY `idx_branch` (`branch_id`),
   FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`),
   FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 17. TABEL PURCHASE INVOICE ITEMS
@@ -526,7 +526,7 @@ CREATE TABLE IF NOT EXISTS `purchase_invoice_items` (
   `subtotal` DECIMAL(15,2) DEFAULT 0,
   KEY `idx_invoice` (`invoice_id`),
   FOREIGN KEY (`invoice_id`) REFERENCES `purchase_invoices`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- 18. TABEL PURCHASE PAYMENTS (PEMBAYARAN HUTANG)
@@ -544,10 +544,81 @@ CREATE TABLE IF NOT EXISTS `purchase_payments` (
   PRIMARY KEY (`id`),
   KEY `idx_invoice` (`invoice_id`),
   FOREIGN KEY (`invoice_id`) REFERENCES `purchase_invoices`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==========================================================
+-- 24. STOK OPNAME - PERINTAH
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS `stock_count_orders` (
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `order_number` VARCHAR(40) NOT NULL UNIQUE,
+  `order_date` DATE NOT NULL,
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NOT NULL,
+  `warehouse_id` VARCHAR(20) NOT NULL,
+  `branch_id` VARCHAR(20) NOT NULL,
+  `category_id` VARCHAR(20) NULL,
+  `include_zero_unused` TINYINT(1) NOT NULL DEFAULT 1,
+  `assigned_user_id` VARCHAR(20) NOT NULL,
+  `assigned_user_name` VARCHAR(120) NOT NULL,
+  `status` VARCHAR(30) NOT NULL DEFAULT 'Menunggu Eksekusi',
+  `notes` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_by` VARCHAR(20) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `completed_at` DATETIME NULL,
+  KEY `idx_stock_count_order_date` (`start_date`),
+  KEY `idx_stock_count_order_status` (`status`),
+  KEY `idx_stock_count_order_warehouse` (`warehouse_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==========================================================
+-- 25. STOK OPNAME - HASIL
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS `stock_count_results` (
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `result_number` VARCHAR(40) NOT NULL UNIQUE,
+  `order_id` VARCHAR(30) NOT NULL UNIQUE,
+  `result_date` DATE NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'Draft',
+  `adjustment_id` VARCHAR(30) NULL UNIQUE,
+  `adjustment_number` VARCHAR(40) NULL,
+  `notes` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_by` VARCHAR(20) NULL,
+  `posted_by` VARCHAR(20) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `posted_at` DATETIME NULL,
+  KEY `idx_stock_count_result_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==========================================================
+-- 26. STOK OPNAME - RINCIAN HASIL
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS `stock_count_result_items` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `result_id` VARCHAR(30) NOT NULL,
+  `item_id` VARCHAR(20) NOT NULL,
+  `item_code` VARCHAR(80) NOT NULL,
+  `item_name` VARCHAR(255) NOT NULL,
+  `category_name` VARCHAR(120) NOT NULL DEFAULT '',
+  `unit` VARCHAR(30) NOT NULL DEFAULT '',
+  `system_quantity` INT NOT NULL DEFAULT 0,
+  `system_version` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `movement_in` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `movement_out` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `is_manual` TINYINT(1) NOT NULL DEFAULT 0,
+  `added_by` VARCHAR(20) NULL,
+  `added_at` DATETIME NULL,
+  `count_1` INT NULL,
+  `count_2` INT NULL,
+  `final_quantity` INT NULL,
+  `variance` INT NULL,
+  UNIQUE KEY `uq_stock_count_result_item` (`result_id`,`item_id`),
+  KEY `idx_stock_count_result_parent` (`result_id`),
+  KEY `idx_stock_count_result_item` (`item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
 -- SELESAI
 -- ==========================================================
--- Total: 18 tabel
+-- Total: 26 tabel
 -- Cek dengan: SHOW TABLES;
