@@ -547,7 +547,77 @@ CREATE TABLE IF NOT EXISTS `purchase_payments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================
+-- 24. STOK OPNAME - PERINTAH
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS `stock_count_orders` (
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `order_number` VARCHAR(40) NOT NULL UNIQUE,
+  `order_date` DATE NOT NULL,
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NOT NULL,
+  `warehouse_id` VARCHAR(20) NOT NULL,
+  `branch_id` VARCHAR(20) NOT NULL,
+  `category_id` VARCHAR(20) NULL,
+  `include_zero_unused` TINYINT(1) NOT NULL DEFAULT 1,
+  `assigned_user_id` VARCHAR(20) NOT NULL,
+  `assigned_user_name` VARCHAR(120) NOT NULL,
+  `status` VARCHAR(30) NOT NULL DEFAULT 'Menunggu Eksekusi',
+  `notes` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_by` VARCHAR(20) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `completed_at` DATETIME NULL,
+  KEY `idx_stock_count_order_date` (`start_date`),
+  KEY `idx_stock_count_order_status` (`status`),
+  KEY `idx_stock_count_order_warehouse` (`warehouse_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==========================================================
+-- 25. STOK OPNAME - HASIL
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS `stock_count_results` (
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `result_number` VARCHAR(40) NOT NULL UNIQUE,
+  `order_id` VARCHAR(30) NOT NULL UNIQUE,
+  `result_date` DATE NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'Draft',
+  `adjustment_id` VARCHAR(30) NULL UNIQUE,
+  `adjustment_number` VARCHAR(40) NULL,
+  `notes` VARCHAR(255) NOT NULL DEFAULT '',
+  `created_by` VARCHAR(20) NULL,
+  `posted_by` VARCHAR(20) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `posted_at` DATETIME NULL,
+  KEY `idx_stock_count_result_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==========================================================
+-- 26. STOK OPNAME - RINCIAN HASIL
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS `stock_count_result_items` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `result_id` VARCHAR(30) NOT NULL,
+  `item_id` VARCHAR(20) NOT NULL,
+  `item_code` VARCHAR(80) NOT NULL,
+  `item_name` VARCHAR(255) NOT NULL,
+  `category_name` VARCHAR(120) NOT NULL DEFAULT '',
+  `unit` VARCHAR(30) NOT NULL DEFAULT '',
+  `system_quantity` INT NOT NULL DEFAULT 0,
+  `system_version` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `movement_in` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `movement_out` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `is_manual` TINYINT(1) NOT NULL DEFAULT 0,
+  `added_by` VARCHAR(20) NULL,
+  `added_at` DATETIME NULL,
+  `count_1` INT NULL,
+  `count_2` INT NULL,
+  `final_quantity` INT NULL,
+  `variance` INT NULL,
+  KEY `idx_stock_count_result_parent` (`result_id`),
+  KEY `idx_stock_count_result_item` (`item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==========================================================
 -- SELESAI
 -- ==========================================================
--- Total: 18 tabel
+-- Total: 26 tabel
 -- Cek dengan: SHOW TABLES;

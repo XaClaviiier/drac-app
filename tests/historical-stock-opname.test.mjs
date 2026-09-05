@@ -279,6 +279,13 @@ test('schema dasar memakai collation UTF8MB4 yang konsisten untuk foreign key My
   assert.match(schema,/DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;/);
 });
 
+test('schema dasar menyediakan aggregate inti sebelum migration histori Stok Opname', () => {
+  const schema = read('database/dokterac_schema.sql');
+  for (const table of ['stock_count_orders','stock_count_results','stock_count_result_items']) {
+    assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS `' + table + '`'));
+  }
+});
+
 test('runtime bootstrap membuat kolom lost-sales sebelum migration lama menggunakannya', () => {
   const column = helpers.indexOf("ensureTableColumn($pdo,'work_orders','cancel_reason'");
   const migration = helpers.indexOf("$lostSalesMigrationKey = 'legacy_floating_work_orders_to_lost_sales_20260810_v1'");
