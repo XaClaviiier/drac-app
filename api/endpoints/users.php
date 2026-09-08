@@ -34,6 +34,7 @@ function lockValidUserBranchesForWrite(PDO $pdo, array $branchIds): array {
     $stmt=$pdo->prepare("SELECT id,is_active FROM branches WHERE id IN ($placeholders) ORDER BY id FOR UPDATE");
     $stmt->execute($branchIds);$valid=[];
     foreach($stmt->fetchAll() as $branch)if(!empty($branch['is_active']))$valid[]=(string)$branch['id'];
+    sort($valid,SORT_STRING);
     if($valid!==$branchIds)throw new InvalidArgumentException('Ada cabang yang tidak valid atau nonaktif');
     return $valid;
 }

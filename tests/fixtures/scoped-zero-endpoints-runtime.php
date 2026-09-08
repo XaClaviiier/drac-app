@@ -12,7 +12,7 @@ final class ScopedZeroStatement extends PDOStatement {
     public function fetchColumn(int $column=0): mixed { $row=$this->fetch(); return $row===false?false:array_values($row)[$column]; }
 }
 final class ScopedZeroPDO extends PDO {
-    public array $contacts=[],$receipts=[],$lines=[],$queries=[];
+    public array $contacts=[],$receipts=[],$lines=[],$queries=[],$warehouses=[];
     public bool $transaction=false,$committed=false,$rolledBack=false;
     private array $snapshot=[];
     public function __construct(public array $input,public array $actor) { $this->contacts=$input['rows']??[]; }
@@ -46,6 +46,9 @@ final class ScopedZeroPDO extends PDO {
         if(str_starts_with($q,'SELECT * FROM customer_contact_logs'))return array_values(array_filter($this->contacts,fn($r)=>!$p||$r['customer_id']===$p[0]));
         if(str_contains($q,'FROM information_schema.COLUMNS'))return [[1]];
         if($q==='SELECT is_active FROM branches WHERE id=? LIMIT 1')return [['is_active'=>1]];
+        if($q==='SELECT id FROM branches WHERE id=? AND is_active=1 FOR UPDATE')return ($this->input['missingBranch']??false)||!($this->input['branchActive']??1)?[]:[['id'=>$p[0]]];
+        if($q==='SELECT branch_id,is_default,is_system,is_active FROM warehouses WHERE id=? FOR UPDATE')return [['branch_id'=>$this->input['currentBranchId']??$this->input['body']['branchId'],'is_default'=>0,'is_system'=>0,'is_active'=>1]];
+        if(str_starts_with($q,'INSERT INTO warehouses(')||str_starts_with($q,'UPDATE warehouses SET code=')){$this->warehouses[]=$p;return [];}
         if($q==='SELECT id FROM warehouses WHERE id=? AND branch_id=? AND is_active=1')return $p===['warehouse',$this->input['body']['branchId']]?[['id'=>'warehouse']]:[];
         if($q==='SELECT id,name,branch_id,is_active,is_owner FROM users WHERE id=? LIMIT 1')return ($this->input['missingReceiver']??false)?[]:[$this->receiver()];
         if($q==='SELECT * FROM users WHERE id=? FOR UPDATE')return [$this->actor];
@@ -68,7 +71,7 @@ final class ScopedZeroPDO extends PDO {
 function generateId(): string { return 'fixture-generated-id'; }
 function getInput(): array { return $GLOBALS['input']['body']??[]; }
 function scopedZeroFinish(array $response): never {
-    $db=$GLOBALS['pdo'];echo json_encode($response+['contacts'=>$db->contacts,'receipts'=>$db->receipts,'lines'=>$db->lines,'committed'=>$db->committed,'rolledBack'=>$db->rolledBack,'queries'=>$db->queries],JSON_THROW_ON_ERROR);exit;
+    $db=$GLOBALS['pdo'];echo json_encode($response+['contacts'=>$db->contacts,'receipts'=>$db->receipts,'lines'=>$db->lines,'warehouses'=>$db->warehouses,'committed'=>$db->committed,'rolledBack'=>$db->rolledBack,'queries'=>$db->queries],JSON_THROW_ON_ERROR);exit;
 }
 function respondSuccess(mixed $data=null,string $message=''): never { scopedZeroFinish(['status'=>200,'data'=>$data,'message'=>$message]); }
 function respondError(string $message,int $status=400): never { scopedZeroFinish(['status'=>$status,'message'=>$message]); }
@@ -78,5 +81,5 @@ $pdo=new ScopedZeroPDO($input,$actor);
 $_SERVER['HTTP_AUTHORIZATION']='Bearer fixture-not-a-real-session';
 $method=$input['method']??'POST';$id=$input['id']??null;$requestUser=$actor;
 $endpoint=$input['endpoint']??'customer-contacts';
-if(!in_array($endpoint,['customer-contacts','goods-receipts'],true))throw new LogicException('Invalid fixture endpoint');
+if(!in_array($endpoint,['customer-contacts','goods-receipts','warehouses'],true))throw new LogicException('Invalid fixture endpoint');
 require __DIR__.'/../../api/endpoints/'.$endpoint.'.php';

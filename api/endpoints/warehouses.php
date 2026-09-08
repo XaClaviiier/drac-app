@@ -25,7 +25,7 @@ switch ($method) {
             $actor=$authorization['actor'];
             assertAccessibleBranch($pdo,$actor,(string)$d['branchId']);
             $branchStmt=$pdo->prepare("SELECT id FROM branches WHERE id=? AND is_active=1 FOR UPDATE");$branchStmt->execute([$d['branchId']]);
-            if(!$branchStmt->fetchColumn())throw new DomainException('Cabang tidak ditemukan atau tidak aktif',404);
+            if($branchStmt->fetchColumn()===false)throw new DomainException('Cabang tidak ditemukan atau tidak aktif',404);
             $pdo->prepare("INSERT INTO warehouses(id,code,name,address,branch_id,is_default,is_sellable,is_system,is_active) VALUES(?,?,?,?,?,0,?,0,?)")
                 ->execute([$wid,strtoupper(trim($d['code'])),trim($d['name']),trim($d['address']??''),$d['branchId'],$d['isSellable']??1,$d['isActive']??1]);
             $pdo->commit();respondSuccess(null,'Gudang ditambahkan');
@@ -42,7 +42,7 @@ switch ($method) {
             if(!$currentRow)throw new DomainException('Gudang tidak ditemukan',404);
             assertAccessibleBranch($pdo,$actor,(string)$currentRow['branch_id']);assertAccessibleBranch($pdo,$actor,(string)($d['branchId']??''));
             if((int)$currentRow['is_system']===1)throw new DomainException('Gudang sistem tidak dapat diubah',403);
-            $branchStmt=$pdo->prepare("SELECT id FROM branches WHERE id=? AND is_active=1 FOR UPDATE");$branchStmt->execute([$d['branchId']??'']);if(!$branchStmt->fetchColumn())throw new DomainException('Cabang tidak ditemukan atau tidak aktif',404);
+            $branchStmt=$pdo->prepare("SELECT id FROM branches WHERE id=? AND is_active=1 FOR UPDATE");$branchStmt->execute([$d['branchId']??'']);if($branchStmt->fetchColumn()===false)throw new DomainException('Cabang tidak ditemukan atau tidak aktif',404);
             if((int)$currentRow['is_default']===1&&(string)$currentRow['branch_id']!==(string)$d['branchId'])throw new DomainException('Gudang utama tidak boleh dipindahkan ke cabang lain',409);
             if((string)$currentRow['branch_id']!==(string)$d['branchId']){$history=$pdo->prepare("SELECT COUNT(*) FROM stock_movements WHERE source_warehouse_id=? OR destination_warehouse_id=?");$history->execute([$id,$id]);if((int)$history->fetchColumn()>0)throw new DomainException('Gudang yang sudah mempunyai riwayat mutasi tidak boleh dipindahkan cabang. Buat gudang baru pada cabang tujuan.',409);if($reason=$warehouseBlocker($pdo,$id))throw new DomainException('Gudang tidak dapat dipindahkan cabang. '.$reason,409);}
             if((bool)$currentRow['is_active']&&!($d['isActive']??1)&&($reason=$warehouseBlocker($pdo,$id)))throw new DomainException($reason,409);

@@ -13,6 +13,18 @@ function run(input) {
 }
 const active = ids => ids.map(id => ({ id, is_active: 1 }));
 
+test('validator canonicalizes mixed-case database order without changing SQL lock order', () => {
+  const result = run({ branchIds: ['B', 'a'], validate: true, rows: active(['a', 'B']) });
+  assert.deepEqual(result.ids, ['B', 'a'], JSON.stringify(result));
+  assert.deepEqual(result.params, ['B', 'a']);
+  assert.equal(result.sql, 'SELECT id,is_active FROM branches WHERE id IN (?,?) ORDER BY id FOR UPDATE');
+});
+
+test('validator canonicalizes mixed-case and leading-zero identities together', () => {
+  const result = run({ branchIds: ['a', '0', '00', '0123', '123', 'B'], validate: true, rows: active(['0', '00', '0123', '123', 'a', 'B']) });
+  assert.deepEqual(result.ids, ['0', '00', '0123', '123', 'B', 'a'], JSON.stringify(result));
+});
+
 test('normalization retains numeric branch 123 as a string', () => {
   assert.deepEqual(run({ branchIds: ['123'] }), { ids: ['123'], sql: null, params: null });
 });
@@ -75,6 +87,10 @@ for (const [name, branchIds, rows] of [
   ['partially inactive selection', ['123', 'BR-1'], [{ id: '123', is_active: 0 }, ...active(['BR-1'])]],
   ['different identity with equal row count', ['0123'], active(['123'])],
   ['case-mismatched identity', ['BR-1'], active(['br-1'])],
+  ['mixed-case alias in reordered rows', ['B', 'a'], active(['a', 'b'])],
+  ['leading-zero alias in reordered rows', ['0123', 'B', 'a'], active(['123', 'a', 'B'])],
+  ['missing mixed-case member', ['B', 'a'], active(['a'])],
+  ['inactive mixed-case member', ['B', 'a'], [{ id: 'a', is_active: 0 }, ...active(['B'])]],
 ]) {
   test(`validator still rejects ${name}`, () => {
     const result = run({ branchIds, validate: true, rows });
