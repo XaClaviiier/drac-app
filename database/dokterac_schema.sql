@@ -200,6 +200,51 @@ INSERT INTO `item_product_types` (`id`, `code`, `name`, `category_id`, `is_activ
 -- ==========================================================
 -- 8. TABEL ITEMS (BARANG & JASA)
 -- ==========================================================
+-- Item creation prepares fitment queries even with no explicit fitment rows.
+-- Keep these catalog prerequisites available without visiting vehicle-catalog.
+CREATE TABLE IF NOT EXISTS `vehicle_brands` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL UNIQUE,
+  `item_code` CHAR(2) NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `vehicle_models` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `brand_id` VARCHAR(64) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_vehicle_model (brand_id, name),
+  CONSTRAINT fk_vehicle_model_brand FOREIGN KEY (brand_id) REFERENCES vehicle_brands(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `vehicle_generations` (
+  `id` VARCHAR(64) NOT NULL PRIMARY KEY,
+  `model_id` VARCHAR(64) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `aliases` VARCHAR(500) NOT NULL DEFAULT '',
+  `year_from` SMALLINT UNSIGNED NULL,
+  `year_to` SMALLINT UNSIGNED NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_vehicle_generation (model_id, name),
+  KEY idx_generation_model (model_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `vehicle_generation_engines` (
+  `generation_id` VARCHAR(64) NOT NULL,
+  `engine_cc` SMALLINT UNSIGNED NOT NULL,
+  PRIMARY KEY (generation_id, engine_cc)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `items` (
   `id` VARCHAR(20) NOT NULL,
   `code` VARCHAR(30) NOT NULL,

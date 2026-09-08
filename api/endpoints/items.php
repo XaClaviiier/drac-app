@@ -1,37 +1,38 @@
 <?php
 function safeItemSchemaExec(PDO $pdo, string $sql, string $label): void {
-    try {$pdo->exec($sql);} catch (Throwable $e) {error_log("items schema {$label} failed: ".$e->getMessage());}
+    // Required schema must fail closed, not leave item writes partially bootstrapped.
+    $pdo->exec($sql);
 }
-safeItemSchemaExec($pdo,"ALTER TABLE vehicle_brands ADD COLUMN IF NOT EXISTS item_code CHAR(2) NULL AFTER name",'vehicle brand code');
+ensureTableColumn($pdo, 'vehicle_brands', 'item_code', 'CHAR(2) NULL AFTER name');
 $brandCodeMap=['UNIVERSAL'=>'01','TOYOTA'=>'02','DAIHATSU'=>'03','HONDA'=>'04','MITSUBISHI'=>'05','SUZUKI'=>'06','WULING'=>'07','NISSAN'=>'08','DATSUN'=>'09','ISUZU'=>'10','MAZDA'=>'11','FORD'=>'12','CHEVROLET'=>'13','KIA'=>'14','HYUNDAI'=>'15'];
-try{$brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPER(name)=?");foreach($brandCodeMap as $brandName=>$brandCode){$brandCodeUpdate->execute([$brandCode,$brandName]);}}catch(Throwable$e){error_log('items vehicle brand mapping failed: '.$e->getMessage());}
-$universalId='VB-'.substr(sha1('universal'),0,16);try{$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);}catch(Throwable$e){error_log('items universal brand failed: '.$e->getMessage());}
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand",'vehicle_brand_id');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id",'vehicle_brand_name');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand",'item_brand_id');
+$brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPER(name)=?");foreach($brandCodeMap as $brandName=>$brandCode){$brandCodeUpdate->execute([$brandCode,$brandName]);}
+$universalId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);
+ensureTableColumn($pdo, 'items', 'vehicle_brand_id', 'VARCHAR(64) NULL AFTER brand');
+ensureTableColumn($pdo, 'items', 'vehicle_brand_name', 'VARCHAR(100) NULL AFTER vehicle_brand_id');
+ensureTableColumn($pdo, 'items', 'item_brand_id', 'VARCHAR(64) NULL AFTER brand');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_vehicle_brands');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_vehicle_compatibilities');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc",'engine_type');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_from SMALLINT UNSIGNED NULL AFTER generation_id",'fitment year_from');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_to SMALLINT UNSIGNED NULL AFTER year_from",'fitment year_to');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type",'fitment engine_code');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code",'fitment variant');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant",'fitment transmission');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission",'fitment hvac_type');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS fitment_status VARCHAR(20) NOT NULL DEFAULT 'Pending' AFTER hvac_type",'fitment status');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS source VARCHAR(255) NULL AFTER fitment_status",'fitment source');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS notes VARCHAR(500) NULL AFTER source",'fitment notes');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS oem_part_number VARCHAR(100) NULL AFTER barcode",'oem_part_number');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS alternate_part_numbers VARCHAR(500) NULL AFTER oem_part_number",'alternate_part_numbers');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS technical_notes TEXT NULL AFTER alternate_part_numbers",'technical_notes');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'engine_type', 'VARCHAR(20) NULL AFTER engine_cc');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'year_from', 'SMALLINT UNSIGNED NULL AFTER generation_id');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'year_to', 'SMALLINT UNSIGNED NULL AFTER year_from');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'engine_code', 'VARCHAR(50) NULL AFTER engine_type');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'variant', 'VARCHAR(100) NULL AFTER engine_code');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'transmission', 'VARCHAR(20) NULL AFTER variant');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'hvac_type', 'VARCHAR(30) NULL AFTER transmission');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'fitment_status', "VARCHAR(20) NOT NULL DEFAULT 'Pending' AFTER hvac_type");
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'source', 'VARCHAR(255) NULL AFTER fitment_status');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'notes', 'VARCHAR(500) NULL AFTER source');
+ensureTableColumn($pdo, 'items', 'oem_part_number', 'VARCHAR(100) NULL AFTER barcode');
+ensureTableColumn($pdo, 'items', 'alternate_part_numbers', 'VARCHAR(500) NULL AFTER oem_part_number');
+ensureTableColumn($pdo, 'items', 'technical_notes', 'TEXT NULL AFTER alternate_part_numbers');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_product_types(id VARCHAR(64) NOT NULL PRIMARY KEY,code VARCHAR(20) NOT NULL UNIQUE,name VARCHAR(100) NOT NULL UNIQUE,category_id VARCHAR(64) NULL,is_active TINYINT(1) NOT NULL DEFAULT 1,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_product_types');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_id VARCHAR(64) NULL AFTER category_name",'product_type_id');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_name VARCHAR(100) NULL AFTER product_type_id",'product_type_name');
-try{$pdo->exec("INSERT IGNORE INTO item_product_types(id,code,name,category_id,is_active) VALUES ('IPT-MOTOR-BLOWER','MB','MOTOR BLOWER',(SELECT id FROM item_categories WHERE LOWER(TRIM(name))='sparepart ac' LIMIT 1),1)");}catch(Throwable$e){error_log('items product type seed failed: '.$e->getMessage());}
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active",'verification_status');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status",'created_by');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by",'verified_by');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS merged_into_item_id VARCHAR(64) NULL AFTER verified_by",'merged_into_item_id');
+ensureTableColumn($pdo, 'items', 'product_type_id', 'VARCHAR(64) NULL AFTER category_name');
+ensureTableColumn($pdo, 'items', 'product_type_name', 'VARCHAR(100) NULL AFTER product_type_id');
+$pdo->exec("INSERT IGNORE INTO item_product_types(id,code,name,category_id,is_active) VALUES ('IPT-MOTOR-BLOWER','MB','MOTOR BLOWER',(SELECT id FROM item_categories WHERE LOWER(TRIM(name))='sparepart ac' LIMIT 1),1)");
+ensureTableColumn($pdo, 'items', 'verification_status', "VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
+ensureTableColumn($pdo, 'items', 'created_by', 'VARCHAR(64) NULL AFTER verification_status');
+ensureTableColumn($pdo, 'items', 'verified_by', 'VARCHAR(64) NULL AFTER created_by');
+ensureTableColumn($pdo, 'items', 'merged_into_item_id', 'VARCHAR(64) NULL AFTER verified_by');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_verification_audit(id BIGINT AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,action VARCHAR(30) NOT NULL,target_item_id VARCHAR(64) NULL,user_id VARCHAR(64) NULL,user_name VARCHAR(150) NULL,detail TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_item_verify(item_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_verification_audit');
 function itemCodeSegment(string $value, string $fallback): string {
     $normalized = strtoupper(trim((string)preg_replace('/[^A-Z0-9]+/i', ' ', $value)));
