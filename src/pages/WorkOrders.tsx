@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import type { Customer, Vehicle, WorkOrder, WorkOrderService } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
+import WorkOrderPaidStamp from '../components/WorkOrderPaidStamp';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import ItemSearchOption from '../components/ItemSearchOption';
@@ -3140,8 +3141,9 @@ export default function WorkOrders() {
                     {orderedVisibleWorkOrderColumns.map(key => {
                       if (key === 'number') return <td key={key} className="overflow-hidden px-4 py-3">
                       <button type="button" onClick={() => openWorkOrderStandard(wo)} className="text-left">
-                        <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
+                        <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className="inline-flex flex-col items-center"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span><WorkOrderPaidStamp wo={wo} invoices={data.invoices} /></span></span>
                         <span className="mt-0.5 block text-xs font-semibold text-gray-500">{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}</span>
+                        {wo.invoiceId && <span className="mt-0.5 block text-[10px] font-semibold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                       </button>
                     </td>;
                       if (key === 'date') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3">
@@ -3265,7 +3267,7 @@ export default function WorkOrders() {
             <article key={`compact-${wo.id}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
               <button type="button" onClick={() => openWorkOrderStandard(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-2"><span className="truncate font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span><span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span></span>
+                  <span className="flex min-w-0 items-center gap-2"><span className="truncate font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span><span className="inline-flex flex-shrink-0 flex-col items-center"><span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span><WorkOrderPaidStamp wo={wo} invoices={data.invoices} /></span></span>
                   <span className="whitespace-nowrap text-[11px] text-gray-500">
                     {formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
                   </span>
