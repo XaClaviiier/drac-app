@@ -34,6 +34,8 @@ jobs:
         with:
           php-version: '8.2'
           extensions: pdo_mysql, pdo_sqlite
+      - name: Verify historical report consistent snapshot on MySQL 5.7
+        run: DRAC_TEST_ISOLATED_MYSQL=1 DB_USER=root DB_PASSWORD=root php tests/fixtures/historical-report-snapshot-mysql.php
       - run: npm run check
       - name: Lint PHP API
         run: |

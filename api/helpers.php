@@ -241,17 +241,23 @@ function historicalWarehouseQuantitiesFromLedger(PDO $pdo, string $warehouseId, 
     if($warehouseId===''||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date))throw new InvalidArgumentException('Parameter histori stok tidak valid');
     ensureInventoryLedgerReady($pdo);
     $quantities=[];
-    $current=$pdo->prepare('SELECT item_id,quantity FROM warehouse_stocks WHERE warehouse_id=?');
-    $current->execute([$warehouseId]);
-    foreach($current->fetchAll() as $row)$quantities[(string)$row['item_id']]=(int)$row['quantity'];
-    $movements=$pdo->prepare("SELECT item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type
+    // One consistent-read statement: never mix a pre-commit balance with a
+    // post-commit journal. No transaction/isolation changes or new writer locks.
+    $movements=$pdo->prepare("SELECT item_id,quantity,NULL AS source_warehouse_id,NULL AS destination_warehouse_id,NULL AS movement_type,1 AS is_current
+        FROM warehouse_stocks WHERE warehouse_id=?
+        UNION ALL
+        SELECT item_id,quantity,source_warehouse_id,destination_warehouse_id,movement_type,0 AS is_current
         FROM stock_movements
         WHERE is_voided=0
           AND COALESCE(occurred_at,created_at)>CONCAT(?,' 23:59:59')
           AND (source_warehouse_id=? OR destination_warehouse_id=?)");
-    $movements->execute([$date,$warehouseId,$warehouseId]);
+    $movements->execute([$warehouseId,$date,$warehouseId,$warehouseId]);
     foreach($movements->fetchAll() as $row){
         $itemId=(string)$row['item_id'];
+        if((int)$row['is_current']===1){
+            $quantities[$itemId]=($quantities[$itemId]??0)+(int)$row['quantity'];
+            continue;
+        }
         // Legacy opening imports stored signed INT quantities on destination-only rows.
         $quantity=parseBoundedDecimalInteger($row['quantity']??null,'-2147483648','2147483647','Kuantitas jurnal stok');
         $type=(string)$row['movement_type'];
@@ -933,7 +939,9 @@ function ensureApiSupportTables(PDO $pdo): void {
     $pdo->exec("ALTER TABLE stock_count_result_items MODIFY movement_out BIGINT UNSIGNED NOT NULL DEFAULT 0");
     $pdo->exec("ALTER TABLE stock_count_result_items MODIFY is_manual TINYINT(1) NOT NULL DEFAULT 0");
     $pdo->exec("ALTER TABLE stock_count_result_items MODIFY added_by VARCHAR(20) NULL");
-    $pdo->exec("ALTER TABLE stock_count_result_items MODIFY added_at DATETIME NULL");
+    // Preserve adopted fractional seconds; rollback restores the original type.
+    $addedAtPrecision=(int)$pdo->query("SELECT DATETIME_PRECISION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='stock_count_result_items' AND COLUMN_NAME='added_at'")->fetchColumn();
+    $pdo->exec('ALTER TABLE stock_count_result_items MODIFY added_at DATETIME('.$addedAtPrecision.') NULL');
     ensureCanonicalStockCountResultItemIndex($pdo);
     $pdo->exec("CREATE TABLE IF NOT EXISTS cash_accounts (
         id VARCHAR(64) PRIMARY KEY, code VARCHAR(30) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL,

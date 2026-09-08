@@ -305,7 +305,13 @@ ALTER TABLE `stock_count_result_items` MODIFY `movement_in` BIGINT UNSIGNED NOT 
 ALTER TABLE `stock_count_result_items` MODIFY `movement_out` BIGINT UNSIGNED NOT NULL DEFAULT 0;
 ALTER TABLE `stock_count_result_items` MODIFY `is_manual` TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE `stock_count_result_items` MODIFY `added_by` VARCHAR(20) NULL;
-ALTER TABLE `stock_count_result_items` MODIFY `added_at` DATETIME NULL;
+-- Keep adopted DATETIME/TIMESTAMP fractional values through migration/rollback.
+SET @added_at_precision = (SELECT COALESCE(DATETIME_PRECISION,0) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='stock_count_result_items' AND COLUMN_NAME='added_at');
+SET @ddl = CONCAT('ALTER TABLE `stock_count_result_items` MODIFY `added_at` DATETIME(',@added_at_precision,') NULL');
+PREPARE stock_opname_history_migration FROM @ddl;
+EXECUTE stock_opname_history_migration;
+DEALLOCATE PREPARE stock_opname_history_migration;
 
 SET @ddl = IF(
   @index_signature = '0:result_id,item_id:0',
