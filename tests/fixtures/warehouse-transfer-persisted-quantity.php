@@ -16,6 +16,9 @@ $pdo = new PDO(
     [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC],
 );
 
+// Match the API connection timezone before creating NOW()-based session timestamps.
+$pdo->exec("SET time_zone = '+08:00'");
+
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) {
         throw new RuntimeException($message);
