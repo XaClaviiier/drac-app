@@ -157,7 +157,11 @@ try {
             }
             if ($observed) break;
             icbrAssert(proc_get_status($client)['running'], 'Request finished before reaching inventory mutex');
-            usleep(50000);
+            // MySQL 5.7 refreshes the shared INNODB_TRX/LOCK_WAITS snapshot
+            // only after >100 ms since its last read. Polling every 50 ms
+            // can indefinitely retain the empty pre-request snapshot.
+            // This delay permits refresh; only the exact lock join above proves a wait.
+            usleep(200000);
         } while (microtime(true) < $deadline);
         icbrAssert($observed, 'No proven post-preflight inventory mutex wait (not a passing race)');
         // Preflight passed with BR-002 granted. Revoke ONLY that grant while
