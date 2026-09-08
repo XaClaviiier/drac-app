@@ -22,9 +22,9 @@ function normalizeUserBranchIds(mixed $branchIds, mixed $primaryBranchId): array
     $normalized=[];
     foreach($branchIds as $branchId){
         if(!is_string($branchId)||$branchId!==trim($branchId)||!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,19}$/',$branchId))throw new InvalidArgumentException('ID cabang tidak valid');
-        $normalized[$branchId]=true;
+        $normalized[$branchId]=$branchId;
     }
-    $ids=array_keys($normalized);sort($ids,SORT_STRING);
+    $ids=array_values($normalized);sort($ids,SORT_STRING);
     if(!$ids)throw new InvalidArgumentException('Pilih minimal satu cabang');
     return $ids;
 }

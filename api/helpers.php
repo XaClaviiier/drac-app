@@ -252,7 +252,8 @@ function historicalWarehouseQuantitiesFromLedger(PDO $pdo, string $warehouseId, 
     $movements->execute([$date,$warehouseId,$warehouseId]);
     foreach($movements->fetchAll() as $row){
         $itemId=(string)$row['item_id'];
-        $quantity=parseBoundedDecimalInteger($row['quantity']??null,'1','2147483647','Kuantitas jurnal stok');
+        // Legacy opening imports stored signed INT quantities on destination-only rows.
+        $quantity=parseBoundedDecimalInteger($row['quantity']??null,'-2147483648','2147483647','Kuantitas jurnal stok');
         $type=(string)$row['movement_type'];
         if(!array_key_exists($itemId,$quantities))$quantities[$itemId]=0;
         if((string)$row['source_warehouse_id'] === $warehouseId&&$type!=='transfer_receive')$quantities[$itemId]+=$quantity;
@@ -291,6 +292,11 @@ function ensureOwnedStockOpnameColumn(PDO $pdo, string $table, string $column, s
         if(!empty($existing['CHARACTER_SET_NAME']))$priorDefinition.=' CHARACTER SET '.$existing['CHARACTER_SET_NAME'].' COLLATE '.$existing['COLLATION_NAME'];
         $priorDefinition.=$existing['IS_NULLABLE']==='YES'?' NULL':' NOT NULL';
         if($existing['COLUMN_DEFAULT']===null){if($existing['IS_NULLABLE']==='YES')$priorDefinition.=' DEFAULT NULL';}
+        // MySQL 5.7 exposes temporal expression defaults as unquoted metadata.
+        elseif(preg_match('/\A(?:datetime|timestamp)(?:\([0-6]\))?\z/i',(string)$existing['COLUMN_TYPE'])
+            &&preg_match('/\ACURRENT_TIMESTAMP(?:\([0-6]?\))?\z/i',(string)$existing['COLUMN_DEFAULT'])){
+            $priorDefinition.=' DEFAULT '.$existing['COLUMN_DEFAULT'];
+        }
         else $priorDefinition.=' DEFAULT '.$pdo->quote((string)$existing['COLUMN_DEFAULT']);
         if(!empty($existing['EXTRA']))$priorDefinition.=' '.$existing['EXTRA'];
         if((string)$existing['COLUMN_COMMENT']!=='')$priorDefinition.=' COMMENT '.$pdo->quote((string)$existing['COLUMN_COMMENT']);
@@ -1418,7 +1424,7 @@ function assertLockedInventoryBranchAccess(array $authorization, string $branchI
     if (!empty($actor['is_owner']) || in_array('*', $authorization['permissions'] ?? [], true) || in_array('all_branches', $authorization['permissions'] ?? [], true)) return;
     $actorId = (string)($actor['id'] ?? '');
     $branches = $authorization['branchAccess'][$actorId] ?? [];
-    if (!empty($actor['branch_id'])) $branches[] = (string)$actor['branch_id'];
+    if (isset($actor['branch_id']) && (string)$actor['branch_id'] !== '') $branches[] = (string)$actor['branch_id'];
     if (in_array($branchId, $branches, true)) return;
     throw new DomainException('Akun tidak memiliki akses ke cabang tersebut', 403);
 }
@@ -1435,7 +1441,7 @@ function lockedInventoryDelegatedUserForBranch(array $authorization, string $use
     $permissions=$authorization['permissionsByUser'][$userId]??[];
     if (!empty($user['is_owner']) || in_array('*',$permissions,true) || in_array('all_branches',$permissions,true)) return $user;
     $branches = $authorization['branchAccess'][$userId] ?? [];
-    if (!empty($user['branch_id'])) $branches[] = (string)$user['branch_id'];
+    if (isset($user['branch_id']) && (string)$user['branch_id'] !== '') $branches[] = (string)$user['branch_id'];
     if (!in_array($branchId, $branches, true)) throw new InvalidArgumentException($label . ' tidak lagi bertugas di cabang tersebut');
     return $user;
 }
@@ -1622,8 +1628,8 @@ function getAccessibleBranchIds(PDO $pdo, array $user): array {
     }
 
     $ids = getUserBranchIds($pdo, (string)$user['id']);
-    if (!empty($user['branch_id'])) $ids[] = (string)$user['branch_id'];
-    return array_values(array_unique(array_filter(array_map('strval', $ids))));
+    if (isset($user['branch_id']) && (string)$user['branch_id'] !== '') $ids[] = (string)$user['branch_id'];
+    return array_values(array_unique(array_filter(array_map('strval', $ids), static fn(string $id): bool => $id !== '')));
 }
 
 function requireAccessibleBranch(PDO $pdo, array $user, ?string $branchId): void {

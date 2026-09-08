@@ -130,7 +130,7 @@ switch ($method) {
         }
         if (empty($d['items']) || !is_array($d['items'])) respondError('Tambahkan minimal satu barang', 422);
         $receiverId=(string)($d['receivedById']??($actor['id']??''));$receiverStmt=$pdo->prepare("SELECT id,name,branch_id,is_active,is_owner FROM users WHERE id=? LIMIT 1");$receiverStmt->execute([$receiverId]);$receiver=$receiverStmt->fetch();if(!$receiver||!(bool)$receiver['is_active'])respondError('Petugas penerima tidak valid',422);
-        $receiverBranches=getUserBranchIds($pdo,$receiverId);if(!empty($receiver['branch_id']))$receiverBranches[]=(string)$receiver['branch_id'];$receiverBranches=array_values(array_unique($receiverBranches));if(!in_array($branchId,$receiverBranches,true)&&empty($receiver['is_owner']))respondError('Petugas penerima tidak bertugas di cabang tujuan',422);
+        $receiverBranches=getUserBranchIds($pdo,$receiverId);if(isset($receiver['branch_id'])&&(string)$receiver['branch_id']!=='')$receiverBranches[]=(string)$receiver['branch_id'];$receiverBranches=array_values(array_unique($receiverBranches));if(!in_array($branchId,$receiverBranches,true)&&empty($receiver['is_owner']))respondError('Petugas penerima tidak bertugas di cabang tujuan',422);
         $newStatus = (string)($d['status'] ?? 'Draft');
         if (!in_array($newStatus, ['Draft', 'Diterima'], true)) respondError('Status awal penerimaan tidak valid', 422);
         $pdo->beginTransaction();
@@ -316,13 +316,13 @@ switch ($method) {
             if ($stockImpactChanged && $wasReceived) {
                 foreach ($oldItemsList as $i) {
                     adjustWarehouseStock($pdo,$oldWarehouseId,$oldBranchId,$i['item_id'],-(int)$i['qty']);
-                    if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStockAllowNegative($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['item_id'],(int)$i['qty']);
+                    if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&isset($oldRow['source_branch_id'])&&(string)$oldRow['source_branch_id']!=='')adjustWarehouseStockAllowNegative($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['item_id'],(int)$i['qty']);
                 }
             }
             if($stockImpactChanged)$pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason='Penerimaan diedit' WHERE reference_type='goods_receipt' AND reference_id=? AND is_voided=0")->execute([$actor['id']??null,$id]);
             if ($stockImpactChanged && $isReceived) {
                 foreach ($d['items'] as $lineIndex=>$i) {
-                    if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&!empty($oldRow['source_branch_id']))adjustWarehouseStock($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['itemId'],-$i['qty']);
+                    if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&isset($oldRow['source_branch_id'])&&(string)$oldRow['source_branch_id']!=='')adjustWarehouseStock($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['itemId'],-$i['qty']);
                     adjustWarehouseStockAllowNegative($pdo,$newWarehouseId,$newBranchId,$i['itemId'],$i['qty']);
                     $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':'.$lineIndex.':apply',max(0,(float)($i['unitPrice']??0)));
                 }
@@ -378,7 +378,7 @@ switch ($method) {
                 foreach ($receiptItems as $i) {
                     if (!empty($i['item_id'])) {
                         adjustWarehouseStock($pdo,(string)($row['warehouse_id']?:defaultWarehouseId($pdo,(string)$row['branch_id'])),(string)$row['branch_id'],$i['item_id'],-(int)$i['qty']);
-                        if(($row['source_type']??'Supplier')==='Transfer Gudang'&&!empty($row['source_warehouse_id'])&&!empty($row['source_branch_id']))adjustWarehouseStockAllowNegative($pdo,(string)$row['source_warehouse_id'],(string)$row['source_branch_id'],$i['item_id'],(int)$i['qty']);
+                        if(($row['source_type']??'Supplier')==='Transfer Gudang'&&!empty($row['source_warehouse_id'])&&isset($row['source_branch_id'])&&(string)$row['source_branch_id']!=='')adjustWarehouseStockAllowNegative($pdo,(string)$row['source_warehouse_id'],(string)$row['source_branch_id'],$i['item_id'],(int)$i['qty']);
                     }
                 }
             }

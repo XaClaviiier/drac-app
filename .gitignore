@@ -9,3 +9,4 @@ api/config.local.php
 .codex-*.log
 .codex-tmp/
 outputs/
+.hermes/

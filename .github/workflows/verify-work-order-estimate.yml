@@ -30,10 +30,11 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npm run check
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+          extensions: pdo_mysql, pdo_sqlite
+      - run: npm run check
       - name: Lint PHP API
         run: |
           php -l api/endpoints/work-orders.php
@@ -228,6 +229,14 @@ jobs:
             WHERE TABLE_SCHEMA='drac_fresh' AND TABLE_NAME='stock_count_result_items' AND INDEX_NAME='uq_stock_count_result_item';
           ")
           test "$FRESH_INDEX_COUNT" = "0"
+
+      - name: Verify temporal default ownership roundtrips on MySQL 5.7
+        env:
+          MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          docker exec "$MYSQL_CONTAINER" mysql -uroot -proot -e "CREATE DATABASE drac_temporal_defaults CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          php tests/fixtures/stock-opname-temporal-default-mysql.php
 
       - name: Verify runtime API bootstrap on MySQL 5.7
         run: |
@@ -523,3 +532,16 @@ jobs:
           test "$FINAL_RESULT_STATUS" = "Posted"
           test "$FINAL_ADJUSTMENT_STATUS" = "Posted"
           test "$FINAL_QUANTITY" = "9"
+
+      # Keep serial: API bootstrap shares the server-wide migration lock.
+      - name: Reject item creation after branch revocation while waiting on inventory mutex
+        timeout-minutes: 5
+        env:
+          DRAC_TEST_ISOLATED_MYSQL: '1'
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: root
+        run: |
+          set -euo pipefail
+          php -l tests/fixtures/item-create-branch-revocation.php
+          php tests/fixtures/item-create-branch-revocation.php

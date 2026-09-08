@@ -262,6 +262,7 @@ switch ($method) {
             lockInventoryMutation($pdo);
             $authorization=lockInventoryMutationAuthorization($pdo,$actor,$createPermission);
             $actor=$authorization['actor'];
+            assertLockedInventoryBranchAccess($authorization,$branchId);
             $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=? FOR UPDATE");
             $categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
