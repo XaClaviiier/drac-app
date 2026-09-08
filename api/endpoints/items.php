@@ -1,37 +1,38 @@
 <?php
 function safeItemSchemaExec(PDO $pdo, string $sql, string $label): void {
-    try {$pdo->exec($sql);} catch (Throwable $e) {error_log("items schema {$label} failed: ".$e->getMessage());}
+    // Required schema must fail closed, not leave item writes partially bootstrapped.
+    $pdo->exec($sql);
 }
-safeItemSchemaExec($pdo,"ALTER TABLE vehicle_brands ADD COLUMN IF NOT EXISTS item_code CHAR(2) NULL AFTER name",'vehicle brand code');
+ensureTableColumn($pdo, 'vehicle_brands', 'item_code', 'CHAR(2) NULL AFTER name');
 $brandCodeMap=['UNIVERSAL'=>'01','TOYOTA'=>'02','DAIHATSU'=>'03','HONDA'=>'04','MITSUBISHI'=>'05','SUZUKI'=>'06','WULING'=>'07','NISSAN'=>'08','DATSUN'=>'09','ISUZU'=>'10','MAZDA'=>'11','FORD'=>'12','CHEVROLET'=>'13','KIA'=>'14','HYUNDAI'=>'15'];
-try{$brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPER(name)=?");foreach($brandCodeMap as $brandName=>$brandCode){$brandCodeUpdate->execute([$brandCode,$brandName]);}}catch(Throwable$e){error_log('items vehicle brand mapping failed: '.$e->getMessage());}
-$universalId='VB-'.substr(sha1('universal'),0,16);try{$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);}catch(Throwable$e){error_log('items universal brand failed: '.$e->getMessage());}
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_id VARCHAR(64) NULL AFTER brand",'vehicle_brand_id');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS vehicle_brand_name VARCHAR(100) NULL AFTER vehicle_brand_id",'vehicle_brand_name');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS item_brand_id VARCHAR(64) NULL AFTER brand",'item_brand_id');
+$brandCodeUpdate=$pdo->prepare("UPDATE vehicle_brands SET item_code=? WHERE UPPER(name)=?");foreach($brandCodeMap as $brandName=>$brandCode){$brandCodeUpdate->execute([$brandCode,$brandName]);}
+$universalId='VB-'.substr(sha1('universal'),0,16);$pdo->prepare("INSERT IGNORE INTO vehicle_brands(id,name,item_code,is_active,sort_order) VALUES (?,'Universal','01',1,0)")->execute([$universalId]);
+ensureTableColumn($pdo, 'items', 'vehicle_brand_id', 'VARCHAR(64) NULL AFTER brand');
+ensureTableColumn($pdo, 'items', 'vehicle_brand_name', 'VARCHAR(100) NULL AFTER vehicle_brand_id');
+ensureTableColumn($pdo, 'items', 'item_brand_id', 'VARCHAR(64) NULL AFTER brand');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_vehicle_brands(item_id VARCHAR(64) NOT NULL,vehicle_brand_id VARCHAR(64) NOT NULL,sort_order INT NOT NULL DEFAULT 0,PRIMARY KEY(item_id,vehicle_brand_id),INDEX idx_ivb_brand(vehicle_brand_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_vehicle_brands');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_vehicle_compatibilities(id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,brand_id VARCHAR(64) NOT NULL,model_id VARCHAR(64) NULL,generation_id VARCHAR(64) NULL,engine_cc SMALLINT UNSIGNED NULL,sort_order INT NOT NULL DEFAULT 0,INDEX idx_ivc_item(item_id),INDEX idx_ivc_vehicle(brand_id,model_id,generation_id,engine_cc)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_vehicle_compatibilities');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_type VARCHAR(20) NULL AFTER engine_cc",'engine_type');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_from SMALLINT UNSIGNED NULL AFTER generation_id",'fitment year_from');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS year_to SMALLINT UNSIGNED NULL AFTER year_from",'fitment year_to');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS engine_code VARCHAR(50) NULL AFTER engine_type",'fitment engine_code');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS variant VARCHAR(100) NULL AFTER engine_code",'fitment variant');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS transmission VARCHAR(20) NULL AFTER variant",'fitment transmission');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS hvac_type VARCHAR(30) NULL AFTER transmission",'fitment hvac_type');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS fitment_status VARCHAR(20) NOT NULL DEFAULT 'Pending' AFTER hvac_type",'fitment status');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS source VARCHAR(255) NULL AFTER fitment_status",'fitment source');
-safeItemSchemaExec($pdo,"ALTER TABLE item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS notes VARCHAR(500) NULL AFTER source",'fitment notes');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS oem_part_number VARCHAR(100) NULL AFTER barcode",'oem_part_number');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS alternate_part_numbers VARCHAR(500) NULL AFTER oem_part_number",'alternate_part_numbers');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS technical_notes TEXT NULL AFTER alternate_part_numbers",'technical_notes');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'engine_type', 'VARCHAR(20) NULL AFTER engine_cc');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'year_from', 'SMALLINT UNSIGNED NULL AFTER generation_id');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'year_to', 'SMALLINT UNSIGNED NULL AFTER year_from');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'engine_code', 'VARCHAR(50) NULL AFTER engine_type');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'variant', 'VARCHAR(100) NULL AFTER engine_code');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'transmission', 'VARCHAR(20) NULL AFTER variant');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'hvac_type', 'VARCHAR(30) NULL AFTER transmission');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'fitment_status', "VARCHAR(20) NOT NULL DEFAULT 'Pending' AFTER hvac_type");
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'source', 'VARCHAR(255) NULL AFTER fitment_status');
+ensureTableColumn($pdo, 'item_vehicle_compatibilities', 'notes', 'VARCHAR(500) NULL AFTER source');
+ensureTableColumn($pdo, 'items', 'oem_part_number', 'VARCHAR(100) NULL AFTER barcode');
+ensureTableColumn($pdo, 'items', 'alternate_part_numbers', 'VARCHAR(500) NULL AFTER oem_part_number');
+ensureTableColumn($pdo, 'items', 'technical_notes', 'TEXT NULL AFTER alternate_part_numbers');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_product_types(id VARCHAR(64) NOT NULL PRIMARY KEY,code VARCHAR(20) NOT NULL UNIQUE,name VARCHAR(100) NOT NULL UNIQUE,category_id VARCHAR(64) NULL,is_active TINYINT(1) NOT NULL DEFAULT 1,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_product_types');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_id VARCHAR(64) NULL AFTER category_name",'product_type_id');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS product_type_name VARCHAR(100) NULL AFTER product_type_id",'product_type_name');
-try{$pdo->exec("INSERT IGNORE INTO item_product_types(id,code,name,category_id,is_active) VALUES ('IPT-MOTOR-BLOWER','MB','MOTOR BLOWER',(SELECT id FROM item_categories WHERE LOWER(TRIM(name))='sparepart ac' LIMIT 1),1)");}catch(Throwable$e){error_log('items product type seed failed: '.$e->getMessage());}
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active",'verification_status');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS created_by VARCHAR(64) NULL AFTER verification_status",'created_by');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS verified_by VARCHAR(64) NULL AFTER created_by",'verified_by');
-safeItemSchemaExec($pdo,"ALTER TABLE items ADD COLUMN IF NOT EXISTS merged_into_item_id VARCHAR(64) NULL AFTER verified_by",'merged_into_item_id');
+ensureTableColumn($pdo, 'items', 'product_type_id', 'VARCHAR(64) NULL AFTER category_name');
+ensureTableColumn($pdo, 'items', 'product_type_name', 'VARCHAR(100) NULL AFTER product_type_id');
+$pdo->exec("INSERT IGNORE INTO item_product_types(id,code,name,category_id,is_active) VALUES ('IPT-MOTOR-BLOWER','MB','MOTOR BLOWER',(SELECT id FROM item_categories WHERE LOWER(TRIM(name))='sparepart ac' LIMIT 1),1)");
+ensureTableColumn($pdo, 'items', 'verification_status', "VARCHAR(20) NOT NULL DEFAULT 'Verified' AFTER is_active");
+ensureTableColumn($pdo, 'items', 'created_by', 'VARCHAR(64) NULL AFTER verification_status');
+ensureTableColumn($pdo, 'items', 'verified_by', 'VARCHAR(64) NULL AFTER created_by');
+ensureTableColumn($pdo, 'items', 'merged_into_item_id', 'VARCHAR(64) NULL AFTER verified_by');
 safeItemSchemaExec($pdo,"CREATE TABLE IF NOT EXISTS item_verification_audit(id BIGINT AUTO_INCREMENT PRIMARY KEY,item_id VARCHAR(64) NOT NULL,action VARCHAR(30) NOT NULL,target_item_id VARCHAR(64) NULL,user_id VARCHAR(64) NULL,user_name VARCHAR(150) NULL,detail TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_item_verify(item_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",'item_verification_audit');
 function itemCodeSegment(string $value, string $fallback): string {
     $normalized = strtoupper(trim((string)preg_replace('/[^A-Z0-9]+/i', ' ', $value)));
@@ -243,7 +244,9 @@ switch ($method) {
         assertItemTextLength($d['oemPartNumber'] ?? '', 100, 'Nomor OEM');
         assertItemTextLength($d['alternatePartNumbers'] ?? '', 500, 'Nomor part alternatif');
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
-        if (!authenticatedUserHasPermission($pdo,$actor,'item:create') && empty($d['provisional'])) respondError('Hak penerimaan hanya boleh membuat barang sementara',403);
+        $isProvisional=!empty($d['provisional']);
+        $createPermission=authenticatedUserHasPermission($pdo,$actor,'item:create')?'item:create':'receipt:create';
+        if(!$isProvisional&&$createPermission!=='item:create')respondError('Hak penerimaan hanya boleh membuat barang sementara',403);
         $branchId = (string)($d['branchId'] ?? '');
         requireAccessibleBranch($pdo, $actor, $branchId);
         $type = (string)($d['type'] ?? '');
@@ -257,6 +260,10 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,$createPermission);
+            $actor=$authorization['actor'];
+            assertLockedInventoryBranchAccess($authorization,$branchId);
             $categoryStmt=$pdo->prepare("SELECT id,code,name,is_active FROM item_categories WHERE id=? FOR UPDATE");
             $categoryStmt->execute([(string)($d['categoryId']??'')]);$category=$categoryStmt->fetch();
             if(!$category||!(bool)$category['is_active'])throw new InvalidArgumentException('Kategori wajib dipilih dari kategori aktif');
@@ -289,7 +296,6 @@ switch ($method) {
             if($codeCheck->fetch())throw new InvalidArgumentException("Kode {$code} sudah digunakan");
             if($type==='Group'&&empty($d['groupMembers']))throw new InvalidArgumentException('Group/Paket wajib memiliki minimal satu komponen');
             $itemId = $d['id'] ?? generateId();
-            $isProvisional=!empty($d['provisional']);
             $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, product_type_id, product_type_name, type, brand, item_brand_id, vehicle_brand_id, vehicle_brand_name, unit, stock, sellable_stock, purchase_price, selling_price, is_active, verification_status, created_by, verified_by, is_quick_service, description, receipt_description, barcode, oem_part_number, alternate_part_numbers, technical_notes, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $itemId, $code, $name,
@@ -348,10 +354,10 @@ switch ($method) {
             }
             $pdo->commit();
             respondSuccess(['id' => $itemId, 'code'=>$code], 'Barang/Jasa ditambahkan');
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException | DomainException $e) {
             $pdo->rollBack();
-            respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
+            respondError($e->getMessage(), transactionExceptionStatus($e,422));
+        } catch (Throwable $e) {
             $pdo->rollBack();
             respondError('Gagal menambah item', 500, $e->getMessage());
         }
@@ -365,32 +371,23 @@ switch ($method) {
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         if (in_array((string)($d['action']??''), ['verify','merge'], true)) {
             if($d['action']==='verify'){
+                $pdo->beginTransaction();
                 try {
-                    $isAdmin=!empty($actor['is_owner']);
-                    if(!$isAdmin){
-                        $roleStmt=$pdo->prepare("SELECT name FROM roles WHERE id=? LIMIT 1");
-                        $roleStmt->execute([$actor['role_id']??'']);
-                        $roleName=(string)($roleStmt->fetchColumn()?:'');
-                        $isAdmin=strtolower(trim($roleName))==='administrator';
-                    }
-                    if(!$isAdmin)throw new DomainException('Verifikasi barang hanya untuk Owner atau Administrator',403);
-                    if($pdo->inTransaction())$pdo->rollBack();
-                    $pdo->beginTransaction();
+                    lockInventoryMutation($pdo);
+                    $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:edit');
+                    assertLockedInventoryOwnerOrAdministrator($authorization);
+                    $actor=$authorization['actor'];
                     $pendingStmt=$pdo->prepare("SELECT id FROM items WHERE id=? AND verification_status='Pending' FOR UPDATE");$pendingStmt->execute([$id]);
                     if(!$pendingStmt->fetchColumn())throw new InvalidArgumentException('Barang tidak ditemukan atau sudah tidak menunggu verifikasi');
                     $pdo->prepare("UPDATE items SET verification_status='Verified',verified_by=? WHERE id=?")->execute([$actor['id']??null,$id]);
-                    try {
-                        $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,user_id,user_name) VALUES (?,'Verified',?,?)")->execute([$id,$actor['id']??null,$actor['name']??$actor['username']??'']);
-                    } catch (Throwable $auditError) {
-                        error_log('item verification audit failed: '.$auditError->getMessage());
-                    }
+                    $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,user_id,user_name) VALUES (?,'Verified',?,?)")->execute([$id,$actor['id']??null,$actor['name']??$actor['username']??'']);
                     $pdo->commit();respondSuccess(null,'Barang berhasil diverifikasi');
                 } catch (DomainException $e) {
                     if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),$e->getCode()?:403);
                 } catch (InvalidArgumentException $e) {
                     if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);
                 } catch (Throwable $e) {
-                    if($pdo->inTransaction())$pdo->rollBack();error_log('item verification failed: '.$e->getMessage());respondError('Verifikasi barang gagal: '.$e->getMessage(),500);
+                    if($pdo->inTransaction())$pdo->rollBack();error_log('item verification failed: '.$e->getMessage());respondError('Verifikasi barang gagal',500);
                 }
             }
             $isAdmin=!empty($actor['is_owner']);
@@ -403,17 +400,32 @@ switch ($method) {
             if($targetId===''||$targetId===$id)respondError('Barang tujuan penggabungan tidak valid',422);
             $pdo->beginTransaction();
             try{
+                lockInventoryMutation($pdo);
+                $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:edit');
+                assertLockedInventoryOwnerOrAdministrator($authorization);
+                $actor=$authorization['actor'];
                 $sourceStmt=$pdo->prepare("SELECT * FROM items WHERE id=? AND verification_status='Pending' FOR UPDATE");$sourceStmt->execute([$id]);$source=$sourceStmt->fetch();
                 $targetStmt=$pdo->prepare("SELECT * FROM items WHERE id=? AND is_active=1 AND verification_status='Verified' FOR UPDATE");$targetStmt->execute([$targetId]);$target=$targetStmt->fetch();
                 if(!$source||!$target)throw new InvalidArgumentException('Barang asal Pending atau barang tujuan terverifikasi tidak ditemukan');
                 if((string)$source['type']!==(string)$target['type'])throw new InvalidArgumentException('Jenis barang asal dan tujuan penggabungan harus sama');
-                foreach(['warehouse_stocks'=>['warehouse_id','quantity','reserved_quantity'],'branch_item_stocks'=>['branch_id','stock','sellable_stock']] as $table=>$cols){
-                    [$scope,$qty,$reserved]=$cols;$rows=$pdo->prepare("SELECT * FROM {$table} WHERE item_id=?");$rows->execute([$id]);
-                    foreach($rows->fetchAll() as $row){$up=$pdo->prepare("INSERT INTO {$table} ({$scope},item_id,{$qty},{$reserved}) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE {$qty}={$qty}+VALUES({$qty}),{$reserved}={$reserved}+VALUES({$reserved})");$up->execute([$row[$scope],$targetId,$row[$qty],$row[$reserved]]);}
-                    $pdo->prepare("DELETE FROM {$table} WHERE item_id=?")->execute([$id]);
-                }
-                foreach(['goods_receipt_items','purchase_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,item_code=?,item_name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
-                foreach(['work_order_services','sales_invoice_items'] as $table){$pdo->prepare("UPDATE {$table} SET item_id=?,code=?,name=? WHERE item_id=?")->execute([$targetId,$target['code'],$target['name'],$id]);}
+                $sourceStockStmt=$pdo->prepare("SELECT item_id FROM warehouse_stocks WHERE item_id=? AND (quantity<>0 OR reserved_quantity<>0) LIMIT 1 FOR UPDATE");
+                $sourceStockStmt->execute([$id]);
+                $sourceBranchStockStmt=$pdo->prepare("SELECT item_id FROM branch_item_stocks WHERE item_id=? AND (stock<>0 OR sellable_stock<>0) LIMIT 1 FOR UPDATE");
+                $sourceBranchStockStmt->execute([$id]);
+                $usageQueries=[
+                    "SELECT item_id FROM stock_movements WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM stock_adjustment_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM stock_count_result_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM goods_receipt_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM purchase_invoice_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM work_order_services WHERE item_id=? LIMIT 1 FOR UPDATE",
+                    "SELECT item_id FROM sales_invoice_items WHERE item_id=? LIMIT 1 FOR UPDATE",
+                ];
+                $sourceWasUsed=(bool)$sourceStockStmt->fetchColumn()||(bool)$sourceBranchStockStmt->fetchColumn();
+                foreach($usageQueries as $usageSql){$usageStmt=$pdo->prepare($usageSql);$usageStmt->execute([$id]);if($usageStmt->fetchColumn()){$sourceWasUsed=true;break;}}
+                if($sourceWasUsed)throw new DomainException('Barang asal sudah pernah digunakan dan tidak dapat digabungkan',409);
+                $pdo->prepare("DELETE FROM warehouse_stocks WHERE item_id=?")->execute([$id]);
+                $pdo->prepare("DELETE FROM branch_item_stocks WHERE item_id=?")->execute([$id]);
                 if(in_array((string)$target['type'],['Jasa','Group'],true)){
                     $pdo->prepare("DELETE FROM item_vehicle_compatibilities WHERE item_id=?")->execute([$targetId]);
                     $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$targetId]);
@@ -435,9 +447,10 @@ switch ($method) {
                 $pdo->prepare("UPDATE items SET product_type_id=COALESCE(product_type_id,?),product_type_name=COALESCE(product_type_name,?),oem_part_number=?,alternate_part_numbers=?,technical_notes=? WHERE id=?")->execute([$sourceProductTypeId,$sourceProductTypeName,$mergedOem?:null,$candidateAlternatePartNumbers,$technicalNotes?implode("\n",$technicalNotes):null,$targetId]);
                 $pdo->prepare("UPDATE items SET is_active=0,verification_status='Merged',merged_into_item_id=?,verified_by=?,stock=0,sellable_stock=0 WHERE id=?")->execute([$targetId,$actor['id']??null,$id]);
                 $pdo->prepare("UPDATE items SET stock=(SELECT COALESCE(SUM(stock),0) FROM branch_item_stocks WHERE item_id=?),sellable_stock=(SELECT COALESCE(SUM(sellable_stock),0) FROM branch_item_stocks WHERE item_id=?) WHERE id=?")->execute([$targetId,$targetId,$targetId]);
-                try{$pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??$actor['username']??'']);}catch(Throwable$auditError){error_log('item merge audit failed: '.$auditError->getMessage());}
-                $pdo->commit();respondSuccess(null,'Barang duplikat berhasil dikonversi dan stok digabungkan');
-            }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('item merge failed: '.$e->getMessage());respondError($e instanceof InvalidArgumentException?$e->getMessage():'Penggabungan barang gagal disimpan. Silakan muat ulang dan coba lagi.',$e instanceof InvalidArgumentException?422:500);}
+                $pdo->prepare("INSERT INTO item_verification_audit(item_id,action,target_item_id,user_id,user_name) VALUES (?,'Merged',?,?,?)")->execute([$id,$targetId,$actor['id']??null,$actor['name']??$actor['username']??'']);
+                $pdo->commit();respondSuccess(null,'Barang duplikat belum terpakai berhasil digabungkan');
+            }catch(InvalidArgumentException | DomainException $e){if($pdo->inTransaction())$pdo->rollBack();error_log('item merge failed: '.$e->getMessage());respondError($e->getMessage(),transactionExceptionStatus($e,422));
+            }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('item merge failed: '.$e->getMessage());respondError('Penggabungan barang gagal disimpan. Silakan muat ulang dan coba lagi.',500);}
         }
         $type = (string)($d['type'] ?? '');
         if (!in_array($type, ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'], true)) respondError('Jenis barang/jasa tidak valid', 422);
@@ -450,6 +463,9 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:edit');
+            $actor=$authorization['actor'];
             $currentStmt=$pdo->prepare("SELECT * FROM items WHERE id=? FOR UPDATE");$currentStmt->execute([$id]);$current=$currentStmt->fetch();
             if(!$current)throw new InvalidArgumentException('Barang/Jasa tidak ditemukan');
             $canVerifyFitment=authenticatedUserIsOwnerOrAdministrator($pdo,$actor);
@@ -536,13 +552,10 @@ switch ($method) {
             }
             $pdo->commit();
             respondSuccess(null, 'Item diupdate');
-        } catch (DomainException $e) {
+        } catch (DomainException | InvalidArgumentException $e) {
             $pdo->rollBack();
-            respondError($e->getMessage(), $e->getCode() ?: 403);
-        } catch (InvalidArgumentException $e) {
-            $pdo->rollBack();
-            respondError($e->getMessage(), 422);
-        } catch (Exception $e) {
+            respondError($e->getMessage(), transactionExceptionStatus($e,422));
+        } catch (Throwable $e) {
             $pdo->rollBack();
             respondError('Gagal update item', 500, $e->getMessage());
         }
@@ -553,6 +566,9 @@ switch ($method) {
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:delete');
+            $actor=$authorization['actor'];
             $deleteItemLockStmt = $pdo->prepare("SELECT id FROM items WHERE id=? FOR UPDATE");
             $deleteItemLockStmt->execute([$id]);
             if (!$deleteItemLockStmt->fetchColumn()) throw new DomainException('Barang/jasa tidak ditemukan',404);
@@ -580,7 +596,7 @@ switch ($method) {
             $pdo->commit();
         } catch (DomainException $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError($e->getMessage(),$e->getCode()?:422);
+            respondError($e->getMessage(),transactionExceptionStatus($e,422));
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             respondError('Item gagal dihapus',500,$e->getMessage());

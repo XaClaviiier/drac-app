@@ -5,8 +5,8 @@ $logSalesInvoiceFailure = static function(string $operation, Throwable $error): 
     return $reference;
 };
 runVersionedApiBootstrap($pdo, 'sales_invoice_schema_20260827_v1', static function(PDO $pdo): void {
-    $pdo->exec("ALTER TABLE sales_invoice_items ADD COLUMN IF NOT EXISTS warehouse_id VARCHAR(20) NULL AFTER item_id");
-    $pdo->exec("ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS manual_receipt_number VARCHAR(50) NULL AFTER invoice_number");
+    ensureTableColumn($pdo,'sales_invoice_items','warehouse_id','VARCHAR(20) NULL AFTER item_id');
+    ensureTableColumn($pdo,'sales_invoices','manual_receipt_number','VARCHAR(50) NULL AFTER invoice_number');
     $pdo->exec("UPDATE sales_invoices SET manual_receipt_number=NULL WHERE manual_receipt_number IS NOT NULL AND TRIM(manual_receipt_number)=''");
     $manualReceiptIndex = $pdo->query("SHOW INDEX FROM sales_invoices WHERE Key_name='uniq_sales_manual_receipt_number'")->fetch();
     if (!$manualReceiptIndex) $pdo->exec("CREATE UNIQUE INDEX uniq_sales_manual_receipt_number ON sales_invoices(manual_receipt_number)");
@@ -25,21 +25,11 @@ $assertManualReceiptNumberUnique = static function (PDO $pdo, ?string $number, ?
     $existing = $stmt->fetchColumn();
     if ($existing) throw new InvalidArgumentException("No. Nota Fisik {$number} sudah dipakai pada Faktur {$existing}");
 };
-$salesJournalMigration='backfill_sales_stock_journal_20260820_v1';
-$migrationCheck=$pdo->prepare("SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?");$migrationCheck->execute([$salesJournalMigration]);
-if(!(int)$migrationCheck->fetchColumn()){$pdo->beginTransaction();try{
-    $pdo->exec("UPDATE sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id JOIN warehouses w ON w.branch_id=i.branch_id AND w.is_default=1 AND w.is_active=1 SET d.warehouse_id=w.id WHERE d.warehouse_id IS NULL OR d.warehouse_id=''");
-    $pdo->exec("INSERT IGNORE INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,movement_type,reference_type,reference_id,reference_number,notes,created_by,created_at)
-        SELECT CONCAT('MOV-BFS-',d.id),d.item_id,d.warehouse_id,NULL,d.qty,'sale','sales_invoice',i.id,i.invoice_number,CONCAT('Migrasi penjualan ',i.invoice_number),NULL,CONCAT(i.date,' 12:00:00')
-        FROM sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id JOIN items m ON m.id=d.item_id
-        WHERE m.type='Persediaan' AND d.item_id IS NOT NULL AND d.warehouse_id IS NOT NULL");
-    $pdo->prepare("INSERT INTO app_schema_migrations(migration_key) VALUES(?)")->execute([$salesJournalMigration]);$pdo->commit();
-}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}}
 $normalizeSalesInvoiceItems = static function (PDO $pdo, array $items): array {
     if (!$items) throw new InvalidArgumentException('Tambahkan minimal satu barang atau jasa ke faktur');
     $result=[];$total=0.0;$itemStmt=$pdo->prepare("SELECT id,code,name,receipt_description,type,is_active FROM items WHERE id=?");
     foreach($items as $line){
-        $qty=max(1,(int)($line['qty']??1));$price=max(0,(float)($line['price']??0));$itemId=!empty($line['itemId'])?(string)$line['itemId']:null;
+        $qty=parseBoundedDecimalInteger($line['qty']??1,'1','2147483647','Kuantitas faktur');$price=max(0,(float)($line['price']??0));$itemId=!empty($line['itemId'])?(string)$line['itemId']:null;
         if($itemId){$itemStmt->execute([$itemId]);$item=$itemStmt->fetch();if(!$item||!(bool)$item['is_active'])throw new InvalidArgumentException('Barang atau jasa faktur tidak ditemukan atau nonaktif');$code=(string)$item['code'];$name=(string)$item['name'];$description=trim((string)($line['description']??''))?:(string)($item['receipt_description']??'');$isStockItem=(string)$item['type']==='Persediaan';}
         else{$code=trim((string)($line['code']??''));$name=trim((string)($line['name']??''));$description=trim((string)($line['description']??''));$isStockItem=false;if($name==='')throw new InvalidArgumentException('Nama baris faktur manual wajib diisi');}
         $warehouseId=trim((string)($line['warehouseId']??''))?:null;
@@ -76,17 +66,31 @@ $prepareSalesStockItems=static function(PDO $pdo,string $branchId,array $items)u
 $journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $warehouseId,string $itemId,int $qty,bool $reverse,array $actor,?string $correctionGroupId=null,?string $reversalOfId=null,?string $idempotencyKey=null):string{
     return recordStockMovement($pdo,$itemId,$reverse?null:$warehouseId,$reverse?$warehouseId:null,abs($qty),$reverse?'reversal':'sale','sales_invoice',$invoiceId,$invoiceNumber,($reverse?'Pembalik penjualan ':'Penjualan ').$invoiceNumber,(string)($actor['id']??''),$date.' 12:00:00',$reversalOfId,$correctionGroupId,$idempotencyKey);
 };
+$lockedInvoiceBranchIds=static function(PDO $pdo,array $authorization):array{
+    $lockedActor=$authorization['actor']??[];$permissions=$authorization['permissions']??[];
+    if(!empty($lockedActor['is_owner'])||in_array('*',$permissions,true)||in_array('all_branches',$permissions,true)){
+        return array_map('strval',array_column($pdo->query('SELECT id FROM branches ORDER BY id')->fetchAll(),'id'));
+    }
+    $ids=$authorization['branchAccess'][(string)($lockedActor['id']??'')]??[];
+    if(!empty($lockedActor['branch_id']))$ids[]=(string)$lockedActor['branch_id'];
+    $ids=array_values(array_unique(array_filter(array_map('strval',$ids),static fn(string $branchId):bool=>$branchId!=='')));sort($ids,SORT_STRING);return $ids;
+};
+$lockScopedSalesInvoice=static function(PDO $pdo,array $authorization,string $invoiceId)use($lockedInvoiceBranchIds):?array{
+    $branchIds=$lockedInvoiceBranchIds($pdo,$authorization);if(!$branchIds)return null;$branchMarks=implode(',',array_fill(0,count($branchIds),'?'));
+    $stmt=$pdo->prepare("SELECT * FROM sales_invoices WHERE id=? AND branch_id IN ($branchMarks) FOR UPDATE");$stmt->execute(array_merge([$invoiceId],$branchIds));return $stmt->fetch()?:null;
+};
+$lockScopedWorkOrder=static function(PDO $pdo,array $authorization,string $workOrderId)use($lockedInvoiceBranchIds):?array{
+    $branchIds=$lockedInvoiceBranchIds($pdo,$authorization);if(!$branchIds)return null;$branchMarks=implode(',',array_fill(0,count($branchIds),'?'));
+    $stmt=$pdo->prepare("SELECT * FROM work_orders WHERE id=? AND branch_id IN ($branchMarks) FOR UPDATE");$stmt->execute(array_merge([$workOrderId],$branchIds));return $stmt->fetch()?:null;
+};
 
+$actor = $requestUser ?? requireAuthenticatedUser($pdo);
 switch ($method) {
     case 'GET':
-        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         reconcileCustomerPaymentLedger($pdo);
-        $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
-        $rows = array_values(array_filter(
-            $pdo->query("SELECT * FROM sales_invoices ORDER BY date DESC, invoice_number DESC")->fetchAll(),
-            fn($row) => isset($allowedBranchMap[(string)$row['branch_id']])
-        ));
-        $detailRows = $pdo->query("SELECT * FROM sales_invoice_items ORDER BY id")->fetchAll();
+        $allowedBranchIds=getAccessibleBranchIds($pdo,$actor);if(!$allowedBranchIds)respondSuccess([]);$branchMarks=implode(',',array_fill(0,count($allowedBranchIds),'?'));
+        $invoiceStmt=$pdo->prepare("SELECT * FROM sales_invoices WHERE branch_id IN ($branchMarks) ORDER BY date DESC, invoice_number DESC");$invoiceStmt->execute($allowedBranchIds);$rows=$invoiceStmt->fetchAll();
+        $detailStmt=$pdo->prepare("SELECT d.* FROM sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id WHERE i.branch_id IN ($branchMarks) ORDER BY d.id");$detailStmt->execute($allowedBranchIds);$detailRows=$detailStmt->fetchAll();
         $detailsByInvoice = [];
         foreach ($detailRows as $detail) {
             $detailsByInvoice[$detail['invoice_id']][] = [
@@ -120,15 +124,16 @@ switch ($method) {
         $d = getInput();
         $pdo->beginTransaction();
         try {
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'invoice:create');
+            $actor=$authorization['actor'];
             if ($id === 'from-work-order') {
                 $woId = $d['woId'] ?? null;
                 if (!$woId) throw new Exception('WO wajib dipilih');
 
-                $woStmt = $pdo->prepare("SELECT * FROM work_orders WHERE id = ? FOR UPDATE");
-                $woStmt->execute([$woId]);
-                $wo = $woStmt->fetch();
-                if (!$wo) throw new Exception('WO tidak ditemukan');
-                $actor=$requestUser??requireAuthenticatedUser($pdo);assertActiveBranch($pdo,(string)$wo['branch_id']);requireAccessibleBranch($pdo,$actor,(string)$wo['branch_id']);
+                $wo=$lockScopedWorkOrder($pdo,$authorization,(string)$woId);
+                if (!$wo) throw new DomainException('WO tidak ditemukan',404);
+                assertLockedInventoryBranchAccess($authorization,(string)$wo['branch_id']);assertActiveBranch($pdo,(string)$wo['branch_id']);
                 if (!empty($wo['invoice_id'])) {
                     throw new Exception('WO sudah memiliki faktur');
                 }
@@ -238,7 +243,7 @@ switch ($method) {
 
             $invoiceId = $d['id'] ?? generateId();
             $branchId = (string)($d['branchId'] ?? '');
-            $actor=$requestUser??requireAuthenticatedUser($pdo);assertActiveBranch($pdo,$branchId);requireAccessibleBranch($pdo,$actor,$branchId);
+            assertLockedInventoryBranchAccess($authorization,$branchId);assertActiveBranch($pdo,$branchId);
             if(!empty($d['woId']))throw new InvalidArgumentException('Gunakan proses Faktur dari WO agar pelanggan dan kendaraan terkunci dengan benar');
             $customerStmt=$pdo->prepare("SELECT id,customer_code,name FROM customers WHERE id=?");$customerStmt->execute([(string)($d['customerRefId']??'')]);$customer=$customerStmt->fetch();
             if(!$customer)throw new InvalidArgumentException('Pelanggan wajib dipilih dari data master');
@@ -296,9 +301,9 @@ switch ($method) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             $reference = $logSalesInvoiceFailure('create', $e);
             respondError('Gagal menyimpan faktur. Referensi: ' . $reference, 500);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError($e->getMessage(), 422);
+            respondError($e->getMessage(), transactionExceptionStatus($e, 422));
         }
         break;
 
@@ -307,22 +312,23 @@ switch ($method) {
         $d = getInput();
         $pdo->beginTransaction();
         try {
-            $currentStmt = $pdo->prepare("SELECT * FROM sales_invoices WHERE id=? FOR UPDATE");
-            $currentStmt->execute([$id]);
-            $current = $currentStmt->fetch();
-            if (!$current) throw new Exception('Faktur tidak ditemukan');
-            $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'invoice:edit');
+            $actor=$authorization['actor'];
+            $current=$lockScopedSalesInvoice($pdo,$authorization,(string)$id);
+            if (!$current) throw new DomainException('Faktur tidak ditemukan',404);
+            assertLockedInventoryBranchAccess($authorization, (string)$current['branch_id']);
             assertActiveBranch($pdo, (string)$current['branch_id']);
-            requireAccessibleBranch($pdo, $actor, (string)$current['branch_id']);
             if (!empty($current['wo_id'])) {
-                $duplicateWoInvoiceStmt = $pdo->prepare('SELECT invoice_number FROM sales_invoices WHERE wo_id=? AND id<>? LIMIT 1 FOR UPDATE');
-                $duplicateWoInvoiceStmt->execute([$current['wo_id'], $id]);
-                $duplicateWoInvoiceNumber = $duplicateWoInvoiceStmt->fetchColumn();
-                if ($duplicateWoInvoiceNumber) throw new DomainException('WO terkait juga terhubung dengan faktur ' . $duplicateWoInvoiceNumber . '.');
                 $linkedWoStmt = $pdo->prepare('SELECT id,branch_id,invoice_id,invoice_number FROM work_orders WHERE id=? LIMIT 1 FOR UPDATE');
                 $linkedWoStmt->execute([$current['wo_id']]);
                 $linkedWo = $linkedWoStmt->fetch();
                 if (!$linkedWo) throw new DomainException('WO terkait faktur tidak ditemukan. Perbaiki relasi data sebelum mengedit faktur.');
+                assertLockedInventoryBranchAccess($authorization, (string)$linkedWo['branch_id']);
+                $duplicateWoInvoiceStmt = $pdo->prepare('SELECT invoice_number FROM sales_invoices WHERE wo_id=? AND id<>? LIMIT 1 FOR UPDATE');
+                $duplicateWoInvoiceStmt->execute([$current['wo_id'], $id]);
+                $duplicateWoInvoiceNumber = $duplicateWoInvoiceStmt->fetchColumn();
+                if ($duplicateWoInvoiceNumber) throw new DomainException('WO terkait juga terhubung dengan faktur ' . $duplicateWoInvoiceNumber . '.');
                 if ((string)$linkedWo['branch_id'] !== (string)$current['branch_id']) throw new DomainException('Cabang faktur tidak sesuai dengan cabang WO terkait.');
                 if (!empty($linkedWo['invoice_id']) && (string)$linkedWo['invoice_id'] !== (string)$id) {
                     throw new DomainException('WO terkait sudah menunjuk ke faktur lain.');
@@ -335,7 +341,7 @@ switch ($method) {
 
             if ($action === 'identity') {
                 if (empty($current['wo_id'])) throw new InvalidArgumentException('Koreksi terpadu hanya berlaku untuk faktur dari WO.');
-                requireUserPermission($pdo, 'wo:edit');
+                assertLockedInventoryPermission($authorization,'wo:edit');
                 $reason = trim((string)($d['reason'] ?? ''));
                 if ($reason === '') throw new InvalidArgumentException('Alasan koreksi wajib diisi.');
                 [$customer, $vehicle] = resolveCustomerVehicle($pdo, (string)($d['customerRefId'] ?? ''), (string)($d['vehicleRefId'] ?? ''), true);
@@ -405,8 +411,8 @@ switch ($method) {
             $customerName = !empty($current['wo_id']) ? $current['customer_name'] : ($d['customerName'] ?? '');
             $vehicleInfo = !empty($current['wo_id']) ? $current['vehicle_info'] : ($d['vehicleInfo'] ?? '');
             $branchId = !empty($current['wo_id']) ? $current['branch_id'] : ($d['branchId'] ?? 'BR-001');
+            assertLockedInventoryBranchAccess($authorization, (string)$branchId);
             assertActiveBranch($pdo, (string)$branchId);
-            requireAccessibleBranch($pdo, $actor, (string)$branchId);
             if (empty($current['wo_id'])) {
                 if ($customerRefId === '') throw new InvalidArgumentException('Pelanggan wajib dipilih');
                 $customerStmt = $pdo->prepare("SELECT id,customer_code,name FROM customers WHERE id=? AND is_active=1");
@@ -430,7 +436,8 @@ switch ($method) {
             }
             ksort($oldStockLines);ksort($newStockLines);
             $stockImpactChanged=$oldStockLines!==$newStockLines||(string)$current['branch_id']!==(string)$branchId;
-            $movementMetadataChanged=(string)$current['date']!==$invoiceDate;
+            $movementDateChanged=(string)$current['date']!==$invoiceDate;
+            $movementMetadataChanged=$movementDateChanged;
             $correctionGroupId=$stockImpactChanged?'CORR-SI-'.date('YmdHis').'-'.substr(bin2hex(random_bytes(4)),0,8):null;
             if($stockImpactChanged){
                 foreach($oldDetailsList as $detail){
@@ -459,6 +466,7 @@ switch ($method) {
                     $journalSale($pdo,$id,(string)$current['invoice_number'],$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$item['itemId'].':'.$salesWarehouseId.':'.$lineIndex.':apply');
                 }
             }
+            if(!$stockImpactChanged&&$movementDateChanged)bumpStockVersionsForMovementReference($pdo,'sales_invoice',$id);
             if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
                 ->execute([$invoiceDate,$id]);
             $afterSnapshot=['document'=>array_merge($current,['date'=>$invoiceDate,'description'=>$d['description']??'','total'=>$total,'payment'=>$payment,'status'=>$status,'branch_id'=>$branchId]),'items'=>$items];
@@ -470,9 +478,9 @@ switch ($method) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             $reference = $logSalesInvoiceFailure('update', $e);
             respondError('Gagal memperbarui faktur. Referensi: ' . $reference, 500);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError($e->getMessage(), 422);
+            respondError($e->getMessage(), transactionExceptionStatus($e, 422));
         }
         break;
 
@@ -482,30 +490,31 @@ switch ($method) {
         $deleteReason=trim((string)($deleteInput['reason']??''))?:'Dihapus oleh pengguna';
         $pdo->beginTransaction();
         try {
-            $invoiceStmt = $pdo->prepare("SELECT * FROM sales_invoices WHERE id=? FOR UPDATE");
-            $invoiceStmt->execute([$id]);
-            $invoiceRow = $invoiceStmt->fetch();
-            if (!$invoiceRow) throw new Exception('Faktur tidak ditemukan');
-            $deleteActor=$requestUser ?? requireAuthenticatedUser($pdo);
+            lockInventoryMutation($pdo);
+            $authorization=lockInventoryMutationAuthorization($pdo,$actor,'invoice:delete');
+            $actor=$authorization['actor'];
+            $invoiceRow=$lockScopedSalesInvoice($pdo,$authorization,(string)$id);
+            if (!$invoiceRow) throw new DomainException('Faktur tidak ditemukan',404);
+            assertLockedInventoryBranchAccess($authorization, (string)$invoiceRow['branch_id']);
             assertActiveBranch($pdo, (string)$invoiceRow['branch_id']);
-            requireAccessibleBranch($pdo, $deleteActor, (string)$invoiceRow['branch_id']);
             $paymentCount=$pdo->prepare("SELECT COUNT(*) FROM customer_payments WHERE invoice_id=?");$paymentCount->execute([$id]);
             if ((float)$invoiceRow['payment'] > 0 || (int)$paymentCount->fetchColumn()>0) throw new Exception('Hapus pembayaran terlebih dahulu sebelum menghapus faktur');
             $linkedWoId = trim((string)($invoiceRow['wo_id'] ?? '')) ?: null;
             $reverseWoStmt = $pdo->prepare("SELECT id,wo_number,branch_id,invoice_id,invoice_number FROM work_orders WHERE invoice_id=? FOR UPDATE");
             $reverseWoStmt->execute([$id]);
             $reverseWorkOrders = $reverseWoStmt->fetchAll();
+            foreach($reverseWorkOrders as $reverseWorkOrder)assertLockedInventoryBranchAccess($authorization,(string)$reverseWorkOrder['branch_id']);
             $linkedWorkOrder = null;
             if ($linkedWoId !== null) {
                 $linkedWoStmt = $pdo->prepare("SELECT id,wo_number,branch_id,invoice_id,invoice_number FROM work_orders WHERE id=? FOR UPDATE");
                 $linkedWoStmt->execute([$linkedWoId]);
                 $linkedWorkOrder = $linkedWoStmt->fetch();
                 if (!$linkedWorkOrder) throw new DomainException('WO terkait faktur tidak ditemukan. Perbaiki relasi sebelum menghapus faktur.');
+                assertLockedInventoryBranchAccess($authorization, (string)$linkedWorkOrder['branch_id']);
                 if ((string)$linkedWorkOrder['branch_id'] !== (string)$invoiceRow['branch_id']) {
                     throw new DomainException('Cabang WO dan faktur tidak sama. Perbaiki relasi sebelum menghapus faktur.');
                 }
                 assertActiveBranch($pdo, (string)$linkedWorkOrder['branch_id']);
-                requireAccessibleBranch($pdo, $deleteActor, (string)$linkedWorkOrder['branch_id']);
                 if ((string)($linkedWorkOrder['invoice_id'] ?? '') !== (string)$id
                     || (string)($linkedWorkOrder['invoice_number'] ?? '') !== (string)$invoiceRow['invoice_number']) {
                     throw new DomainException('Relasi WO dan faktur tidak cocok. Perbaiki relasi sebelum menghapus faktur.');
@@ -534,9 +543,9 @@ switch ($method) {
             }
             $snapshot=['document'=>$invoiceRow,'items'=>$invoiceDetails];
             $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('sales_invoice',?,?,'delete',?,?,?,?)")
-                ->execute([$id,$invoiceRow['invoice_number'],substr($deleteReason,0,255),json_encode($snapshot,JSON_UNESCAPED_UNICODE),$deleteActor['id']??null,$deleteActor['name']??$deleteActor['username']??null]);
+                ->execute([$id,$invoiceRow['invoice_number'],substr($deleteReason,0,255),json_encode($snapshot,JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
             $pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason=? WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
-                ->execute([$deleteActor['id']??null,substr($deleteReason,0,255),$id]);
+                ->execute([$actor['id']??null,substr($deleteReason,0,255),$id]);
             if ($linkedWoId !== null) {
                 $unlinkWoStmt = $pdo->prepare("UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL, updated_at=CURRENT_TIMESTAMP(6) WHERE id=? AND invoice_id=? AND invoice_number=?");
                 $unlinkWoStmt->execute([$linkedWoId, $id, $invoiceRow['invoice_number']]);
@@ -549,9 +558,9 @@ switch ($method) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             $reference = $logSalesInvoiceFailure('delete', $e);
             respondError('Gagal menghapus faktur. Referensi: ' . $reference, 500);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            respondError($e->getMessage(), 422);
+            respondError($e->getMessage(), transactionExceptionStatus($e, 422));
         }
         break;
 

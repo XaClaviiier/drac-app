@@ -112,6 +112,7 @@ const typeColors: Record<string, string> = {
 
 export default function ItemsAndServices() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const stockCardMode = searchParams.get('mode') === 'stock-card';
   const {
     data,
     addItem,
@@ -129,7 +130,7 @@ export default function ItemsAndServices() {
   const [search, setSearch] = useState('');
   const [filterActive, setFilterActive] = useState('all');
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterType, setFilterType] = useState('');
+  const [filterType, setFilterType] = useState(stockCardMode ? 'Persediaan' : '');
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStock, setFilterStock] = useState('');
   const [showPrintOptions, setShowPrintOptions] = useState(false);
@@ -388,7 +389,7 @@ export default function ItemsAndServices() {
   ) : false;
 
   const openItemModal = (item?: Item) => {
-    setItemFormTab('general');
+    setItemFormTab(item && stockCardMode ? 'movement' : 'general');
     if (item) {
       setEditingItem(item);
       setItemForm({

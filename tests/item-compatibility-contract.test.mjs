@@ -10,7 +10,7 @@ test('API barang menyimpan metadata part dan fitment teknis lengkap', () => {
     assert.match(endpoint, new RegExp(column));
   }
   for (const column of ['year_from', 'year_to', 'engine_code', 'variant', 'transmission', 'hvac_type', 'fitment_status', 'source', 'notes']) {
-    assert.match(endpoint, new RegExp(`item_vehicle_compatibilities ADD COLUMN IF NOT EXISTS ${column}`));
+    assert.ok(endpoint.includes(`ensureTableColumn($pdo, 'item_vehicle_compatibilities', '${column}',`));
   }
   assert.match(endpoint, /fitmentStatus/);
   assert.match(endpoint, /engineCode/);

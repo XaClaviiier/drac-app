@@ -138,6 +138,10 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS data_purge_snapshots (
 $purgeId = 'PURGE-' . date('YmdHis') . '-' . substr(generateId(), -6);
 $pdo->beginTransaction();
 try {
+    lockInventoryMutation($pdo);
+    $authorization=lockInventoryMutationAuthorization($pdo,$owner,'data:maintenance');
+    assertLockedInventoryOwner($authorization);
+    $owner=$authorization['actor'];
     $snapshotStmt = $pdo->prepare('INSERT INTO data_purge_snapshots(purge_id,entity_type,entity_id,snapshot_json) VALUES(?,?,?,?)');
     $snapshotRows = static function (string $table, string $type, string $where, array $params) use ($pdo, $snapshotStmt, $purgeId): array {
         $stmt = $pdo->prepare("SELECT * FROM {$table} WHERE {$where} FOR UPDATE");
@@ -178,6 +182,7 @@ try {
         $pdo->prepare('DELETE FROM customer_payments WHERE id IN (' . maintenancePlaceholders($paymentIds) . ')')->execute($paymentIds);
     }
     if ($invoiceIds) {
+        foreach($invoiceIds as $invoiceId)bumpStockVersionsForMovementReference($pdo,'sales_invoice',$invoiceId);
         $voidMovement = $pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason=? WHERE reference_type='sales_invoice' AND reference_id IN (" . maintenancePlaceholders($invoiceIds) . ') AND is_voided=0');
         $voidMovement->execute(array_merge([$owner['id'] ?? null, 'Pemeliharaan data transaksi ' . $purgeId], $invoiceIds));
         $pdo->prepare('DELETE FROM customer_payment_audit_logs WHERE invoice_id IN (' . maintenancePlaceholders($invoiceIds) . ')')->execute($invoiceIds);
@@ -249,5 +254,5 @@ try {
     respondSuccess($result, 'Data periode berhasil dihapus');
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
-    respondError('Penghapusan dibatalkan: ' . $error->getMessage(), 500);
+    respondError('Penghapusan dibatalkan: ' . $error->getMessage(), transactionExceptionStatus($error,500));
 }

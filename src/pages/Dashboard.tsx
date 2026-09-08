@@ -275,7 +275,7 @@ export default function Dashboard() {
             <AttentionRow to="/workorders?attention=1" tone="amber" icon={Clock3} title={`${attentionCounts.register} register mengambang`} detail="Belum diputuskan menjadi Dikerjakan atau Lost Sales." />
             {canViewFinancial && <AttentionRow to="/invoices" tone="red" icon={FileText} title={`${overdueInvoices.length} faktur menunggak lebih dari 7 hari`} detail={`Total piutang ${rupiah(receivables)}`} />}
             {canViewFinancial && <AttentionRow to="/branch-deposits" tone="blue" icon={Banknote} title={`${rupiah(unsubmitted)} tunai belum disetor`} detail="Periksa setoran tunai masing-masing cabang." />}
-            <AttentionRow to="/inventory-report" tone={negativeStockCount > 0 ? 'red' : 'amber'} icon={PackageSearch} title={`${negativeStockCount} stok negatif · ${emptyStockCount} stok kosong`} detail={`${pendingVerificationCount} barang masih menunggu verifikasi.`} />
+            <AttentionRow to="/reports/inventory?availability=ATTENTION" tone={negativeStockCount > 0 ? 'red' : 'amber'} icon={PackageSearch} title={`${negativeStockCount} stok negatif · ${emptyStockCount} stok kosong`} detail={`${pendingVerificationCount} barang masih menunggu verifikasi.`} />
           </div>
         </div>
       </section>
