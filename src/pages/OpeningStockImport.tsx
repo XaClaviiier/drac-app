@@ -112,6 +112,7 @@ export default function OpeningStockImport() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [documents, setDocuments] = useState<AdjustmentDocument[]>([]);
+  const [entryTabOpen, setEntryTabOpen] = useState(true);
   const [viewMode, setViewMode] = useState<"list" | "entry">("list");
   const [documentSearch, setDocumentSearch] = useState("");
   const [documentDate, setDocumentDate] = useState("");
@@ -338,7 +339,7 @@ export default function OpeningStockImport() {
     setEditingId("");
     setNotes("");
     setFormTab("items");
-    setViewMode("entry");
+    setEntryTabOpen(true); setViewMode("entry");
     await loadFile(file);
     if (listImportRef.current) listImportRef.current.value = "";
   };
@@ -444,7 +445,7 @@ export default function OpeningStockImport() {
           error: "",
         })),
       );
-      setViewMode("entry");
+      setEntryTabOpen(true); setViewMode("entry");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error: any) {
       setMessage(error?.message || "Draft tidak dapat dibuka.");
@@ -549,7 +550,7 @@ export default function OpeningStockImport() {
 
   const newDocument = () => {
     setSelectedDocument(null); setEditingId(""); setRows([]); setNotes("");
-    setFileName(""); setDate(localDateKey()); setViewMode("entry"); setFormTab("items"); setMenu(null);
+    setFileName(""); setDate(localDateKey()); setEntryTabOpen(true); setViewMode("entry"); setFormTab("items"); setMenu(null);
   };
   const displayRows: PreviewRow[] = selectedDocument ? selectedDocument.rows.map((row, index) => ({
     row: index + 1, code: row.itemCode, itemName: row.itemName, itemId: row.itemId,
@@ -587,10 +588,15 @@ export default function OpeningStockImport() {
     <div className="adjustment-workspace">
       <div className={ui.childBar}>
         <button type="button" title="Daftar Penyesuaian Persediaan" className={`${ui.childListTab} ${!showForm ? "adjustment-list-active" : ""}`} onClick={() => { setSelectedDocument(null); setViewMode("list"); setMenu(null); }}><List size={22}/></button>
-        <button type="button" className={childTabClass(!selectedDocument && viewMode === "entry")} onClick={() => { setSelectedDocument(null); setViewMode("entry"); setMenu(null); }}>
-          <span>{editingId ? documents.find(document => document.id === editingId)?.adjustmentNumber : "Data Baru"}</span>
-          <X size={16} onClick={event => { event.stopPropagation(); setViewMode("list"); }}/>
-        </button>
+        {entryTabOpen && <div className={childTabClass(!selectedDocument && viewMode === "entry")}>
+          <button type="button" onClick={() => { setSelectedDocument(null); setViewMode("entry"); setMenu(null); }}>
+            {editingId ? documents.find(document => document.id === editingId)?.adjustmentNumber : "Data Baru"}
+          </button>
+          <button type="button" title="Tutup Data Baru" disabled={loading} onClick={() => {
+            setEntryTabOpen(false); setViewMode("list"); setEditingId(""); setRows([]); setNotes("");
+            setFileName(""); setItemSearch(""); setRowDialog(null); setMenu(null); setMessage("");
+          }}><X size={16}/></button>
+        </div>}
         {detailTabs.map(tab => <div key={tab.id} className={childTabClass(selectedDocument?.id === tab.id)}>
           <button type="button" onClick={() => { setSelectedDocument(tab); setFormTab("items"); setDetailSearch(""); setMenu(null); }}>{tab.adjustmentNumber}</button>
           <button type="button" title="Tutup tab" onClick={() => closeDetailTab(tab.id)}><X size={16}/></button>
