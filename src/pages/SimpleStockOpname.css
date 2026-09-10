@@ -131,3 +131,9 @@
 .opname-info-warning { color:#a64b26; font-size:12px; margin-top:8px; }
 @media(max-width:1050px){.opname-info-summary>div{padding:0 11px}.opname-info-metadata{gap:18px}.opname-info-metadata dl>div{grid-template-columns:1fr;gap:3px}}
 @media(max-width:640px){.opname-info{padding:12px 9px}.opname-info-heading{margin-bottom:18px}.opname-info .opname-info-heading h2{font-size:18px}.opname-status{font-size:10px}.opname-info-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:6px 0;row-gap:6px}.opname-info-summary>div{border:0;padding:5px 12px}.opname-info-metadata{grid-template-columns:1fr;gap:0;padding:15px 0}.opname-info-metadata dl>div{grid-template-columns:125px 1fr;gap:8px}}
+
+.opname-category-choice .opname-category-detail { display:block; margin:4px 0 0; color:#6b7280; font-size:11px; font-weight:normal; }
+.opname-category-choice>small { white-space:nowrap; }
+.opname-category .opname-category-hint { background:#eff6ff; border:1px solid #bfdbfe; border-radius:4px; padding:10px 12px; }
+.opname-category-hint p { margin:0 0 8px; color:#264766; }
+.opname-category .opname-category-hint button { width:auto; padding:6px 10px; border:1px solid #0767ad; font-size:12px; color:#0767ad; }
