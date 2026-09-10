@@ -3,6 +3,7 @@
 $simpleInput=$method==='GET'?[]:getInput();
 $simplePreview=$method==='GET'&&!$id&&($_GET['preview']??'')==='1';
 $simpleSave=in_array($method,['POST','PUT'],true)&&($simpleInput['action']??'')==='save-simple';
+$draft=($simpleInput['mode']??'apply')==='draft';
 $simpleDelete=$method==='DELETE'&&$id&&($simpleInput['target']??'')==='simple';
 if(!$simplePreview&&!$simpleSave&&!$simpleDelete)return;
 
@@ -26,7 +27,7 @@ $simpleAudit=static function(PDO $pdo,string $id,string $number,string $actorId,
 $pdo->beginTransaction();
 try{
     lockInventoryMutation($pdo);
-    $permission=$simplePreview?'stock_opname:view':($simpleDelete?'stock_opname:delete':'stock_opname:post');
+    $permission=$simplePreview?'stock_opname:view':($simpleDelete?'stock_opname:delete':($draft?'stock_opname:count':'stock_opname:post'));
     $authorization=lockInventoryMutationAuthorization($pdo,$actor,$permission);$actor=$authorization['actor'];
     if($simpleSave){
         assertLockedInventoryPermission($authorization,'stock_opname:count');
@@ -42,10 +43,13 @@ try{
         $stmt->execute([$existing['result_id']]);foreach($stmt->fetchAll() as $line)$oldRows[(string)$line['item_id']]=$line;
     }elseif($method==='PUT'||$simpleDelete)throw new InvalidArgumentException('Nomor opname wajib dipilih');
 
-    $warehouseId=$existing?(string)$existing['warehouse_id']:trim((string)($simplePreview?($_GET['warehouseId']??''):($simpleInput['warehouseId']??'')));
-    $date=$existing?(string)$existing['end_date']:trim((string)($simplePreview?($_GET['date']??''):($simpleInput['date']??'')));
+    $appliedBefore=$existing&&$existing['result_status']==='Posted';
+    if($appliedBefore&&$draft&&$simpleSave)throw new InvalidArgumentException('Opname yang sudah diterapkan tidak dapat dijadikan draf');
+    $fixedHeader=$existing&&($appliedBefore||$simpleDelete);
+    $warehouseId=$fixedHeader?(string)$existing['warehouse_id']:trim((string)($simplePreview?($_GET['warehouseId']??''):($simpleInput['warehouseId']??'')));
+    $date=$fixedHeader?(string)$existing['end_date']:trim((string)($simplePreview?($_GET['date']??''):($simpleInput['date']??'')));
     if(!$isValidDate($date)||$date>date('Y-m-d'))throw new InvalidArgumentException('Tanggal opname tidak valid atau melewati hari ini');
-    if($existing&&$simpleSave&&(($simpleInput['warehouseId']??'')!==$warehouseId||($simpleInput['date']??'')!==$date))throw new InvalidArgumentException('Tanggal dan gudang dokumen tersimpan tidak dapat diganti');
+    if($appliedBefore&&$simpleSave&&(($simpleInput['warehouseId']??'')!==$warehouseId||($simpleInput['date']??'')!==$date))throw new InvalidArgumentException('Tanggal dan gudang dokumen tersimpan tidak dapat diganti');
     if(!$existing&&$simpleSave){
         $retryKey=(string)($simpleInput['requestKey']??'');
         if(!preg_match('/^[a-f0-9]{24}$/D',$retryKey))throw new InvalidArgumentException('Kunci penyimpanan tidak valid');
@@ -62,30 +66,31 @@ try{
     $warehouse=$warehouses[$warehouseId]??null;
     if(!$warehouse||!empty($warehouse['is_system']))throw new InvalidArgumentException('Pilih gudang aktif');
     $branchId=(string)$warehouse['branch_id'];
-    if($existing&&(string)$existing['branch_id']!==$branchId)throw new DomainException('Cabang gudang berubah',409);
+    if($fixedHeader&&(string)$existing['branch_id']!==$branchId)throw new DomainException('Cabang gudang berubah',409);
 
     if($simplePreview){
-        $items=$loadItemSnapshots($pdo,$warehouseId,$date,$date);
+        $items=$loadItemSnapshots($pdo,$warehouseId,substr($date,0,7).'-01',$date);
         $sortByCategoryUsage($items,$loadCategoryUsage($pdo));
         $rows=array_map(static fn($item)=>['itemId'=>(string)$item['id'],'code'=>$item['code'],'name'=>$item['name'],
             'unit'=>$item['unit'],'categoryName'=>$item['category_name']?:'Tanpa Kategori','systemQuantity'=>(int)$item['system_qty'],
-            'editVersion'=>(string)$item['system_version'],'finalQuantity'=>null,'variance'=>null],$items);
+            'movementIn'=>(int)$item['movement_in'],'movementOut'=>(int)$item['movement_out'],'editVersion'=>(string)$item['system_version'],'finalQuantity'=>null,'variance'=>null],$items);
         $pdo->commit();respondSuccess(['rows'=>$rows]);
     }
 
     $notes=trim((string)($simpleInput['notes']??''));if(strlen($notes)>255)throw new InvalidArgumentException('Keterangan maksimal 255 byte');
     $newRows=[];$hasCount=false;
     if($simpleSave){
-        if(!is_array($simpleInput['rows']??null)||!count($simpleInput['rows'])||count($simpleInput['rows'])>20000)throw new InvalidArgumentException('Daftar barang tidak valid');
+        if(!is_array($simpleInput['rows']??null)||(!$draft&&!count($simpleInput['rows']))||count($simpleInput['rows'])>20000)throw new InvalidArgumentException('Daftar barang tidak valid');
         $snapshots=[];
         foreach($loadItemSnapshots($pdo,$warehouseId,$date,$date) as $line)$snapshots[(string)$line['id']]=$line;
         foreach($simpleInput['rows'] as $input){
             if(!is_array($input))throw new InvalidArgumentException('Baris opname tidak valid');
             $itemId=(string)($input['itemId']??'');
             if($itemId===''||isset($newRows[$itemId]))throw new InvalidArgumentException('Barang kosong atau duplikat');
-            $storedItem=isset($oldRows[$itemId]);$base=$oldRows[$itemId]??$snapshots[$itemId]??null;
+            $storedItem=$appliedBefore&&isset($oldRows[$itemId]);$base=$storedItem?$oldRows[$itemId]:($snapshots[$itemId]??null);
             if(!$base)throw new InvalidArgumentException('Barang tidak tersedia pada lembar opname');
             $system=(int)($storedItem?$base['system_quantity']:$base['system_qty']);
+            if($draft)$system=parseBoundedDecimalInteger($input['systemQuantity']??$system,'-2147483648','2147483647','Stok acuan');
             $physical=$input['finalQuantity']??null;
             if($physical==='')$physical=null;
             if($physical!==null){
@@ -95,16 +100,16 @@ try{
             if($variance!==null)parseBoundedDecimalInteger($variance,'-2147483647','2147483647','Selisih');
             $currentVersion=$simpleStockVersion($pdo,$warehouseId,$itemId);
             // Blank rows do not participate in stock changes; previously counted rows do.
-            if($physical!==null||($storedItem&&$base['final_quantity']!==null)){
+            if(!$draft&&($physical!==null||($storedItem&&$base['final_quantity']!==null))){
                 if((string)($input['editVersion']??'')!==$currentVersion)throw new DomainException('Stok '.$base[$storedItem?'item_code':'code'].' berubah saat penghitungan. Muat ulang stok dan periksa hasil hitung sebelum menyimpan.',409);
                 if(!$storedItem&&(int)($input['systemQuantity']??PHP_INT_MIN)!==$system)throw new DomainException('Stok acuan berubah. Muat ulang stok sebelum menyimpan.',409);
             }
             $newRows[$itemId]=['item_id'=>$itemId,'item_code'=>$base[$storedItem?'item_code':'code'],'item_name'=>$base[$storedItem?'item_name':'name'],
-                'category_name'=>$base['category_name']??'','unit'=>$base['unit']??'','system_quantity'=>$system,'system_version'=>$currentVersion,
+                'category_name'=>$base['category_name']??'','unit'=>$base['unit']??'','system_quantity'=>$system,'system_version'=>$draft?normalizeBoundedDecimalInteger($input['editVersion']??'0','0','18446744073709551615','Versi stok'):$currentVersion,
                 'final_quantity'=>$physical,'variance'=>$variance];
         }
-        if(!$hasCount)throw new InvalidArgumentException('Isi hasil hitung minimal satu barang');
-        if($existing&&array_diff_key($oldRows,$newRows))throw new InvalidArgumentException('Daftar barang tidak lengkap. Kosongkan hitung fisik untuk menandai belum diperiksa.');
+        if(!$draft&&!$hasCount)throw new InvalidArgumentException('Isi hasil hitung minimal satu barang');
+        if($appliedBefore&&array_diff_key($oldRows,$newRows))throw new InvalidArgumentException('Daftar barang tidak lengkap. Kosongkan hitung fisik untuk menandai belum diperiksa.');
     }
 
     // A client-generated request key prevents duplicate creation after a lost response.
@@ -124,7 +129,7 @@ try{
     $before=$existing?['document'=>$existing,'rows'=>array_values($oldRows)]:null;
     $adjustmentId=$existing['adjustment_id']??null;$adjustmentNumber=$existing['adjustment_number']??null;
     // Check the linked ledger before replacing it; never remove unrelated movements.
-    if($existing){
+    if($appliedBefore){
         $movement=$pdo->prepare("SELECT * FROM stock_movements WHERE reference_type='stock_opname' AND reference_id=? FOR UPDATE");
         $movement->execute([$existing['result_id']]);$oldMovements=$movement->fetchAll();$ledger=[];
         foreach($oldMovements as $move){
@@ -146,7 +151,7 @@ try{
 
     $allIds=array_unique(array_merge(array_keys($oldRows),array_keys($newRows)));
     foreach($allIds as $itemId){
-        $delta=(int)($newRows[$itemId]['variance']??0)-(int)($oldRows[$itemId]['variance']??0);
+        $delta=($draft&&!$simpleDelete?0:(int)($newRows[$itemId]['variance']??0))-($appliedBefore?(int)($oldRows[$itemId]['variance']??0):0);
         if($delta!==0){
             $itemType=$pdo->prepare('SELECT type FROM items WHERE id=? FOR UPDATE');$itemType->execute([$itemId]);
             if($itemType->fetchColumn()!=='Persediaan')throw new DomainException('Jenis barang berubah; koreksi stok tidak dapat diterapkan.',409);
@@ -184,7 +189,7 @@ try{
         $pdo->prepare('UPDATE stock_count_orders SET notes=?,revision=revision+1 WHERE id=?')->execute([$notes,$id]);
         $pdo->prepare('DELETE FROM stock_count_result_items WHERE result_id=?')->execute([$resultId]);
     }
-    $different=array_filter($newRows,static fn($line)=>($line['variance']??0)!==0);
+    $different=$draft?[]:array_filter($newRows,static fn($line)=>($line['variance']??0)!==0);
     if($different){
         if(!$adjustmentId){
             $adjustmentId='SADJ-'.substr(bin2hex(random_bytes(12)),0,24);
@@ -203,11 +208,13 @@ try{
         if($adjustmentId)$pdo->prepare('DELETE FROM stock_adjustments WHERE id=?')->execute([$adjustmentId]);
         $adjustmentId=null;$adjustmentNumber=null;
     }
+    $pdo->prepare('UPDATE stock_count_orders SET status=?,completed_at=?,warehouse_id=?,branch_id=?,start_date=?,end_date=? WHERE id=?')->execute([$draft?'Draft':'Selesai',$draft?null:date('Y-m-d H:i:s'),$warehouseId,$branchId,$date,$date,$id]);
+    $pdo->prepare('UPDATE stock_count_results SET status=?,result_date=? WHERE id=?')->execute([$draft?'Draft':'Posted',$date,$resultId]);
     $insert=$pdo->prepare('INSERT INTO stock_count_result_items(result_id,item_id,item_code,item_name,category_name,unit,system_quantity,system_version,count_1,final_quantity,variance) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
     foreach($newRows as $line)$insert->execute([$resultId,$line['item_id'],$line['item_code'],$line['item_name'],$line['category_name'],$line['unit'],$line['system_quantity'],$line['system_version'],$line['final_quantity'],$line['final_quantity'],$line['variance']]);
-    $pdo->prepare("UPDATE stock_count_results SET adjustment_id=?,adjustment_number=?,notes=?,posted_by=?,posted_at=NOW() WHERE id=?")->execute([$adjustmentId,$adjustmentNumber,$notes,$actor['id'],$resultId]);
+    $pdo->prepare("UPDATE stock_count_results SET adjustment_id=?,adjustment_number=?,notes=?,posted_by=?,posted_at=? WHERE id=?")->execute([$adjustmentId,$adjustmentNumber,$notes,$draft?null:$actor['id'],$draft?null:date('Y-m-d H:i:s'),$resultId]);
     $simpleAudit($pdo,$id,$number,(string)$actor['id'],$existing?'update':'create',['before'=>$before,'rows'=>array_values($newRows),'notes'=>$notes,'adjustmentId'=>$adjustmentId,'adjustmentNumber'=>$adjustmentNumber,'requestHash'=>hash('sha256',json_encode($simpleInput))]);
-    $pdo->commit();respondSuccess(['id'=>$id,'adjustmentId'=>$adjustmentId,'adjustmentNumber'=>$adjustmentNumber],$different?'Opname disimpan dan penyesuaian diperbarui':'Opname disimpan tanpa selisih stok');
+    $pdo->commit();respondSuccess(['id'=>$id,'adjustmentId'=>$adjustmentId,'adjustmentNumber'=>$adjustmentNumber],$draft?'Draf disimpan. Stok belum berubah.':($different?'Opname disimpan dan penyesuaian diperbarui':'Opname disimpan tanpa selisih stok'));
 }catch(Throwable $e){
     if($pdo->inTransaction())$pdo->rollBack();
     respondError($e->getMessage(),in_array($e->getCode(),[403,404,409],true)?$e->getCode():422);

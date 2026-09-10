@@ -94,3 +94,32 @@ test('manual selection saves only selected items and allows adding an item to th
 for(const [name,counts] of Object.entries({blank:[null,null,null],negative:[-1,7,null],fraction:[1.5,7,null],overflow:[2147483648,7,null]}))test(`invalid ${name} count is rejected without changes`,t=>{
  const run=setup(t),r=run({payload:payload(counts)});assert.equal(r.success,false);assert.equal(r.tables.stock_movements.length,0);assert.equal(r.tables.stock_count_orders.length,0);
 });
+test('draft can be saved incomplete, resumed and applied once without premature stock mutation',t=>{
+ const run=setup(t),p={...payload([4,null,null]),mode:'draft'};
+ const draft=ok(run({payload:p,deny:['stock_opname:post']})),id=draft.data.id;
+ assert.deepEqual(draft.tables.warehouse_stocks.map(row=>row.quantity),[5,10,5]);assert.equal(draft.tables.stock_movements.length,0);assert.equal(draft.tables.stock_count_results[0].status,'Draft');
+ let doc=ok(run({method:'GET',id})).data;assert.equal(doc.rows.find(row=>row.itemId==='I1').finalQuantity,4);
+ ok(run({method:'PUT',id,payload:{...edit(doc,[4,7,null]),mode:'draft'}}));
+ doc=ok(run({method:'GET',id})).data;const applied=ok(run({method:'PUT',id,payload:edit(doc,[4,7,null])}));
+ assert.deepEqual(applied.tables.warehouse_stocks.map(row=>row.quantity),[4,7,5]);assert.equal(applied.tables.stock_count_results[0].status,'Posted');
+ doc=ok(run({method:'GET',id})).data;const downgrade=run({method:'PUT',id,payload:{...edit(doc,[4,7,null]),mode:'draft'}});assert.equal(downgrade.success,false);
+});
+test('deleting a draft does not reverse unapplied variances; blank draft is allowed',t=>{
+ const run=setup(t),saved=ok(run({payload:{...payload([0,null,null]),mode:'draft'}}));
+ const doc=ok(run({method:'GET',id:saved.data.id})).data;
+ const deleted=ok(run({method:'DELETE',id:doc.id,payload:{target:'simple',revision:doc.revision}}));assert.deepEqual(deleted.tables.warehouse_stocks.map(row=>row.quantity),[5,10,5]);
+ ok(run({payload:{...payload([null,null,null]),mode:'draft',requestKey:'555555555555555555555555'}}));
+});
+test('draft retains its old snapshot and refuses apply until stale stock is reviewed',t=>{
+ const run=setup(t),saved=ok(run({payload:{...payload(),mode:'draft'}})),id=saved.data.id;
+ run({bump:{itemId:'I2',delta:1}});
+ const doc=ok(run({method:'GET',id})).data;assert.equal(doc.rows.find(row=>row.itemId==='I2').editVersion,'1');
+ const rejected=run({method:'PUT',id,payload:edit(doc,[5,7,null])});assert.equal(rejected.status,409);assert.equal(rejected.tables.stock_adjustments.length,0);
+ const reviewed=edit(doc,[5,7,null]);const row=reviewed.rows.find(row=>row.itemId==='I2');row.editVersion='2';row.systemQuantity=11;
+ const applied=ok(run({method:'PUT',id,payload:reviewed}));assert.equal(applied.tables.warehouse_stocks[1].quantity,7);
+});
+test('category preview includes month-to-date activity even when final stock is zero',t=>{
+ const run=setup(t);run({seedActivity:[date.slice(0,7)+'-01 12:00:00','2020-01-01 12:00:00']});
+ const result=ok(run({method:'GET',query:{preview:'1',warehouseId:'W1',date}}));
+ const row=result.data.rows.find(row=>row.itemId==='I3');assert.equal(row.systemQuantity,0);assert.equal(row.movementIn,2);assert.equal(row.movementOut,2);
+});

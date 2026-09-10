@@ -48,6 +48,16 @@
 .opname-linked { padding:20px; max-height:70vh; overflow:auto; }
 .opname-linked table { width:100%; margin-top:15px; }
 .opname-linked td,.opname-linked th { padding:8px; text-align:left; border-bottom:1px solid #ddd; }
+.opname-category { padding:20px; }
+.opname-category label,.opname-category select,.opname-category>input { display:block; width:100%; }
+.opname-category select { margin:7px 0; }
+.opname-category p { color:#666; font-size:12px; margin:10px 0; }
+.opname-category>div { max-height:330px; overflow:auto; margin-top:10px; }
+.opname-category>div button { display:flex; justify-content:space-between; width:100%; padding:12px 8px; border-bottom:1px solid #ddd; text-align:left; }
+.opname-category>div button:hover { background:#edf6ff; }
+.opname-category>div button span:last-child { color:#1674a4; font-size:12px; }
+.opname-rail .draft { flex-direction:column; font-size:11px; gap:3px; }
+.opname-rail .save span { font-size:11px; line-height:1.2; }
 .opname-add-search { position:relative; width:34%; min-width:240px; }
 .opname-add-search .opname-search { width:100%; }
 .opname-add-search .adjustment-suggestions span { display:block; }

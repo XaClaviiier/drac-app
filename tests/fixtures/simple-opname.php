@@ -45,5 +45,13 @@ function response(bool $success,mixed $data,string $message,int $status):never{
 function respondSuccess(mixed $data=null,string $message=''):never{response(true,$data,$message,200);}
 function respondError(string $message,int $status=400):never{response(false,null,$message,$status);}
 if(isset($fixtureInput['bump'])){$pdo->prepare('UPDATE warehouse_stocks SET quantity=quantity+?,stock_version=stock_version+1 WHERE item_id=?')->execute([$fixtureInput['bump']['delta'],$fixtureInput['bump']['itemId']]);respondSuccess();}
+if(isset($fixtureInput['seedActivity'])){
+    $pdo->exec("UPDATE warehouse_stocks SET quantity=0 WHERE item_id='I3'");
+    foreach($fixtureInput['seedActivity'] as $when){
+        recordStockMovement($pdo,'I3',null,'W1',2,'adjustment','test','T','T','Activity','OWNER',$when);
+        recordStockMovement($pdo,'I3','W1',null,2,'adjustment','test','T','T','Activity','OWNER',$when);
+    }
+    respondSuccess();
+}
 $method=$fixtureInput['method']??'POST';$id=$fixtureInput['id']??null;$_GET=$fixtureInput['query']??[];
 require __DIR__.'/../../api/endpoints/stock-opnames.php';
