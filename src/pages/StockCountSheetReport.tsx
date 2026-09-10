@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import SimpleStockOpname from './SimpleStockOpname';
 
 type CountRow={id:number;itemId:string;code:string;name:string;categoryName:string;categoryUsageCount?:number;unit:string;systemQuantity:number;movementIn:number;movementOut:number;isManual:boolean;count1:number|null;count2:number|null;finalQuantity:number|null;variance:number|null};
 type CountResult={id:string;resultNumber:string;date:string;status:string;adjustmentId?:string|null;adjustmentNumber?:string|null;notes?:string};
@@ -12,7 +13,9 @@ const statusTone:Record<string,string>={'Menunggu Eksekusi':'bg-amber-100 text-a
 const dateLabel=(value:string)=>new Date(`${value}T12:00:00`).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
 const escapeHtml=(value:unknown)=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 
-export default function StockCountSheetReport(){
+export default function StockCountSheetReport(){return <SimpleStockOpname legacy={<LegacyStockCountSheetReport/>}/>;}
+
+function LegacyStockCountSheetReport(){
  const{data,currentUser,currentBranchId,hasPermission}=useApp();
  const canCreate=hasPermission('stock_opname:create');
  const canCount=hasPermission('stock_opname:count');
@@ -26,7 +29,7 @@ export default function StockCountSheetReport(){
  const users=useMemo(()=>data.users.filter(x=>x.isActive&&(!form.branchId||x.isOwner||x.branchId===form.branchId||x.branchIds?.includes(form.branchId))),[data.users,form.branchId]);
  const manualCandidates=useMemo(()=>{const existing=new Set((selected?.rows||[]).map(row=>row.itemId));const needle=itemSearch.trim().toLocaleLowerCase('id-ID');if(!selected?.result||!needle)return[];return data.items.filter(item=>item.isActive&&item.type==='Persediaan'&&!existing.has(item.id)&&`${item.code} ${item.name} ${item.brand||''} ${item.barcode||''}`.toLocaleLowerCase('id-ID').includes(needle)).slice(0,12);},[data.items,itemSearch,selected]);
  const filtered=orders.filter(x=>`${x.orderNumber} ${x.warehouseName} ${x.assignedUserName} ${x.status}`.toLowerCase().includes(search.toLowerCase()));
- const loadOrders=async()=>{setLoading(true);try{const r=await api.get<CountOrder[]>('stock-opnames');if(!r.success)throw new Error(r.message);setOrders(r.data||[]);}catch(e:any){setMessage(e?.message||'Daftar gagal dimuat.');}finally{setLoading(false);}};
+ const loadOrders=async()=>{setLoading(true);try{const r=await api.get<CountOrder[]>('stock-opnames');if(!r.success)throw new Error(r.message);setOrders((r.data||[]).filter(order=>(order as CountOrder & {entryMode?:string}).entryMode!=='simple'));}catch(e:any){setMessage(e?.message||'Daftar gagal dimuat.');}finally{setLoading(false);}};
  useEffect(()=>{void loadOrders();},[]);
  useEffect(()=>{if(form.warehouseId&&!warehouses.some(x=>x.id===form.warehouseId))setForm(x=>({...x,warehouseId:''}));},[warehouses,form.warehouseId]);
  const openDetail=async(id:string)=>{setLoading(true);try{const r=await api.get<CountOrder>(`stock-opnames/${id}`);if(!r.success||!r.data)throw new Error(r.message);setSelected(r.data);}catch(e:any){setMessage(e?.message||'Detail gagal dimuat.');}finally{setLoading(false);}};

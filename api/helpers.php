@@ -917,6 +917,14 @@ function ensureApiSupportTables(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $stockCountOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM stock_count_orders")->fetchAll(), 'Field');
+    if (!in_array('entry_mode', $stockCountOrderColumns, true)) $pdo->exec("ALTER TABLE stock_count_orders ADD entry_mode VARCHAR(20) NOT NULL DEFAULT 'legacy'");
+    if (!in_array('revision', $stockCountOrderColumns, true)) $pdo->exec("ALTER TABLE stock_count_orders ADD revision INT UNSIGNED NOT NULL DEFAULT 0");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS stock_opname_audit (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id VARCHAR(30) NOT NULL,
+        order_number VARCHAR(40) NOT NULL, actor_id VARCHAR(20) NOT NULL,
+        action VARCHAR(20) NOT NULL, snapshot LONGTEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_opname_audit_order(order_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensureOwnedStockOpnameColumn($pdo,'stock_count_orders','end_date','DATE NULL AFTER start_date');
     $pdo->exec("UPDATE stock_count_orders o LEFT JOIN stock_count_results r ON r.order_id=o.id SET o.end_date=COALESCE(r.result_date,o.start_date) WHERE o.end_date IS NULL");
     $stockCountEndDateColumn = $pdo->query("SHOW COLUMNS FROM stock_count_orders LIKE 'end_date'")->fetch();
