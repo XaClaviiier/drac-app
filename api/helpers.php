@@ -968,6 +968,10 @@ function ensureApiSupportTables(PDO $pdo): void {
         is_active TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_coa_parent (parent_id), INDEX idx_coa_type (account_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $coaColumns = array_column($pdo->query("SHOW COLUMNS FROM chart_of_accounts")->fetchAll(), 'Field');
+    if (!in_array('detail_type', $coaColumns, true)) $pdo->exec("ALTER TABLE chart_of_accounts ADD detail_type VARCHAR(60) NOT NULL DEFAULT ''");
+    if (!in_array('notes', $coaColumns, true)) $pdo->exec("ALTER TABLE chart_of_accounts ADD notes TEXT NULL");
+    if (!in_array('revision', $coaColumns, true)) $pdo->exec("ALTER TABLE chart_of_accounts ADD revision INT UNSIGNED NOT NULL DEFAULT 0");
     $pdo->exec("CREATE TABLE IF NOT EXISTS branch_account_settings (
         branch_id VARCHAR(20) PRIMARY KEY, cash_account_id VARCHAR(64) NULL,
         bank_account_id VARCHAR(64) NULL, qris_account_id VARCHAR(64) NULL,
