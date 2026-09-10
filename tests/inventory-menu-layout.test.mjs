@@ -19,7 +19,7 @@ const sectionBetween = (source, start, end) => {
 
 test('menu Persediaan memakai grid kotak enam kolom model Accurate', () => {
   assert.match(layout, /const isAccurateInventoryMenu = group\.id === "inventory"/);
-  assert.match(layout, /const usesAccurateTileMenu = group\.id === "inventory" \|\| group\.id === "sales"/);
+  assert.match(layout, /const usesAccurateTileMenu = isAccurateInventoryMenu \|\| isAccurateServiceMenu \|\| isAccurateLedgerMenu/);
   assert.match(layout, /data-menu-model=\{usesAccurateTileMenu \? "accurate" : "standard"\}/);
   assert.match(layout, /isAccurateInventoryMenu\s*\? "w-\[min\(828px,calc\(100vw-18rem\)\)\]"/);
   assert.match(layout, /isAccurateInventoryMenu\s*\? "grid-cols-\[repeat\(auto-fit,120px\)\] gap-2\.5"/);

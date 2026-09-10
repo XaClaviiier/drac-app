@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+const dir=mkdtempSync(join(tmpdir(),'coa-details-'));let count=0;
+function fixture(){const db=join(dir,`${count++}.sqlite`);return (method,payload={},id,deny=false)=>JSON.parse(execFileSync('php',['tests/fixtures/coa-details.php',db,JSON.stringify({method,payload,id,deny})],{encoding:'utf8'}).replace(/^\uFEFF/,''));}
+const root={code:'1101',name:'Kas',detailType:'Kas & Bank',isActive:true};
+test.after(()=>rmSync(dir,{recursive:true,force:true}));
+test('COA detail type, notes and server automatic numbering persist',()=>{const call=fixture();const id=call('POST',root).data.id;const child=call('POST',{name:'Sub A',parentId:id,autoCode:true,detailType:'Kas & Bank',isActive:true,notes:'Catatan'});assert.equal(child.success,true);call('POST',{name:'Sub B',parentId:id,autoCode:true,detailType:'Kas & Bank',isActive:true});const rows=call('GET').data;assert.deepEqual(rows.map(x=>x.code),['1101','1101-01','1101-02']);assert.equal(rows[1].notes,'Catatan');assert.equal(rows[1].accountType,'Asset');});
+test('COA hierarchy rejects self, descendant and incompatible parent',()=>{const call=fixture();const id=call('POST',root).data.id;const cid=call('POST',{...root,code:'1102',parentId:id}).data.id;assert.equal(call('PUT',{...root,parentId:id},id).success,false);assert.equal(call('PUT',{...root,parentId:cid},id).success,false);assert.equal(call('POST',{...root,code:'6000',detailType:'Beban',parentId:id}).success,false);assert.equal(call('GET').data.length,2);});
+test('COA rejects duplicate, missing and invalid fields without writes',()=>{const call=fixture();call('POST',root);for(const value of [{...root},{...root,code:'2',name:''},{...root,code:'2',detailType:'Bogus'},{...root,code:'2',normalBalance:'Bogus'}])assert.equal(call('POST',value).success,false);assert.equal(call('PUT',root,'missing').status,404);assert.equal(call('GET').data.length,1);});
+test('COA revisions reject stale changes, referenced parents cannot be deleted',()=>{const call=fixture();const id=call('POST',root).data.id;assert.equal(call('PUT',{...root,notes:'new',revision:0},id).success,true);assert.equal(call('PUT',{...root,revision:0},id).status,409);const cid=call('POST',{...root,code:'1102',parentId:id}).data.id;assert.equal(call('DELETE',{},id).success,false);assert.equal(call('DELETE',{},cid).success,true);assert.equal(call('DELETE',{revision:1},id).success,true);});
+test('COA write authorization is rechecked inside transaction',()=>{const call=fixture();assert.equal(call('POST',root,undefined,true).status,403);assert.equal(call('GET').data.length,0);});
+test('COA preserves generic legacy type and debit/credit metadata',()=>{const call=fixture();const id=call('POST',{code:'1000',name:'Aset lama',accountType:'Asset',normalBalance:'Credit',isActive:true}).data.id;assert.equal(call('PUT',{code:'1000',name:'Aset lama revisi',accountType:'Asset',isActive:true,notes:'Tidak ditebak'},id).success,true);const row=call('GET').data[0];assert.equal(row.detailType,'');assert.equal(row.normalBalance,'Credit');assert.equal(call('PUT',{code:'1000',name:'Salah',detailType:'Beban'},id).success,false);});
