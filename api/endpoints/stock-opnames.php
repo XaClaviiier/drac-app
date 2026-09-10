@@ -125,6 +125,8 @@ if($method==='GET') {
         $payload=$mapOrder($row);
         if($row['result_id'])$payload['rows']=$orderRows($pdo,(string)$row['result_id']); else $payload['rows']=[];
         if(($row['entry_mode']??'legacy')==='simple'){
+            $lastUpdate=$pdo->prepare('SELECT created_at FROM stock_opname_audit WHERE order_id=? ORDER BY id DESC LIMIT 1');
+            $lastUpdate->execute([$id]);$payload['lastUpdatedAt']=$lastUpdate->fetchColumn()?:$row['created_at'];
             $versions=$pdo->prepare('SELECT item_id,stock_version FROM warehouse_stocks WHERE warehouse_id=?');
             $versions->execute([$row['warehouse_id']]);$byItem=[];
             foreach($versions->fetchAll() as $v)$byItem[(string)$v['item_id']]=(string)$v['stock_version'];
