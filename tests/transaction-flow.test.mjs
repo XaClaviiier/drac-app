@@ -242,18 +242,34 @@ test('gudang tidak dapat dinonaktifkan saat saldo atau dokumen masih terbuka', (
   assert.match(endpoint, /goods_receipts/);
 });
 
-test('penyesuaian posted dibatalkan dengan mutasi pembalik dan tidak dihapus', () => {
+test('penyesuaian menyediakan Hapus langsung tanpa aksi pembatalan pada UI', () => {
   const endpoint = source('api/endpoints/stock-adjustments.php');
   const helpers = source('api/helpers.php');
   const page = source('src/pages/OpeningStockImport.tsx');
-  assert.match(endpoint, /Dokumen yang sudah diposting tidak boleh dihapus/);
   assert.match(endpoint, /movementType|'reversal'/);
-  assert.match(endpoint, /DELETE FROM stock_movements WHERE notes=\?/);
+  assert.match(endpoint, /DELETE FROM stock_movements WHERE id=\?/);
   assert.match(endpoint, /stock_adjustment_maintenance_logs/);
   assert.match(helpers, /CREATE TABLE IF NOT EXISTS stock_adjustment_maintenance_logs/);
-  assert.match(page, /Batalkan dengan Mutasi Pembalik/);
-  assert.doesNotMatch(page, /Hapus Penyesuaian/);
+  assert.doesNotMatch(page, /Batalkan dengan Mutasi Pembalik|canCancelAdjustment/);
+  assert.match(page, /title:"Hapus"/);
   assert.match(page, /removeWithBody\("stock-adjustments"/);
+});
+
+test('hapus penyesuaian dibatalkan menjaga saldo dan menyimpan snapshot sebelum mutasi dihapus', () => {
+  const endpoint = source('api/endpoints/stock-adjustments.php');
+  const block = endpoint.slice(endpoint.indexOf("if ($method === 'DELETE'"));
+  assert.match(block, /in_array\(\$doc\['status'\],\['Draft','Posted','Cancelled'\],true\)/);
+  assert.match(block, /reference_type='stock_adjustment' AND reference_id=\? FOR UPDATE/);
+  assert.match(block, /reference_id IS NULL OR reference_id=''/);
+  assert.doesNotMatch(block, /notes LIKE/);
+  assert.match(block, /source_warehouse_id'=>-1,'destination_warehouse_id'=>1/);
+  assert.match(block, /\$key=\$warehouseId\.'\|'\.\$movement\['item_id'\]/);
+  assert.match(block, /if\(!empty\(\$movement\['is_voided'\]\)\)continue/);
+  assert.match(block, /\$netQuantities\[\$key\]\?\?0\)!==\(\$expectedQuantities\[\$key\]\?\?0/);
+  assert.ok(block.indexOf('INSERT INTO transaction_activity_logs') < block.indexOf('DELETE FROM stock_movements'));
+  assert.match(block, /foreach\(\$movementRows as \$movement\)\$deleteMovement->execute\(\[\$movement\['id'\]\]\)/);
+  assert.doesNotMatch(block, /recordStockMovement/);
+  assert.match(block, /\$pdo->rollBack\(\)/);
 });
 
 test('dokumentasi online mencatat aturan dan alur kerja lintas modul', () => {

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../stock-adjustment-values.php';
 $actor = requireAuthenticatedUser($pdo);
 $roleStmt = $pdo->prepare("SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1");
 $roleStmt->execute([$actor['role_id'] ?? '']);
@@ -32,7 +33,7 @@ if ($method === 'GET') {
         $document = $stmt->fetch(); if (!$document) respondError('Penyesuaian stok tidak ditemukan', 404);
         $lineStmt = $pdo->prepare("SELECT sai.*,w.name warehouse_name FROM stock_adjustment_items sai JOIN warehouses w ON w.id=sai.warehouse_id WHERE adjustment_id=? ORDER BY sai.id");
         $lineStmt->execute([$id]); $lines = $lineStmt->fetchAll();
-        foreach ($lines as &$line) { $line = ['id'=>$line['id'],'itemId'=>$line['item_id'],'itemCode'=>$line['item_code'],'itemName'=>$line['item_name'],'warehouseId'=>$line['warehouse_id'],'warehouseName'=>$line['warehouse_name'],'quantity'=>(int)$line['quantity'],'unit'=>$line['unit']]; }
+        foreach ($lines as &$line) { $line = ['id'=>$line['id'],'itemId'=>$line['item_id'],'itemCode'=>$line['item_code'],'itemName'=>$line['item_name'],'warehouseId'=>$line['warehouse_id'],'warehouseName'=>$line['warehouse_name'],'quantity'=>(int)$line['quantity'],'unit'=>$line['unit'],'unitCost'=>(float)($line['unit_cost']??0),'targetQuantity'=>isset($line['target_quantity'])?(int)$line['target_quantity']:null,'stockBefore'=>isset($line['stock_before'])?(int)$line['stock_before']:null,'lineNotes'=>$line['line_notes']??'']; }
         $payload = $mapDocument($document); $payload['rows'] = $lines; respondSuccess($payload);
     }
     $stmt = $pdo->prepare("SELECT sa.*,
@@ -67,14 +68,14 @@ if ($method === 'POST') {
         $documentId = 'SADJ-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)), 0, 8);
         $pdo->prepare("INSERT INTO stock_adjustments(id,adjustment_number,adjustment_type,adjustment_date,status,batch_key,notes,created_by) VALUES(?,?,'opening_balance',?,'Draft',?,?,?)")
             ->execute([$documentId,$number,$date,$batchKey ?: null,(string)($d['notes'] ?? ''),$actor['id']]);
-        $lineInsert = $pdo->prepare("INSERT INTO stock_adjustment_items(adjustment_id,item_id,warehouse_id,item_code,item_name,unit,quantity) VALUES(?,?,?,?,?,?,?)");
+        $lineInsert = $pdo->prepare("INSERT INTO stock_adjustment_items(adjustment_id,item_id,warehouse_id,item_code,item_name,unit,quantity,unit_cost,target_quantity,stock_before,line_notes) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
         $seen = [];
         foreach ($rows as $index => $input) {
-            $itemId=(string)($input['itemId']??''); $warehouseId=(string)($input['warehouseId']??''); $quantity=parseBoundedDecimalInteger($input['quantity']??null,'-2147483647','2147483647','Kuantitas baris '.($index+1));
+            $itemId=(string)($input['itemId']??''); $warehouseId=(string)($input['warehouseId']??''); [$quantity,$unitCost,$targetQuantity,$stockBefore,$lineNotes]=adjustmentLineValues($pdo,$input,$warehouseId,$itemId);
             if ($quantity === 0) continue; $key=$itemId.'|'.$warehouseId; if(isset($seen[$key])) throw new InvalidArgumentException('Barang dan gudang terduplikasi pada baris '.($index+1)); $seen[$key]=true;
             $warehouse=$lockedWarehouseMap[$warehouseId]??null; if(!$warehouse) throw new InvalidArgumentException('Gudang baris '.($index+1).' tidak valid'); assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);
             $itemStmt->execute([$itemId]); $item=$itemStmt->fetch(); if(!$item || $item['type']!=='Persediaan' || !(bool)$item['is_active']) throw new InvalidArgumentException('Barang baris '.($index+1).' tidak valid');
-            $lineInsert->execute([$documentId,$itemId,$warehouseId,$item['code'],$item['name'],$item['unit']??'',$quantity]);
+            $lineInsert->execute([$documentId,$itemId,$warehouseId,$item['code'],$item['name'],$item['unit']??'',$quantity,$unitCost,$targetQuantity,$stockBefore,$lineNotes]);
         }
         if (!$seen) throw new InvalidArgumentException('Tidak ada rincian penyesuaian yang dapat disimpan');
         $pdo->commit(); respondSuccess(['id'=>$documentId,'adjustmentNumber'=>$number,'status'=>'Draft'],'Penyesuaian stok disimpan sebagai Draft');
@@ -102,8 +103,8 @@ if ($method === 'PUT' && $id) {
             $rows=is_array($d['rows']??null)?$d['rows']:[]; $date=(string)($d['date']??$doc['adjustment_date']); if(!$rows||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date)) throw new InvalidArgumentException('Data Draft tidak valid');
             $lockedWarehouseMap=lockActiveInventoryWarehouses($pdo,array_column($rows,'warehouseId'));
             $warehouseStmt=$pdo->prepare("SELECT id,branch_id,is_active FROM warehouses WHERE id=?"); $itemStmt=$pdo->prepare("SELECT id,code,name,unit,type,is_active FROM items WHERE id=?");
-            $pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]); $lineInsert=$pdo->prepare("INSERT INTO stock_adjustment_items(adjustment_id,item_id,warehouse_id,item_code,item_name,unit,quantity) VALUES(?,?,?,?,?,?,?)"); $seen=[];
-            foreach($rows as $index=>$input){$itemId=(string)($input['itemId']??'');$warehouseId=(string)($input['warehouseId']??'');$quantity=parseBoundedDecimalInteger($input['quantity']??null,'-2147483647','2147483647','Kuantitas baris '.($index+1));if($quantity===0)continue;$key=$itemId.'|'.$warehouseId;if(isset($seen[$key]))throw new InvalidArgumentException('Barang dan gudang terduplikasi pada baris '.($index+1));$seen[$key]=true;$warehouse=$lockedWarehouseMap[$warehouseId]??null;if(!$warehouse)throw new InvalidArgumentException('Gudang tidak valid');assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);$itemStmt->execute([$itemId]);$item=$itemStmt->fetch();if(!$item||$item['type']!=='Persediaan'||!(bool)$item['is_active'])throw new InvalidArgumentException('Barang tidak valid');$lineInsert->execute([$id,$itemId,$warehouseId,$item['code'],$item['name'],$item['unit']??'',$quantity]);}
+            $pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]); $lineInsert=$pdo->prepare("INSERT INTO stock_adjustment_items(adjustment_id,item_id,warehouse_id,item_code,item_name,unit,quantity,unit_cost,target_quantity,stock_before,line_notes) VALUES(?,?,?,?,?,?,?,?,?,?,?)"); $seen=[];
+            foreach($rows as $index=>$input){$itemId=(string)($input['itemId']??'');$warehouseId=(string)($input['warehouseId']??'');[$quantity,$unitCost,$targetQuantity,$stockBefore,$lineNotes]=adjustmentLineValues($pdo,$input,$warehouseId,$itemId);if($quantity===0)continue;$key=$itemId.'|'.$warehouseId;if(isset($seen[$key]))throw new InvalidArgumentException('Barang dan gudang terduplikasi pada baris '.($index+1));$seen[$key]=true;$warehouse=$lockedWarehouseMap[$warehouseId]??null;if(!$warehouse)throw new InvalidArgumentException('Gudang tidak valid');assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);$itemStmt->execute([$itemId]);$item=$itemStmt->fetch();if(!$item||$item['type']!=='Persediaan'||!(bool)$item['is_active'])throw new InvalidArgumentException('Barang tidak valid');$lineInsert->execute([$id,$itemId,$warehouseId,$item['code'],$item['name'],$item['unit']??'',$quantity,$unitCost,$targetQuantity,$stockBefore,$lineNotes]);}
             if(!$seen)throw new InvalidArgumentException('Rincian Draft tidak boleh kosong');$pdo->prepare("UPDATE stock_adjustments SET adjustment_date=?,notes=? WHERE id=?")->execute([$date,(string)($d['notes']??$doc['notes']),$id]);$pdo->commit();respondSuccess(['status'=>'Draft'],'Draft penyesuaian stok diperbarui');
         }
         if($requestedAction==='post' && $doc['status']!=='Draft') throw new InvalidArgumentException('Hanya Draft yang dapat diposting');
@@ -111,6 +112,12 @@ if ($method === 'PUT' && $id) {
         $reason=trim((string)($d['reason']??'')); if($requestedAction==='cancel' && $reason==='') throw new InvalidArgumentException('Alasan pembatalan wajib diisi');
         if(!$lines) throw new InvalidArgumentException('Rincian penyesuaian kosong');
         $lockedWarehouseMap=lockActiveInventoryWarehouses($pdo,array_column($lines,'warehouse_id'));
+        if ($requestedAction === 'post') foreach ($lines as $line) {
+            if (isset($line['target_quantity'])) {
+                [$checked] = adjustmentLineValues($pdo, ['targetQuantity'=>$line['target_quantity'],'stockBefore'=>$line['stock_before']], (string)$line['warehouse_id'], (string)$line['item_id']);
+                if ($checked !== (int)$line['quantity']) throw new DomainException('Selisih stok berubah. Periksa kembali Draft.',409);
+            }
+        }
         foreach($lines as $line){$lockedWarehouse=$lockedWarehouseMap[(string)$line['warehouse_id']]??null;if(!$lockedWarehouse)throw new InvalidArgumentException('Gudang penyesuaian tidak lagi valid');$branchId=(string)$lockedWarehouse['branch_id'];$original=parseBoundedDecimalInteger($line['quantity']??null,'-2147483647','2147483647','Kuantitas tersimpan penyesuaian'); $delta=$requestedAction==='post'?$original:-$original; if($delta<0)adjustWarehouseStock($pdo,$line['warehouse_id'],$branchId,$line['item_id'],$delta);else adjustWarehouseStockAllowNegative($pdo,$line['warehouse_id'],$branchId,$line['item_id'],$delta);
             $source=$delta<0?$line['warehouse_id']:null; $destination=$delta>0?$line['warehouse_id']:null; $note=($requestedAction==='post'?'Penyesuaian ':'Pembatalan penyesuaian ').$doc['adjustment_number'].($reason?' - '.$reason:'');
             recordStockMovement($pdo,(string)$line['item_id'],$source,$destination,abs($delta),$requestedAction==='post'?'adjustment':'reversal','stock_adjustment',(string)$doc['id'],(string)$doc['adjustment_number'],$note,(string)$actor['id'],$requestedAction==='post'?$doc['adjustment_date'].' 00:00:00':null);
@@ -136,30 +143,63 @@ if ($method === 'DELETE' && $id) {
         $lineStmt=$pdo->prepare("SELECT * FROM stock_adjustment_items WHERE adjustment_id=? FOR UPDATE");
         $lineStmt->execute([$id]); $lines=$lineStmt->fetchAll();
         $warehouseIds=array_column($lines,'warehouse_id');
-        lockInventoryWarehousesForAuthorization($pdo,$authorization,$warehouseIds,'Penyesuaian stok tidak ditemukan',404);
+        $deleteWarehouseMap=lockInventoryWarehousesForAuthorization($pdo,$authorization,$warehouseIds,'Penyesuaian stok tidak ditemukan',404);
         if(lockStockOpnameResultForAdjustment($pdo,$id))throw new InvalidArgumentException('Penyesuaian yang terhubung ke Hasil Stok Opname tidak dapat dihapus');
 
-        if($doc['status']!=='Draft')throw new DomainException('Dokumen yang sudah diposting tidak boleh dihapus. Gunakan Batalkan agar mutasi pembalik dan jejak audit tetap tersimpan.');
+        if(!in_array($doc['status'],['Draft','Posted','Cancelled'],true))throw new DomainException('Status penyesuaian tidak mendukung penghapusan.',409);
         $reason=trim((string)($d['reason']??''));
 
         $markers=['STOCK_ADJUSTMENT:'.$doc['adjustment_number'],'CANCEL_STOCK_ADJUSTMENT:'.$doc['adjustment_number']];
         if(!empty($doc['batch_key'])) $markers[]='OPENING_BALANCE:'.$doc['batch_key'];
-        $movementRows=[];
+        $movementStmt=$pdo->prepare("SELECT * FROM stock_movements WHERE reference_type='stock_adjustment' AND reference_id=? FOR UPDATE");
+        $movementStmt->execute([$id]);
+        $movementMap=[];
+        foreach($movementStmt->fetchAll() as $movement)$movementMap[$movement['id']]=$movement;
         foreach($markers as $marker) {
-            $movementStmt=$pdo->prepare("SELECT * FROM stock_movements WHERE notes=? OR notes LIKE CONCAT(?,' %') FOR UPDATE");
-            $movementStmt->execute([$marker,$marker]);
-            $movementRows=array_merge($movementRows,$movementStmt->fetchAll());
+            $movementStmt=$pdo->prepare("SELECT * FROM stock_movements WHERE (reference_id IS NULL OR reference_id='') AND (notes=? OR LEFT(notes,CHAR_LENGTH(?)+1)=CONCAT(?,' ')) FOR UPDATE");
+            $movementStmt->execute([$marker,$marker,$marker]);
+            foreach($movementStmt->fetchAll() as $movement)$movementMap[$movement['id']]=$movement;
         }
-        $snapshot=json_encode(['document'=>$doc,'items'=>$lines,'movements'=>$movementRows],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+        $movementRows=array_values($movementMap);
+        $netQuantities=[];
+        $movementWarehouseIds=[];
+        foreach($movementRows as $movement) {
+            foreach(['source_warehouse_id'=>-1,'destination_warehouse_id'=>1] as $field=>$direction) {
+                if($movement[$field]===null||(string)$movement[$field]==='')continue;
+                $warehouseId=(string)$movement[$field];$movementWarehouseIds[]=$warehouseId;
+                if(!empty($movement['is_voided']))continue;
+                $key=$warehouseId.'|'.$movement['item_id'];
+                $netQuantities[$key]=($netQuantities[$key]??0)+$direction*(int)$movement['quantity'];
+            }
+        }
+        if($movementWarehouseIds)lockInventoryWarehousesForAuthorization($pdo,$authorization,array_unique($movementWarehouseIds),'Penyesuaian stok tidak ditemukan',404);
+        $expectedQuantities=[];
+        if($doc['status']==='Posted') {
+            foreach($lines as $line) {
+                $key=$line['warehouse_id'].'|'.$line['item_id'];
+                $expectedQuantities[$key]=($expectedQuantities[$key]??0)+(int)$line['quantity'];
+            }
+        }
+        foreach(array_unique(array_merge(array_keys($netQuantities),array_keys($expectedQuantities))) as $key) {
+            if(($netQuantities[$key]??0)!==($expectedQuantities[$key]??0))throw new DomainException('Mutasi tidak sesuai dengan status dan rincian penyesuaian. Periksa kartu stok sebelum menghapus dokumen.',409);
+        }
+        $snapshot=json_encode(['document'=>$doc,'items'=>$lines,'movements'=>$movementRows],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
         $pdo->prepare("INSERT INTO stock_adjustment_maintenance_logs(adjustment_id,adjustment_number,previous_status,reason,snapshot_json,deleted_by,deleted_by_name) VALUES(?,?,?,?,?,?,?)")
             ->execute([$id,$doc['adjustment_number'],$doc['status'],$reason?:'Dihapus oleh pengguna',$snapshot?:null,$actor['id']??null,$actor['name']??$actor['username']??null]);
-        foreach($markers as $marker) {
-            $pdo->prepare("DELETE FROM stock_movements WHERE notes=? OR notes LIKE CONCAT(?,' %')")->execute([$marker,$marker]);
+        $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('stock_adjustment',?,?,'delete',?,?,?,?)")
+            ->execute([$id,$doc['adjustment_number'],$reason?:'Penyesuaian dihapus',$snapshot?:null,$actor['id']??null,$actor['name']??$actor['username']??null]);
+        if($doc['status']==='Posted') {
+            foreach($lines as $line) {
+                $warehouseId=(string)$line['warehouse_id'];
+                adjustWarehouseStock($pdo,$warehouseId,(string)$deleteWarehouseMap[$warehouseId]['branch_id'],(string)$line['item_id'],-(int)$line['quantity']);
+            }
         }
+        $deleteMovement=$pdo->prepare("DELETE FROM stock_movements WHERE id=?");
+        foreach($movementRows as $movement)$deleteMovement->execute([$movement['id']]);
         $pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM stock_adjustments WHERE id=?")->execute([$id]);
         $pdo->commit();
-        respondSuccess(null,$doc['status']==='Draft'?'Draft penyesuaian stok dihapus':'Penyesuaian stok dihapus dan dampak stok dikoreksi otomatis.');
+        respondSuccess(null,$doc['status']==='Posted'?'Penyesuaian dan mutasinya dihapus. Saldo stok disesuaikan otomatis.':'Penyesuaian dan mutasinya dihapus. Saldo stok tidak berubah.');
     } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),transactionExceptionStatus($e,422));}
 }
 respondError('Method not allowed',405);
