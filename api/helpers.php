@@ -816,6 +816,10 @@ function ensureApiSupportTables(PDO $pdo): void {
             INDEX idx_stock_adjustment_item_warehouse (warehouse_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    ensureTableColumn($pdo,'stock_adjustment_items','unit_cost','DECIMAL(16,4) NOT NULL DEFAULT 0');
+    ensureTableColumn($pdo,'stock_adjustment_items','target_quantity','INT NULL');
+    ensureTableColumn($pdo,'stock_adjustment_items','stock_before','INT NULL');
+    ensureTableColumn($pdo,'stock_adjustment_items','line_notes',"VARCHAR(1000) NOT NULL DEFAULT ''");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS stock_adjustment_maintenance_logs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

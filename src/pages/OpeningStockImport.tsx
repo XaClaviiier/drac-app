@@ -2,11 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  CheckCircle2,
-  Download,
-  Eye,
+  ChevronDown,
+  ArrowUpDown,
+  Info,
   FileText,
-  FileSpreadsheet,
   Filter,
   List,
   Lightbulb,
@@ -16,9 +15,6 @@ import {
   RefreshCw,
   Search,
   Settings,
-  Send,
-  Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
@@ -28,8 +24,15 @@ import ItemSearchOption from "../components/ItemSearchOption";
 import { childTabClass, ui } from "../components/ui/interfaceStandards";
 import IndonesianDateInput from "../components/IndonesianDateInput";
 import AccurateFormActionRail from "../components/AccurateFormActionRail";
+import "./OpeningStockImport.css";
 
 type PreviewRow = {
+  unitCost?: number;
+  targetQuantity?: number | null;
+  stockBefore?: number | null;
+  lineNotes?: string;
+  adjustmentMode?: "plus" | "minus" | "set";
+
   row: number;
   code: string;
   itemName: string;
@@ -50,6 +53,7 @@ type AdjustmentDocument = {
   itemCount: number;
   totalQuantity: number;
   cancellationReason?: string;
+  notes?: string;
 };
 type AdjustmentDetail = AdjustmentDocument & {
   rows: Array<{
@@ -58,15 +62,19 @@ type AdjustmentDetail = AdjustmentDocument & {
     itemCode: string;
     itemName: string;
     warehouseName: string;
+    warehouseId: string;
     quantity: number;
     unit: string;
+  unitCost?: number;
+  targetQuantity?: number | null;
+  stockBefore?: number | null;
+  lineNotes?: string;
+  adjustmentMode?: "plus" | "minus" | "set";
   }>;
 };
 
 const canDeleteAdjustment = (document: AdjustmentDocument) =>
-  document.status === "Draft" && !document.isStockOpnameLinked;
-const canCancelAdjustment = (document: AdjustmentDocument) =>
-  document.status === "Posted" && !document.isStockOpnameLinked;
+  ["Draft", "Posted", "Cancelled"].includes(document.status) && !document.isStockOpnameLinked;
 
 const parseCsv = (text: string) =>
   text
@@ -112,6 +120,36 @@ export default function OpeningStockImport() {
   const [selectedDocument, setSelectedDocument] =
     useState<AdjustmentDetail | null>(null);
   const [detailTabs, setDetailTabs] = useState<AdjustmentDetail[]>([]);
+  const [notes, setNotes] = useState("");
+  const [formTab, setFormTab] = useState<"items" | "info">("items");
+  const [menu, setMenu] = useState<"import" | "settings" | "details" | null>(null);
+  const [showFilter, setShowFilter] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortKey, setSortKey] = useState<"adjustmentNumber" | "date" | "notes">("date");
+  const [sortAsc, setSortAsc] = useState(false);
+  const [rowDialog, setRowDialog] = useState<{ index: number; row: PreviewRow; readOnly: boolean } | null>(null);
+  const [detailSearch, setDetailSearch] = useState("");
+  const [rowTab, setRowTab] = useState<"items" | "info" | "image">("items");
+  useEffect(() => { setRowTab("items"); }, [rowDialog?.index]);
+  const stockFor = (row: PreviewRow) => Number(data.warehouseStocks?.find(stock => stock.itemId === row.itemId && stock.warehouseId === row.warehouseId)?.quantity || 0);
+  const dialogMode = rowDialog?.row.adjustmentMode || (rowDialog?.row.targetQuantity != null ? "set" : (rowDialog?.row.quantity || 0) < 0 ? "minus" : "plus");
+  const changeDialog = (patch: Partial<PreviewRow>) => {
+    if (!rowDialog || rowDialog.readOnly) return;
+    const row = {...rowDialog.row, ...patch};
+    const mode = patch.adjustmentMode || dialogMode;
+    row.adjustmentMode = mode;
+    if (mode === "set") {
+      row.targetQuantity = patch.targetQuantity ?? row.targetQuantity ?? Math.max(0, stockFor(row));
+      row.stockBefore = stockFor(row);
+      row.quantity = row.targetQuantity - row.stockBefore;
+    } else {
+      row.targetQuantity = null; row.stockBefore = null;
+      row.quantity = Math.abs(row.quantity) * (mode === "minus" ? -1 : 1);
+    }
+    setRowDialog({...rowDialog, row});
+  };
+  const [rowMessage, setRowMessage] = useState("");
+  useEffect(() => { setRowMessage(""); }, [rowDialog?.index, rowDialog?.row.quantity, rowDialog?.row.warehouseId]);
   const isAdmin =
     Boolean(currentUser?.isOwner) ||
     String(currentUser?.roleName || "")
@@ -158,20 +196,11 @@ export default function OpeningStockImport() {
       )
     )
       return setMessage(`${item.code} sudah ada dalam rincian.`);
-    setRows((current) => [
-      ...current,
-      {
-        row: current.length + 1,
-        code: item.code,
-        itemName: item.name,
-        itemId: item.id,
-        warehouse: defaultWarehouse.name,
-        warehouseId: defaultWarehouse.id,
-        quantity: 1,
-        unit: item.unit,
-        error: "",
-      },
-    ]);
+    setRowDialog({index:rows.length,readOnly:false,row:{
+      row:rows.length+1,code:item.code,itemName:item.name,itemId:item.id,
+      warehouse:defaultWarehouse.name,warehouseId:defaultWarehouse.id,
+      quantity:1,unit:item.unit,unitCost:0,error:"",
+    }});
     setItemSearch("");
     setMessage("");
   };
@@ -307,6 +336,8 @@ export default function OpeningStockImport() {
     if (!file) return;
     setSelectedDocument(null);
     setEditingId("");
+    setNotes("");
+    setFormTab("items");
     setViewMode("entry");
     await loadFile(file);
     if (listImportRef.current) listImportRef.current.value = "";
@@ -320,7 +351,7 @@ export default function OpeningStockImport() {
     try {
       const normalized =
         validRows
-          .map((row) => `${row.itemId}|${row.warehouseId}|${row.quantity}`)
+          .map((row) => `${row.itemId}|${row.warehouseId}|${row.quantity}|${row.unitCost||0}|${row.targetQuantity??""}|${row.lineNotes||""}`)
           .sort()
           .join(";") + `|${date}`;
       const digest = await crypto.subtle.digest(
@@ -334,11 +365,16 @@ export default function OpeningStockImport() {
         .toUpperCase();
       const payload = {
         date,
+        notes,
         batchKey,
         rows: validRows.map((row) => ({
           itemId: row.itemId,
           warehouseId: row.warehouseId,
           quantity: row.quantity,
+          unitCost: row.unitCost || 0,
+          targetQuantity: row.targetQuantity ?? null,
+          stockBefore: row.stockBefore ?? null,
+          lineNotes: row.lineNotes || "",
         })),
       };
       const response = editingId
@@ -371,6 +407,7 @@ export default function OpeningStockImport() {
       setRows([]);
       setFileName("");
       setEditingId("");
+      setNotes("");
       setViewMode("list");
       if (inputRef.current) inputRef.current.value = "";
     } catch (error: any) {
@@ -389,6 +426,9 @@ export default function OpeningStockImport() {
         throw new Error(response.message || "Draft tidak dapat dibuka.");
       setEditingId(document.id);
       setDate(response.data.date);
+      setNotes(response.data.notes || "");
+      setSelectedDocument(null);
+      setFormTab("items");
       setFileName(`Draft ${document.adjustmentNumber}`);
       setRows(
         (response.data.rows || []).map((row: any, index: number) => ({
@@ -400,6 +440,7 @@ export default function OpeningStockImport() {
           warehouseId: row.warehouseId,
           quantity: Number(row.quantity),
           unit: row.unit,
+          unitCost: row.unitCost, targetQuantity: row.targetQuantity, stockBefore: row.stockBefore, lineNotes: row.lineNotes,
           error: "",
         })),
       );
@@ -429,6 +470,8 @@ export default function OpeningStockImport() {
           : [...current, detail];
       });
       setSelectedDocument(detail);
+      setFormTab("items");
+      setDetailSearch("");
       setViewMode("list");
     } catch (error: any) {
       setMessage(error?.message || "Rincian penyesuaian tidak dapat dibuka.");
@@ -448,22 +491,19 @@ export default function OpeningStockImport() {
 
   const processDocument = async (
     document: AdjustmentDocument,
-    action: "post" | "cancel" | "delete",
+    action: "post" | "delete",
   ) => {
+    if (loading) return;
     if (action === "delete" && !canDeleteAdjustment(document)) {
       setMessage("Dokumen ini tidak dapat dihapus.");
       return;
     }
-    if (action === "cancel" && !canCancelAdjustment(document)) {
-      setMessage("Dokumen ini tidak dapat dibatalkan.");
-      return;
-    }
-    const reason = action === "cancel" ? window.prompt(`Alasan pembatalan ${document.adjustmentNumber}:`)?.trim() || "" : "";
-    if (action === "cancel" && !reason) return;
     if (action === "delete") {
       const impact =
         document.status === "Posted"
-          ? " Stok dan mutasi yang dibuat dokumen ini akan dikoreksi otomatis."
+          ? " Dokumen dan mutasinya akan dihapus, saldo stok disesuaikan otomatis. Riwayat penghapusan tersimpan untuk audit."
+          : document.status === "Cancelled"
+          ? " Dokumen serta mutasi awal dan pembatalannya akan dihapus. Saldo stok tetap. Riwayat penghapusan tersimpan di Log Aktivitas."
           : "";
       if (!window.confirm(`Hapus ${document.adjustmentNumber}?${impact}`)) return;
     }
@@ -473,16 +513,20 @@ export default function OpeningStockImport() {
       const response =
         action === "delete"
           ? await api.removeWithBody("stock-adjustments", document.id, {
-              reason,
+              reason: "Dihapus oleh pengguna",
             })
           : await api.update("stock-adjustments", document.id, {
               action,
-              reason,
             });
       if (!response.success)
         throw new Error(response.message || "Proses gagal.");
       await Promise.all([loadDocuments(), refreshData()]);
-      if (action === "delete") closeDetailTab(document.id);
+      if (action === "delete") {
+        closeDetailTab(document.id);
+        if (editingId === document.id) {
+          setEditingId(""); setRows([]); setNotes(""); setFileName(""); setViewMode("list");
+        }
+      }
       setMessage(response.message || "Penyesuaian stok diperbarui.");
     } catch (error: any) {
       setMessage(error?.message || "Proses penyesuaian stok gagal.");
@@ -495,621 +539,175 @@ export default function OpeningStockImport() {
     const query = documentSearch.trim().toLowerCase();
     return (
       (!documentDate || document.date >= documentDate) &&
+      (!statusFilter || document.status === statusFilter) &&
       (!query ||
-        `${document.adjustmentNumber} ${document.adjustmentType} ${document.status}`
+        `${document.adjustmentNumber} ${document.notes || ""} ${document.adjustmentType} ${document.status}`
           .toLowerCase()
           .includes(query))
     );
   });
 
+  const newDocument = () => {
+    setSelectedDocument(null); setEditingId(""); setRows([]); setNotes("");
+    setFileName(""); setDate(localDateKey()); setViewMode("entry"); setFormTab("items"); setMenu(null);
+  };
+  const displayRows: PreviewRow[] = selectedDocument ? selectedDocument.rows.map((row, index) => ({
+    row: index + 1, code: row.itemCode, itemName: row.itemName, itemId: row.itemId,
+    warehouse: row.warehouseName, warehouseId: row.warehouseId, quantity: row.quantity, unit: row.unit, unitCost: row.unitCost, targetQuantity: row.targetQuantity, stockBefore: row.stockBefore, lineNotes: row.lineNotes, error: "",
+  })) : rows;
+  const quantityTotal = displayRows.reduce((sum, row) => sum + Math.abs(row.quantity), 0);
+  const activeDocument = selectedDocument || documents.find(document => document.id === editingId);
+  const showForm = !!selectedDocument || viewMode === "entry";
+  const saveDisabled = !isAdmin || loading || !validRows.length || !!errorRows.length || !!duplicateKeys.size;
+  const formatDate = (value: string) => value.split("-").reverse().join("/");
+  const toggleMenu = (value: typeof menu) => setMenu(current => current === value ? null : value);
+  const openDocument = (document: AdjustmentDocument) => {
+    setMenu(null);
+    if (document.status === "Draft" && !document.isStockOpnameLinked) void editDocument(document);
+    else void viewDocument(document);
+  };
+  const saveRow = () => {
+    if (!rowDialog || rowDialog.readOnly) return;
+    const row = rowDialog.row;
+    if (dialogMode === "set" && (!Number.isSafeInteger(row.targetQuantity) || Number(row.targetQuantity) < 0)) { setRowMessage("Stok akhir harus bilangan bulat nol atau lebih."); return; }
+    if (dialogMode === "set" && row.quantity === 0) { setRowMessage("Stok akhir sama dengan stok saat ini; tidak ada penyesuaian."); return; }
+    if (!Number.isFinite(row.unitCost || 0) || (row.unitCost || 0) < 0 || (row.unitCost || 0) >= 1e12 || !/^\d+(\.\d{1,4})?$/.test(String(row.unitCost || 0))) { setRowMessage("Biaya satuan harus nol atau positif, maksimal 4 desimal."); return; }
+    if (!Number.isSafeInteger(row.quantity) || !row.quantity || Math.abs(row.quantity) > 2147483647) { setRowMessage("Kuantitas harus bilangan bulat antara 1 dan 2.147.483.647."); return; }
+    if (!row.itemId) { setRowMessage("Kode barang belum dikenali. Hapus baris ini lalu pilih barang yang terdaftar."); return; }
+    if (!row.warehouseId) { setRowMessage("Pilih gudang untuk barang ini."); return; }
+    if (rows.some((other, index) => index !== rowDialog.index && other.itemId === row.itemId && other.warehouseId === row.warehouseId)) { setRowMessage("Barang sudah ada pada gudang yang sama."); return; }
+    setRows(current => rowDialog.index === current.length ? [...current, {...row,error:""}] : current.map((other, index) => index === rowDialog.index ? { ...row, error: "" } : other));
+    setRowDialog(null);
+  };
+  const orderedDocuments = [...filteredDocuments].sort((a,b) =>
+    String(a[sortKey] || "").localeCompare(String(b[sortKey] || ""), "id", { numeric: true }) * (sortAsc ? 1 : -1));
+  const orderBy = (key: typeof sortKey) => { setSortAsc(sortKey === key ? !sortAsc : true); setSortKey(key); };
+
   return (
-    <div className="space-y-0 bg-[#eeeeee]">
+    <div className="adjustment-workspace">
       <div className={ui.childBar}>
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedDocument(null);
-            setViewMode("list");
-          }}
-          className={ui.childListTab}
-          title="Daftar Penyesuaian Stok"
-        >
-          <List className="h-5 w-5" />
+        <button type="button" title="Daftar Penyesuaian Persediaan" className={`${ui.childListTab} ${!showForm ? "adjustment-list-active" : ""}`} onClick={() => { setSelectedDocument(null); setViewMode("list"); setMenu(null); }}><List size={22}/></button>
+        <button type="button" className={childTabClass(!selectedDocument && viewMode === "entry")} onClick={() => { setSelectedDocument(null); setViewMode("entry"); setMenu(null); }}>
+          <span>{editingId ? documents.find(document => document.id === editingId)?.adjustmentNumber : "Data Baru"}</span>
+          <X size={16} onClick={event => { event.stopPropagation(); setViewMode("list"); }}/>
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedDocument(null);
-            setViewMode("entry");
-          }}
-          className={`${childTabClass(!selectedDocument && viewMode === "entry")} justify-between px-4 text-sm`}
-        >
-          <span>
-            {editingId
-              ? documents.find((document) => document.id === editingId)
-                  ?.adjustmentNumber || "Data Baru"
-              : "Data Baru"}
-          </span>
-          <X
-            className="h-4 w-4"
-            onClick={(event) => {
-              event.stopPropagation();
-              setViewMode("list");
-            }}
-          />
-        </button>
-        {detailTabs.map((tab) => {
-          const active = selectedDocument?.id === tab.id;
-          return (
-            <div
-              key={tab.id}
-              className={`${childTabClass(active)} min-w-56 max-w-80`}
-            >
-              <button
-                type="button"
-                onClick={() => setSelectedDocument(tab)}
-                className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold"
-              >
-                {tab.adjustmentNumber}
-              </button>
-              <button
-                type="button"
-                onClick={() => closeDetailTab(tab.id)}
-                className="mr-1 rounded p-1.5 hover:bg-slate-100"
-                title="Tutup tab"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          );
-        })}
-        <div className="ml-auto flex h-11 items-center gap-2 pr-2">
-          <button
-            type="button"
-            className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-800"
-            title="Pengaturan"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => window.open("/help?article=penyesuaian-stok", "_blank")}
-            className="flex h-10 w-12 items-center justify-center rounded bg-amber-500 text-white"
-            title="Panduan"
-          >
-            <Lightbulb className="h-5 w-5" />
-          </button>
+        {detailTabs.map(tab => <div key={tab.id} className={childTabClass(selectedDocument?.id === tab.id)}>
+          <button type="button" onClick={() => { setSelectedDocument(tab); setFormTab("items"); setDetailSearch(""); setMenu(null); }}>{tab.adjustmentNumber}</button>
+          <button type="button" title="Tutup tab" onClick={() => closeDetailTab(tab.id)}><X size={16}/></button>
+        </div>)}
+        <div className="adjustment-tab-tools">
+          <button className="adjustment-icon" title="Pengaturan tampilan" onClick={() => toggleMenu("settings")}><Settings size={17}/></button>
+          <button className="adjustment-help" title="Panduan" onClick={() => window.open("/help?article=penyesuaian-stok", "_blank")}><Lightbulb size={18}/></button>
+          {menu === "settings" && <div className="adjustment-menu"><button onClick={() => { setDocumentDate(""); setDocumentSearch(""); setStatusFilter(""); setSortKey("date"); setSortAsc(false); setMenu(null); }}>Reset filter dan urutan</button><button onClick={() => { setMenu(null); void Promise.all([loadDocuments(),refreshData()]); }}>Muat ulang data</button></div>}
         </div>
       </div>
-      {!selectedDocument && (
-        <>
-          <div className="hidden rounded-t-lg border border-slate-300 bg-[#eeeeee] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Penyesuaian Stok
-                </h2>
-                <p className="text-sm text-slate-600">
-                  Saldo awal disimpan sebagai dokumen. Draft belum mengubah
-                  stok; Posting mencatat mutasi dan Pembatalan membuat pembalik.
-                </p>
-              </div>
-              <button
-                onClick={downloadTemplate}
-                className="flex h-10 items-center gap-2 rounded border border-blue-600 bg-white px-4 text-sm font-semibold text-blue-700"
-              >
-                <Download className="h-4 w-4" />
-                Unduh Template
-              </button>
+      {message && <div role="status" className="adjustment-message">{message}</div>}
+      <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={event => { void loadFile(event.target.files?.[0]); event.target.value = ""; }}/>
+      <input ref={listImportRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={event => void importFromMainList(event.target.files?.[0])}/>
+      {!showForm ? <section className="adjustment-list">
+        <div className="adjustment-filter-row">
+          <label className="adjustment-date-filter">Tanggal: <IndonesianDateInput value={documentDate} onChange={setDocumentDate}/></label>
+          <button className="adjustment-icon adjustment-filter" title="Tambah kriteria" onClick={() => setShowFilter(!showFilter)}><Filter size={16}/><ChevronDown size={12}/></button>
+          {showFilter && <div className="adjustment-filter-options"><label>Status <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="">Semua</option><option value="Draft">Draft</option><option value="Posted">Diposting</option><option value="Cancelled">Dibatalkan</option></select></label><button onClick={() => { setDocumentDate(""); setStatusFilter(""); }}>Bersihkan</button></div>}
+        </div>
+        <div className="adjustment-list-toolbar">
+          <button className="adjustment-add" title="Data Baru" onClick={newDocument}><Plus size={23}/></button>
+          <button className="adjustment-icon" title="Perbarui" disabled={loading} onClick={() => void Promise.all([loadDocuments(),refreshData()])}><RefreshCw size={16}/></button>
+          <div className="adjustment-list-tools">
+            <button className="adjustment-icon" title="Cetak daftar" onClick={() => window.print()}><Printer size={16}/></button>
+            <div className="adjustment-dropdown"><button className="adjustment-icon" title="Impor dan template" onClick={() => toggleMenu("import")}><Settings size={16}/><ChevronDown size={12}/></button>
+              {menu === "import" && <div className="adjustment-menu"><button disabled={!isAdmin} onClick={() => { setMenu(null); listImportRef.current?.click(); }}>Impor Excel/CSV</button><button onClick={() => { setMenu(null); downloadTemplate(); }}>Unduh template</button></div>}
             </div>
-          </div>
-          {!isAdmin && viewMode === "entry" && (
-            <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-              <AlertTriangle className="mr-2 inline h-4 w-4" />
-              Import hanya dapat dilakukan Owner atau Administrator.
-            </div>
-          )}
-          {viewMode === "entry" && (
-            <div className="relative grid gap-x-12 gap-y-3 border-b border-slate-300 bg-[#eeeeee] px-16 py-5 pr-44 md:grid-cols-2">
-              <label className="text-sm">
-                Tanggal <span className="text-red-600">*</span>
-                <IndonesianDateInput value={date} onChange={setDate} className="mt-1 h-10 w-full"/>
-              </label>
-              <label className="text-sm md:row-start-2">
-                File CSV/Excel
-                <div className="mt-1 flex h-10 items-center rounded border border-slate-300 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => inputRef.current?.click()}
-                    className="flex h-full items-center gap-2 border-r border-slate-300 px-4 text-blue-700"
-                  >
-                    <Upload className="h-4 w-4" />
-                    {editingId ? "Ganti File" : "Pilih File"}
-                  </button>
-                  <span className="truncate px-3 text-slate-500">
-                    {fileName || "Belum ada file"}
-                  </span>
-                  {fileName && (
-                    <button
-                      onClick={() => {
-                        setRows([]);
-                        setFileName("");
-                        setEditingId("");
-                      }}
-                      className="ml-auto px-3"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={(event) => loadFile(event.target.files?.[0])}
-                  className="hidden"
-                />
-              </label>
-              <div className="absolute right-5 top-5 flex w-[72px] flex-col items-stretch gap-3">
-                <div className="text-center text-xs text-slate-500">
-                  No Penyesuaian #
-                  <b className="block font-mono text-blue-700">
-                    {editingId
-                      ? documents.find((document) => document.id === editingId)
-                          ?.adjustmentNumber
-                      : "OTOMATIS"}
-                  </b>
-                </div>
-                <AccurateFormActionRail
-                  save={{
-                    disabled: !isAdmin || loading || !validRows.length || !!errorRows.length,
-                    onClick: () => void submit(false),
-                    title: "Simpan Draft",
-                  }}
-                  print={{ onClick: () => window.print(), title: "Cetak / simpan sebagai PDF" }}
-                  attachment={{ onClick: () => inputRef.current?.click(), title: "Lampiran File" }}
-                  more={{
-                    disabled: !isAdmin || loading || !validRows.length || !!errorRows.length,
-                    onClick: () => void submit(true),
-                    title: "Lain-lain / simpan dan posting",
-                  }}
-                  remove={{ disabled: !editingId, title: editingId ? "Hapus penyesuaian" : "Hapus tersedia setelah data disimpan" }}
-                />
-              </div>
-            </div>
-          )}
-          {message && (
-            <div
-              className={`rounded border p-3 text-sm ${message.includes("berhasil") ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-red-300 bg-red-50 text-red-700"}`}
-            >
-              {message}
-            </div>
-          )}
-          {viewMode === "entry" && (
-            <>
-              <div className="mx-3 mt-3 min-h-[460px] overflow-hidden rounded-t-lg border border-slate-300 bg-white shadow-sm">
-                <div className="flex items-center gap-3 border-b border-slate-300 px-4 py-3">
-                  <FileText className="h-6 w-6 text-pink-500" />
-                  <div className="relative w-[505px] max-w-[42vw]">
-                    <input
-                      value={itemSearch}
-                      onChange={(event) => setItemSearch(event.target.value)}
-                      placeholder="Cari/Pilih Barang & Jasa..."
-                      className="h-10 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-sm outline-none focus:border-blue-500"
-                    />
-                    <Search className="absolute right-3 top-2.5 h-5 w-5 text-slate-900" />
-                    {itemSuggestions.length > 0 && (
-                      <div className="absolute left-0 right-0 top-11 z-30 max-h-72 overflow-auto rounded border border-slate-300 bg-white shadow-xl">
-                        {itemSuggestions.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => addManualItem(item)}
-                            className="block w-full border-b border-slate-200 px-3 py-2 text-left hover:bg-blue-50"
-                          >
-                            <ItemSearchOption name={item.name} code={item.code} />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="rounded border border-blue-600 bg-white px-4 py-2 text-blue-700"
-                  >
-                    Rincian
-                  </button>
-                  <div className="ml-auto flex items-center gap-3">
-                    <button className="flex h-10 w-12 items-center justify-center rounded border border-slate-300">
-                      <Search className="h-5 w-5" />
-                    </button>
-                    <b className="text-2xl font-medium">
-                      Rincian Barang <span className="text-red-600">*</span>
-                    </b>
-                  </div>
-                </div>
-                {rows.length > 0 ? (
-                  <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
-                    <div className="flex items-center justify-between bg-[#eeeeee] px-4 py-3 text-sm">
-                      <span>
-                        Pratinjau: <b>{rows.length}</b> baris · Valid{" "}
-                        <b className="text-emerald-700">{validRows.length}</b> ·
-                        Bermasalah{" "}
-                        <b className="text-red-700">{errorRows.length}</b>
-                      </span>
-                      {!errorRows.length && (
-                        <span className="text-emerald-700">
-                          <CheckCircle2 className="mr-1 inline h-4 w-4" />
-                          Siap disimpan
-                        </span>
-                      )}
-                    </div>
-                    <div className="max-h-72 overflow-auto">
-                      <table className="min-w-[1000px] w-full text-[13px]">
-                        <thead className="sticky top-0 bg-[#637c93] text-left text-white">
-                          <tr>
-                            <th className="px-3 py-2.5">Baris</th>
-                            <th className="px-3 py-2.5">Kode Barang</th>
-                            <th className="px-3 py-2.5">Nama Barang</th>
-                            <th className="px-3 py-2.5">Gudang</th>
-                            <th className="px-3 py-2.5 text-right">Qty Awal</th>
-                            <th className="px-3 py-2.5">Satuan</th>
-                            <th className="px-3 py-2.5">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row, index) => (
-                            <tr
-                              key={`${row.row}-${index}`}
-                              className={`border-b ${row.error ? "bg-red-50" : index % 2 ? "bg-slate-50" : "bg-white"}`}
-                            >
-                              <td className="px-3 py-2">{row.row}</td>
-                              <td className="px-3 py-2 font-medium text-blue-700">
-                                {row.code}
-                              </td>
-                              <td className="px-3 py-2">
-                                {row.itemName || "—"}
-                              </td>
-                              <td className="px-3 py-2">{row.warehouse}</td>
-                              <td className="px-3 py-2 text-right font-semibold">
-                                <input
-                                  type="number"
-                                  value={row.quantity}
-                                  onChange={(event) =>
-                                    setRows((current) =>
-                                      current.map((entry, rowIndex) =>
-                                        rowIndex === index
-                                          ? {
-                                              ...entry,
-                                              quantity:
-                                                Number(event.target.value) || 0,
-                                              error: Number(event.target.value)
-                                                ? entry.error.replace(
-                                                    /;?\s*Qty awal harus selain 0/g,
-                                                    "",
-                                                  )
-                                                : "Qty awal harus selain 0",
-                                            }
-                                          : entry,
-                                      ),
-                                    )
-                                  }
-                                  className="h-8 w-24 rounded border border-slate-300 bg-white px-2 text-right"
-                                />
-                              </td>
-                              <td className="px-3 py-2">{row.unit}</td>
-                              <td
-                                className={`px-3 py-2 ${row.error ? "text-red-700" : "text-emerald-700"}`}
-                              >
-                                {row.error || "Valid"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="grid grid-cols-[180px_minmax(360px,1fr)_100px_180px_120px] rounded-t-lg bg-[#637c93] px-3 py-3 text-center text-sm text-white">
-                      <span>Kode #</span>
-                      <span>Nama Barang</span>
-                      <span>Kuantitas</span>
-                      <span>Tipe</span>
-                      <span>Satuan</span>
-                    </div>
-                    <div className="py-6 text-center text-lg">
-                      Belum ada data
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="ml-auto mr-3 mt-3 w-60 rounded border border-slate-300 bg-white px-5 py-4 text-right shadow-sm">
-                <span className="block text-left text-lg">Total Kuantitas</span>
-                <b className="text-2xl">
-                  {validRows
-                    .reduce((total, row) => total + row.quantity, 0)
-                    .toLocaleString("id-ID")}
-                </b>
-              </div>
-            </>
-          )}
-          {viewMode === "list" && (
-            <div className="min-h-[calc(100vh-235px)] border border-slate-300 bg-[#eeeeee] p-4">
-              <div className="mb-4 flex items-center gap-3">
-                <label className="flex h-11 items-center gap-2 text-sm">Tanggal:<IndonesianDateInput value={documentDate} onChange={setDocumentDate} className="h-11 w-40"/></label>
-                <button className="flex h-11 w-14 items-center justify-center rounded border border-blue-600 bg-blue-50 text-blue-700">
-                  <Filter className="h-5 w-5" />
-                </button>
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    onClick={() => window.print()}
-                    className="flex h-11 w-14 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"
-                  >
-                    <Printer className="h-5 w-5" />
-                  </button>
-                  <button className="flex h-11 w-14 items-center justify-center rounded border border-blue-600 bg-white text-blue-700">
-                    <Settings className="h-5 w-5" />
-                  </button>
-                  <label className="relative w-80">
-                    <input
-                      value={documentSearch}
-                      onChange={(event) =>
-                        setDocumentSearch(event.target.value)
-                      }
-                      placeholder="Ketik dan [Enter]"
-                      className="h-11 w-full rounded border border-slate-300 bg-white px-3 pr-10"
-                    />
-                    <Search className="absolute right-3 top-3 h-5 w-5" />
-                  </label>
-                  <span className="flex h-11 min-w-20 items-center justify-center rounded border border-slate-300 bg-white">
-                    {filteredDocuments.length}
-                  </span>
-                </div>
-              </div>
-              <div className="mb-4 flex gap-2">
-                <button
-                  onClick={() => setViewMode("entry")}
-                  className="flex h-12 w-20 items-center justify-center rounded bg-blue-800 text-white"
-                >
-                  <Plus className="h-7 w-7" />
-                </button>
-                <button
-                  onClick={() => loadDocuments()}
-                  className="flex h-12 w-14 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"
-                >
-                  <RefreshCw className="h-5 w-5" />
-                </button>
-                {isAdmin && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => listImportRef.current?.click()}
-                      title="Upload Excel/CSV"
-                      className="flex h-12 w-14 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"
-                    >
-                      <Upload className="h-5 w-5" />
-                    </button>
-                    <input
-                      ref={listImportRef}
-                      type="file"
-                      accept=".csv,.xlsx,.xls"
-                      onChange={(event) =>
-                        void importFromMainList(event.target.files?.[0])
-                      }
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={downloadTemplate}
-                      title="Unduh Template Import"
-                      className="flex h-12 w-14 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"
-                    >
-                      <Download className="h-5 w-5" />
-                    </button>
-                  </>
-                )}
-              </div>
-              <div className="overflow-hidden rounded-t-lg border border-slate-300 bg-white">
-                <table className="w-full text-[13px]">
-                  <thead className="bg-[#637c93] text-left text-white">
-                    <tr>
-                      <th className="px-3 py-2.5">Nomor</th>
-                      <th className="px-3 py-2.5">Tanggal</th>
-                      <th className="px-3 py-2.5">Keterangan</th>
-                      <th className="px-3 py-2.5">Status</th>
-                      <th className="px-3 py-2.5">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDocuments.map((document, index) => (
-                      <tr
-                        key={document.id}
-                        className={`border-b ${index % 2 ? "bg-slate-50" : "bg-white"}`}
-                      >
-                        <td className="px-3 py-2 font-medium">
-                          <button
-                            type="button"
-                            onClick={() => viewDocument(document)}
-                            className="text-blue-700 underline-offset-2 hover:underline"
-                            title="Buka rincian penyesuaian"
-                          >
-                            {document.adjustmentNumber}
-                          </button>
-                        </td>
-                        <td className="px-3 py-2">{document.date}</td>
-                        <td className="px-3 py-2">
-                          {document.adjustmentType || "PENYESUAIAN PERSEDIAAN"}{" "}
-                          · {document.itemCount} barang (
-                          {document.totalQuantity})
-                        </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`rounded-full px-2 py-1 ${document.status === "Draft" ? "bg-amber-100 text-amber-800" : document.status === "Posted" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}
-                          >
-                            {document.status === "Posted"
-                              ? "Diposting"
-                              : document.status === "Cancelled"
-                                ? "Dibatalkan"
-                                : "Draft"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex gap-2">
-                            <button
-                              title="Lihat Rincian"
-                              onClick={() => viewDocument(document)}
-                              className="text-slate-600"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            {document.status === "Draft" && (
-                              <>
-                                <button
-                                  title="Edit Draft"
-                                  onClick={() => editDocument(document)}
-                                  className="text-blue-700"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                                <button
-                                  title="Posting"
-                                  onClick={() =>
-                                    processDocument(document, "post")
-                                  }
-                                  className="text-emerald-700"
-                                >
-                                  <Send className="h-4 w-4" />
-                                </button>
-                                {canDeleteAdjustment(document) && (
-                                  <button
-                                    title="Hapus Draft"
-                                    onClick={() =>
-                                      processDocument(document, "delete")
-                                    }
-                                    className="text-red-600"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!documents.length && (
-                  <div className="py-12 text-center text-slate-400">
-                    <FileSpreadsheet className="mx-auto mb-2 h-9 w-9" />
-                    Belum ada penyesuaian stok.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-      {selectedDocument && (
-        <div className="px-1 pb-3">
-          <div className="flex min-h-[calc(100vh-245px)] w-full flex-col overflow-hidden rounded-b border border-slate-300 bg-white shadow-sm">
-            <div className="grid gap-3 border-b bg-[#eeeeee] px-5 py-4 text-sm sm:grid-cols-3">
-              <div>
-                <span className="block text-xs text-slate-500">Tanggal</span>
-                <b>{selectedDocument.date}</b>
-              </div>
-              <div>
-                <span className="block text-xs text-slate-500">Jenis</span>
-                <b>Saldo Awal</b>
-              </div>
-              <div>
-                <span className="block text-xs text-slate-500">Status</span>
-                <b
-                  className={
-                    selectedDocument.status === "Posted"
-                      ? "text-emerald-700"
-                      : selectedDocument.status === "Cancelled"
-                        ? "text-slate-600"
-                        : "text-amber-700"
-                  }
-                >
-                  {selectedDocument.status === "Posted"
-                    ? "Diposting"
-                    : selectedDocument.status === "Cancelled"
-                      ? "Dibatalkan"
-                      : "Draft"}
-                </b>
-              </div>
-              {selectedDocument.cancellationReason && (
-                <div className="sm:col-span-3">
-                  <span className="block text-xs text-slate-500">
-                    Alasan Pembatalan
-                  </span>
-                  <b className="text-red-700">
-                    {selectedDocument.cancellationReason}
-                  </b>
-                </div>
-              )}
-            </div>
-            <div className="flex-1 overflow-auto p-5">
-              <table className="w-full min-w-[760px] overflow-hidden rounded-t-lg border border-slate-300 text-[13px]">
-                <thead className="bg-[#637c93] text-left text-white">
-                  <tr>
-                    <th className="px-3 py-2.5">Kode Barang</th>
-                    <th className="px-3 py-2.5">Nama Barang</th>
-                    <th className="px-3 py-2.5">Gudang</th>
-                    <th className="px-3 py-2.5 text-right">Qty</th>
-                    <th className="px-3 py-2.5">Satuan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedDocument.rows.map((row, index) => (
-                    <tr
-                      key={row.id}
-                      onClick={() =>
-                        navigate(
-                          `/items?view=${encodeURIComponent(row.itemId)}`,
-                        )
-                      }
-                      title={`Buka detail ${row.itemName}`}
-                      className={`cursor-pointer border-b transition-colors hover:bg-blue-50 ${index % 2 ? "bg-slate-50" : "bg-white"}`}
-                    >
-                      <td className="px-3 py-2 font-medium text-blue-700">
-                        <button type="button" className="hover:underline">
-                          {row.itemCode}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2">{row.itemName}</td>
-                      <td className="px-3 py-2">{row.warehouseName}</td>
-                      <td className="px-3 py-2 text-right font-semibold">
-                        {row.quantity}
-                      </td>
-                      <td className="px-3 py-2">{row.unit}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end gap-2 border-t bg-[#eeeeee] px-5 py-3">
-              {canDeleteAdjustment(selectedDocument) && <button
-                onClick={() => processDocument(selectedDocument, "delete")}
-                className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
-              >Hapus Draft</button>}
-              {canCancelAdjustment(selectedDocument) && <button
-                onClick={() => processDocument(selectedDocument, "cancel")}
-                className="rounded border border-red-500 bg-white px-4 py-2 text-sm font-semibold text-red-700"
-              >Batalkan dengan Mutasi Pembalik</button>}
-              <button
-                onClick={() => closeDetailTab(selectedDocument.id)}
-                className="rounded bg-blue-700 px-5 py-2 text-sm font-semibold text-white"
-              >
-                Tutup
-              </button>
-            </div>
+            <label className="adjustment-search"><input aria-label="Cari penyesuaian" placeholder="Ketik dan [Enter]" value={documentSearch} onChange={event => setDocumentSearch(event.target.value)}/><Search size={18}/></label>
+            <output className="adjustment-count">{orderedDocuments.length}</output>
           </div>
         </div>
-      )}
+        <div className="adjustment-table-scroll adjustment-list-table"><table>
+          <colgroup><col style={{width:"38%"}}/><col style={{width:"23%"}}/><col/></colgroup>
+          <thead><tr>{([['adjustmentNumber','Nomor #'],['date','Tanggal'],['notes','Keterangan']] as const).map(([key,label]) => <th key={key}><button onClick={() => orderBy(key)}><ArrowUpDown size={12}/>{label}</button></th>)}</tr></thead>
+          <tbody>{orderedDocuments.map(document => <tr key={document.id} className="adjustment-clickable" onClick={() => openDocument(document)}>
+            <td><button className="adjustment-document-link" onClick={event => { event.stopPropagation(); openDocument(document); }}>{document.adjustmentNumber}</button></td>
+            <td>{formatDate(document.date)}</td><td>{document.notes || ""}</td>
+          </tr>)}</tbody>
+        </table>{!orderedDocuments.length && <div className="adjustment-empty">{loading ? "Memuat data…" : "Belum ada data"}</div>}</div>
+      </section> : <section className="adjustment-form">
+        <div className="adjustment-form-main">
+          <div className="adjustment-form-header">
+            <label className="adjustment-form-date">Tanggal <span>*</span><IndonesianDateInput value={selectedDocument?.date || date} onChange={setDate} disabled={!!selectedDocument}/></label>
+            <div className="adjustment-number-wrap"><label>No Penyesuaian # <span>*</span><input readOnly value={activeDocument?.adjustmentNumber || "Penyesuaian Persediaan"} aria-label="Nomor penyesuaian"/></label>
+              {!selectedDocument && <div className="adjustment-dropdown"><button className="adjustment-outline" onClick={() => toggleMenu("import")}>Ambil <ChevronDown size={12}/></button>{menu === "import" && <div className="adjustment-menu"><button disabled={!isAdmin} onClick={() => {setMenu(null); inputRef.current?.click();}}>Impor Excel/CSV</button><button onClick={() => {setMenu(null); downloadTemplate();}}>Unduh template</button></div>}</div>}
+            </div>
+          </div>
+          <div className="adjustment-body-wrap">
+            <nav className="adjustment-side-tabs" aria-label="Bagian penyesuaian">
+              <button title="Rincian Barang" className={formTab === "items" ? "active" : ""} onClick={() => {setFormTab("items"); setMenu(null);}}><FileText size={19}/></button>
+              <button title="Info lainnya" className={formTab === "info" ? "active" : ""} onClick={() => {setFormTab("info"); setMenu(null);}}><Info size={19}/></button>
+            </nav>
+            <div className="adjustment-body">
+              {formTab === "items" ? <>
+                <div className="adjustment-items-toolbar">
+                  <div className="adjustment-item-search"><label className="adjustment-search"><input aria-label={selectedDocument ? "Cari rincian barang" : "Cari atau pilih barang"} value={selectedDocument ? detailSearch : itemSearch} onChange={event => selectedDocument ? setDetailSearch(event.target.value) : setItemSearch(event.target.value)} placeholder="Cari/Pilih Barang & Jasa..."/><Search size={18}/></label>
+                    {!selectedDocument && itemSuggestions.length > 0 && <div className="adjustment-suggestions">{itemSuggestions.map(item => <button key={item.id} onClick={() => addManualItem(item)}><ItemSearchOption name={item.name} code={item.code}/></button>)}</div>}
+                  </div>
+                  <div className="adjustment-dropdown"><button className="adjustment-outline" onClick={() => toggleMenu("details")}>Rincian <ChevronDown size={12}/></button>{menu === "details" && <div className="adjustment-menu"><button onClick={() => {setMenu(null); setFormTab("info");}}>Info lainnya</button><button disabled={!displayRows.length} onClick={() => {setMenu(null); setRowDialog({index:0,row:{...displayRows[0]},readOnly:!!selectedDocument});}}>Rincian barang pertama</button></div>}</div>
+                  <h2>{displayRows.length ? `${displayRows.length} Barang (${quantityTotal.toLocaleString("id-ID")})` : "Rincian Barang"} <span>*</span></h2>
+                </div>
+                {!selectedDocument && (errorRows.length > 0 || duplicateKeys.size > 0) && <div className="adjustment-message"><AlertTriangle size={16}/> {errorRows.length} baris bermasalah{duplicateKeys.size ? ` · ${duplicateKeys.size} barang/gudang duplikat` : ""}. Periksa rincian sebelum menyimpan.</div>}
+                <div className="adjustment-table-scroll adjustment-items-table"><table>
+                  <colgroup><col style={{width:"12%"}}/><col style={{width:"46%"}}/><col style={{width:"9%"}}/><col style={{width:"23%"}}/><col style={{width:"10%"}}/></colgroup>
+                  <thead><tr><th>Kode #</th><th>Nama Barang</th><th>Kuantitas</th><th>Tipe</th><th>Satuan</th></tr></thead>
+                  <tbody>{displayRows.map((row,index) => (!selectedDocument || `${row.code} ${row.itemName}`.toLowerCase().includes(detailSearch.toLowerCase())) && <tr key={`${row.row}-${index}`} className={`adjustment-clickable ${row.error ? "adjustment-row-error" : ""}`} onClick={() => setRowDialog({index,row:{...row},readOnly:!!selectedDocument})}>
+                    <td><button onClick={event => {event.stopPropagation(); setRowDialog({index,row:{...row},readOnly:!!selectedDocument});}}>{row.code}</button></td>
+                    <td>{row.itemName || "—"}{row.error && <small>{row.error}</small>}</td><td className="adjustment-qty">{Math.abs(row.quantity).toLocaleString("id-ID")}</td><td>{row.quantity < 0 ? "Pengurangan" : "Penambahan"}</td><td>{row.unit}</td>
+                  </tr>)}</tbody>
+                </table>{!displayRows.length && <div className="adjustment-empty">Belum ada data</div>}</div>
+              </> : <div className="adjustment-info">
+                <h2><Info size={20}/> Info lainnya</h2>
+                <label>Akun Penyesuaian<input disabled value="Belum tersedia" title="Akun penyesuaian belum didukung oleh modul ini"/></label>
+                <label>Keterangan<textarea rows={3} readOnly={!!selectedDocument} value={selectedDocument ? selectedDocument.notes || "" : notes} onChange={event => setNotes(event.target.value)}/></label>
+                {activeDocument && <label>Status<span>{activeDocument.status === "Posted" ? "Diposting" : activeDocument.status === "Cancelled" ? "Dibatalkan" : "Draft"}</span></label>}
+                {selectedDocument?.cancellationReason && <label>Catatan pembatalan sebelumnya<span>{selectedDocument.cancellationReason}</span></label>}
+                {fileName && !selectedDocument && <label>File impor<span>{fileName}</span></label>}
+              </div>}
+            </div>
+          </div>
+          <div className="adjustment-total"><span>Total</span><strong>Rp {displayRows.reduce((sum,row)=>sum+Math.abs(row.quantity)*(row.unitCost||0),0).toLocaleString("id-ID",{maximumFractionDigits:4})}</strong><small>Total Kuantitas: {quantityTotal.toLocaleString("id-ID")}</small></div>
+        </div>
+        <div className="adjustment-rail">
+          <AccurateFormActionRail
+            save={{disabled:!!selectedDocument || saveDisabled,onClick:() => void submit(true),title:"Simpan"}}
+            print={{onClick:() => window.print(),title:"Cetak"}}
+            attachment={{disabled:true,title:"Lampiran"}}
+            more={{disabled:true,title:"Pilihan lainnya"}}
+            remove={activeDocument && canDeleteAdjustment(activeDocument) ? {disabled:loading,onClick:() => void processDocument(activeDocument,"delete"),title:"Hapus"} : undefined}
+          />
+
+        </div>
+      </section>}
+      {rowDialog && <div className="adjustment-modal-overlay" onKeyDown={event => {if(event.key === "Escape") setRowDialog(null);}}>
+        <section role="dialog" aria-modal="true" aria-labelledby="adjustment-row-title" className="adjustment-modal">
+          <header><h2 id="adjustment-row-title"><Pencil size={17}/> Rincian Barang</h2><button autoFocus title="Tutup rincian" onClick={() => setRowDialog(null)}><X size={18}/></button></header>
+          <div className="adjustment-modal-content">
+            <div className="adjustment-modal-tabs" role="tablist" aria-label="Rincian barang">
+              {([['items','Rincian Barang'],['info','Info Lainnya'],['image','Gambar']] as const).map(([tab,label])=><button role="tab" aria-selected={rowTab===tab} key={tab} className={rowTab===tab?'active':''} onClick={()=>setRowTab(tab)}>{label}</button>)}
+            </div>
+            {rowTab === "items" && <>
+            <label>Kode #<button className="adjustment-item-link" onClick={() => navigate(`/items?view=${encodeURIComponent(rowDialog.row.itemId)}`)}>{rowDialog.row.code}</button></label>
+            <label>Nama Barang <span>*</span><input readOnly value={rowDialog.row.itemName}/></label>
+            <div className="adjustment-type-field"><span>Tipe Penyesuaian</span><div>{([['plus','Penambahan'],['minus','Pengurangan'],['set','Atur Stok']] as const).map(([mode,label])=><label key={mode}><input type="radio" name="adjustment-mode" checked={dialogMode===mode} disabled={rowDialog.readOnly} onChange={()=>changeDialog({adjustmentMode:mode})}/>{label}</label>)}</div></div>
+            <label>{dialogMode === "set" ? "Stok Akhir" : "Kuantitas"} <span>*</span><div className="adjustment-modal-quantity"><input aria-label={dialogMode === "set" ? "Stok Akhir" : "Kuantitas"} readOnly={rowDialog.readOnly} type="number" min={dialogMode === "set" ? "0" : "1"} step="1" value={dialogMode === "set" ? rowDialog.row.targetQuantity ?? 0 : Math.abs(rowDialog.row.quantity)} onChange={event=>changeDialog(dialogMode==='set'?{targetQuantity:Number(event.target.value)}:{quantity:Number(event.target.value)})}/><select aria-label="Satuan" disabled={rowDialog.readOnly} value={rowDialog.row.unit} onChange={()=>{}}><option>{rowDialog.row.unit}</option></select></div></label>
+            <label>Biaya Satuan<div className="adjustment-currency"><span>Rp</span><input aria-label="Biaya Satuan" readOnly={rowDialog.readOnly} type="number" min="0" max="999999999999.9999" step="0.0001" value={rowDialog.row.unitCost ?? 0} onChange={event=>changeDialog({unitCost:Number(event.target.value)})}/></div></label>
+            <label>Total Biaya<input aria-label="Total Biaya" readOnly value={(Math.abs(rowDialog.row.quantity)*(rowDialog.row.unitCost||0)).toLocaleString('id-ID',{maximumFractionDigits:4})}/></label>
+            <label>Gudang <span>*</span>{rowDialog.readOnly ? <input readOnly value={rowDialog.row.warehouse}/> : <select aria-label="Gudang" value={rowDialog.row.warehouseId} onChange={event=>{const warehouse=data.warehouses.find(value=>value.id===event.target.value);if(warehouse)changeDialog({warehouseId:warehouse.id,warehouse:warehouse.name});}}>{data.warehouses.filter(warehouse => warehouse.isActive && !warehouse.isSystem && (currentBranchId === "ALL" || warehouse.branchId === currentBranchId)).map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select>}</label>
+            <p className="adjustment-stock-note">Stok saat ini: <strong>{stockFor(rowDialog.row).toLocaleString('id-ID')} {rowDialog.row.unit}</strong>{dialogMode==='set' && <> | Selisih: {rowDialog.row.quantity > 0 ? '+' : ''}{rowDialog.row.quantity.toLocaleString('id-ID')}</>}</p>
+            </>}
+            {rowTab === "info" && <><label>Keterangan<textarea aria-label="Keterangan barang" maxLength={1000} readOnly={rowDialog.readOnly} rows={4} value={rowDialog.row.lineNotes||''} onChange={event=>changeDialog({lineNotes:event.target.value})}/></label><p className="adjustment-detail-note">Satuan mengikuti master barang. Biaya disimpan pada dokumen penyesuaian; belum membentuk jurnal atau mengubah HPP.</p></>}
+            {rowTab === "image" && <p className="adjustment-empty-image">Gambar barang belum tersedia pada master barang.</p>}
+            {(rowMessage || rowDialog.row.error) && <p role="alert" className="adjustment-message">{rowMessage || rowDialog.row.error}</p>}
+          </div>
+          <footer>{!rowDialog.readOnly && rowDialog.index < rows.length && <button className="adjustment-outline" onClick={() => {setRows(current=>current.filter((_,index)=>index!==rowDialog.index));setRowDialog(null);}}>Hapus</button>}<button className="adjustment-primary" onClick={rowDialog.readOnly ? () => setRowDialog(null) : saveRow}>{rowDialog.readOnly ? "Tutup" : "Lanjut"}</button></footer>
+        </section>
+      </div>}
     </div>
   );
 }
