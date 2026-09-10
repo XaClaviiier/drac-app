@@ -81,6 +81,16 @@ test('an earlier count cannot change stock beneath a newer completed count',t=>{
 for(const mode of ['count','post','create'])test(`save requires ${mode} permission`,t=>{
  const run=setup(t),r=run({payload:payload(),deny:[`stock_opname:${mode}`]});assert.equal(r.status,403);assert.equal(r.tables.stock_count_orders.length,0);
 });
+test('manual selection saves only selected items and allows adding an item to the same adjustment',t=>{
+ const run=setup(t),p=payload([4,7,null]);p.rows=p.rows.slice(0,1);
+ const first=ok(run({payload:p})),doc=ok(run({method:'GET',id:first.data.id})).data;
+ assert.equal(doc.rows.length,1);
+ const update=edit(doc,[4,7,null]);update.rows.push(payload([4,7,null]).rows[1]);
+ const saved=ok(run({method:'PUT',id:first.data.id,payload:update}));
+ assert.equal(saved.data.adjustmentNumber,first.data.adjustmentNumber);assert.deepEqual(saved.tables.warehouse_stocks.map(x=>x.quantity),[4,7,5]);
+ const fresh=ok(run({method:'GET',id:first.data.id})).data;const incomplete=edit(fresh,[4,7,null]);incomplete.rows=incomplete.rows.slice(0,1);
+ const rejected=run({method:'PUT',id:first.data.id,payload:incomplete});assert.equal(rejected.success,false);assert.equal(rejected.tables.stock_count_result_items.length,2);
+});
 for(const [name,counts] of Object.entries({blank:[null,null,null],negative:[-1,7,null],fraction:[1.5,7,null],overflow:[2147483648,7,null]}))test(`invalid ${name} count is rejected without changes`,t=>{
  const run=setup(t),r=run({payload:payload(counts)});assert.equal(r.success,false);assert.equal(r.tables.stock_movements.length,0);assert.equal(r.tables.stock_count_orders.length,0);
 });

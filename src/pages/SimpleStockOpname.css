@@ -48,6 +48,18 @@
 .opname-linked { padding:20px; max-height:70vh; overflow:auto; }
 .opname-linked table { width:100%; margin-top:15px; }
 .opname-linked td,.opname-linked th { padding:8px; text-align:left; border-bottom:1px solid #ddd; }
+.opname-add-search { position:relative; width:34%; min-width:240px; }
+.opname-add-search .opname-search { width:100%; }
+.opname-add-search .adjustment-suggestions span { display:block; }
+.opname-add-search .adjustment-suggestions strong { font-size:12px; color:#087fba; }
+.opname-search>button { position:absolute; right:1px; top:1px; width:33px; height:33px; display:grid; place-items:center; }
+.opname-search>button svg { position:static; }
+.opname-table-search-tools { display:flex; align-items:center; gap:12px; margin-left:auto; }
+.opname-entry-toolbar .opname-table-search-tools h2 { width:auto; margin:0; white-space:nowrap; }
+.opname-table-search-tools b { color:#de2525; font-weight:400; }
+.opname-table-filters { display:flex; justify-content:flex-end; align-items:center; gap:12px; padding-bottom:10px; color:#666; font-size:12px; }
+.opname-table-filters .opname-search { width:270px; }
+@media(max-width:640px){.opname-add-search{width:100%;min-width:0}.opname-table-search-tools{gap:6px}.opname-table-filters{flex-wrap:wrap}.opname-table-filters .opname-search{width:100%;flex-basis:100%}}
 @media(min-width:640px){.opname-workspace{margin:-24px;}}
 @media(max-width:1050px){.opname-header{gap:9px 15px;padding-left:36px}.opname-header label{grid-template-columns:100px 1fr;gap:8px}.opname-form{gap:10px;grid-template-columns:minmax(0,1fr) 65px}.opname-toolbar h2{width:100%}}
 @media(max-width:640px){.opname-form{display:flex;flex-direction:column;padding:10px 6px}.opname-header{grid-template-columns:1fr;padding:0 6px 14px}.opname-notes{grid-column:auto}.opname-header label{grid-template-columns:115px 1fr}.opname-toolbar h2{font-size:18px}.opname-toolbar h2 span{font-size:13px}.opname-search{flex:1}.opname-toolbar select{flex:1}.opname-rail{flex-direction:row;position:sticky;bottom:0;z-index:5;background:#eee;padding:8px 0}.opname-rail button,.opname-rail .save{height:48px;flex:1;margin:0}.opname-rail .save{flex-direction:row}.opname-rail .delete{margin:0}.opname-list-tools{flex-wrap:wrap}.opname-items{max-height:55vh}.opname-body{padding:9px 6px}.opname-summary{font-size:11px}}

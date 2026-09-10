@@ -78,14 +78,14 @@ try{
     if($simpleSave){
         if(!is_array($simpleInput['rows']??null)||!count($simpleInput['rows'])||count($simpleInput['rows'])>20000)throw new InvalidArgumentException('Daftar barang tidak valid');
         $snapshots=[];
-        if(!$existing){foreach($loadItemSnapshots($pdo,$warehouseId,$date,$date) as $line)$snapshots[(string)$line['id']]=$line;}
+        foreach($loadItemSnapshots($pdo,$warehouseId,$date,$date) as $line)$snapshots[(string)$line['id']]=$line;
         foreach($simpleInput['rows'] as $input){
             if(!is_array($input))throw new InvalidArgumentException('Baris opname tidak valid');
             $itemId=(string)($input['itemId']??'');
             if($itemId===''||isset($newRows[$itemId]))throw new InvalidArgumentException('Barang kosong atau duplikat');
-            $base=$existing?($oldRows[$itemId]??null):($snapshots[$itemId]??null);
+            $storedItem=isset($oldRows[$itemId]);$base=$oldRows[$itemId]??$snapshots[$itemId]??null;
             if(!$base)throw new InvalidArgumentException('Barang tidak tersedia pada lembar opname');
-            $system=(int)($existing?$base['system_quantity']:$base['system_qty']);
+            $system=(int)($storedItem?$base['system_quantity']:$base['system_qty']);
             $physical=$input['finalQuantity']??null;
             if($physical==='')$physical=null;
             if($physical!==null){
@@ -95,16 +95,16 @@ try{
             if($variance!==null)parseBoundedDecimalInteger($variance,'-2147483647','2147483647','Selisih');
             $currentVersion=$simpleStockVersion($pdo,$warehouseId,$itemId);
             // Blank rows do not participate in stock changes; previously counted rows do.
-            if($physical!==null||($existing&&$base['final_quantity']!==null)){
-                if((string)($input['editVersion']??'')!==$currentVersion)throw new DomainException('Stok '.$base[$existing?'item_code':'code'].' berubah saat penghitungan. Muat ulang stok dan periksa hasil hitung sebelum menyimpan.',409);
-                if(!$existing&&(int)($input['systemQuantity']??PHP_INT_MIN)!==$system)throw new DomainException('Stok acuan berubah. Muat ulang stok sebelum menyimpan.',409);
+            if($physical!==null||($storedItem&&$base['final_quantity']!==null)){
+                if((string)($input['editVersion']??'')!==$currentVersion)throw new DomainException('Stok '.$base[$storedItem?'item_code':'code'].' berubah saat penghitungan. Muat ulang stok dan periksa hasil hitung sebelum menyimpan.',409);
+                if(!$storedItem&&(int)($input['systemQuantity']??PHP_INT_MIN)!==$system)throw new DomainException('Stok acuan berubah. Muat ulang stok sebelum menyimpan.',409);
             }
-            $newRows[$itemId]=['item_id'=>$itemId,'item_code'=>$base[$existing?'item_code':'code'],'item_name'=>$base[$existing?'item_name':'name'],
+            $newRows[$itemId]=['item_id'=>$itemId,'item_code'=>$base[$storedItem?'item_code':'code'],'item_name'=>$base[$storedItem?'item_name':'name'],
                 'category_name'=>$base['category_name']??'','unit'=>$base['unit']??'','system_quantity'=>$system,'system_version'=>$currentVersion,
                 'final_quantity'=>$physical,'variance'=>$variance];
         }
         if(!$hasCount)throw new InvalidArgumentException('Isi hasil hitung minimal satu barang');
-        if($existing&&count($newRows)!==count($oldRows))throw new InvalidArgumentException('Daftar barang tidak lengkap. Kosongkan hitung fisik untuk menandai belum diperiksa.');
+        if($existing&&array_diff_key($oldRows,$newRows))throw new InvalidArgumentException('Daftar barang tidak lengkap. Kosongkan hitung fisik untuk menandai belum diperiksa.');
     }
 
     // A client-generated request key prevents duplicate creation after a lost response.
