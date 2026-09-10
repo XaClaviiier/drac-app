@@ -91,6 +91,7 @@ $mapOrder = static function(array $row): array {
         'warehouseName'=>(string)$row['warehouse_name'],'branchId'=>(string)$row['branch_id'],'branchName'=>(string)$row['branch_name'],
         'categoryId'=>$row['category_id'] ?: null,'includeZeroUnused'=>(bool)$row['include_zero_unused'],'assignedUserId'=>(string)$row['assigned_user_id'],'assignedUserName'=>(string)$row['assigned_user_name'],
         'status'=>(string)$row['status'],'notes'=>(string)($row['notes']??''),'createdAt'=>(string)$row['created_at'],
+        'entryMode'=>(string)($row['entry_mode']??'legacy'),'revision'=>(int)($row['revision']??0),
         'result'=>$row['result_id'] ? ['id'=>(string)$row['result_id'],'resultNumber'=>(string)$row['result_number'],'date'=>(string)$row['result_date'],
             'status'=>(string)$row['result_status'],'adjustmentId'=>$row['adjustment_id']?:null,'adjustmentNumber'=>$row['adjustment_number']?:null,'notes'=>(string)($row['result_notes']??'')] : null,
     ];
@@ -101,20 +102,37 @@ $orderRows = static function(PDO $pdo, string $resultId) use ($loadCategoryUsage
     $storedRows=$stmt->fetchAll();$usage=$loadCategoryUsage($pdo);$sortByCategoryUsage($storedRows,$usage);
     return array_map(static fn($row)=>[
         'id'=>(int)$row['id'],'itemId'=>(string)$row['item_id'],'code'=>(string)$row['item_code'],'name'=>(string)$row['item_name'],
-        'categoryName'=>(string)($row['category_name']?:'Tanpa Kategori'),'categoryUsageCount'=>(int)($usage[(string)($row['category_name']?:'Tanpa Kategori')]??0),'unit'=>(string)$row['unit'],'systemQuantity'=>(int)$row['system_quantity'],
+        'categoryName'=>(string)($row['category_name']?:'Tanpa Kategori'),'categoryUsageCount'=>(int)($usage[(string)($row['category_name']?:'Tanpa Kategori')]??0),'unit'=>(string)$row['unit'],'systemQuantity'=>(int)$row['system_quantity'],'snapshotVersion'=>(string)$row['system_version'],
         'movementIn'=>(int)$row['movement_in'],'movementOut'=>(int)$row['movement_out'],'isManual'=>(bool)$row['is_manual'],
         'count1'=>$row['count_1']===null?null:(int)$row['count_1'],'count2'=>$row['count_2']===null?null:(int)$row['count_2'],
         'finalQuantity'=>$row['final_quantity']===null?null:(int)$row['final_quantity'],'variance'=>$row['variance']===null?null:(int)$row['variance'],
     ],$storedRows);
 };
 
+require __DIR__.'/../stock-opname-simple.php';
+
 if($method==='GET') {
     if(!$hasOpnamePermission($pdo,$actor,'stock_opname:view'))respondError('Akun tidak memiliki izin melihat Stok Opname',403);
     $accessibleBranchIds=getAccessibleBranchIds($pdo,$actor);
     if($id) {
         $row=$loadOrder($pdo,$id,$accessibleBranchIds); if(!$row)respondError('Perintah Stok Opname tidak ditemukan',404);
+        $simpleRead=($row['entry_mode']??'legacy')==='simple';
+        if($simpleRead){
+            $pdo->beginTransaction();lockInventoryMutation($pdo);
+            $row=$loadOrder($pdo,$id,$accessibleBranchIds);
+            if(!$row){$pdo->rollBack();respondError('Stok Opname tidak ditemukan',404);}
+        }
         $payload=$mapOrder($row);
         if($row['result_id'])$payload['rows']=$orderRows($pdo,(string)$row['result_id']); else $payload['rows']=[];
+        if(($row['entry_mode']??'legacy')==='simple'){
+            $lastUpdate=$pdo->prepare('SELECT created_at FROM stock_opname_audit WHERE order_id=? ORDER BY id DESC LIMIT 1');
+            $lastUpdate->execute([$id]);$payload['lastUpdatedAt']=$lastUpdate->fetchColumn()?:$row['created_at'];
+            $versions=$pdo->prepare('SELECT item_id,stock_version FROM warehouse_stocks WHERE warehouse_id=?');
+            $versions->execute([$row['warehouse_id']]);$byItem=[];
+            foreach($versions->fetchAll() as $v)$byItem[(string)$v['item_id']]=(string)$v['stock_version'];
+            foreach($payload['rows'] as &$item)$item['editVersion']=$row['result_status']==='Draft'?$item['snapshotVersion']:($byItem[$item['itemId']]??'0');unset($item);
+        }
+        if($simpleRead)$pdo->commit();
         respondSuccess($payload);
     }
     if(!$accessibleBranchIds)respondSuccess([]);
@@ -170,6 +188,7 @@ if($method==='PUT'&&$id) {
         if(!$lockOrderRoot($pdo,$id,$accessibleBranchIds))throw new InvalidArgumentException('Perintah Stok Opname tidak ditemukan');
         $lockOrderResult($pdo,$id);
         $row=$loadOrder($pdo,$id,$accessibleBranchIds);if(!$row)throw new InvalidArgumentException('Perintah Stok Opname tidak ditemukan');
+        if(($row['entry_mode']??'legacy')==='simple')throw new InvalidArgumentException('Gunakan Simpan pada formulir Stok Opname');
         if((string)$row['assigned_user_id']!==(string)$preflight['assigned_user_id'])throw new DomainException('Petugas Perintah Stok Opname berubah, silakan ulangi');
 
         if(!in_array((string)$row['branch_id'],getAccessibleBranchIds($pdo,$actor),true))throw new DomainException('Akun tidak memiliki akses ke cabang tersebut',403);
@@ -274,6 +293,7 @@ if($method==='PUT'&&$id) {
 if($method==='DELETE'&&$id) {
     if(!$hasOpnamePermission($pdo,$actor,'stock_opname:delete'))respondError('Akun tidak memiliki izin menghapus dokumen Stok Opname',403);
     $accessibleBranchIds=getAccessibleBranchIds($pdo,$actor);$preflight=$loadOrder($pdo,$id,$accessibleBranchIds);if(!$preflight)respondError('Perintah Stok Opname tidak ditemukan',404);
+    if(($preflight['entry_mode']??'legacy')==='simple')respondError('Hapus opname satu langkah melalui formulir Stok Opname',422);
     $target=(string)($d['target']??'order');$pdo->beginTransaction();try{
         lockInventoryMutation($pdo);
         $authorization=lockInventoryMutationAuthorization($pdo,$actor,'stock_opname:delete',[(string)($preflight['assigned_user_id']??'')]);$actor=$authorization['actor'];

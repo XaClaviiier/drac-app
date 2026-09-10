@@ -14,6 +14,7 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260903_work_order_estimated_duration_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260903_historical_stock_opname_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_adjustment_details_v1');
+    ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_simple_opname_v1');
 } catch (Throwable $e) {
     $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
     error_log(sprintf(
