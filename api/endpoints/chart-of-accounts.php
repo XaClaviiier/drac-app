@@ -21,6 +21,8 @@ try {
     if($method!=='POST'&&!$existing)throw new DomainException('Akun tidak ditemukan',404);
     if($existing&&array_key_exists('revision',$d)&&(int)$d['revision']!==(int)$existing['revision'])throw new DomainException('Akun sudah diubah. Muat ulang sebelum menyimpan.',409);
     if($method==='DELETE') {
+        $journalUsage=$pdo->prepare('SELECT 1 FROM journal_lines WHERE account_id=? LIMIT 1');$journalUsage->execute([$id]);
+        if($journalUsage->fetchColumn())throw new DomainException('Akun dipakai jurnal; tidak dapat dihapus.',422);
         $used=$pdo->prepare('SELECT (SELECT COUNT(*) FROM chart_of_accounts WHERE parent_id=?)+(SELECT COUNT(*) FROM cash_accounts WHERE ledger_account_id=?)+(SELECT COUNT(*) FROM branch_account_settings WHERE receivable_coa_id=? OR service_revenue_coa_id=? OR goods_revenue_coa_id=? OR inventory_coa_id=?)');
         $used->execute([$id,$id,$id,$id,$id,$id]);
         if((int)$used->fetchColumn()>0)throw new DomainException('Akun sedang digunakan. Nonaktifkan akun bila tidak dipakai.',422);

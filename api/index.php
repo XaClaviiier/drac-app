@@ -16,6 +16,8 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_adjustment_details_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_simple_opname_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_coa_details_v1');
+    require_once __DIR__.'/accounting.php';
+    require_once __DIR__.'/accounting-schema.php';
 } catch (Throwable $e) {
     $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
     error_log(sprintf(
@@ -128,6 +130,9 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
 // ROUTING
 // ==========================================================
     switch ($resource) {
+        case 'general-journals':
+            require 'endpoints/general-journals.php';
+            break;
         // ----- AUTH -----
         case 'login':
             require 'endpoints/auth.php';
@@ -238,6 +243,9 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
             break;
         case 'chart-of-accounts':
             require 'endpoints/chart-of-accounts.php';
+            break;
+        case 'general-journals':
+            require 'endpoints/general-journals.php';
             break;
         case 'branch-account-settings':
             require 'endpoints/branch-account-settings.php';

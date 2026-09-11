@@ -103,9 +103,9 @@ case 'POST':
         $invoiceStmt=$pdo->prepare("SELECT * FROM sales_invoices WHERE id=? FOR UPDATE");$invoiceStmt->execute([$invoiceId]);$invoice=$invoiceStmt->fetch();
         if(!$invoice)throw new Exception('Faktur tidak ditemukan');
         if(!paymentUserCanAccessBranch($pdo,$user,(string)$invoice['branch_id']))throw new Exception('Tidak memiliki akses ke cabang faktur');
-        $amount=(float)($d['amount']??0);$outstanding=max(0,(float)$invoice['total']-(float)$invoice['payment']);
+        $amount=journalDecimal(journalMoney($d['amount']??'0'));$outstanding=max(0,journalMoney($invoice['total'])-journalMoney($invoice['payment']));
         if($amount<=0)throw new Exception('Nominal pembayaran harus lebih dari Rp0');
-        if($amount>$outstanding)throw new Exception('Nominal pembayaran melebihi sisa tagihan');
+        if(journalMoney($amount)>$outstanding)throw new Exception('Nominal pembayaran melebihi sisa tagihan');
         $date=(string)($d['date']??date('Y-m-d'));
         if($date<$invoice['date'])throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
         if($date>date('Y-m-d'))throw new Exception('Tanggal pembayaran tidak boleh melewati hari ini');

@@ -309,7 +309,7 @@ const desktopGroups = [
       },
       { label: "Pencatatan Beban", icon: ClipboardPenLine, tone: "green" },
       { label: "Pencatatan Gaji", icon: BookUser, tone: "green" },
-      { label: "Jurnal Umum", icon: Table2, tone: "green" },
+      { label: "Jurnal Umum", path: "/general-journal", perm: "report:view", icon: Table2, tone: "green" },
       { label: "Monitor Anggaran", icon: MonitorCog, tone: "purple" },
       { label: "Transfer Anggaran", icon: ArrowLeftRight, tone: "green" },
       { label: "Anggaran", icon: ChartNoAxesColumnIncreasing, tone: "orange" },
