@@ -18,7 +18,6 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_coa_details_v1');
     require_once __DIR__.'/accounting.php';
     require_once __DIR__.'/accounting-schema.php';
-    ensureAccountingSchema($pdo);
 } catch (Throwable $e) {
     $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
     error_log(sprintf(

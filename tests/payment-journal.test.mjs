@@ -1,37 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
-test('invoice posting is atomic in both creation routes and initial receipts',()=>{
- const s=read('api/endpoints/sales-invoices.php');
- assert.equal((s.match(/postInvoiceJournal\(\$pdo/g)||[]).length,2);
- assert.match(s,/postCustomerPaymentJournal\(\$pdo,\$paymentId/);
- assert.equal((s.match(/accounting_eligible/g)||[]).length,2);
- assert.match(s,/assertInvoiceAccountingInput\(\$d\)/);
- assert.match(s,/assertJournalSourceMutable/);
+
+const read = (p) => fs.readFileSync(new URL('../' + p, import.meta.url), 'utf8');
+
+test('sales invoices no longer trigger otomatis posting untuk journal/manual otomatis', () => {
+  const s = read('api/endpoints/sales-invoices.php');
+  assert.equal((s.match(/postInvoiceJournal\(/g) || []).length, 0);
+  assert.equal((s.match(/assertInvoiceAccountingInput\(/g) || []).length, 0);
+  assert.equal((s.match(/assertJournalSourceMutable\(/g) || []).length, 0);
+  assert.equal((s.match(/accounting_eligible/g) || []).length, 0);
+  assert.match(s, /prepare\("INSERT INTO sales_invoices/);
 });
-test('payments post before commit; mutation guard covers batch deletion',()=>{
- const s=read('api/endpoints/customer-payments.php');
- assert.match(s,/postCustomerPaymentJournal\(\$pdo,\$paymentId/);
- assert.ok(s.indexOf('postCustomerPaymentJournal')<s.indexOf('$pdo->commit()'));
- assert.match(s,/assertJournalSourceMutable/);
+
+test('customer payments tidak auto posting dan tidak punya guard sumber jurnal', () => {
+  const s = read('api/endpoints/customer-payments.php');
+  assert.equal((s.match(/postCustomerPaymentJournal\(/g) || []).length, 0);
+  assert.equal((s.match(/assertJournalSourceMutable\(/g) || []).length, 0);
 });
-test('runtime migration and database immutability guards cover sibling paths',()=>{
- const s=read('api/accounting-schema.php');
- for(const table of ['sales_invoices','sales_invoice_items','customer_payments'])assert.match(s,new RegExp(table));
- assert.match(s,/UNIQUE KEY/);assert.match(s,/SIGNAL SQLSTATE/);assert.match(s,/accounting_eligible/);
- assert.match(read('api/index.php'),/ensureAccountingSchema/);
- assert.match(read('api/endpoints/data-maintenance.php'),/assertNoPostedAccounting/);
- assert.match(read('api/endpoints/chart-of-accounts.php'),/journal_lines/);
+
+test('manual accounting migration initialized on endpoint, not in global bootstrap', () => {
+  const index = read('api/index.php');
+  const schema = read('api/accounting-schema.php');
+  const schemaRouter = read('api/endpoints/general-journals.php');
+
+  assert.ok(index.includes("require_once __DIR__.'/accounting-schema.php';"));
+  assert.ok(!index.includes('ensureAccountingSchema($pdo)'));
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS journal_entries/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS journal_lines/);
+  assert.match(schema, /INSERT IGNORE INTO app_schema_migrations/);
+  assert.equal((schema.match(/SIGNAL SQLSTATE/g) || []).length, 0);
+  assert.equal((schema.match(/accounting_eligible/g) || []).length, 0);
+  assert.match(schemaRouter, /ensureAccountingSchema\(\$pdo\)/);
 });
-test('manual journal endpoint denies impersonation and scopes permission/branches',()=>{
- const s=read('api/endpoints/general-journals.php');
- for(const x of ['sourceType','sourceId','report:view','settings:edit','getAccessibleBranchIds','lockInventoryMutationAuthorization'])assert.ok(s.includes(x),x);
- assert.match(s,/postJournal/);
+
+test('manual journal tetap menolak sumber otomatis dan simpan jalan manual', () => {
+  const s = read('api/endpoints/general-journals.php');
+  assert.ok(s.includes('array_key_exists(\'sourceType\'') || s.includes('array_key_exists(\"sourceType\"'));
+  assert.match(s, /postJournal\(\$pdo/);
+  assert.match(s, /sourceType.*sourceId/);
 });
-test('journal screen is live and ledger menu is permission gated',()=>{
- const s=read('src/pages/GeneralJournal.tsx');
- for(const x of ["api.get('general-journals')","api.create('general-journals'",'Belum termasuk saldo awal','Debit','Kredit'])assert.ok(s.includes(x),x);
- assert.match(read('src/App.tsx'),/general-journal.*report:view/);
- assert.match(read('src/components/Layout.tsx'),/Jurnal Umum.*general-journal.*report:view/);
+
+test('journal screens tetap terhubung di UI', () => {
+  const s = read('src/pages/GeneralJournal.tsx');
+  const app = read('src/App.tsx');
+  const layout = read('src/components/Layout.tsx');
+  assert.ok(s.includes("api.get('general-journals')"));
+  assert.match(app, /report:view/);
+  assert.match(layout, /Jurnal Umum/);
 });

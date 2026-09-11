@@ -1,5 +1,6 @@
 <?php
 $actor=$requestUser??requireAuthenticatedUser($pdo);
+ensureAccountingSchema($pdo);
 requireAuthenticatedUserPermission($pdo,$actor,'report:view');
 if($method==='GET'){
     $branches=getAccessibleBranchIds($pdo,$actor);if(!$branches)respondSuccess([]);
