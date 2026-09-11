@@ -142,6 +142,7 @@ try {
     $authorization=lockInventoryMutationAuthorization($pdo,$owner,'data:maintenance');
     assertLockedInventoryOwner($authorization);
     $owner=$authorization['actor'];
+    assertNoPostedAccounting($pdo);
     $snapshotStmt = $pdo->prepare('INSERT INTO data_purge_snapshots(purge_id,entity_type,entity_id,snapshot_json) VALUES(?,?,?,?)');
     $snapshotRows = static function (string $table, string $type, string $where, array $params) use ($pdo, $snapshotStmt, $purgeId): array {
         $stmt = $pdo->prepare("SELECT * FROM {$table} WHERE {$where} FOR UPDATE");

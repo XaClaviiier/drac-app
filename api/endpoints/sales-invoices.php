@@ -48,8 +48,10 @@ $recordInitialCustomerPayment = static function (PDO $pdo, string $invoiceId, st
     if(!$account||$account['account_type']!==$expected||($account['branch_id']&&$account['branch_id']!==$branchId))throw new InvalidArgumentException('Akun penerimaan pembayaran belum diatur dengan benar untuk cabang ini');
     $branch=$pdo->prepare("SELECT code FROM branches WHERE id=?");$branch->execute([$branchId]);
     $paymentNumber=nextCustomerPaymentNumber($pdo,$branchId,(string)$branch->fetchColumn(),$date);
+    $paymentId=generateId();
     $pdo->prepare("INSERT INTO customer_payments(id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-        ->execute([generateId(),$paymentNumber,$invoiceId,$date,$amount,$method,$account['id'],$account['name'],'Pembayaran saat pembuatan faktur',$branchId,$actor['id']??null,$actor['name']??$actor['username']??null]);
+        ->execute([$paymentId,$paymentNumber,$invoiceId,$date,journalDecimal(journalMoney($amount)),$method,$account['id'],$account['name'],'Pembayaran saat pembuatan faktur',$branchId,$actor['id']??null,$actor['name']??$actor['username']??null]);
+    postCustomerPaymentJournal($pdo,$paymentId,(string)$actor['id']);
 };
 
 $resolveSalesWarehouse=static function(PDO $pdo,string $branchId,?string $requested):string{
@@ -127,6 +129,7 @@ switch ($method) {
             lockInventoryMutation($pdo);
             $authorization=lockInventoryMutationAuthorization($pdo,$actor,'invoice:create');
             $actor=$authorization['actor'];
+            assertInvoiceAccountingInput($d);
             if ($id === 'from-work-order') {
                 $woId = $d['woId'] ?? null;
                 if (!$woId) throw new Exception('WO wajib dipilih');
@@ -195,8 +198,8 @@ switch ($method) {
                     INSERT INTO sales_invoices (
                         id, invoice_number, manual_receipt_number, date, customer_ref_id, customer_id, customer_name,
                         vehicle_info, description, total, payment, payment_date, backdate_reason, payment_method, status, age,
-                        wo_id, wo_number, branch_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                        wo_id, wo_number, branch_id, accounting_eligible
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 1)
                 ");
                 $insertInvoice->execute([
                     $invoiceId, $invoiceNumber, $manualReceiptNumber, $date,
@@ -223,6 +226,7 @@ switch ($method) {
                     }
                 }
 
+                postInvoiceJournal($pdo,$invoiceId,(string)$actor['id']);
                 $updateWo = $pdo->prepare("
                     UPDATE work_orders
                     SET status = 'Selesai', invoice_id = ?, invoice_number = ?
@@ -264,7 +268,7 @@ switch ($method) {
             if ($invoiceDate > date('Y-m-d') || ($paymentDate && $paymentDate > date('Y-m-d'))) throw new Exception('Tanggal transaksi tidak boleh melewati hari ini');
             if ($paymentDate && $paymentDate < $invoiceDate) throw new Exception('Tanggal pembayaran tidak boleh sebelum tanggal faktur');
             if (isBackdateReasonRequired($pdo) && ($invoiceDate < date('Y-m-d') || ($paymentDate && $paymentDate < date('Y-m-d'))) && $backdateReason === '') throw new Exception('Alasan tanggal mundur wajib diisi');
-            $stmt = $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, manual_receipt_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, payment_date, backdate_reason, payment_method, status, age, wo_id, wo_number, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO sales_invoices (id, invoice_number, manual_receipt_number, date, customer_ref_id, customer_id, customer_name, vehicle_info, description, total, payment, payment_date, backdate_reason, payment_method, status, age, wo_id, wo_number, branch_id, accounting_eligible) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
             $stmt->execute([
                 $invoiceId,
                 $invoiceNumber, $manualReceiptNumber, $invoiceDate,
@@ -293,6 +297,7 @@ switch ($method) {
                     }
                 }
             }
+            postInvoiceJournal($pdo,$invoiceId,(string)$actor['id']);
             $recordInitialCustomerPayment($pdo,$invoiceId,$branchId,(string)($paymentDate??$invoiceDate),$initialPayment,$paymentMethod,$actor);
 
             $pdo->commit();
@@ -317,6 +322,7 @@ switch ($method) {
             $actor=$authorization['actor'];
             $current=$lockScopedSalesInvoice($pdo,$authorization,(string)$id);
             if (!$current) throw new DomainException('Faktur tidak ditemukan',404);
+            assertJournalSourceMutable($pdo,'sales_invoice',(string)$id);
             assertLockedInventoryBranchAccess($authorization, (string)$current['branch_id']);
             assertActiveBranch($pdo, (string)$current['branch_id']);
             if (!empty($current['wo_id'])) {
@@ -495,6 +501,7 @@ switch ($method) {
             $actor=$authorization['actor'];
             $invoiceRow=$lockScopedSalesInvoice($pdo,$authorization,(string)$id);
             if (!$invoiceRow) throw new DomainException('Faktur tidak ditemukan',404);
+            assertJournalSourceMutable($pdo,'sales_invoice',(string)$id);
             assertLockedInventoryBranchAccess($authorization, (string)$invoiceRow['branch_id']);
             assertActiveBranch($pdo, (string)$invoiceRow['branch_id']);
             $paymentCount=$pdo->prepare("SELECT COUNT(*) FROM customer_payments WHERE invoice_id=?");$paymentCount->execute([$id]);

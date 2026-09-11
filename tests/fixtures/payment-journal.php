@@ -1,0 +1,54 @@
+<?php
+require __DIR__.'/../../api/accounting.php';
+function check($condition,$message){if(!$condition)throw new RuntimeException($message);}
+function rejects(callable $fn){try{$fn();}catch(DomainException $e){return;}throw new RuntimeException('Expected rejection');}
+check(function_exists('journalMoney'),'Exact journal money parser is missing');
+check(journalMoney('0.29')===29,'Exact cents');
+check(journalMoney('9999999999999.99')===999999999999999,'Maximum money');
+foreach(['-1','1.001','1e3','NaN','',null] as $bad)rejects(fn()=>journalMoney($bad));
+check(journalDecimal(29)==='0.29','Exact serialization');
+print "PASS exact monetary values\n";
+check(function_exists('postJournal'),'Journal posting is missing');
+$pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);
+$pdo->exec('CREATE TABLE chart_of_accounts(id TEXT PRIMARY KEY,code TEXT,name TEXT,account_type TEXT,is_active INTEGER,parent_id TEXT)');
+$pdo->exec("INSERT INTO chart_of_accounts VALUES ('ar','110','AR','Asset',1,NULL),('sales','410','Sales','Revenue',1,NULL),('bank','120','Bank','Asset',1,NULL),('off','999','Inactive','Asset',0,NULL),('parent','100','Parent','Asset',1,NULL),('child','101','Child','Asset',1,'parent')");
+$pdo->exec('CREATE TABLE journal_entries(id TEXT PRIMARY KEY,branch_id TEXT,date TEXT,description TEXT,source_type TEXT,source_id TEXT,created_by TEXT,UNIQUE(source_type,source_id))');
+$pdo->exec('CREATE TABLE journal_lines(journal_id TEXT,line_number INTEGER,account_id TEXT,account_code TEXT,account_name TEXT,debit TEXT,credit TEXT,PRIMARY KEY(journal_id,line_number))');
+$lines=[['accountId'=>'ar','debit'=>'0.30','credit'=>'0'],['accountId'=>'sales','debit'=>'0','credit'=>'0.30']];
+rejects(fn()=>postJournal($pdo,'b','2026-09-11','Test',$lines,'u'));
+$pdo->beginTransaction();
+$jid=postJournal($pdo,'b','2026-09-11','Test',$lines,'u');
+check($pdo->query('SELECT COUNT(*) FROM journal_lines')->fetchColumn()==2,'Persist both lines');
+check($pdo->query("SELECT debit FROM journal_lines WHERE account_id='ar'")->fetchColumn()==='0.30','Persist exact money');
+$before=$pdo->query('SELECT COUNT(*) FROM journal_entries')->fetchColumn();
+rejects(fn()=>postJournal($pdo,'b','2026-09-11','Bad',[['accountId'=>'ar','debit'=>'1','credit'=>'0'],['accountId'=>'sales','debit'=>'0','credit'=>'0.99']],'u'));
+foreach(['off','parent','missing'] as $account)rejects(fn()=>postJournal($pdo,'b','2026-09-11','Bad',[['accountId'=>$account,'debit'=>'1','credit'=>'0'],['accountId'=>'sales','debit'=>'0','credit'=>'1']],'u'));
+rejects(fn()=>postJournal($pdo,'b','2026-02-30','Bad',$lines,'u'));
+check($pdo->query('SELECT COUNT(*) FROM journal_entries')->fetchColumn()==$before,'Invalid journal has no writes');
+$pdo->rollBack();check($pdo->query('SELECT COUNT(*) FROM journal_entries')->fetchColumn()==0,'Rollback is atomic');
+print "PASS balanced journal persistence and rollback\n";
+check(function_exists('postInvoiceJournal'),'Invoice recognition is missing');
+$pdo->exec('CREATE TABLE branch_account_settings(branch_id TEXT,receivable_coa_id TEXT,service_revenue_coa_id TEXT)');
+$pdo->exec("INSERT INTO branch_account_settings VALUES('b','ar','sales')");
+$pdo->exec('CREATE TABLE sales_invoices(id TEXT,total TEXT,date TEXT,branch_id TEXT,invoice_number TEXT,accounting_eligible INTEGER)');
+$pdo->exec("INSERT INTO sales_invoices VALUES('i','10.30','2026-09-11','b','INV-1',1),('legacy','10.30','2026-09-11','b','OLD',0)");
+$pdo->exec('CREATE TABLE items(id TEXT,type TEXT,purchase_price TEXT)');$pdo->exec("INSERT INTO items VALUES('svc','Jasa','0'),('stock','Persediaan','2')");
+$pdo->exec('CREATE TABLE sales_invoice_items(invoice_id TEXT,item_id TEXT,qty INTEGER,price TEXT)');
+$pdo->exec("INSERT INTO sales_invoice_items VALUES('i','svc',1,'10.30')");
+$pdo->exec('CREATE TABLE customer_payments(id TEXT,invoice_id TEXT,date TEXT,amount TEXT,branch_id TEXT,account_id TEXT,payment_method TEXT,payment_number TEXT)');
+$pdo->exec("INSERT INTO customer_payments VALUES('p','i','2026-09-11','3.10','b','cash','Tunai','PAY-1'),('oldpay','legacy','2026-09-11','1.00','b','cash','Tunai','OLDPAY')");
+$pdo->exec('CREATE TABLE cash_accounts(id TEXT,ledger_account_id TEXT,is_active INTEGER,account_type TEXT,branch_id TEXT)');$pdo->exec("INSERT INTO cash_accounts VALUES('cash','bank',1,'cash','b')");
+$pdo->beginTransaction();postInvoiceJournal($pdo,'i','u');postCustomerPaymentJournal($pdo,'p','u');
+check($pdo->query("SELECT COUNT(*) FROM journal_entries WHERE source_type='sales_invoice' AND source_id='i'")->fetchColumn()==1,'Invoice recognized once');
+check($pdo->query("SELECT credit FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_id WHERE j.source_type='customer_payment' AND account_id='ar'")->fetchColumn()==='3.10','Installment credits recognized AR');
+rejects(fn()=>postCustomerPaymentJournal($pdo,'oldpay','u'));
+try{postInvoiceJournal($pdo,'i','u');throw new RuntimeException('Duplicate accepted');}catch(PDOException $e){}
+$pdo->rollBack();
+$pdo->exec("UPDATE sales_invoice_items SET item_id='stock'");$pdo->beginTransaction();rejects(fn()=>postInvoiceJournal($pdo,'i','u'));$pdo->rollBack();
+check($pdo->query('SELECT COUNT(*) FROM journal_entries')->fetchColumn()==0,'Unsupported inventory/HPP never posts');
+print "PASS invoice recognition, installments, legacy rejection, duplicate and HPP protection\n";
+rejects(fn()=>assertInvoiceAccountingInput(['total'=>'1.005']));
+rejects(fn()=>assertInvoiceAccountingInput(['items'=>[['price'=>'1.005']]]));
+rejects(fn()=>assertInvoiceAccountingInput(['payment'=>'0.001']));
+assertInvoiceAccountingInput(['total'=>'1.20','payment'=>'0.20','items'=>[['price'=>'1.20']]]);
+print "PASS invoice input rejects rounding before persistence\n";
