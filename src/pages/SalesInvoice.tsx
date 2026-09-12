@@ -990,36 +990,31 @@ export default function SalesInvoice() {
             const invoiceRemaining = Math.max(0, invoice.total - invoice.payment);
             return (
               <article key={invoice.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="px-3 py-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
+                <div className="px-3 pb-2.5 pt-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <button
                         type="button"
                         onClick={() => setViewingInvoice(invoice)}
-                        className="text-left font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                        className="truncate text-left font-mono text-sm font-bold text-blue-700 hover:text-blue-900 hover:underline"
                         title="Buka detail faktur"
                       >
                         {invoice.invoiceNumber}
                       </button>
-                      <p className="mt-0.5 text-xs font-medium text-gray-500">{formatShareDate(invoice.date)}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-gray-500">{formatShareDate(invoice.date)}{invoice.woNumber ? ` · WO ${invoice.woNumber}` : ''}</p>
                     </div>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                    <span className={`inline-flex flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                       {invoicePaid ? 'Lunas' : 'Belum Lunas'}
                     </span>
                   </div>
-                  <div className="mt-2 space-y-1 text-xs text-gray-600">
-                    <p className="font-medium text-gray-900"><strong>Pelanggan:</strong> {invoice.customerName}</p>
-                    <p>{invoiceCustomerPhone(invoice)} · {vehicleSummary.plateNumber || '-'}</p>
-                    {vehicleSummary.detail && <p>{vehicleSummary.detail}</p>}
-                    {invoice.woNumber && (
-                      <p className="font-medium text-gray-600" title={`Faktur dibuat dari ${invoice.woNumber}`}>
-                        WO: {invoice.woNumber}
-                      </p>
-                    )}
+                  <div className="mt-1 min-w-0 text-xs text-gray-600">
+                    <p className="truncate font-medium text-gray-900"><strong>Pelanggan:</strong> {invoice.customerName}</p>
+                    <p className="truncate">{invoiceCustomerPhone(invoice)} · {vehicleSummary.plateNumber || '-'}</p>
+                    {vehicleSummary.detail && <p className="truncate">{vehicleSummary.detail}</p>}
                   </div>
-                  <div className="mt-2 space-y-1 border-t border-gray-100 pt-2 text-xs text-gray-600">
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-gray-100 pt-2 text-xs text-gray-600">
                     {invoice.manualReceiptNumber && (
-                      <p>
+                      <p className="col-span-2">
                         No. Nota Asli: <strong className="text-gray-700">{invoice.manualReceiptNumber}</strong>
                       </p>
                     )}
@@ -1032,13 +1027,11 @@ export default function SalesInvoice() {
                     <p className={invoicePaid ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>
                       {invoicePaid ? 'Lunas' : `Sisa Rp ${invoiceRemaining.toLocaleString('id-ID')}`}
                     </p>
-                    {!invoicePaid && invoice.age > 0 && (
-                      <p className="font-semibold text-amber-700">
-                        {invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}
-                      </p>
-                    )}
                   </div>
-                  <p className="mt-2 text-[11px] text-gray-500">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-500">
+                    <span className="truncate">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</span>
+                    {!invoicePaid && invoice.age > 0 && <span className="flex-shrink-0 font-semibold text-amber-700">{invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}</span>}
+                  </div>
                 </div>
                 <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-2 py-1.5">
                   <button
