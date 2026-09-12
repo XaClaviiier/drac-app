@@ -385,11 +385,11 @@ export default function CustomerPayments() {
         >
           <List className="h-5 w-5" />
         </button>
-        {(showForm || viewingPayment) && (
-          <div className={`${ui.childTabActive} min-w-48 max-w-80`}>
-            <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">
-              {showForm ? (editingPayment ? `Edit ${editingPayment.paymentNumber}` : "Data Baru") : (viewingPayment?.paymentNumber || "Detail Pembayaran")}
-            </button>
+        <div className={`${ui.childTabActive} min-w-48 max-w-80`}>
+          <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">
+            {showForm ? (editingPayment ? `Edit ${editingPayment.paymentNumber}` : "Data Baru") : (viewingPayment?.paymentNumber || "Pembayaran Pelanggan")}
+          </button>
+          {(showForm || viewingPayment) && (
             <button
               type="button"
               onClick={() => { closeForm(); setViewingPayment(null); }}
@@ -398,8 +398,8 @@ export default function CustomerPayments() {
             >
               <X className="h-4 w-4" />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className={`${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
