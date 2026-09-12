@@ -73,7 +73,7 @@ test('stock opname-linked adjustment is immutable for save post cancel and delet
 
   const remove = source.slice(source.indexOf("if ($method === 'DELETE' && $id)"));
   const deleteLinkage = remove.indexOf('lockStockOpnameResultForAdjustment($pdo,$id)');
-  const deleteLifecycle = remove.indexOf("$doc['status']!=='Draft'");
+  const deleteLifecycle = remove.indexOf("!in_array($doc['status'],['Draft','Posted','Cancelled'],true)");
   assert.ok(deleteLinkage >= 0 && deleteLifecycle > deleteLinkage);
 });
 
@@ -222,7 +222,7 @@ test('stock-affecting request quantities use exact bounded integer parsing befor
 
 test('stock adjustment rejects INT minimum before a Draft can reach post or cancel', () => {
   const adjustments = read('api/endpoints/stock-adjustments.php');
-  assert.ok((adjustments.match(/parseBoundedDecimalInteger\(\$input\['quantity'\]\?\?null,'-2147483647','2147483647'/g) ?? []).length >= 2);
+  assert.ok((adjustments.match(/adjustmentLineValues\(\$pdo,\$input,\$warehouseId,\$itemId\)/g) ?? []).length >= 2);
   assert.doesNotMatch(adjustments, /parseBoundedDecimalInteger\(\$input\['quantity'\]\?\?null,'-2147483648'/);
   const persistedMutation = adjustments.slice(adjustments.indexOf('$lockedWarehouseMap=lockActiveInventoryWarehouses', adjustments.indexOf("if ($method === 'PUT'")), adjustments.indexOf("if($requestedAction==='post') $pdo->prepare"));
   const persistedValidation = persistedMutation.indexOf("parseBoundedDecimalInteger($line['quantity']??null,'-2147483647','2147483647','Kuantitas tersimpan penyesuaian')");

@@ -896,20 +896,18 @@ test('UI Penyesuaian Stok menyembunyikan aksi destruktif untuk adjustment linked
   assert.match(stockAdjustments, /'isStockOpnameLinked'\s*=>\s*!empty\(\$row\['is_stock_opname_linked'\]\)/);
   assert.match(openingStockImport, /isStockOpnameLinked:\s*boolean/);
   assert.match(openingStockImport, /canDeleteAdjustment\(document\)/);
-  assert.match(openingStockImport, /canCancelAdjustment\(selectedDocument\)/);
+  assert.match(openingStockImport, /canDeleteAdjustment\(activeDocument\)/);
 });
 
 test('aksi adjustment memakai predicate status dan linkage yang sama pada list serta detail', () => {
-  assert.match(openingStockImport,/const canDeleteAdjustment = \(document: AdjustmentDocument\) =>\s*document\.status === ["']Draft["'] && !document\.isStockOpnameLinked/);
-  assert.match(openingStockImport,/const canCancelAdjustment = \(document: AdjustmentDocument\) =>\s*document\.status === ["']Posted["'] && !document\.isStockOpnameLinked/);
-  assert.ok((openingStockImport.match(/canDeleteAdjustment\((?:document|selectedDocument)\)/g)||[]).length>=2);
-  assert.ok((openingStockImport.match(/canCancelAdjustment\((?:document|selectedDocument)\)/g)||[]).length>=1);
+  assert.match(openingStockImport,/\["Draft", "Posted", "Cancelled"\]\.includes\(document.status\) && !document.isStockOpnameLinked/);
+  assert.doesNotMatch(openingStockImport,/canCancelAdjustment|Batalkan dengan Mutasi Pembalik/);
+  assert.ok((openingStockImport.match(/canDeleteAdjustment\((?:document|activeDocument)\)/g)||[]).length>=2);
   assert.doesNotMatch(openingStockImport,/document\.status !== ["']Draft["'][\s\S]{0,300}handleDelete\(document\)/);
   const processBlock=openingStockImport.slice(openingStockImport.indexOf('const processDocument = async'),openingStockImport.indexOf('const filteredDocuments'));
   const deleteGuard=processBlock.indexOf("action === \"delete\" && !canDeleteAdjustment(document)");
-  const cancelGuard=processBlock.indexOf("action === \"cancel\" && !canCancelAdjustment(document)");
   const apiCall=processBlock.indexOf('await api.');
-  assert.ok(deleteGuard>=0&&cancelGuard>=0&&deleteGuard<apiCall&&cancelGuard<apiCall);
+  assert.ok(deleteGuard>=0&&deleteGuard<apiCall);
 });
 
 test('concurrency CI merace posting Opname dengan pembatalan adjustment linked dan memverifikasi state akhir', () => {
@@ -1108,7 +1106,7 @@ test('kuantitas Penyesuaian Stok divalidasi sebagai signed INT tepat sebelum kon
   const put = stockAdjustments.slice(stockAdjustments.indexOf("if ($method === 'PUT'"), stockAdjustments.indexOf("if ($method === 'DELETE'"));
   const save = put.slice(put.indexOf("if($requestedAction==='save')"), put.indexOf("if($requestedAction==='post'"));
   for (const [label, block] of [['POST', post], ['save', save]]) {
-    assert.match(block, /parseBoundedDecimalInteger\(\$input\['quantity'\]\?\?null,'-2147483647','2147483647'/, `${label} wajib parse exact signed INT yang dapat dicatat sebagai magnitude positif`);
+    assert.match(block, /adjustmentLineValues\(\$pdo,\$input,\$warehouseId,\$itemId\)/, `${label} wajib parse exact signed INT yang dapat dicatat sebagai magnitude positif`);
     assert.doesNotMatch(block, /\$quantity=\(int\)\(\$input\['quantity'\]/, `${label} masih cast sebelum validasi`);
   }
 });
