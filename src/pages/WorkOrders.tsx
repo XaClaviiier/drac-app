@@ -3306,7 +3306,7 @@ export default function WorkOrders() {
               </button>
               <div className="flex items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                <span className="truncate text-[10px] font-semibold text-gray-400">{branchName}</span>
+                <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 </div>
                 <span className="shrink-0 text-xs">

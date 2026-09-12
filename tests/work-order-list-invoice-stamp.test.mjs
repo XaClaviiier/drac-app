@@ -19,11 +19,11 @@ new Function('require', 'module', 'exports', stampCode)(require, stampModule, st
 const WorkOrderPaidStamp = stampModule.exports.default;
 const paidInvoice = { id: 'INV-1', invoiceNumber: 'C262027', woId: 'WO-1', branchId: 'BR-1', total: 100, payment: 100, status: 'Lunas' };
 const mobileList = page.slice(page.indexOf('{/* Ringkasan WO mobile:'), page.indexOf('{/* Layout kartu lama'));
-const mobileHeader = mobileList.slice(mobileList.indexOf('<span className="flex min-w-0 items-center gap-2">'), mobileList.indexOf('<span className="whitespace-nowrap text-[11px] text-gray-500">')).trim();
+const mobileHeader = mobileList.slice(mobileList.indexOf('<div className="flex items-start justify-between gap-3">'), mobileList.indexOf('<WorkOrderCustomerVehicleIdentity')).trim();
 
 function renderNumberCell(workOrder = wo, invoices = [], markup = numberCell) {
-  const code = transformSync(`export default function Cell({wo, data}) {
-    const key = 'number'; const openWorkOrderStandard = () => {};
+    const code = transformSync(`export default function Cell({wo, data}) {
+    const key = 'number'; const openWorkOrderStandard = () => {}; const formatBusinessDate = value => value;
     const statusColors = {}; const statusLabel = status => status;
     return ${markup};
   }`, { loader: 'tsx', jsx: 'automatic', format: 'cjs' }).code;
