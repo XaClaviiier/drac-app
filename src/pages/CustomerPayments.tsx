@@ -62,6 +62,35 @@ const displayDate = (value: string) =>
       }).format(new Date(`${value}T00:00:00`))
     : "-";
 
+const demoPaymentRows: PaymentRow[] = [
+  {
+    id: "demo-payment-1",
+    paymentNumber: "PAY-CKL-2026-0001",
+    invoiceId: "9",
+    invoiceNumber: "D-1962",
+    date: "2026-09-10",
+    customerName: "ENSEVAL",
+    customerId: "PLG-002",
+    vehicleInfo: "GRANDMAX",
+    invoiceTotal: 1800000,
+    invoicePaid: 900000,
+    amount: 900000,
+    balanceAfter: 900000,
+    paymentStatus: "Cicilan",
+    paymentMethod: "Transfer",
+    accountId: "demo-bank-bca",
+    accountName: "Bank BCA Cakalang",
+    branchId: "BR-001",
+    createdByName: "OWNER DEMO",
+    notes: "Pembayaran tahap pertama",
+  },
+];
+
+const demoCashAccounts: CashAccount[] = [
+  { id: "demo-cash", name: "Kas Perintis", accountType: "cash", branchId: "BR-001" },
+  { id: "demo-bank-bca", name: "Bank BCA Cakalang", accountType: "bank", branchId: "BR-001" },
+];
+
 export default function CustomerPayments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, currentBranchId, hasPermission, refreshData } = useApp();
@@ -100,8 +129,10 @@ export default function CustomerPayments() {
       api.get("cash-accounts"),
     ]);
     if (p.success) setRows(p.data || []);
+    else if (import.meta.env.DEV) setRows(demoPaymentRows);
     else window.alert(p.message);
     if (a.success) setAccounts(a.data || []);
+    else if (import.meta.env.DEV) setAccounts(demoCashAccounts);
     setLoading(false);
   };
   useEffect(() => {
@@ -343,70 +374,38 @@ export default function CustomerPayments() {
 
   return (
     <div className="space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0">
+      {/* Subtab Pembayaran Pelanggan: daftar, data baru/edit, dan detail pembayaran. */}
       <div className={`${ui.childBar} hidden lg:flex`}>
-        <button type="button" className={ui.childListTab} title="Daftar Pembayaran Pelanggan" aria-label="Daftar Pembayaran Pelanggan">
+        <button
+          type="button"
+          onClick={() => { closeForm(); setViewingPayment(null); }}
+          title="Daftar Pembayaran Pelanggan"
+          aria-label="Daftar Pembayaran Pelanggan"
+          className={ui.childListTab}
+        >
           <List className="h-5 w-5" />
         </button>
+        {(showForm || viewingPayment) && (
+          <div className={`${ui.childTabActive} min-w-48 max-w-80`}>
+            <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">
+              {showForm ? (editingPayment ? `Edit ${editingPayment.paymentNumber}` : "Data Baru") : (viewingPayment?.paymentNumber || "Detail Pembayaran")}
+            </button>
+            <button
+              type="button"
+              onClick={() => { closeForm(); setViewingPayment(null); }}
+              className="mr-1 rounded p-1.5 hover:bg-blue-700"
+              title="Tutup tab"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className={`${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
-        <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value as Period)}
-          className={`${ui.field} px-3`}
-        >
-          <option value="today">Hari Ini</option>
-          <option value="this_month">Bulan Ini</option>
-          <option value="last_month">Bulan Lalu</option>
-          <option value="custom">Pilih Tanggal</option>
-          <option value="all">Semua Tanggal</option>
-        </select>
-        {period === "custom" && (
-          <>
-            <IndonesianDateInput value={dateFrom} onChange={setDateFrom} className="h-9 w-36 text-sm"/>
-            <IndonesianDateInput value={dateTo} onChange={setDateTo} className="h-9 w-36 text-sm"/>
-          </>
-        )}
-        <select
-          value={methodFilter}
-          onChange={(e) => setMethodFilter(e.target.value)}
-          className={`${ui.field} px-3`}
-        >
-          <option value="ALL">Semua Metode</option>
-          <option>Tunai</option>
-          <option>Transfer</option>
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={`${ui.field} px-3`}
-        >
-          <option value="ALL">Semua Status</option>
-          <option>Lunas</option>
-          <option>Cicilan</option>
-        </select>
-        <select
-          value={accountFilter}
-          onChange={(e) => setAccountFilter(e.target.value)}
-          className={`${ui.field} max-w-[190px] px-3`}
-        >
-          <option value="ALL">Semua Akun</option>
-          {visibleAccounts.map((a) => (
-            <option value={a.id} key={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={userFilter}
-          onChange={(e) => setUserFilter(e.target.value)}
-          className={`${ui.field} max-w-[170px] px-3`}
-        >
-          <option value="ALL">Semua Input</option>
-          {inputUsers.map((name) => (
-            <option key={name}>{name}</option>
-          ))}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} className={`${ui.field} px-3`}>
+          <option value="today">Hari Ini</option><option value="this_month">Bulan Ini</option><option value="last_month">Bulan Lalu</option><option value="custom">Pilih Tanggal</option><option value="all">Semua Tanggal</option>
         </select>
         <ActiveFilterResetButton active={activeFilterCount > 0} onReset={resetPaymentFilters} />
         <div className="relative" tabIndex={-1} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}>
@@ -415,7 +414,7 @@ export default function CustomerPayments() {
             {activeFilterCount > 0 && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}
           </button>
           {showFilterPanel && (
-            <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
+            <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Pembayaran</strong><button type="button" onClick={resetPaymentFilters} className="text-xs font-semibold text-blue-700 hover:underline">Reset</button></div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-semibold text-gray-600">Periode<select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="today">Hari Ini</option><option value="this_month">Bulan Ini</option><option value="last_month">Bulan Lalu</option><option value="custom">Pilih Tanggal</option><option value="all">Semua Tanggal</option></select></label>
@@ -429,6 +428,7 @@ export default function CustomerPayments() {
           )}
         </div>
         </div>
+        <div className="order-2 h-0 basis-full" />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {hasPermission("payment:create") && (
