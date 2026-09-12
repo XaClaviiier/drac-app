@@ -917,6 +917,14 @@ function ensureApiSupportTables(PDO $pdo): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $stockCountOrderColumns = array_column($pdo->query("SHOW COLUMNS FROM stock_count_orders")->fetchAll(), 'Field');
+    if (!in_array('entry_mode', $stockCountOrderColumns, true)) $pdo->exec("ALTER TABLE stock_count_orders ADD entry_mode VARCHAR(20) NOT NULL DEFAULT 'legacy'");
+    if (!in_array('revision', $stockCountOrderColumns, true)) $pdo->exec("ALTER TABLE stock_count_orders ADD revision INT UNSIGNED NOT NULL DEFAULT 0");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS stock_opname_audit (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id VARCHAR(30) NOT NULL,
+        order_number VARCHAR(40) NOT NULL, actor_id VARCHAR(20) NOT NULL,
+        action VARCHAR(20) NOT NULL, snapshot LONGTEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_opname_audit_order(order_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensureOwnedStockOpnameColumn($pdo,'stock_count_orders','end_date','DATE NULL AFTER start_date');
     $pdo->exec("UPDATE stock_count_orders o LEFT JOIN stock_count_results r ON r.order_id=o.id SET o.end_date=COALESCE(r.result_date,o.start_date) WHERE o.end_date IS NULL");
     $stockCountEndDateColumn = $pdo->query("SHOW COLUMNS FROM stock_count_orders LIKE 'end_date'")->fetch();
@@ -960,6 +968,10 @@ function ensureApiSupportTables(PDO $pdo): void {
         is_active TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_coa_parent (parent_id), INDEX idx_coa_type (account_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $coaColumns = array_column($pdo->query("SHOW COLUMNS FROM chart_of_accounts")->fetchAll(), 'Field');
+    if (!in_array('detail_type', $coaColumns, true)) $pdo->exec("ALTER TABLE chart_of_accounts ADD detail_type VARCHAR(60) NOT NULL DEFAULT ''");
+    if (!in_array('notes', $coaColumns, true)) $pdo->exec("ALTER TABLE chart_of_accounts ADD notes TEXT NULL");
+    if (!in_array('revision', $coaColumns, true)) $pdo->exec("ALTER TABLE chart_of_accounts ADD revision INT UNSIGNED NOT NULL DEFAULT 0");
     $pdo->exec("CREATE TABLE IF NOT EXISTS branch_account_settings (
         branch_id VARCHAR(20) PRIMARY KEY, cash_account_id VARCHAR(64) NULL,
         bank_account_id VARCHAR(64) NULL, qris_account_id VARCHAR(64) NULL,
