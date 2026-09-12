@@ -975,8 +975,118 @@ export default function SalesInvoice() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
+      {/* Kartu faktur (mobile) */}
+      <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} space-y-2 px-2 pt-2 pb-3 lg:hidden`}>
+        {filteredInvoices.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center shadow-sm">
+            <FileText className="mx-auto mb-2 h-9 w-9 text-gray-300" />
+            <p className="font-semibold text-gray-900">Tidak ada data faktur</p>
+            <p className="text-xs text-gray-500">Silakan buat faktur baru atau pilih cabang lain</p>
+          </div>
+        ) : (
+          filteredInvoices.map((invoice) => {
+            const vehicleSummary = invoiceVehicleSummary(invoice);
+            const invoicePaid = invoice.total > 0 && invoice.payment >= invoice.total;
+            const invoiceRemaining = Math.max(0, invoice.total - invoice.payment);
+            return (
+              <article key={invoice.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setViewingInvoice(invoice)}
+                        className="text-left font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                        title="Buka detail faktur"
+                      >
+                        {invoice.invoiceNumber}
+                      </button>
+                      <p className="mt-0.5 text-xs font-medium text-gray-500">{formatShareDate(invoice.date)}</p>
+                    </div>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      {invoicePaid ? 'Lunas' : 'Belum Lunas'}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1 text-xs text-gray-600">
+                    <p className="font-medium text-gray-900"><strong>Pelanggan:</strong> {invoice.customerName}</p>
+                    <p>{invoiceCustomerPhone(invoice)} · {vehicleSummary.plateNumber || '-'}</p>
+                    {vehicleSummary.detail && <p>{vehicleSummary.detail}</p>}
+                    {invoice.woNumber && (
+                      <p className="font-medium text-gray-600" title={`Faktur dibuat dari ${invoice.woNumber}`}>
+                        WO: {invoice.woNumber}
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-2 space-y-1 border-t border-gray-100 pt-2 text-xs text-gray-600">
+                    {invoice.manualReceiptNumber && (
+                      <p>
+                        No. Nota Asli: <strong className="text-gray-700">{invoice.manualReceiptNumber}</strong>
+                      </p>
+                    )}
+                    <p>
+                      Total <span className="font-semibold text-gray-900">Rp {invoice.total.toLocaleString('id-ID')}</span>
+                    </p>
+                    <p>
+                      Bayar <span className="font-semibold text-gray-900">Rp {invoice.payment.toLocaleString('id-ID')}</span>
+                    </p>
+                    <p className={invoicePaid ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>
+                      {invoicePaid ? 'Lunas' : `Sisa Rp ${invoiceRemaining.toLocaleString('id-ID')}`}
+                    </p>
+                    {!invoicePaid && invoice.age > 0 && (
+                      <p className="font-semibold text-amber-700">
+                        {invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}
+                      </p>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-gray-500">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</p>
+                </div>
+                <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-2 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setViewingInvoice(invoice)}
+                    className="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-sm text-gray-600 hover:bg-white"
+                    title={`Buka Faktur ${invoice.invoiceNumber}`}
+                    aria-label={`Buka Faktur ${invoice.invoiceNumber}`}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => shareInvoiceToWhatsApp(invoice)}
+                    className="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-emerald-600 hover:bg-white"
+                    title={`Bagikan Faktur ${invoice.invoiceNumber} ke WhatsApp`}
+                    aria-label={`Bagikan Faktur ${invoice.invoiceNumber} ke WhatsApp`}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyInvoice(invoice)}
+                    className="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-blue-600 hover:bg-white"
+                    title={`Salin Faktur ${invoice.invoiceNumber}`}
+                    aria-label={`Salin Faktur ${invoice.invoiceNumber}`}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                  {hasPermission('invoice:delete') && invoice.payment <= 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(invoice)}
+                      className="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-red-600 hover:bg-red-50"
+                      title="Hapus"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          })
+        )}
+      </div>
+
+      {/* Tabel desktop */}
+      <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : 'hidden lg:block'} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
         <div className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
           <table className="w-full min-w-[1040px] table-fixed border-collapse" style={{ minWidth: Math.max(1040, orderedVisibleInvoiceColumns.reduce((sum, key) => sum + (invoiceTable.isDesktop ? invoiceTable.widths[key] : SALES_INVOICE_COLUMN_WIDTHS[key]), 0)) }}>
             <colgroup>
