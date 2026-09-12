@@ -1006,14 +1006,14 @@ export default function SalesInvoice() {
                       >
                         {invoice.invoiceNumber}
                       </button>
-                      <p className="mt-0.5 text-[11px] font-medium text-gray-500">{formatBusinessDate(invoice.date)}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-500">{formatBusinessDate(invoice.date)}</p>
                     </div>
                     <span className={`inline-flex flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                       {invoicePaid ? 'Lunas' : 'Belum Lunas'}
                     </span>
                   </div>
                   <div className="mt-1 min-w-0 text-xs text-gray-600">
-                    <p className="truncate font-semibold text-gray-900">{invoice.customerName}{vehicleSummary.plateNumber ? ` — ${vehicleSummary.plateNumber}` : ''}</p>
+                    <p className="truncate text-sm font-bold text-gray-900">{invoice.customerName}{vehicleSummary.plateNumber ? ` — ${vehicleSummary.plateNumber}` : ''}</p>
                     <p className="truncate">{invoiceCustomerPhone(invoice)}{vehicleSummary.detail ? ` — ${vehicleSummary.detail}` : ''}</p>
                     {invoice.woNumber && <p className="truncate text-gray-500">WO: {invoice.woNumber}</p>}
                     {invoice.description && <p className="truncate"><span className="font-semibold text-gray-700">Keterangan:</span> {invoice.description}</p>}
