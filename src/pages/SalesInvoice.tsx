@@ -389,6 +389,11 @@ export default function SalesInvoice() {
     const [year, month, day] = date.split('-');
     return year && month && day ? `${Number(day)}/${Number(month)}/${year}` : date;
   };
+  const formatBusinessDate = (date?: string) => {
+    if (!date) return '-';
+    const parsed = new Date(`${date.slice(0, 10)}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? date : new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(parsed);
+  };
 
   const invoiceShareText = (invoice: SalesInvoice) => {
     const branch = data.branches.find(item => item.id === invoice.branchId)?.name.replace('CABANG ', '') || '-';
@@ -1001,7 +1006,7 @@ export default function SalesInvoice() {
                       >
                         {invoice.invoiceNumber}
                       </button>
-                      <p className="mt-0.5 text-[11px] font-medium text-gray-500">{formatShareDate(invoice.date)}{invoice.woNumber ? ` · WO ${invoice.woNumber}` : ''}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-gray-500">{formatBusinessDate(invoice.date)}</p>
                     </div>
                     <span className={`inline-flex flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                       {invoicePaid ? 'Lunas' : 'Belum Lunas'}
@@ -1011,6 +1016,8 @@ export default function SalesInvoice() {
                     <p className="truncate font-semibold text-gray-900">{invoice.customerName}{vehicleSummary.plateNumber ? ` — ${vehicleSummary.plateNumber}` : ''}</p>
                     <p className="truncate">{invoiceCustomerPhone(invoice)}{vehicleSummary.detail ? ` — ${vehicleSummary.detail}` : ''}</p>
                     {invoice.woNumber && <p className="truncate text-gray-500">WO: {invoice.woNumber}</p>}
+                    {invoice.description && <p className="truncate"><span className="font-semibold text-gray-700">Keterangan:</span> {invoice.description}</p>}
+                    {invoice.items?.length ? <p className="truncate"><span className="font-semibold text-gray-700">Layanan:</span> {invoice.items.filter(item => !isPackageMemberItem(item)).slice(0, 2).map(item => item.name).join(', ')}{invoice.items.filter(item => !isPackageMemberItem(item)).length > 2 ? ` +${invoice.items.filter(item => !isPackageMemberItem(item)).length - 2}` : ''}</p> : null}
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-gray-100 pt-2 text-xs text-gray-600">
                     {invoice.manualReceiptNumber && (
@@ -1018,22 +1025,16 @@ export default function SalesInvoice() {
                         No. Nota Asli: <strong className="text-gray-700">{invoice.manualReceiptNumber}</strong>
                       </p>
                     )}
-                    <p className="col-span-2 hidden">
-                      Total <span className="font-semibold text-gray-900">Rp {invoice.total.toLocaleString('id-ID')}</span>
-                    </p>
-                    <p className="col-span-2 hidden">
-                      Bayar <span className="font-semibold text-gray-900">Rp {invoice.payment.toLocaleString('id-ID')}</span>
-                    </p>
-                    <p className="col-span-2 text-right font-semibold text-gray-900">Sisa Rp {invoiceRemaining.toLocaleString('id-ID')}</p>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-500">
-                    <span className="truncate">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</span>
-                    {!invoicePaid && invoice.age > 0 && <span className="flex-shrink-0 font-semibold text-amber-700">{invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}</span>}
+                    {!invoicePaid && invoiceRemaining > 0 && (
+                      <p className="col-span-2 text-right font-semibold text-amber-700">
+                        Sisa · Rp {invoiceRemaining.toLocaleString('id-ID')}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${invoicePaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{invoicePaid ? 'Lunas' : 'Belum Lunas'}</span>
                   <span className="truncate text-[10px] font-semibold text-gray-400">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</span>
+                  {!invoicePaid && invoice.age > 0 && <span className="text-[10px] font-semibold text-amber-700">{invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}</span>}
                   <span className="ml-auto text-xs font-bold text-gray-900">Rp {invoice.total.toLocaleString('id-ID')}</span>
                   <button
                     type="button"
