@@ -3267,10 +3267,14 @@ export default function WorkOrders() {
             <article key={`compact-${wo.id}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
               <button type="button" onClick={() => openWorkOrderStandard(wo)} className="block w-full px-3 pb-2.5 pt-3 text-left">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-2"><span className="truncate font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span><span className="inline-flex flex-shrink-0 flex-col items-center"><span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span><WorkOrderPaidStamp wo={wo} invoices={data.invoices} /></span></span>
-                  <span className="whitespace-nowrap text-[11px] text-gray-500">
-                    {formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}
-                  </span>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2"><span className="truncate font-mono text-sm font-bold text-blue-700">{wo.woNumber}</span></div>
+                    <p className="mt-0.5 whitespace-nowrap text-[11px] text-gray-500">{formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}</p>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-1.5">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span>
+                    <WorkOrderPaidStamp wo={wo} invoices={data.invoices} />
+                  </div>
                 </div>
                 <WorkOrderCustomerVehicleIdentity
                   className="mt-1"
@@ -3291,19 +3295,24 @@ export default function WorkOrders() {
                     Target selesai {formatAuditTime(wo.estimatedCompletionAt)}
                   </p>
                 )}
+                <div className="mt-2 flex min-h-6 items-center border-t border-gray-100 pt-1.5 text-xs">
+                  {attentionByWorkOrderId.has(wo.id) ? (
+                    <span data-wo-attention-label className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${attentionByWorkOrderId.get(wo.id)?.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`} title={attentionByWorkOrderId.get(wo.id)?.description}>
+                      {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                      {attentionByWorkOrderId.get(wo.id)?.label}
+                    </span>
+                  ) : <span className="text-gray-400">Status: {statusLabel(wo.status)}</span>}
+                </div>
               </button>
-              <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
-                {attentionByWorkOrderId.has(wo.id) && (
-                  <span data-wo-attention-label className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${attentionByWorkOrderId.get(wo.id)?.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`} title={attentionByWorkOrderId.get(wo.id)?.description}>
-                    {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                    {attentionByWorkOrderId.get(wo.id)?.label}
-                  </span>
-                )}
-                <span className="text-[10px] font-semibold text-gray-400">{branchName}</span>
+              <div className="flex items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                <span className="truncate text-[10px] font-semibold text-gray-400">{branchName}</span>
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
-                <span className="ml-auto text-xs">
+                </div>
+                <span className="shrink-0 text-xs">
                   <WorkOrderEstimateAmount amount={wo.total} isLostSales={statusLabel(wo.status) === 'Lost Sales'} />
                 </span>
+                <div className="flex shrink-0 items-center gap-1.5">
                 <button type="button" onClick={() => openWorkOrderStandard(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Buka ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
                 {canShowAdminRowActions && canEditWorkOrderInActiveBranch(wo) && !wo.invoiceId && (
                   <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>
@@ -3311,6 +3320,7 @@ export default function WorkOrders() {
                 {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
                   <button type="button" onClick={() => void handleDelete(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600" aria-label={`Hapus ${wo.woNumber}`}><Trash2 className="h-4 w-4" /></button>
                 )}
+                </div>
               </div>
             </article>
           );
