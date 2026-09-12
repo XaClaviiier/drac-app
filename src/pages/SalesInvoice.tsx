@@ -1008,9 +1008,9 @@ export default function SalesInvoice() {
                     </span>
                   </div>
                   <div className="mt-1 min-w-0 text-xs text-gray-600">
-                    <p className="truncate font-medium text-gray-900"><strong>Pelanggan:</strong> {invoice.customerName}</p>
-                    <p className="truncate">{invoiceCustomerPhone(invoice)} · {vehicleSummary.plateNumber || '-'}</p>
-                    {vehicleSummary.detail && <p className="truncate">{vehicleSummary.detail}</p>}
+                    <p className="truncate font-semibold text-gray-900">{invoice.customerName}{vehicleSummary.plateNumber ? ` — ${vehicleSummary.plateNumber}` : ''}</p>
+                    <p className="truncate">{invoiceCustomerPhone(invoice)}{vehicleSummary.detail ? ` — ${vehicleSummary.detail}` : ''}</p>
+                    {invoice.woNumber && <p className="truncate text-gray-500">WO: {invoice.woNumber}</p>}
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-gray-100 pt-2 text-xs text-gray-600">
                     {invoice.manualReceiptNumber && (
@@ -1018,22 +1018,23 @@ export default function SalesInvoice() {
                         No. Nota Asli: <strong className="text-gray-700">{invoice.manualReceiptNumber}</strong>
                       </p>
                     )}
-                    <p>
+                    <p className="col-span-2 hidden">
                       Total <span className="font-semibold text-gray-900">Rp {invoice.total.toLocaleString('id-ID')}</span>
                     </p>
-                    <p>
+                    <p className="col-span-2 hidden">
                       Bayar <span className="font-semibold text-gray-900">Rp {invoice.payment.toLocaleString('id-ID')}</span>
                     </p>
-                    <p className={invoicePaid ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>
-                      {invoicePaid ? 'Lunas' : `Sisa Rp ${invoiceRemaining.toLocaleString('id-ID')}`}
-                    </p>
+                    <p className="col-span-2 text-right font-semibold text-gray-900">Sisa Rp {invoiceRemaining.toLocaleString('id-ID')}</p>
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-500">
                     <span className="truncate">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</span>
                     {!invoicePaid && invoice.age > 0 && <span className="flex-shrink-0 font-semibold text-amber-700">{invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}</span>}
                   </div>
                 </div>
-                <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-2 py-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${invoicePaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{invoicePaid ? 'Lunas' : 'Belum Lunas'}</span>
+                  <span className="truncate text-[10px] font-semibold text-gray-400">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</span>
+                  <span className="ml-auto text-xs font-bold text-gray-900">Rp {invoice.total.toLocaleString('id-ID')}</span>
                   <button
                     type="button"
                     onClick={() => setViewingInvoice(invoice)}
