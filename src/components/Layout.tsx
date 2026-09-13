@@ -1304,7 +1304,7 @@ export default function Layout() {
         </header>
 
         {/* Legacy layout contract marker: className={`${ui.workspaceBar} hidden lg:flex`} */}
-        <div className={`${ui.workspaceBar} relative z-[70] flex`}>
+        <div className={`${ui.workspaceBar} relative z-[70] ${location.pathname === "/chart-of-accounts" ? "!flex" : "flex"}`}>
           <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-0.5 overflow-x-auto overflow-y-hidden">
             <button
               type="button"
