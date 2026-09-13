@@ -901,7 +901,7 @@ export default function Layout() {
           const usesAccurateTileMenu = isAccurateInventoryMenu || isAccurateServiceMenu || isAccurateLedgerMenu || isAccuratePurchaseMenu || isAccurateReportsMenu || group.id === "cash" || group.id === "settings";
           // Compatibility markers: isAccurateServiceMenu || isAccurateLedgerMenu ? "w-[420px]"
           // isAccurateServiceMenu || isAccurateLedgerMenu ? "grid-cols-[repeat(3,120px)] gap-2.5"
-          // top-12 rounded-r-xl is the legacy baseline; actual offset is top-[60px].
+          // top-12 rounded-r-xl is the legacy baseline; actual offset is top-[94px].
 
           return (
             <>
@@ -913,7 +913,7 @@ export default function Layout() {
               />
               <section
                 data-menu-model={usesAccurateTileMenu ? "accurate" : "standard"}
-                className={`fixed top-[60px] z-[60] hidden max-h-[calc(100vh-60px)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateCompactMenu ? "w-[420px]" : isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
+                className={`fixed top-[94px] z-[60] hidden max-h-[calc(100vh-94px)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateCompactMenu ? "w-[420px]" : isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
               >
                 <div className="px-4 pb-0 pt-4">
                   <div className="flex items-center justify-between">
