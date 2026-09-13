@@ -84,7 +84,7 @@ function AppRoutes() {
         <Route path="branch-deposits" element={protectedPage('report:view', <BranchDeposits />)} />
         <Route path="cash-accounts" element={protectedPage('report:view', <CashAccounts mode="cash" />)} />
         <Route path="bank-accounts" element={protectedPage('report:view', <CashAccounts mode="bank" />)} />
-        <Route path="chart-of-accounts" element={protectedPage('report:view', <ChartOfAccounts />)} />
+        <Route path="chart-of-accounts" element={protectedPage('settings:view', <ChartOfAccounts />)} />
         <Route path="general-ledger" element={protectedPage('report:view', <GeneralLedger />)} />
         <Route path="general-journal" element={protectedPage('report:view', <GeneralJournal />)} />
         <Route path="opening-balances" element={protectedPage('settings:edit', <OpeningBalances />)} />
