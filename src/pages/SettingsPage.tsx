@@ -10,7 +10,7 @@ import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 
-type Tab = 'company' | 'features' | 'tax' | 'sales' | 'purchases' | 'inventory' | 'defaultAccounts' | 'branches' | 'documents' | 'workflow' | 'security' | 'ai' | 'other' | 'guide' | 'backup' | 'maintenance';
+type Tab = 'company' | 'features' | 'tax' | 'sales' | 'purchases' | 'security' | 'approval' | 'attachments' | 'attributes' | 'defaultAccounts' | 'other' | 'branches' | 'documents' | 'workflow' | 'inventory' | 'ai' | 'guide' | 'backup' | 'maintenance';
 
 const tabs = [
   { id: 'company' as const, label: 'Perusahaan', hint: 'Profil, logo, alamat, identitas pajak', group: 'Preferensi Utama', icon: Building2 },
@@ -24,6 +24,9 @@ const tabs = [
   { id: 'inventory' as const, label: 'Persediaan', hint: 'Stok, HPP, gudang, dan penyesuaian', group: 'Transaksi', icon: Database },
   { id: 'workflow' as const, label: 'Operasional Bengkel', hint: 'Alur WO dan alasan Lost Sales', group: 'Transaksi', icon: GitBranch },
   { id: 'security' as const, label: 'Keamanan & Pembatasan', hint: 'Sesi, backdate, audit, akses', group: 'Kontrol', icon: ShieldCheck },
+  { id: 'approval' as const, label: 'Persetujuan', hint: 'Alur persetujuan transaksi', group: 'Kontrol', icon: ClipboardCheck },
+  { id: 'attachments' as const, label: 'Lampiran', hint: 'Aturan dokumen pendukung', group: 'Kontrol', icon: FileText },
+  { id: 'attributes' as const, label: 'Atribut Tambahan', hint: 'Kolom tambahan transaksi', group: 'Kontrol', icon: Plus },
   { id: 'ai' as const, label: 'Integrasi AI', hint: 'Model dan izin data Asisten AI', group: 'Integrasi', icon: Bot },
   { id: 'other' as const, label: 'Lain-lain', hint: 'Pengaturan tambahan sistem', group: 'Sistem', icon: Wrench },
   { id: 'guide' as const, label: 'Panduan Sistem', hint: 'Cara kerja modul CerdikApp', group: 'Sistem', icon: BookOpenCheck },
@@ -42,7 +45,9 @@ export default function SettingsPage() {
     const saved = localStorage.getItem('drac-settings-tab') as Tab | null;
     return tabs.some(item => item.id === saved) ? saved! : 'company';
   });
-  const [tabSearch, setTabSearch] = useState('');
+  const [innerTab, setInnerTab] = useState('perusahaan');
+  const [companyTab, setCompanyTab] = useState<'info' | 'address'>('info');
+
   const [draft, setDraft] = useState<AppSettings>(() => structuredClone(data.settings));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -87,6 +92,12 @@ export default function SettingsPage() {
   useEffect(() => {
     setDraft(structuredClone(data.settings));
   }, [data.settings]);
+
+  useEffect(() => {
+    const next = tab === 'company' ? 'info' : tab === 'features' ? 'perusahaan' : tab === 'inventory' ? 'persediaan' : tab === 'sales' ? 'penjualan' : tab === 'purchases' ? 'pembelian' : tab === 'tax' ? 'pajak' : tab;
+    setInnerTab(next);
+    if (tab === 'company') setCompanyTab('info');
+  }, [tab]);
 
   useEffect(() => {
     api.getAISettings().then(result => {
@@ -308,59 +319,30 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="space-y-0">
-        <div className="border-b border-gray-200 bg-white px-3 py-3 shadow-sm sm:px-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Preferensi</p><h2 className="text-xl font-bold text-gray-900">Pengaturan CerdikApp</h2><p className="text-xs text-gray-500">Pusat pengaturan perusahaan, transaksi, akun, dan keamanan.</p></div>
-            <label className="relative block w-full lg:max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" /><input value={tabSearch} onChange={event => setTabSearch(event.target.value)} placeholder="Cari pengaturan..." className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" aria-label="Cari pengaturan" /></label>
-          </div>
-        </div>
-        <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm lg:gap-1 lg:px-3">
-          {tabs.filter(item => (!['backup', 'maintenance'].includes(item.id) || currentUser?.isOwner) && `${item.label} ${item.hint} ${item.group}`.toLowerCase().includes(tabSearch.toLowerCase())).map(item => {
-            const Icon = item.icon;
-            return <button key={item.id} onClick={() => selectTab(item.id)} title={item.hint} className={`flex h-11 flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-3 text-left text-sm font-medium transition lg:px-4 ${tab === item.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}><Icon className="h-4 w-4" /> {item.label}</button>;
-          })}
+      <div className="overflow-hidden rounded-md border border-gray-200 bg-[#edf1f4] shadow-sm">
+        <div className="space-y-0">
+        <div className="flex items-start border-b border-gray-300 bg-[#edf1f4]">
+        <nav className="w-full flex-shrink-0 overflow-x-auto border-r border-gray-300 bg-[#e5e8eb] p-2 lg:w-[168px] lg:space-y-1">
+          {['company','features','tax','sales','purchases','security','approval','attachments','attributes','defaultAccounts','other'].map(id => { const item=tabs.find(candidate=>candidate.id===id); if(!item)return null; const Icon=item.icon; return <button key={item.id} onClick={()=>selectTab(item.id)} title={item.hint} className={`relative flex min-w-[145px] items-center justify-end gap-2 border px-3 py-2 text-right text-xs transition lg:w-full ${tab===item.id?'z-10 mr-[-1px] border-[#ff4081] border-r-white bg-white font-bold text-gray-800':'border-gray-300 bg-[#f1f2f3] text-gray-600 hover:bg-white'}`}><Icon className="hidden h-4 w-4 text-blue-600 lg:block" />{item.label}</button>; })}
         </nav>
+        <div className="min-w-0 flex-1 border-l border-gray-300 bg-white">
+        <InnerTabs tab={tab} active={innerTab} onChange={id => { setInnerTab(id); if (tab === 'company') setCompanyTab(id === 'alamat' ? 'address' : 'info'); }} />
 
         <section className={`grid items-start gap-3 pt-0.5 ${['guide', 'backup', 'maintenance'].includes(tab) ? '' : 'lg:grid-cols-[minmax(0,1fr)_120px]'}`}>
-          {tab === 'company' && (
-            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-              <TabHeader title="Profil Perusahaan" description="Informasi yang tampil pada dokumen dan laporan." />
-              <div className="grid gap-8 lg:grid-cols-2">
-                <section>
-                  <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Umum</h4>
-                  <div className="space-y-4">
-                    <CompanyField label="Nama perusahaan"><input className={inputClass} value={draft.company.name} onChange={e => setCompany('name', e.target.value)} /></CompanyField>
-                    <CompanyField label="Telepon"><input className={inputClass} value={draft.company.phone} onChange={e => setCompany('phone', e.target.value)} /></CompanyField>
-                    <CompanyField label="Alamat" multiline><textarea className={`${inputClass} resize-y`} rows={4} value={draft.company.address} onChange={e => setCompany('address', e.target.value)} /></CompanyField>
-                    <CompanyField label="NPWP"><input className={inputClass} value={draft.company.taxNumber} onChange={e => setCompany('taxNumber', e.target.value)} /></CompanyField>
-                  </div>
-                </section>
-                <section>
-                  <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Lainnya</h4>
-                  <div className="space-y-4">
-                    <CompanyField label="Nama legal"><input className={inputClass} value={draft.company.legalName} onChange={e => setCompany('legalName', e.target.value)} placeholder="PT/CV (opsional)" /></CompanyField>
-                    <CompanyField label="Email"><input className={inputClass} type="email" value={draft.company.email} onChange={e => setCompany('email', e.target.value)} /></CompanyField>
-                    <CompanyField label="Zona waktu"><select className={inputClass} value={draft.company.timezone} onChange={e => setCompany('timezone', e.target.value)}><option value="Asia/Makassar">Asia/Makassar (WITA)</option><option value="Asia/Jakarta">Asia/Jakarta (WIB)</option></select></CompanyField>
-                  </div>
-                </section>
-                <div className="lg:col-span-2">
-                  <CompanyField label="Footer faktur" multiline><textarea className={`${inputClass} resize-y`} rows={3} value={draft.company.invoiceFooter} onChange={e => setCompany('invoiceFooter', e.target.value)} /></CompanyField>
-                </div>
-              </div>
-            </div>
-          )}
+          {tab === 'company' && <div className="rounded-md border border-gray-200 bg-white shadow-sm"><div className="p-5">{companyTab==='info' ? <div className="max-w-3xl space-y-3"><CompanyField label="Nama"><input className={inputClass} value={draft.company.name} onChange={e => setCompany('name', e.target.value)} /></CompanyField><CompanyField label="Kategori Usaha"><div className="flex items-center rounded-lg border border-gray-300 bg-white px-2 py-1"><span className="rounded border border-blue-300 px-2 py-1 text-sm text-blue-700">JASA / SERVICES ×</span><Search className="ml-auto h-4 w-4 text-gray-600" /></div></CompanyField><CompanyField label="Bidang Usaha"><div className="flex items-center rounded-lg border border-gray-300 bg-white px-2 py-1"><span className="rounded border border-blue-300 px-2 py-1 text-sm text-blue-700">Automotive (Otomotif) ×</span><Search className="ml-auto h-4 w-4 text-gray-600" /></div></CompanyField><CompanyField label="Telepon"><input className={inputClass} value={draft.company.phone} onChange={e => setCompany('phone', e.target.value)} /></CompanyField><CompanyField label="Faksimili"><input className={inputClass} /></CompanyField><CompanyField label="Email"><input className={inputClass} type="email" value={draft.company.email} onChange={e => setCompany('email', e.target.value)} /></CompanyField><CompanyField label="Tgl Mulai Data"><input className={inputClass} type="date" defaultValue="2025-01-01" /></CompanyField><CompanyField label="Periode Akuntansi"><select className={inputClass} defaultValue="Januari - Desember"><option>Januari - Desember</option></select></CompanyField><CompanyField label="Mata Uang"><div className="flex gap-2"><input className={`${inputClass} bg-gray-100`} value="Indonesian Rupiah" readOnly /><button type="button" className="rounded-lg border px-3">✎</button></div></CompanyField></div> : <div className="max-w-3xl space-y-3"><CompanyField label="Alamat" multiline><textarea className={`${inputClass} resize-y`} rows={4} value={draft.company.address} onChange={e => setCompany('address', e.target.value)} placeholder="Jalan" /></CompanyField><CompanyField label="Kota"><div className="flex items-center rounded-lg border border-gray-300 bg-white px-2 py-1"><span className="rounded border border-blue-300 px-2 py-1 text-sm text-blue-700">Kota Makassar ×</span></div></CompanyField><CompanyField label="Provinsi"><input className={inputClass} defaultValue="Sulawesi Selatan" /></CompanyField><CompanyField label="K.Pos"><input className={inputClass} /></CompanyField><CompanyField label="Negara"><input className={inputClass} defaultValue="Indonesia" /></CompanyField></div>}</div></div>}
 
-          {['features', 'tax', 'sales', 'purchases', 'inventory', 'other'].includes(tab) && <PreferencePanel tab={tab} />}
+          {tab === 'features' && <AccurateFeaturesPanel activeTab={innerTab} />}
+          {tab === 'sales' && <AccurateSalesPanel />}
+          {['tax', 'purchases', 'inventory', 'other'].includes(tab) && <PreferencePanel tab={tab} />}
 
           {tab === 'defaultAccounts' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
               <TabHeader title="Akun Default" description="Seperti tab Akun di Accurate: tentukan akun yang digunakan otomatis oleh transaksi CerdikApp." />
               <div className="grid gap-4 lg:grid-cols-2">
-                <PreferenceAccountGroup title="Barang & Jasa" rows={['Persediaan', 'Pendapatan Jasa', 'Pendapatan Barang', 'HPP', 'Retur Penjualan', 'Diskon Penjualan']} />
-                <PreferenceAccountGroup title="Pembelian" rows={['Hutang Usaha', 'Persediaan', 'Pembelian Belum Tertagih', 'Retur Pembelian', 'Diskon Pembelian']} />
-                <PreferenceAccountGroup title="Kas & Pembayaran" rows={['Kas Tunai', 'Bank / Transfer', 'Piutang Usaha', 'Akun Pembayaran Supplier']} />
-                <PreferenceAccountGroup title="Saldo & Penyesuaian" rows={['Ekuitas Saldo Awal', 'Penyesuaian Persediaan', 'Selisih Stok', 'Pembulatan']} />
+                {(innerTab === 'barang' || innerTab === 'perusahaan') && <PreferenceAccountGroup title="Barang & Jasa" rows={['Persediaan', 'Pendapatan Jasa', 'Pendapatan Barang', 'HPP', 'Retur Penjualan', 'Diskon Penjualan']} />}
+                {(innerTab === 'penjualanPembelian' || innerTab === 'barang') && <PreferenceAccountGroup title="Pembelian" rows={['Hutang Usaha', 'Persediaan', 'Pembelian Belum Tertagih', 'Retur Pembelian', 'Diskon Pembelian']} />}
+                {(innerTab === 'penjualanPembelian' || innerTab === 'perusahaan') && <PreferenceAccountGroup title="Kas & Pembayaran" rows={['Kas Tunai', 'Bank / Transfer', 'Piutang Usaha', 'Akun Pembayaran Supplier']} />}
+                {(innerTab === 'persediaan' || innerTab === 'perusahaan') && <PreferenceAccountGroup title="Saldo & Penyesuaian" rows={['Ekuitas Saldo Awal', 'Penyesuaian Persediaan', 'Selisih Stok', 'Pembulatan']} />}
               </div>
               <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun yang belum dipetakan akan memblokir posting otomatis agar Buku Besar tidak menerima jurnal yang tidak lengkap.</p>
             </div>
@@ -586,11 +568,44 @@ export default function SettingsPage() {
         </section>
       </div>
     </div>
+    </div>
+    </div>
+    </div>
   );
+}
+
+function InnerTabs({ tab, active, onChange }: { tab: Tab; active: string; onChange: (id: string) => void }) {
+  const tabSets: Partial<Record<Tab, Array<[string, string]>>> = {
+    company: [['info', 'Info Perusahaan'], ['alamat', 'Alamat']],
+    features: [['perusahaan', 'Perusahaan'], ['penjualan', 'Penjualan'], ['pembelian', 'Pembelian'], ['persediaan', 'Persediaan']],
+    sales: [['penjualan', 'Penjualan']],
+    purchases: [['pembelian', 'Pembelian']],
+    inventory: [['persediaan', 'Persediaan']],
+    tax: [['pajak', 'Pajak']],
+    defaultAccounts: [['barang', 'Barang & Jasa'], ['perusahaan', 'Perusahaan'], ['penjualanPembelian', 'Penjualan/Pembelian'], ['persediaan', 'Persediaan']],
+    workflow: [['operasional', 'Operasional Bengkel']],
+    security: [['keamanan', 'Keamanan & Pembatasan']],
+    ai: [['ai', 'Integrasi AI']],
+    other: [['lainnya', 'Lain-lain']],
+  };
+  const items = tabSets[tab] || [[tab, tabs.find(item => item.id === tab)?.label || 'Preferensi']];
+  return <div className="flex h-10 items-center gap-1 overflow-x-auto border-b border-gray-300 bg-white px-2 text-xs">{items.map(([id, label]) => <button key={id} type="button" onClick={() => onChange(id)} className={`border border-b-0 px-3 py-2 ${active === id ? 'border-[#ff4081] bg-white font-bold text-gray-800' : 'border-gray-300 bg-gray-100 text-gray-600 hover:bg-white'}`}>{label}</button>)}</div>;
 }
 
 function TabHeader({ title, description }: { title: string; description: string }) {
   return <div className="mb-5 flex items-start gap-3 border-b border-gray-100 pb-4"><div className="rounded-xl bg-blue-50 p-2.5 text-blue-700"><ClipboardCheck className="h-5 w-5" /></div><div><h2 className="text-xl font-bold text-gray-900">{title}</h2><p className="mt-1 text-sm text-gray-500">{description}</p></div></div>;
+}
+
+function AccurateFeaturesPanel({ activeTab }: { activeTab: string }) {
+  const [checked, setChecked] = useState<Record<string, boolean>>({ pajak: true, approval: true, aset: true, budget: true });
+  const toggle = (key: string) => setChecked(prev => ({ ...prev, [key]: !prev[key] }));
+  const basic = [['multiCabang','Multi Cabang'],['multiCurrency','Multi Mata Uang'],['pajak','Pajak'],['approval','Persetujuan (Approval)'],['aset','Pencatatan Aset'],['budget','Anggaran dan Target']];
+  return <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm"><TabHeader title="Fitur" description="Aktifkan fitur sesuai kebutuhan perusahaan seperti Preferensi Accurate." />{activeTab==='perusahaan' && <div className="grid gap-8 lg:grid-cols-2"><section><h3 className="mb-3 border-b border-gray-200 pb-2 text-base font-bold text-blue-700">⚙ Fitur Dasar</h3><div className="space-y-3">{basic.map(([key,label]) => <label key={key} className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={checked[key]===true} onChange={() => toggle(key)} className="h-4 w-4" />{label}{key==='multiCabang'&&<span className="text-xs italic text-blue-600">(Pelajari lebih lanjut)</span>}</label>)}</div><h3 className="mb-3 mt-7 border-b border-gray-200 pb-2 text-base font-bold text-blue-700">◉ Metode Biaya Persediaan</h3><label className="flex items-center gap-2 text-sm"><input type="radio" checked readOnly /> Rata-rata</label></section><section><h3 className="mb-3 border-b border-gray-200 pb-2 text-base font-bold text-blue-700">◉ Pusat Laba &amp; Biaya</h3><div className="space-y-3">{['Departemen','Proyek','Kategori Keuangan'].map(label => <label key={label} className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" className="h-4 w-4" />{label}</label>)}</div><p className="mt-3 text-xs italic text-blue-600">(Pelajari lebih lanjut)</p><h3 className="mb-3 mt-7 border-b border-gray-200 pb-2 text-base font-bold text-blue-700">▤ Lainnya</h3><label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4" />Pinjaman Karyawan</label></section></div>}{activeTab!=='perusahaan' && <PreferencePanel tab={activeTab==='persediaan'?'inventory':activeTab==='penjualan'?'sales':'purchases'} />}</div>;
+}
+
+function AccurateSalesPanel() {
+  const [autoClose, setAutoClose] = useState(false); const [returnCost, setReturnCost] = useState('bpp'); const [nonReturn, setNonReturn] = useState('hpp');
+  return <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm"><TabHeader title="Penjualan" description="Pengaturan transaksi penjualan seperti Accurate." /><div className="space-y-7"><section><h3 className="mb-3 border-b border-gray-200 pb-2 text-base font-bold text-blue-700">▣ Pesanan Penjualan</h3><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={autoClose} onChange={e=>setAutoClose(e.target.checked)} className="h-4 w-4" />Ya <span className="text-gray-400">ⓘ</span></label></section><section><h3 className="mb-3 border-b border-gray-200 pb-2 text-base font-bold text-blue-700">↩ Retur Penjualan</h3><p className="mb-2 text-sm font-semibold">Opsi Nilai Barang yang di Retur <span className="font-normal">(Nilai pengembalian yang dijurnal)</span></p><div className="space-y-2 text-sm"><label className="flex items-center gap-2"><input type="radio" name="returnCost" checked={returnCost==='last'} onChange={()=>setReturnCost('last')} />Harga Beli/Biaya masuk terakhir</label><label className="flex items-center gap-2"><input type="radio" name="returnCost" checked={returnCost==='bpp'} onChange={()=>setReturnCost('bpp')} />BPP Faktur Penjualan</label></div><p className="mb-2 mt-5 text-sm font-semibold">Opsi Jika barang TIDAK dikembalikan saat Retur</p><div className="space-y-2 text-sm"><label className="flex items-center gap-2"><input type="radio" name="nonReturn" checked={nonReturn==='hpp'} onChange={()=>setNonReturn('hpp')} />Dibebankan ke akun HPP barang</label><label className="flex items-center gap-2"><input type="radio" name="nonReturn" checked={nonReturn==='account'} onChange={()=>setNonReturn('account')} />Dibebankan ke akun</label></div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4" />Perbarui biaya barang saat simpan ulang Retur Penjualan</label></section><section><h3 className="mb-3 border-b border-gray-200 pb-2 text-base font-bold text-blue-700">♙ Pelanggan</h3><label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4" />Pelanggan baru selalu termasuk pajak</label></section></div></div>;
 }
 
 function PreferencePanel({ tab }: { tab: string }) {

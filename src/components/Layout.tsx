@@ -204,7 +204,7 @@ const navItems = [
   },
   {
     path: "/settings",
-    label: "Pengaturan",
+    label: "Preferensi",
     short: "Atur",
     icon: Settings,
     perm: "settings:view" as const,
@@ -230,7 +230,7 @@ const pageTitles: Record<string, string> = {
   "/purchase-invoices": "Faktur Pembelian",
   "/ai": "Asisten AI",
   "/users": "Pengguna & Akses",
-  "/settings": "Pengaturan",
+  "/settings": "Preferensi",
   "/reports": "Daftar Laporan",
   "/reports/workorders": "Laporan WO",
   "/reports/sales": "Laporan Penjualan",
@@ -895,7 +895,10 @@ export default function Layout() {
           const isAccurateInventoryMenu = group.id === "inventory";
           const isAccurateServiceMenu = group.id === "sales";
           const isAccurateLedgerMenu = group.id === "ledger";
-          const usesAccurateTileMenu = isAccurateInventoryMenu || isAccurateServiceMenu || isAccurateLedgerMenu;
+          const isAccuratePurchaseMenu = group.id === "purchase";
+          const isAccurateReportsMenu = group.id === "reports";
+          const isAccurateCompactMenu = isAccurateServiceMenu || isAccurateLedgerMenu || isAccuratePurchaseMenu || isAccurateReportsMenu || group.id === "cash" || group.id === "settings";
+          const usesAccurateTileMenu = isAccurateInventoryMenu || isAccurateCompactMenu;
           return (
             <>
               <button
@@ -906,7 +909,7 @@ export default function Layout() {
               />
               <section
                 data-menu-model={usesAccurateTileMenu ? "accurate" : "standard"}
-                className={`fixed top-12 z-[60] hidden max-h-[calc(100vh-3rem)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateServiceMenu || isAccurateLedgerMenu ? "w-[420px]" : isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
+                className={`fixed top-[60px] z-[60] hidden max-h-[calc(100vh-60px)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateCompactMenu ? "w-[420px]" : isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-64" : "left-[84px]"}`}
               >
                 <div className="px-4 pb-0 pt-4">
                   <div className="flex items-center justify-between">
@@ -925,7 +928,7 @@ export default function Layout() {
                   <div className={`mt-3 h-0.5 w-full ${isAccurateLedgerMenu ? "bg-[#ff4081]" : isAccurateInventoryMenu ? "bg-green-500" : "bg-blue-600"}`} />
                 </div>
                 <div className="p-4">
-                  <div className={`grid max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 ${isAccurateServiceMenu || isAccurateLedgerMenu ? "grid-cols-[repeat(3,120px)] gap-2.5" : isAccurateInventoryMenu ? "grid-cols-[repeat(auto-fit,120px)] gap-2.5" : "grid-cols-3 gap-2.5"}`}>
+                  <div className={`grid max-h-[calc(100vh-8.5rem)] overflow-y-auto pr-1 ${isAccurateCompactMenu ? "grid-cols-[repeat(3,120px)] gap-2.5" : isAccurateInventoryMenu ? "grid-cols-[repeat(auto-fit,120px)] gap-2.5" : "grid-cols-3 gap-2.5"}`}>
                     {items.map((item, index) => {
                       const Icon = item.icon;
                       const available = !!item.path;

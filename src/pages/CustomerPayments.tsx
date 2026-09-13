@@ -560,16 +560,31 @@ export default function CustomerPayments() {
         {filtered.map((r) => (
           <article
             key={r.id}
-            className="rounded-xl border bg-white p-3 shadow-sm"
+            className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
           >
-            <div className="flex justify-between gap-2">
-              <div>
-                <button type="button" onClick={() => setViewingPayment(r)} className="font-bold text-blue-700 hover:underline">{r.paymentNumber}</button>
-                <p className="text-xs text-gray-500">
-                  {displayDate(r.date)} · {r.invoiceNumber}
-                </p>
+            <div className="px-3 pb-2.5 pt-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <button type="button" onClick={() => setViewingPayment(r)} className="truncate text-left font-mono text-sm font-bold text-blue-700 hover:text-blue-900 hover:underline">{r.paymentNumber}</button>
+                  <p className="mt-0.5 text-[11px] text-gray-500">{displayDate(r.date)} · Faktur {r.invoiceNumber}</p>
+                </div>
+                <span className={`inline-flex flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${r.balanceAfter > 0 ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+                  {r.paymentStatus}
+                </span>
               </div>
-              <div className="flex items-start gap-2">
+              <div className="mt-1 min-w-0 text-xs text-gray-600">
+                <p className="truncate text-sm font-bold text-gray-900">{r.customerName}</p>
+                <p className="truncate">{r.vehicleInfo}</p>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 border-t border-gray-100 pt-2 text-xs text-gray-600">
+                <p>Masuk ke<br /><strong className="text-gray-800">{r.accountName || "-"}</strong> · {r.paymentMethod}</p>
+                <p className="text-right">Diterima<br /><strong className="text-base text-green-700">{rupiah(r.amount)}</strong></p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
+              <span className="truncate text-[10px] font-semibold text-gray-400">Sisa faktur</span>
+              <span className={`ml-auto text-xs font-bold ${r.balanceAfter > 0 ? "text-amber-700" : "text-green-700"}`}>{rupiah(r.balanceAfter)}</span>
+              <div className="flex items-center gap-1.5">
                 {hasPermission("payment:edit") && (
                   <button
                     onClick={() => openEdit(r)}
@@ -588,30 +603,8 @@ export default function CustomerPayments() {
                 >
                   <MessageCircle className="h-4 w-4" />
                 </button>
-                <b className="text-green-700">{rupiah(r.amount)}</b>
+                <button type="button" onClick={() => setViewingPayment(r)} className="rounded-lg border border-blue-200 px-2 py-1 text-[10px] font-semibold text-blue-700">Detail</button>
               </div>
-            </div>
-            <div className="mt-2 border-t pt-2">
-              <b>{r.customerName}</b>
-              <p className="truncate text-xs text-gray-500">{r.vehicleInfo}</p>
-            </div>
-            <div className="mt-2 grid grid-cols-2 text-xs">
-              <span>
-                Masuk ke
-                <br />
-                <b>{r.accountName || "-"}</b> · {r.paymentMethod}
-              </span>
-              <span className="text-right">
-                Saldo faktur
-                <br />
-                <b
-                  className={
-                    r.balanceAfter > 0 ? "text-amber-700" : "text-green-700"
-                  }
-                >
-                  {rupiah(r.balanceAfter)}
-                </b>
-              </span>
             </div>
             {hasPermission("payment:delete") && (
               <button
