@@ -55,6 +55,18 @@ function writePaymentAudit(PDO $pdo, array $payment, string $action, string $rea
         ->execute([$payment['id'] ?? null,$payment['payment_number'] ?? '',$payment['invoice_id'] ?? '',$action,substr($reason,0,255),json_encode($payment),$user['id'] ?? null,$user['name'] ?? $user['username'] ?? null]);
 }
 
+function postCustomerPaymentJournal(PDO $pdo, array $payment, array $invoice, array $user): void {
+
+    $check=$pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1');$check->execute(['customer_payment',$payment['id'],'PAYMENT']);if($check->fetchColumn())return;
+    $mapping=$pdo->prepare('SELECT receivable_coa_id FROM branch_account_settings WHERE branch_id=?');$mapping->execute([$payment['branch_id']]);$receivable=(string)($mapping->fetchColumn()?:'');
+    $cash=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$cash->execute([$payment['account_id']]);$cashAccount=(string)($cash->fetchColumn()?:'');
+    if($receivable===''||$cashAccount==='')throw new InvalidArgumentException('Mapping akun piutang atau akun penerimaan belum lengkap');
+    $journalId=generateId();$userId=$user['id']??null;$number=$payment['payment_number'];
+    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")->execute([$journalId,$payment['date'],$number,'Pembayaran '.$payment['payment_number'],$payment['branch_id'],'customer_payment',$payment['id'],$userId,$userId]);
+    $line=$pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');$line->execute([generateId(),$journalId,$cashAccount,$payment['amount'],0,'Pembayaran '.$payment['payment_number']]);$line->execute([generateId(),$journalId,$receivable,0,$payment['amount'],'Pelunasan faktur '.$invoice['invoice_number']]);
+    $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")->execute([generateId(),$journalId,'customer_payment',$payment['id'],'PAYMENT']);
+}
+
 // Setoran cabang saat ini bersifat agregat, belum menunjuk pembayaran satu per satu.
 // Karena itu pembayaran dikunci secara konservatif bila akun tunai yang sama sudah
 // memiliki setoran aktif pada tanggal pembayaran atau setelahnya.
@@ -127,6 +139,7 @@ case 'POST':
         $number=nextCustomerPaymentNumber($pdo,(string)$invoice['branch_id'],(string)$branch->fetchColumn(),$date);$paymentId=generateId();
         $insert=$pdo->prepare("INSERT INTO customer_payments(id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
         $insert->execute([$paymentId,$number,$invoiceId,$date,$amount,$methodName,$account['id'],$account['name'],trim((string)($d['notes']??''))?:null,$invoice['branch_id'],$user['id']??null,$user['name']??$user['username']??null]);
+        postCustomerPaymentJournal($pdo,['id'=>$paymentId,'payment_number'=>$number,'invoice_id'=>$invoiceId,'date'=>$date,'amount'=>$amount,'account_id'=>$account['id'],'branch_id'=>$invoice['branch_id']],$invoice,$user);
         recalculateCustomerInvoice($pdo,$invoiceId);$pdo->commit();respondSuccess(['id'=>$paymentId,'paymentNumber'=>$number],'Pembayaran pelanggan disimpan');
     }catch(Exception $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}break;
 

@@ -3,25 +3,32 @@ import {
   Building2, MapPin, Hash, ShieldCheck, Bot, Save, KeyRound,
   CheckCircle2, AlertTriangle, BookOpenCheck, ClipboardCheck, Wrench, FileText, WalletCards, Database, Trash2,
   GitBranch, Plus, ChevronUp, ChevronDown, Power,
-  Download, Upload, FileSpreadsheet, RotateCcw,
+  Download, Upload, FileSpreadsheet, RotateCcw, Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 
-type Tab = 'company' | 'branches' | 'documents' | 'workflow' | 'security' | 'ai' | 'guide' | 'backup' | 'maintenance';
+type Tab = 'company' | 'features' | 'tax' | 'sales' | 'purchases' | 'inventory' | 'defaultAccounts' | 'branches' | 'documents' | 'workflow' | 'security' | 'ai' | 'other' | 'guide' | 'backup' | 'maintenance';
 
 const tabs = [
-  { id: 'company' as const, label: 'Profil Perusahaan', icon: Building2 },
-  { id: 'branches' as const, label: 'Cabang', icon: MapPin },
-  { id: 'documents' as const, label: 'Nomor Dokumen', icon: Hash },
-  { id: 'workflow' as const, label: 'Alur Servis', icon: GitBranch },
-  { id: 'security' as const, label: 'Keamanan', icon: ShieldCheck },
-  { id: 'ai' as const, label: 'Integrasi AI', icon: Bot },
-  { id: 'guide' as const, label: 'Panduan Sistem', icon: BookOpenCheck },
-  { id: 'backup' as const, label: 'Backup & Restore', icon: FileSpreadsheet },
-  { id: 'maintenance' as const, label: 'Pemeliharaan Data', icon: Database },
+  { id: 'company' as const, label: 'Perusahaan', hint: 'Profil, logo, alamat, identitas pajak', group: 'Preferensi Utama', icon: Building2 },
+  { id: 'features' as const, label: 'Fitur', hint: 'Aktifkan modul sesuai kebutuhan usaha', group: 'Preferensi Utama', icon: ClipboardCheck },
+  { id: 'tax' as const, label: 'Pajak', hint: 'PPN dan akun pajak', group: 'Preferensi Utama', icon: FileText },
+  { id: 'defaultAccounts' as const, label: 'Akun Default', hint: 'Akun otomatis untuk transaksi', group: 'Preferensi Utama', icon: WalletCards },
+  { id: 'branches' as const, label: 'Cabang & Akun', hint: 'Kas, bank, piutang, pendapatan, persediaan', group: 'Preferensi Utama', icon: MapPin },
+  { id: 'documents' as const, label: 'Penomoran Dokumen', hint: 'Nomor WO dan faktur', group: 'Transaksi', icon: Hash },
+  { id: 'sales' as const, label: 'Penjualan', hint: 'Aturan faktur dan pembayaran pelanggan', group: 'Transaksi', icon: FileText },
+  { id: 'purchases' as const, label: 'Pembelian', hint: 'Aturan penerimaan dan hutang supplier', group: 'Transaksi', icon: WalletCards },
+  { id: 'inventory' as const, label: 'Persediaan', hint: 'Stok, HPP, gudang, dan penyesuaian', group: 'Transaksi', icon: Database },
+  { id: 'workflow' as const, label: 'Operasional Bengkel', hint: 'Alur WO dan alasan Lost Sales', group: 'Transaksi', icon: GitBranch },
+  { id: 'security' as const, label: 'Keamanan & Pembatasan', hint: 'Sesi, backdate, audit, akses', group: 'Kontrol', icon: ShieldCheck },
+  { id: 'ai' as const, label: 'Integrasi AI', hint: 'Model dan izin data Asisten AI', group: 'Integrasi', icon: Bot },
+  { id: 'other' as const, label: 'Lain-lain', hint: 'Pengaturan tambahan sistem', group: 'Sistem', icon: Wrench },
+  { id: 'guide' as const, label: 'Panduan Sistem', hint: 'Cara kerja modul CerdikApp', group: 'Sistem', icon: BookOpenCheck },
+  { id: 'backup' as const, label: 'Backup & Restore', hint: 'Cadangan transaksi Excel', group: 'Sistem', icon: FileSpreadsheet },
+  { id: 'maintenance' as const, label: 'Pemeliharaan Data', hint: 'Perbaikan dan penghapusan terkontrol', group: 'Sistem', icon: Database },
 ];
 
 const backupSheetNames = ['Pelanggan', 'Kendaraan', 'WO', 'Detail_WO', 'Faktur', 'Detail_Faktur', 'Pembayaran'] as const;
@@ -35,6 +42,7 @@ export default function SettingsPage() {
     const saved = localStorage.getItem('drac-settings-tab') as Tab | null;
     return tabs.some(item => item.id === saved) ? saved! : 'company';
   });
+  const [tabSearch, setTabSearch] = useState('');
   const [draft, setDraft] = useState<AppSettings>(() => structuredClone(data.settings));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -301,20 +309,16 @@ export default function SettingsPage() {
       )}
 
       <div className="space-y-0">
-        <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm">
-          {tabs.filter(item => !['backup', 'maintenance'].includes(item.id) || currentUser?.isOwner).map(item => {
+        <div className="border-b border-gray-200 bg-white px-3 py-3 shadow-sm sm:px-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Preferensi</p><h2 className="text-xl font-bold text-gray-900">Pengaturan CerdikApp</h2><p className="text-xs text-gray-500">Pusat pengaturan perusahaan, transaksi, akun, dan keamanan.</p></div>
+            <label className="relative block w-full lg:max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" /><input value={tabSearch} onChange={event => setTabSearch(event.target.value)} placeholder="Cari pengaturan..." className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" aria-label="Cari pengaturan" /></label>
+          </div>
+        </div>
+        <nav className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-blue-600 bg-gray-100 px-1 pt-1 shadow-sm lg:gap-1 lg:px-3">
+          {tabs.filter(item => (!['backup', 'maintenance'].includes(item.id) || currentUser?.isOwner) && `${item.label} ${item.hint} ${item.group}`.toLowerCase().includes(tabSearch.toLowerCase())).map(item => {
             const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => selectTab(item.id)}
-                className={`flex h-11 flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-4 text-left text-sm font-medium transition ${
-                  tab === item.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'
-                }`}
-              >
-                <Icon className="h-4 w-4" /> {item.label}
-              </button>
-            );
+            return <button key={item.id} onClick={() => selectTab(item.id)} title={item.hint} className={`flex h-11 flex-shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-3 text-left text-sm font-medium transition lg:px-4 ${tab === item.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-gray-300 bg-gray-200 text-gray-600 hover:bg-white'}`}><Icon className="h-4 w-4" /> {item.label}</button>;
           })}
         </nav>
 
@@ -344,6 +348,21 @@ export default function SettingsPage() {
                   <CompanyField label="Footer faktur" multiline><textarea className={`${inputClass} resize-y`} rows={3} value={draft.company.invoiceFooter} onChange={e => setCompany('invoiceFooter', e.target.value)} /></CompanyField>
                 </div>
               </div>
+            </div>
+          )}
+
+          {['features', 'tax', 'sales', 'purchases', 'inventory', 'other'].includes(tab) && <PreferencePanel tab={tab} />}
+
+          {tab === 'defaultAccounts' && (
+            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+              <TabHeader title="Akun Default" description="Seperti tab Akun di Accurate: tentukan akun yang digunakan otomatis oleh transaksi CerdikApp." />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <PreferenceAccountGroup title="Barang & Jasa" rows={['Persediaan', 'Pendapatan Jasa', 'Pendapatan Barang', 'HPP', 'Retur Penjualan', 'Diskon Penjualan']} />
+                <PreferenceAccountGroup title="Pembelian" rows={['Hutang Usaha', 'Persediaan', 'Pembelian Belum Tertagih', 'Retur Pembelian', 'Diskon Pembelian']} />
+                <PreferenceAccountGroup title="Kas & Pembayaran" rows={['Kas Tunai', 'Bank / Transfer', 'Piutang Usaha', 'Akun Pembayaran Supplier']} />
+                <PreferenceAccountGroup title="Saldo & Penyesuaian" rows={['Ekuitas Saldo Awal', 'Penyesuaian Persediaan', 'Selisih Stok', 'Pembulatan']} />
+              </div>
+              <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun yang belum dipetakan akan memblokir posting otomatis agar Buku Besar tidak menerima jurnal yang tidak lengkap.</p>
             </div>
           )}
 
@@ -571,9 +590,25 @@ export default function SettingsPage() {
 }
 
 function TabHeader({ title, description }: { title: string; description: string }) {
-  void title;
-  void description;
-  return null;
+  return <div className="mb-5 flex items-start gap-3 border-b border-gray-100 pb-4"><div className="rounded-xl bg-blue-50 p-2.5 text-blue-700"><ClipboardCheck className="h-5 w-5" /></div><div><h2 className="text-xl font-bold text-gray-900">{title}</h2><p className="mt-1 text-sm text-gray-500">{description}</p></div></div>;
+}
+
+function PreferencePanel({ tab }: { tab: string }) {
+  const content: Record<string, { title: string; description: string; groups: Array<{ title: string; items: string[] }> }> = {
+    features: { title: 'Fitur', description: 'Aktifkan hanya fitur yang benar-benar digunakan agar menu dan form tetap sederhana.', groups: [{ title: 'Perusahaan', items: ['Cabang aktif', 'Multi gudang', 'Akun & jurnal otomatis'] }, { title: 'Barang & Jasa', items: ['Barang persediaan', 'Jasa bengkel', 'Penjualan barang dan jasa terpisah'] }] },
+    tax: { title: 'Pajak', description: 'Kerangka pengaturan pajak disiapkan seperti Preferensi Accurate; aktifkan hanya jika operasional membutuhkan.', groups: [{ title: 'Pajak Penjualan', items: ['PPN keluaran', 'Harga termasuk pajak', 'Akun pajak keluaran'] }, { title: 'Pajak Pembelian', items: ['PPN masukan', 'Harga di luar pajak', 'Akun pajak masukan'] }] },
+    sales: { title: 'Penjualan', description: 'Aturan faktur, pembayaran pelanggan, retur, dan jurnal penjualan.', groups: [{ title: 'Transaksi', items: ['Penomoran faktur otomatis', 'Penjualan jasa', 'Penjualan barang', 'Pembayaran sebagian'] }, { title: 'Jurnal Otomatis', items: ['Pendapatan jasa', 'Pendapatan barang', 'Piutang pelanggan', 'Kas dan bank'] }] },
+    purchases: { title: 'Pembelian', description: 'Aturan penerimaan barang, faktur pembelian, pembayaran supplier, dan hutang.', groups: [{ title: 'Transaksi', items: ['Penerimaan barang', 'Faktur pembelian', 'Pembayaran supplier', 'Retur pembelian'] }, { title: 'Jurnal Otomatis', items: ['Persediaan', 'Hutang usaha', 'Pembelian belum tertagih', 'Kas dan bank'] }] },
+    inventory: { title: 'Persediaan', description: 'Aturan stok, gudang, biaya unit, HPP, dan penyesuaian persediaan.', groups: [{ title: 'Stok', items: ['Gudang utama per cabang', 'Stok berkurang saat faktur', 'Penerimaan menyimpan unit cost'] }, { title: 'Penilaian', items: ['HPP saat barang terjual', 'Penyesuaian stok', 'Selisih stok opname'] }] },
+    other: { title: 'Lain-lain', description: 'Pengaturan tambahan yang tidak masuk ke kelompok utama.', groups: [{ title: 'Tampilan', items: ['Bahasa Indonesia', 'Zona waktu WITA', 'Format Rupiah'] }, { title: 'Sistem', items: ['Panduan sistem', 'Backup dan restore', 'Pemeliharaan data'] }] },
+  };
+  const current = content[tab];
+  if (!current) return null;
+  return <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm"><TabHeader title={current.title} description={current.description} /><div className="grid gap-4 lg:grid-cols-2">{current.groups.map(group => <section key={group.title} className="rounded-xl border border-gray-200 p-4"><h3 className="mb-3 font-bold text-gray-900">{group.title}</h3><div className="space-y-2">{group.items.map(item => <div key={item} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm"><span>{item}</span><span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">Tersedia</span></div>)}</div></section>)}</div><p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Pengaturan rinci akan mengikuti mapping akun dan aturan transaksi CerdikApp. Fitur yang belum memiliki konfigurasi tidak dapat diposting otomatis.</p></div>;
+}
+
+function PreferenceAccountGroup({ title, rows }: { title: string; rows: string[] }) {
+  return <section className="rounded-xl border border-gray-200 p-4"><h3 className="mb-3 border-b border-gray-100 pb-2 font-bold text-gray-900">{title}</h3><div className="space-y-2">{rows.map(row => <div key={row} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm"><span>{row}</span><button type="button" className="rounded-md border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Pilih akun</button></div>)}</div></section>;
 }
 
 function CompanyField({ label, multiline = false, children }: { label: string; multiline?: boolean; children: ReactNode }) {

@@ -26,6 +26,9 @@ import CustomerPayments from './pages/CustomerPayments';
 import BranchDeposits from './pages/BranchDeposits';
 import CashAccounts from './pages/CashAccounts';
 import ChartOfAccounts from './pages/ChartOfAccounts';
+import GeneralLedger from './pages/GeneralLedger';
+import GeneralJournal from './pages/GeneralJournal';
+import OpeningBalances from './pages/OpeningBalances';
 import PerformanceBonus from './pages/PerformanceBonus';
 import SalesReport from './pages/SalesReport';
 import PurchaseReport from './pages/PurchaseReport';
@@ -82,6 +85,9 @@ function AppRoutes() {
         <Route path="cash-accounts" element={protectedPage('report:view', <CashAccounts mode="cash" />)} />
         <Route path="bank-accounts" element={protectedPage('report:view', <CashAccounts mode="bank" />)} />
         <Route path="chart-of-accounts" element={protectedPage('report:view', <ChartOfAccounts />)} />
+        <Route path="general-ledger" element={protectedPage('report:view', <GeneralLedger />)} />
+        <Route path="general-journal" element={protectedPage('report:view', <GeneralJournal />)} />
+        <Route path="opening-balances" element={protectedPage('settings:edit', <OpeningBalances />)} />
         <Route path="customers" element={protectedPage('customer:view', <Customers />)} />
         <Route path="workorders" element={protectedPage('wo:view', <WorkOrders />)} />
         <Route path="workorders/timeline" element={protectedPage('wo:view', <WorkOrderTimeline />)} />
