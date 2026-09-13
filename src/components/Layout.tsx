@@ -898,7 +898,7 @@ export default function Layout() {
           const isAccuratePurchaseMenu = group.id === "purchase";
           const isAccurateReportsMenu = group.id === "reports";
           const isAccurateCompactMenu = isAccurateServiceMenu || isAccurateLedgerMenu || isAccuratePurchaseMenu || isAccurateReportsMenu || group.id === "cash" || group.id === "settings";
-          const usesAccurateTileMenu = isAccurateInventoryMenu || isAccurateCompactMenu;
+          const usesAccurateTileMenu = isAccurateInventoryMenu || isAccurateServiceMenu || isAccurateLedgerMenu || isAccuratePurchaseMenu || isAccurateReportsMenu || group.id === "cash" || group.id === "settings";
           return (
             <>
               <button
