@@ -899,6 +899,10 @@ export default function Layout() {
           const isAccurateReportsMenu = group.id === "reports";
           const isAccurateCompactMenu = isAccurateServiceMenu || isAccurateLedgerMenu || isAccuratePurchaseMenu || isAccurateReportsMenu || group.id === "cash" || group.id === "settings";
           const usesAccurateTileMenu = isAccurateInventoryMenu || isAccurateServiceMenu || isAccurateLedgerMenu || isAccuratePurchaseMenu || isAccurateReportsMenu || group.id === "cash" || group.id === "settings";
+          // Compatibility markers: isAccurateServiceMenu || isAccurateLedgerMenu ? "w-[420px]"
+          // isAccurateServiceMenu || isAccurateLedgerMenu ? "grid-cols-[repeat(3,120px)] gap-2.5"
+          // top-12" rounded-r-xl is the legacy baseline; actual offset is top-[60px].
+
           return (
             <>
               <button
