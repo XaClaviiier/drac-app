@@ -90,7 +90,7 @@ $mapOrder = static function(array $row): array {
         'startDate'=>(string)$row['start_date'],'endDate'=>(string)$row['end_date'],'warehouseId'=>(string)$row['warehouse_id'],'warehouseCode'=>(string)$row['warehouse_code'],
         'warehouseName'=>(string)$row['warehouse_name'],'branchId'=>(string)$row['branch_id'],'branchName'=>(string)$row['branch_name'],
         'categoryId'=>$row['category_id'] ?: null,'includeZeroUnused'=>(bool)$row['include_zero_unused'],'assignedUserId'=>(string)$row['assigned_user_id'],'assignedUserName'=>(string)$row['assigned_user_name'],
-        'status'=>(string)$row['status'],'notes'=>(string)($row['notes']??''),'createdAt'=>(string)$row['created_at'],
+        'status'=>(string)$row['status'],'notes'=>preg_replace('/^\[ITEMS:\[[^\]]*\]\]\s*/','',(string)($row['notes']??'')),'createdAt'=>(string)$row['created_at'],
         'entryMode'=>(string)($row['entry_mode']??'legacy'),'revision'=>(int)($row['revision']??0),
         'result'=>$row['result_id'] ? ['id'=>(string)$row['result_id'],'resultNumber'=>(string)$row['result_number'],'date'=>(string)$row['result_date'],
             'status'=>(string)$row['result_status'],'adjustmentId'=>$row['adjustment_id']?:null,'adjustmentNumber'=>$row['adjustment_number']?:null,'notes'=>(string)($row['result_notes']??'')] : null,
@@ -153,6 +153,7 @@ if($method==='POST') {
     if(!$isValidDate($startDate)||!$isValidDate($endDate)||$startDate>$endDate||$endDate>date('Y-m-d'))respondError('Periode Stok Opname tidak valid atau melewati hari ini',422);
     $includeZeroUnused=array_key_exists('includeZeroUnused',$d)?(bool)$d['includeZeroUnused']:true;
     $categoryId=trim((string)($d['categoryId']??''));
+    $selectedItemIds=array_values(array_unique(array_filter(array_map('strval',is_array($d['selectedItemIds']??null)?$d['selectedItemIds']:[]),static fn(string $id):bool=>$id!=='')));
     $pdo->beginTransaction();try{
         lockInventoryMutation($pdo);
         $authorization=lockInventoryMutationAuthorization($pdo,$actor,'stock_opname:create',[$assignedId]);$actor=$authorization['actor'];
@@ -170,7 +171,12 @@ if($method==='POST') {
         $period=date('ym',strtotime($endDate));$seq=$pdo->prepare("SELECT order_number FROM stock_count_orders WHERE order_number LIKE ? ORDER BY order_number DESC LIMIT 1 FOR UPDATE");$seq->execute(['SO-'.$period.'-%']);$last=(string)($seq->fetchColumn()?:'');$next=preg_match('/(\d{4})$/',$last,$m)?(int)$m[1]+1:1;
         $number='SO-'.$period.'-'.str_pad((string)$next,4,'0',STR_PAD_LEFT);$newId='SC-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);
         $pdo->prepare("INSERT INTO stock_count_orders(id,order_number,order_date,start_date,end_date,warehouse_id,branch_id,category_id,include_zero_unused,assigned_user_id,assigned_user_name,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            ->execute([$newId,$number,date('Y-m-d'),$startDate,$endDate,$warehouseId,$warehouse['branch_id'],$categoryId?:null,$includeZeroUnused?1:0,$assignedId,$assigned['name']?:$assigned['username'],trim((string)($d['notes']??'')),$actor['id']]);
+            ->execute([$newId,$number,date('Y-m-d'),$startDate,$endDate,$warehouseId,$warehouse['branch_id'],$categoryId?:null,$includeZeroUnused?1:0,$assignedId,$assigned['name']?:$assigned['username'],trim((string)($d['notes']??'')), $actor['id']]);
+        if($selectedItemIds) {
+            $marker=trim((string)($d['notes']??''));
+            $marker='[ITEMS:'.json_encode($selectedItemIds,JSON_UNESCAPED_UNICODE).']'.($marker!==''?' '.$marker:'');
+            $pdo->prepare('UPDATE stock_count_orders SET notes=? WHERE id=?')->execute([$marker,$newId]);
+        }
         $pdo->commit();respondSuccess(['id'=>$newId,'orderNumber'=>$number,'status'=>'Menunggu Eksekusi'],'Perintah Stok Opname disimpan');
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),$e->getCode()===403?403:422);}
 }
@@ -210,6 +216,7 @@ if($method==='PUT'&&$id) {
             $period=date('ym',strtotime((string)$row['end_date']));$seq=$pdo->prepare("SELECT result_number FROM stock_count_results WHERE result_number LIKE ? ORDER BY result_number DESC LIMIT 1 FOR UPDATE");$seq->execute(['HSO-'.$period.'-%']);$last=(string)($seq->fetchColumn()?:'');$next=preg_match('/(\d{4})$/',$last,$m)?(int)$m[1]+1:1;$resultNumber='HSO-'.$period.'-'.str_pad((string)$next,4,'0',STR_PAD_LEFT);$resultId='SCR-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);
             $pdo->prepare("INSERT INTO stock_count_results(id,result_number,order_id,result_date,status,created_by) VALUES(?,?,?,?, 'Draft',?)")->execute([$resultId,$resultNumber,$id,$row['end_date'],$actor['id']]);
             $itemRows=$loadItemSnapshots($pdo,(string)$row['warehouse_id'],(string)$row['start_date'],(string)$row['end_date'],$row['category_id']?:null);
+            if(preg_match('/^\[ITEMS:(\[[^\]]*\])\]/',(string)$row['notes'],$matches)){$chosen=json_decode($matches[1],true);if(is_array($chosen)&&$chosen)$itemRows=$loadItemSnapshots($pdo,(string)$row['warehouse_id'],(string)$row['start_date'],(string)$row['end_date'],$row['category_id']?:null,array_values(array_map('strval',$chosen)));}
             if(!(bool)$row['include_zero_unused'])$itemRows=array_values(array_filter($itemRows,static fn(array $item):bool=>(int)$item['system_qty']!==0||(int)$item['movement_in']!==0||(int)$item['movement_out']!==0));
             $sortByCategoryUsage($itemRows,$loadCategoryUsage($pdo));$insert=$pdo->prepare("INSERT INTO stock_count_result_items(result_id,item_id,item_code,item_name,category_name,unit,system_quantity,system_version,movement_in,movement_out) VALUES(?,?,?,?,?,?,?,?,?,?)");$count=0;foreach($itemRows as$item){$insert->execute([$resultId,$item['id'],$item['code'],$item['name'],$item['category_name']?:'Tanpa Kategori',$item['unit']??'',$item['system_qty'],$item['system_version'],$item['movement_in'],$item['movement_out']]);$count++;}if(!$count)throw new InvalidArgumentException('Tidak ada barang untuk dihitung');
             $pdo->prepare("UPDATE stock_count_orders SET status='Dalam Penghitungan' WHERE id=?")->execute([$id]);$pdo->commit();respondSuccess(['resultId'=>$resultId,'resultNumber'=>$resultNumber],'Hasil Stok Opname dibuat');
