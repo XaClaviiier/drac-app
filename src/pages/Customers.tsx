@@ -5,6 +5,7 @@ import type { Customer, CustomerPerson, CustomerPersonRole } from '../types';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import CustomerImport from '../components/CustomerImport';
+import { childTabClass, ui } from '../components/ui/interfaceStandards';
 
 type ContactTemplate = 'Hubungi Kembali' | 'Terima Kasih' | 'Minta Ulasan' | 'Pengingat Servis' | 'Pesan Bebas';
 type ContactLog = { id:string; templateType:string; messageText:string; vehicleInfo?:string; workOrderNumber?:string; invoiceNumber?:string; status:string; createdByName?:string; createdAt:string };
@@ -231,10 +232,10 @@ export default function Customers() {
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
       {showImport && <CustomerImport branches={importBranches} defaultBranchId={resolveBranchId()} onClose={() => setShowImport(false)} onComplete={refreshData} />}
       {/* Subtab modul Pelanggan (desktop) */}
-      <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
-        <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}><List className="h-6 w-6" /></button>
+      <div className={`${ui.childBar} hidden lg:flex`}>
+        <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`${childTabClass(!showModal)} flex h-10 w-14 items-center justify-center`}><List className="h-5 w-5" /></button>
         {showModal && (
-          <div className="ml-0.5 flex h-11 min-w-48 max-w-80 items-center rounded-t-md border border-b-0 border-blue-600 bg-blue-600 text-white">
+          <div className={`${ui.childTabActive} ml-0.5 flex h-10 min-w-48 max-w-80 items-center`}>
             <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.companyName || editingCustomer.name}` : 'Akun Pelanggan Baru'}</span>
             <button type="button" onClick={() => handleCloseModal()} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
@@ -243,34 +244,30 @@ export default function Customers() {
 
       <div className={`${showModal ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5`}>
       {/* Search */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+      <div className="space-y-2">
+        <div className={`${ui.toolbar} flex flex-wrap items-center gap-2`}>
           <select aria-label="Filter status pelanggan" className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 shadow-sm"><option>Non Aktif: Semua</option></select>
           <select aria-label="Filter kategori pelanggan" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 shadow-sm"><option value="">Kategori: Semua</option>{customerCategories.map(category => <option key={category} value={category}>{category}</option>)}</select>
-          <button type="button" title="Tambah kriteria" className="inline-flex h-9 items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-3 text-sm text-blue-700"><Filter className="h-4 w-4" />Kriteria</button>
-          <button type="button" onClick={() => void refreshData()} title="Muat ulang" className="ml-auto flex h-9 w-9 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"><RefreshCw className="h-4 w-4" /></button>
+          <button type="button" title="Tambah kriteria" aria-label="Tambah kriteria" className="inline-flex h-9 items-center gap-2 rounded border border-blue-600 bg-white px-3 text-sm font-semibold text-blue-700"><Filter className="h-4 w-4" />Filter</button>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="relative w-full max-w-xl">
+        <div className={`${ui.toolbar} flex flex-wrap items-center gap-2`}>
+          {hasPermission('customer:create') && <button type="button" onClick={() => handleOpenModal()} title="Tambah akun pelanggan" aria-label="Tambah akun pelanggan" className="order-1 inline-flex h-9 w-11 flex-shrink-0 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700 lg:w-14"><Plus className="h-5 w-5" /></button>}
+          <button type="button" onClick={() => void refreshData()} title="Muat ulang" className="order-2 flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"><RefreshCw className="h-4 w-4" /></button>
+          <div className="relative order-3 ml-auto w-full max-w-xl lg:flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
               placeholder="Cari akun, perusahaan, PIC, telepon, atau kendaraan..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-9 w-full rounded-md border border-gray-300 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className={`${ui.search} h-9 w-full pl-10 pr-4`}
             />
           </div>
-          <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print daftar pelanggan" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Printer className="h-4 w-4" /><span className="hidden xl:inline">Print</span></button>
-          <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Export CSV" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Download className="h-4 w-4" /><span className="hidden xl:inline">Export</span></button>
-          <span className="hidden h-9 items-center rounded-md border border-gray-300 bg-white px-4 text-sm text-gray-700 lg:inline-flex">{filteredCustomers.length.toLocaleString('id-ID')}</span>
-          {hasPermission('customer:create') && <button type="button" onClick={() => setShowImport(true)} className="h-9 shrink-0 rounded-lg border border-blue-300 px-3 text-sm text-blue-700">Import Customer</button>}
-          {hasPermission('customer:create') && (
-            <button onClick={() => handleOpenModal()} title="Tambah akun pelanggan" className="inline-flex h-9 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
-              <Plus className="h-5 w-5" /><span className="hidden sm:inline">Tambah Akun</span>
-            </button>
-          )}
-          <div className="relative hidden lg:block">
+          <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Download" className="order-5 hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 sm:inline-flex"><Download className="h-4 w-4" /></button>
+          <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print" className="order-6 hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 sm:inline-flex"><Printer className="h-4 w-4" /></button>
+          <span className="order-8 hidden h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 lg:flex">{filteredCustomers.length.toLocaleString('id-ID')}</span>
+          {hasPermission('customer:create') && <button type="button" onClick={() => setShowImport(true)} className="order-4 h-9 shrink-0 rounded border border-blue-300 bg-white px-3 text-sm text-blue-700">Import Customer</button>}
+          <div className="relative order-7 hidden lg:block">
             <button type="button" onClick={() => setShowColumnPicker(current => !current)} title="Pilih kolom tabel" className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${showColumnPicker ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}><Settings2 className="h-4 w-4" /></button>
             {showColumnPicker && (
               <>
@@ -294,10 +291,10 @@ export default function Customers() {
 
       {/* Desktop Customer Table */}
       {filteredCustomers.length > 0 && (
-        <div className="hidden overflow-hidden border border-gray-300 bg-white shadow-sm lg:block">
+        <div className={`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`}>
           <div className="max-h-[calc(100vh-245px)] overflow-auto">
             <table className="w-full min-w-[1050px] text-left">
-              <thead className="sticky top-0 z-10 bg-[#5f7690] text-xs text-white">
+              <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
                   {visibleColumns.includes('name') && <th className="px-4 py-3 font-semibold">Nama</th>}
                   {visibleColumns.includes('phone') && <th className="px-4 py-3 font-semibold">No. Telepon</th>}
