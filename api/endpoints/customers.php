@@ -1,4 +1,9 @@
 <?php
+require_once __DIR__ . '/../customer-import.php';
+if (in_array($id, ['import-preview', 'import'], true)) {
+    require __DIR__ . '/customer-import.php';
+    return;
+}
 $sanitizeCustomerName = static function ($value): string {
     $name = trim((string)$value);
     $name = preg_replace('/^(?:(?:reg)(?:\s+wo)?|wo)\b\s*[,;:\-]?\s*/iu', '', $name);
@@ -11,6 +16,7 @@ switch ($method) {
     case 'GET':
         $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
         foreach ($rows as &$r) {
+            $r['categories'] = json_decode($r['categories'] ?? '[]', true) ?: [];
             $r['customerCode']       = $r['customer_code'];
             $r['companyName']        = $r['company_name'] ?? '';
             $r['accountType']        = $r['account_type'] ?? 'Pribadi';
@@ -30,22 +36,23 @@ switch ($method) {
         if ($name === '' && $companyName !== '') $name = function_exists('mb_strtoupper') ? mb_strtoupper($companyName, 'UTF-8') : strtoupper($companyName);
         $phone = trim((string)($d['phone'] ?? ''));
         if ($name === '' || ($companyName === '' && $phone === '')) respondError('Nama customer dan nomor HP wajib diisi. Untuk perusahaan, Nama Perusahaan wajib diisi.', 422);
-        $normalizedPhone = preg_replace('/\D/', '', $phone);
+        $branchId = (string)($d['branchId'] ?? '');
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        $firstSeenBranchId = (string)($d['firstSeenBranchId'] ?? $branchId);
+        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
+        if ((int)$pdo->query("SELECT GET_LOCK('customer_code_sequence', 10)")->fetchColumn() !== 1) respondError('Master pelanggan sedang diproses. Coba lagi.', 409);
+        $normalizedPhone = customerImportPhone($phone) ?: preg_replace('/\D/', '', $phone);
         foreach ($pdo->query("SELECT customer_code, name, phone FROM customers")->fetchAll() as $existing) {
-            if ($normalizedPhone !== '' && preg_replace('/\D/', '', (string)$existing['phone']) === $normalizedPhone) {
+            if ($normalizedPhone !== '' && (customerImportPhone((string)$existing['phone']) ?: preg_replace('/\D/', '', (string)$existing['phone'])) === $normalizedPhone) {
+                $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
                 respondError('Nomor HP sudah terdaftar atas nama ' . $existing['name'] . ' (' . $existing['customer_code'] . ').', 409);
             }
         }
-        $pdo->query("SELECT GET_LOCK('customer_code_sequence', 10)");
         $maxRow = $pdo->query("
             SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED))
             FROM customers WHERE customer_code REGEXP '^PLG-[0-9]+$'
         ")->fetchColumn();
         $code = 'PLG-' . str_pad((string)(((int)$maxRow) + 1), 3, '0', STR_PAD_LEFT);
-        $branchId = (string)($d['branchId'] ?? '');
-        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
-        $firstSeenBranchId = (string)($d['firstSeenBranchId'] ?? $branchId);
-        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $firstSeenBranchId);
 
         $customerId = $d['id'] ?? generateId();
         $accountType = $companyName !== '' ? 'Perusahaan' : 'Pribadi';
@@ -60,7 +67,7 @@ switch ($method) {
             $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,after_json,user_id,user_name) VALUES('customer',?,'create',?,?,?)")->execute([$customerId,json_encode(['name'=>$name,'companyName'=>$companyName,'accountType'=>$accountType,'phone'=>$phone,'email'=>$d['email']??'','address'=>$d['address']??''],JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
             $pdo->commit();
         } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
-        $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
+        finally { $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')"); }
         respondSuccess(['customerCode' => $code], 'Pelanggan ditambahkan');
         break;
 
@@ -78,12 +85,25 @@ switch ($method) {
         if ($name === '') respondError('Nama pelanggan wajib diisi.', 422);
         $companyName = trim((string)($d['companyName'] ?? ($current['company_name'] ?? '')));
         $accountType = $companyName !== '' ? 'Perusahaan' : 'Pribadi';
+        if ((int)$pdo->query("SELECT GET_LOCK('customer_code_sequence', 10)")->fetchColumn() !== 1) respondError('Master pelanggan sedang diproses. Coba lagi.', 409);
+        $newPhone = customerImportPhone((string)($d['phone'] ?? ''));
+        foreach ($pdo->query('SELECT id,phone FROM customers')->fetchAll() as $other) {
+            if ($other['id'] !== $id && $newPhone !== '' && customerImportPhone((string)$other['phone']) === $newPhone) {
+                $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
+                respondError('Nomor HP sudah digunakan pelanggan lain.', 409);
+            }
+        }
+        $pdo->beginTransaction();
+        try {
         $after = ['name'=>$name,'companyName'=>$companyName,'accountType'=>$accountType,'phone'=>$d['phone']??'','email'=>$d['email']??'','address'=>$d['address']??'','branchId'=>$branchId];
         $stmt = $pdo->prepare("UPDATE customers SET name=?,company_name=?,account_type=?,phone=?,email=?,address=?,branch_id=? WHERE id=?");
         $stmt->execute([$name,$companyName,$accountType,$d['phone'] ?? '',$d['email'] ?? '',$d['address'] ?? '',$branchId,$id]);
         $pdo->prepare("UPDATE customer_people SET name=?,phone=?,email=? WHERE id=? AND relationship_label='Pemilik akun'")
             ->execute([$name,$d['phone'] ?? '',$d['email'] ?? '',$current['primary_contact_id'] ?? '']);
         $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,before_json,after_json,user_id,user_name) VALUES('customer',?,'update',?,?,?,?)")->execute([$id,json_encode($current,JSON_UNESCAPED_UNICODE),json_encode($after,JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
+        $pdo->commit();
+        } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+        finally { $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')"); }
         respondSuccess(null, 'Pelanggan diupdate');
         break;
 

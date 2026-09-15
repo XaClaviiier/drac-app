@@ -380,6 +380,8 @@ function assertNoDuplicateStockCountResultItems(PDO $pdo): void {
 }
 
 function ensureApiSupportTables(PDO $pdo): void {
+    require_once __DIR__ . '/customer-import.php';
+    ensureCustomerImportSchema($pdo);
     $customerColumns = array_column($pdo->query("SHOW COLUMNS FROM customers")->fetchAll(), 'Field');
     if (!in_array('account_type', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD account_type ENUM('Pribadi','Perusahaan') NOT NULL DEFAULT 'Pribadi' AFTER name");
     if (!in_array('company_name', $customerColumns, true)) $pdo->exec("ALTER TABLE customers ADD company_name VARCHAR(150) NOT NULL DEFAULT '' AFTER name");

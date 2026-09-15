@@ -35,6 +35,8 @@ export interface Vehicle {
 }
 
 export interface Customer {
+  /** Kategori sumber customer, independen dari cabang asal. */
+  categories?: string[];
   id: string;
   customerCode: string;
   name: string;

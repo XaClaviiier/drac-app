@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3, Filter, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Customer, CustomerPerson, CustomerPersonRole } from '../types';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
+import CustomerImport from '../components/CustomerImport';
 
 type ContactTemplate = 'Hubungi Kembali' | 'Terima Kasih' | 'Minta Ulasan' | 'Pengingat Servis' | 'Pesan Bebas';
 type ContactLog = { id:string; templateType:string; messageText:string; vehicleInfo?:string; workOrderNumber?:string; invoiceNumber?:string; status:string; createdByName?:string; createdAt:string };
@@ -19,10 +20,13 @@ const customerColumns: Array<{ id: CustomerColumn; label: string; locked?: boole
 const defaultCustomerColumns: CustomerColumn[] = ['name', 'phone', 'plates', 'vehicles', 'workOrders', 'invoices', 'actions'];
 
 export default function Customers() {
-  const { data, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
+  const { data, currentUser, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
+  const [showImport, setShowImport] = useState(false);
+  const importBranches = data.branches.filter(branch => branch.isActive && (currentUser?.isOwner || hasPermission('all_branches') || branch.id === currentUser?.branchId || currentUser?.branchIds?.includes(branch.id)));
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [columnSearch, setColumnSearch] = useState('');
   const [contactCustomer, setContactCustomer] = useState<Customer | null>(null);
@@ -58,12 +62,14 @@ export default function Customers() {
       const matchesPlate = data.vehicles.some(v => (v.customerRefId === c.id || (!v.customerRefId && v.customerId === c.customerCode)) && v.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesSearch =
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.categories || []).some(category => category.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.phone.includes(searchTerm) ||
         c.email.toLowerCase().includes(searchTerm.toLowerCase()) || matchesPlate;
-      return matchesSearch;
+      return matchesSearch && (!categoryFilter || (c.categories || []).includes(categoryFilter));
     });
-  }, [data.customers, data.vehicles, searchTerm]);
+  }, [data.customers, data.vehicles, searchTerm, categoryFilter]);
+  const customerCategories = useMemo(() => Array.from(new Set(data.customers.flatMap(customer => customer.categories || []))).sort((a, b) => a.localeCompare(b)), [data.customers]);
 
   const setColumns = (columns: CustomerColumn[]) => {
     const next = Array.from(new Set<CustomerColumn>(['name', ...columns, 'actions']));
@@ -223,6 +229,7 @@ export default function Customers() {
 
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
+      {showImport && <CustomerImport branches={importBranches} defaultBranchId={resolveBranchId()} onClose={() => setShowImport(false)} onComplete={refreshData} />}
       {/* Subtab modul Pelanggan (desktop) */}
       <div className="hidden items-end border-b border-blue-600 bg-gray-100 px-1 lg:flex">
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`flex h-11 w-14 items-center justify-center rounded-t-md border border-b-0 ${!showModal ? 'border-green-600 bg-green-500 text-white' : 'border-gray-300 bg-green-500 text-white hover:bg-green-600'}`}><List className="h-6 w-6" /></button>
@@ -236,7 +243,13 @@ export default function Customers() {
 
       <div className={`${showModal ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5`}>
       {/* Search */}
-      <div>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+          <select aria-label="Filter status pelanggan" className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 shadow-sm"><option>Non Aktif: Semua</option></select>
+          <select aria-label="Filter kategori pelanggan" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 shadow-sm"><option value="">Kategori: Semua</option>{customerCategories.map(category => <option key={category} value={category}>{category}</option>)}</select>
+          <button type="button" title="Tambah kriteria" className="inline-flex h-9 items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-3 text-sm text-blue-700"><Filter className="h-4 w-4" />Kriteria</button>
+          <button type="button" onClick={() => void refreshData()} title="Muat ulang" className="ml-auto flex h-9 w-9 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"><RefreshCw className="h-4 w-4" /></button>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <div className="relative w-full max-w-xl">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -245,11 +258,13 @@ export default function Customers() {
               placeholder="Cari akun, perusahaan, PIC, telepon, atau kendaraan..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-9 w-full rounded-lg border border-gray-300 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="h-9 w-full rounded-md border border-gray-300 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print daftar pelanggan" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Printer className="h-4 w-4" /><span className="hidden xl:inline">Print</span></button>
           <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Export CSV" className="hidden h-9 items-center justify-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 text-sm font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex"><Download className="h-4 w-4" /><span className="hidden xl:inline">Export</span></button>
+          <span className="hidden h-9 items-center rounded-md border border-gray-300 bg-white px-4 text-sm text-gray-700 lg:inline-flex">{filteredCustomers.length.toLocaleString('id-ID')}</span>
+          {hasPermission('customer:create') && <button type="button" onClick={() => setShowImport(true)} className="h-9 shrink-0 rounded-lg border border-blue-300 px-3 text-sm text-blue-700">Import Customer</button>}
           {hasPermission('customer:create') && (
             <button onClick={() => handleOpenModal()} title="Tambah akun pelanggan" className="inline-flex h-9 flex-shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700">
               <Plus className="h-5 w-5" /><span className="hidden sm:inline">Tambah Akun</span>
@@ -279,12 +294,12 @@ export default function Customers() {
 
       {/* Desktop Customer Table */}
       {filteredCustomers.length > 0 && (
-        <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
+        <div className="hidden overflow-hidden border border-gray-300 bg-white shadow-sm lg:block">
           <div className="max-h-[calc(100vh-245px)] overflow-auto">
             <table className="w-full min-w-[1050px] text-left">
-              <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
+              <thead className="sticky top-0 z-10 bg-[#5f7690] text-xs text-white">
                 <tr>
-                  {visibleColumns.includes('name') && <th className="px-4 py-3 font-semibold">Kode / Nama Pelanggan</th>}
+                  {visibleColumns.includes('name') && <th className="px-4 py-3 font-semibold">Nama</th>}
                   {visibleColumns.includes('phone') && <th className="px-4 py-3 font-semibold">No. Telepon</th>}
                   {visibleColumns.includes('plates') && <th className="px-4 py-3 font-semibold">No. Plat Kendaraan</th>}
                   {visibleColumns.includes('email') && <th className="px-4 py-3 font-semibold">Email</th>}
@@ -318,6 +333,7 @@ export default function Customers() {
                           </div>
                           <div className="min-w-0">
                             <p className="max-w-[220px] truncate text-sm font-semibold text-gray-900">{customer.name}</p>
+                            {!!customer.categories?.length && <p className="max-w-[220px] text-xs text-gray-500">{customer.categories.join(', ')}</p>}
                             {customer.companyName && <p className="max-w-[220px] truncate text-xs text-gray-500">{customer.companyName}</p>}
                             <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
                           </div>
@@ -407,6 +423,7 @@ export default function Customers() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900">{customer.name}</h3>
+                      {!!customer.categories?.length && <p className="text-xs text-gray-500">{customer.categories.join(', ')}</p>}
                       {customer.companyName && <p className="text-xs text-gray-500">{customer.companyName}</p>}
                       <p className="text-xs text-blue-600 font-mono font-medium">{customer.customerCode}</p>
                       <p className="text-xs text-gray-500">Sejak {customer.createdAt}</p>

@@ -5,6 +5,7 @@
 date_default_timezone_set('Asia/Makassar');
 require_once 'config.php';
 require_once 'helpers.php';
+require_once 'customer-import.php';
 // Seluruh audit operasional memakai WITA. Berkas router ini ikut deployment,
 // sedangkan config.php sengaja tidak ditimpa agar kredensial hosting tetap aman.
 try {
@@ -16,6 +17,9 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_adjustment_details_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_simple_opname_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_coa_details_v1');
+    runVersionedApiBootstrap($pdo, 'api_support_20260915_customer_import_v1', static function(PDO $pdo): void {
+        ensureCustomerImportSchema($pdo);
+    });
     $pdo->exec("CREATE TABLE IF NOT EXISTS journal_entries (id VARCHAR(64) PRIMARY KEY,entry_date DATE NOT NULL,entry_number VARCHAR(60) NOT NULL UNIQUE,description VARCHAR(500) NOT NULL,branch_id VARCHAR(64) NULL,source_type VARCHAR(30) NOT NULL DEFAULT 'manual',source_id VARCHAR(64) NULL,posted TINYINT(1) NOT NULL DEFAULT 1,status VARCHAR(20) NOT NULL DEFAULT 'Posted',created_by VARCHAR(64) NULL,posted_by VARCHAR(64) NULL,posted_at DATETIME NULL,reversal_of_id VARCHAR(64) NULL,void_reason VARCHAR(500) NULL,created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,INDEX idx_journal_date(entry_date),INDEX idx_journal_branch_date(branch_id,entry_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS journal_lines (id VARCHAR(64) PRIMARY KEY,journal_id VARCHAR(64) NOT NULL,account_id VARCHAR(64) NOT NULL,debit DECIMAL(18,2) NOT NULL DEFAULT 0,credit DECIMAL(18,2) NOT NULL DEFAULT 0,memo VARCHAR(500) NULL,INDEX idx_journal_line_journal(journal_id),INDEX idx_journal_line_account(account_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS journal_postings (id VARCHAR(64) PRIMARY KEY,journal_id VARCHAR(64) NOT NULL,source_type VARCHAR(40) NOT NULL,source_id VARCHAR(64) NULL,posting_key VARCHAR(60) NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'Posted',created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_journal_posting(source_type,source_id,posting_key)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");

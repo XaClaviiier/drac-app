@@ -19,6 +19,7 @@ const API_BASE_URL = (() => {
 })();
 
 export interface ApiResponse<T = any> {
+  httpStatus?: number;
   success: boolean;
   message?: string;
   data?: T;
@@ -56,7 +57,7 @@ async function request<T = any>(
       localStorage.removeItem('apiToken');
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') window.location.assign('/login');
     }
-    return data;
+    return { ...data, httpStatus: response.status };
   } catch (error: any) {
     console.error('API Error:', url, error);
     return {
@@ -104,8 +105,8 @@ export const api = {
 
   // ========== GENERIC CRUD ==========
   get: <T = any>(resource: string) => request<T>(`/${resource}`, { method: 'GET' }),
-  create: (resource: string, data: any) =>
-    request(`/${resource}`, { method: 'POST', body: JSON.stringify(data) }),
+  create: (resource: string, data: any, options: Pick<RequestInit, 'signal'> = {}) =>
+    request(`/${resource}`, { ...options, method: 'POST', body: JSON.stringify(data) }),
   update: (resource: string, id: string, data: any) =>
     request(`/${resource}/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (resource: string, id: string) =>

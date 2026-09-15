@@ -233,6 +233,7 @@ try {
     // Customers
     $rows = $pdo->query("SELECT * FROM customers ORDER BY customer_code")->fetchAll();
     foreach ($rows as &$r) {
+        $r['categories'] = json_decode($r['categories'] ?? '[]', true) ?: [];
         $r['customerCode']      = $r['customer_code'];
         $r['companyName']       = $r['company_name'] ?? '';
         $r['accountType']       = $r['account_type'] ?? 'Pribadi';
