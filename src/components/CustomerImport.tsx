@@ -5,9 +5,9 @@ import type { ImportMapping, ImportPreview, ImportRow, ImportTable } from '../li
 
 const labels = { name: 'Nama', phone: 'Telepon / Handphone', businessPhone: 'Telepon bisnis', category: 'Kategori', accurateId: 'ID Accurate', email: 'Email', address: 'Alamat', contact: 'Kontak', description: 'Deskripsi sumber' };
 const statuses: Record<string, string> = { new: 'Baru', existing: 'Existing (skip)', duplicate: 'Duplikat', conflict: 'Konflik', invalid: 'Invalid', created: 'Berhasil' };
-type Props = { branches: { id: string; name: string }[]; defaultBranchId: string; onClose: () => void; onComplete: () => Promise<void> };
+type Props = { branches: { id: string; name: string }[]; defaultBranchId: string; onClose: () => void; onComplete: () => Promise<void>; embedded?: boolean };
 
-export default function CustomerImport({ branches, defaultBranchId, onClose, onComplete }: Props) {
+export default function CustomerImport({ branches, defaultBranchId, onClose, onComplete, embedded = false }: Props) {
   const [table, setTable] = useState<ImportTable>();
   const [mapping, setMapping] = useState<ImportMapping>();
   const [source, setSource] = useState('');
@@ -72,8 +72,7 @@ export default function CustomerImport({ branches, defaultBranchId, onClose, onC
   const visible = preview?.rows.filter(row => filter === 'all' || row.status === filter) || [];
   const locked = Boolean(busy || uncertain || preview?.verified);
   const button = 'rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium disabled:opacity-40';
-  return <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-2 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="import-title">
-    <div className="mx-auto max-w-6xl space-y-4 rounded-xl bg-white p-4 sm:p-6">
+  const content = <div className={`${embedded ? 'mx-auto max-w-6xl' : 'mx-auto my-2 max-h-[calc(100vh-1rem)] max-w-6xl overflow-y-auto sm:my-6 sm:max-h-[calc(100vh-3rem)]'} space-y-4 rounded-xl bg-white p-4 sm:p-6`}>
       <div className="flex items-center justify-between gap-3"><h2 id="import-title" className="text-lg font-semibold">Import Customer</h2><button className={button} onClick={onClose} disabled={Boolean(busy || uncertain)}>Tutup</button></div>
       <p className="text-sm text-gray-600">Customer berlaku global untuk semua cabang. Kategori Accurate tetap kategori. Existing di-skip; konflik dan nomor tidak valid perlu diperbaiki pada salinan file lalu dipreview ulang.</p>
       <div className="flex flex-wrap items-end gap-3">
@@ -97,6 +96,6 @@ export default function CustomerImport({ branches, defaultBranchId, onClose, onC
         <div className="flex items-center gap-3 text-sm"><button className={button} disabled={page === 0} onClick={() => setPage(page - 1)}>Sebelumnya</button><span>{visible.length ? page * 50 + 1 : 0}–{Math.min((page + 1) * 50, visible.length)} dari {visible.length}</span><button className={button} disabled={(page + 1) * 50 >= visible.length} onClick={() => setPage(page + 1)}>Berikutnya</button></div>
         {!preview.verified && <div className="space-y-3 border-t pt-3"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirmed} disabled={Boolean(busy || uncertain)} onChange={event => setConfirmed(event.target.checked)} />Saya sudah meninjau preview dan akan membuat hanya {preview.counts.new} customer baru. Existing, konflik, duplikat dan invalid tidak diimpor sebagai customer baru.</label><button className={`${button} bg-blue-600 text-white`} disabled={Boolean(busy) || (!uncertain && (!confirmed || !preview.counts.new))} onClick={() => void execute()}>{uncertain ? 'Coba ulang aman / verifikasi hasil' : `Import ${preview.counts.new} customer baru`}</button></div>}
       </>}
-    </div>
-  </div>;
+    </div>;
+  return embedded ? content : <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/50 p-2 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="import-title">{content}</div>;
 }

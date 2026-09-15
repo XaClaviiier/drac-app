@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import VehicleRegister from './pages/VehicleRegister';
 import SalesInvoice from './pages/SalesInvoice';
 import Customers from './pages/Customers';
+import CustomerImportPage from './pages/CustomerImportPage';
 import WorkOrders from './pages/WorkOrders';
 import WorkOrderTimeline from './pages/WorkOrderTimeline';
 import ItemsAndServices from './pages/ItemsAndServices';
@@ -89,6 +90,7 @@ function AppRoutes() {
         <Route path="general-journal" element={protectedPage('report:view', <GeneralJournal />)} />
         <Route path="opening-balances" element={protectedPage('settings:edit', <OpeningBalances />)} />
         <Route path="customers" element={protectedPage('customer:view', <Customers />)} />
+        <Route path="customers/import" element={protectedPage('customer:create', <CustomerImportPage />)} />
         <Route path="workorders" element={protectedPage('wo:view', <WorkOrders />)} />
         <Route path="workorders/timeline" element={protectedPage('wo:view', <WorkOrderTimeline />)} />
         <Route path="historical-entry" element={protectedPage('invoice:create', <HistoricalQuickEntry />)} />

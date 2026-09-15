@@ -219,6 +219,7 @@ const pageTitles: Record<string, string> = {
   "/invoices": "Faktur Penjualan",
   "/customer-payments": "Pembayaran Pelanggan",
   "/customers": "Pelanggan",
+  "/customers/import": "Impor Pelanggan",
   "/vehicles": "Register Kendaraan",
   "/items": "Barang & Jasa",
   "/warehouses": "Gudang & Stok",

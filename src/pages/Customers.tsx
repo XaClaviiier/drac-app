@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3, Filter, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useNavigate } from 'react-router-dom';
 import type { Customer, CustomerPerson, CustomerPersonRole } from '../types';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
-import CustomerImport from '../components/CustomerImport';
 import { ui } from '../components/ui/interfaceStandards';
 
 type ContactTemplate = 'Hubungi Kembali' | 'Terima Kasih' | 'Minta Ulasan' | 'Pengingat Servis' | 'Pesan Bebas';
@@ -21,9 +21,8 @@ const customerColumns: Array<{ id: CustomerColumn; label: string; locked?: boole
 const defaultCustomerColumns: CustomerColumn[] = ['name', 'phone', 'plates', 'vehicles', 'workOrders', 'invoices', 'actions'];
 
 export default function Customers() {
-  const { data, currentUser, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
-  const [showImport, setShowImport] = useState(false);
-  const importBranches = data.branches.filter(branch => branch.isActive && (currentUser?.isOwner || hasPermission('all_branches') || branch.id === currentUser?.branchId || currentUser?.branchIds?.includes(branch.id)));
+  const { data, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
+  const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -230,7 +229,6 @@ export default function Customers() {
 
   return (
     <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
-      {showImport && <CustomerImport branches={importBranches} defaultBranchId={resolveBranchId()} onClose={() => setShowImport(false)} onComplete={refreshData} />}
       {/* Subtab modul Pelanggan (desktop) */}
       <div className={`${ui.childBar} hidden lg:flex`}>
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={ui.childListTab}><List className="h-5 w-5" /></button>
@@ -266,7 +264,7 @@ export default function Customers() {
           <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Download" className="order-5 hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 sm:inline-flex"><Download className="h-4 w-4" /></button>
           <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print" className="order-6 hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 sm:inline-flex"><Printer className="h-4 w-4" /></button>
           <span className="order-8 hidden h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 lg:flex">{filteredCustomers.length.toLocaleString('id-ID')}</span>
-          {hasPermission('customer:create') && <button type="button" onClick={() => setShowImport(true)} className="order-4 h-9 shrink-0 rounded border border-blue-300 bg-white px-3 text-sm text-blue-700">Import Customer</button>}
+          {hasPermission('customer:create') && <button type="button" onClick={() => navigate('/customers/import')} className="order-4 h-9 shrink-0 rounded border border-blue-300 bg-white px-3 text-sm text-blue-700">Import Customer</button>}
           <div className="relative order-7 hidden lg:block">
             <button type="button" onClick={() => setShowColumnPicker(current => !current)} title="Pilih kolom tabel" className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${showColumnPicker ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}><Settings2 className="h-4 w-4" /></button>
             {showColumnPicker && (
