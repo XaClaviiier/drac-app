@@ -1318,7 +1318,7 @@ export default function Layout() {
               return (
                 <div
                   key={tab.path}
-                  className={`${workspaceTabClass(active)} min-w-40 max-w-56`}
+                  className={workspaceTabClass(active)}
                 >
                   <button
                     type="button"

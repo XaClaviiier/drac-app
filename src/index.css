@@ -206,6 +206,7 @@ body { margin: 0; background: #f3f4f6; }
   background: var(--app-tab-idle);
   color: #4b5563;
   transition: background-color .15s, color .15s;
+  box-sizing: border-box;
 }
 .app-workspace-tab:hover { background: #e8eaed; }
 .app-workspace-tab--active {
@@ -253,6 +254,7 @@ body { margin: 0; background: #f3f4f6; }
   border-radius: 6px 6px 0 0;
   background: #d0d0d0;
   color: #4b5563;
+  box-sizing: border-box;
 }
 .app-child-tab--active {
   position: relative;
@@ -274,6 +276,7 @@ body { margin: 0; background: #f3f4f6; }
   border-radius: 6px 6px 0 0;
   background: #58c915;
   color: #fff;
+  box-sizing: border-box;
 }
 
 /* Pada HP, tab dan toolbar WO adalah satu header dua tingkat. Keduanya tetap

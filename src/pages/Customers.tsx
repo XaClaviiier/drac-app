@@ -5,7 +5,7 @@ import type { Customer, CustomerPerson, CustomerPersonRole } from '../types';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import CustomerImport from '../components/CustomerImport';
-import { childTabClass, ui } from '../components/ui/interfaceStandards';
+import { ui } from '../components/ui/interfaceStandards';
 
 type ContactTemplate = 'Hubungi Kembali' | 'Terima Kasih' | 'Minta Ulasan' | 'Pengingat Servis' | 'Pesan Bebas';
 type ContactLog = { id:string; templateType:string; messageText:string; vehicleInfo?:string; workOrderNumber?:string; invoiceNumber?:string; status:string; createdByName?:string; createdAt:string };
@@ -233,7 +233,7 @@ export default function Customers() {
       {showImport && <CustomerImport branches={importBranches} defaultBranchId={resolveBranchId()} onClose={() => setShowImport(false)} onComplete={refreshData} />}
       {/* Subtab modul Pelanggan (desktop) */}
       <div className={`${ui.childBar} hidden lg:flex`}>
-        <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={`${childTabClass(!showModal)} flex h-10 w-14 items-center justify-center`}><List className="h-5 w-5" /></button>
+        <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={ui.childListTab}><List className="h-5 w-5" /></button>
         {showModal && (
           <div className={`${ui.childTabActive} ml-0.5 flex h-10 min-w-48 max-w-80 items-center`}>
             <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.companyName || editingCustomer.name}` : 'Akun Pelanggan Baru'}</span>
