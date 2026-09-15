@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, MessageCircle, History, Clock3, Filter, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, ExternalLink, MessageCircle, History, Clock3, Filter, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import type { Customer, CustomerPerson, CustomerPersonRole } from '../types';
@@ -261,10 +261,10 @@ export default function Customers() {
               className={`${ui.search} h-9 w-full pl-10 pr-4`}
             />
           </div>
-          <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Download" className="order-5 hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 sm:inline-flex"><Download className="h-4 w-4" /></button>
+          {hasPermission('customer:create') && <button type="button" onClick={() => navigate('/customers/import')} title="Impor Data" aria-label="Impor Data" className="order-4 h-9 w-11 shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50 inline-flex"><Download className="h-4 w-4" /></button>}
+          <button type="button" onClick={exportCustomers} disabled={filteredCustomers.length === 0} title="Ekspor Data" aria-label="Ekspor Data" className="order-5 hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 sm:inline-flex"><ExternalLink className="h-4 w-4" /></button>
           <button type="button" onClick={printCustomers} disabled={filteredCustomers.length === 0} title="Print" className="order-6 hidden h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 sm:inline-flex"><Printer className="h-4 w-4" /></button>
           <span className="order-8 hidden h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 lg:flex">{filteredCustomers.length.toLocaleString('id-ID')}</span>
-          {hasPermission('customer:create') && <button type="button" onClick={() => navigate('/customers/import')} className="order-4 h-9 shrink-0 rounded border border-blue-300 bg-white px-3 text-sm text-blue-700">Import Customer</button>}
           <div className="relative order-7 hidden lg:block">
             <button type="button" onClick={() => setShowColumnPicker(current => !current)} title="Pilih kolom tabel" className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${showColumnPicker ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}><Settings2 className="h-4 w-4" /></button>
             {showColumnPicker && (
