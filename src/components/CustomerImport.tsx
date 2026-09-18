@@ -6,6 +6,7 @@ import type { ImportMapping, ImportPreview, ImportRow, ImportTable } from '../li
 const labels = { name: 'Nama', phone: 'Telepon / Handphone', businessPhone: 'Telepon bisnis', category: 'Kategori', accurateId: 'ID Accurate', email: 'Email', address: 'Alamat', contact: 'Kontak', description: 'Deskripsi sumber' };
 const statuses: Record<string, string> = { new: 'Baru', existing: 'Existing (skip)', duplicate: 'Duplikat', conflict: 'Konflik', invalid: 'Invalid', created: 'Berhasil' };
 type Props = { branches: { id: string; name: string }[]; defaultBranchId: string; onClose: () => void; onComplete: () => Promise<void>; embedded?: boolean };
+type ImportResultRow = ImportRow & { status: string; reason?: string };
 
 export default function CustomerImport({ branches, defaultBranchId, onClose, onComplete, embedded = false }: Props) {
   const [table, setTable] = useState<ImportTable>();
@@ -60,9 +61,9 @@ export default function CustomerImport({ branches, defaultBranchId, onClose, onC
         setUncertain(true); throw new Error((response.message || 'Import belum terverifikasi.') + ' Coba ulang aman memakai ID import yang sama.');
       }
       setPreview(response.data); setUncertain(false); setConfirmed(false);
-      const failedRows = response.data.rows.filter((row: ImportRow) => row.status !== 'created');
+      const failedRows = response.data.rows.filter((row: ImportResultRow) => row.status !== 'created');
       if (failedRows.length) {
-        const text = ['LAPORAN GAGAL IMPORT CUSTOMER', `Berhasil: ${response.data.counts.created}`, `Gagal: ${failedRows.length}`, '', ...failedRows.map((row: ImportRow) => `Baris ${row.rowNumber} | ${row.name} | ${row.phone || 'tanpa nomor'} | ${statuses[row.status] || row.status} | ${row.reason || 'Tidak diimpor'}`)].join('\n');
+        const text = ['LAPORAN GAGAL IMPORT CUSTOMER', `Berhasil: ${response.data.counts.created}`, `Gagal: ${failedRows.length}`, '', ...failedRows.map((row: ImportResultRow) => `Baris ${row.rowNumber} | ${row.name} | ${row.phone || 'tanpa nomor'} | ${statuses[row.status] || row.status} | ${row.reason || 'Tidak diimpor'}`)].join('\n');
         const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = 'laporan-gagal-import-customer.txt'; link.click(); URL.revokeObjectURL(url);
       }
       try { await onComplete(); } catch { setError('Import terverifikasi, tetapi penyegaran daftar gagal. Muat ulang daftar.'); }
