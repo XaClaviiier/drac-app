@@ -62,6 +62,9 @@ export default function SalesInvoice() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDate, setFilterDate] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterMinAge, setFilterMinAge] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
@@ -100,25 +103,34 @@ export default function SalesInvoice() {
   const [selectedFormItemId, setSelectedFormItemId] = useState('');
   const [invoiceDocumentTab, setInvoiceDocumentTab] = useState<AccurateDocumentTab>('details');
   const [invoiceRailMenu, setInvoiceRailMenu] = useState<'print' | 'more' | ''>('');
-  const activeFilterCount = [filterCustomer, filterStatus, filterDate].filter(Boolean).length;
+  const activeFilterCount = [filterCustomer, filterStatus, filterDate || filterDateFrom || filterDateTo, filterMinAge].filter(Boolean).length;
   const resetInvoiceFilters = () => {
     setFilterCustomer('');
     setFilterStatus('');
     setFilterDate('');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+    setFilterMinAge('');
     setSearchParams(params => {
       const next = new URLSearchParams(params);
       next.delete('date');
       next.delete('status');
+      next.delete('from');
+      next.delete('to');
+      next.delete('minAge');
       return next;
     }, { replace: true });
   };
 
   const updateFilterDate = (date: string) => {
     setFilterDate(date);
+    setFilterDateFrom('');
+    setFilterDateTo('');
     setSearchParams(params => {
       const next = new URLSearchParams(params);
-      if (date) next.set('date', date);
-      else next.delete('date');
+      next.delete('date');
+      next.delete('from');
+      next.delete('to');
       return next;
     }, { replace: true });
   };
@@ -348,10 +360,15 @@ export default function SalesInvoice() {
           (inv.manualReceiptNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.vehicleInfo.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = !filterStatus || inv.status === filterStatus;
-        const matchesDate = !filterDate || inv.date === filterDate;
+        const remaining = Math.max(0, Number(inv.total) - Number(inv.payment));
+        const matchesStatus = !filterStatus || (filterStatus === 'Belum Lunas' ? remaining > 0 : remaining === 0);
+        const invoiceDate = inv.date.slice(0, 10);
+        const matchesDate = (!filterDate || invoiceDate === filterDate)
+          && (!filterDateFrom || invoiceDate >= filterDateFrom)
+          && (!filterDateTo || invoiceDate <= filterDateTo);
+        const matchesAge = !filterMinAge || (remaining > 0 && Number(inv.age) >= Number(filterMinAge));
         const matchesCustomer = !filterCustomer || inv.customerName === filterCustomer;
-        return matchesSearch && matchesStatus && matchesDate && matchesCustomer;
+        return matchesSearch && matchesStatus && matchesDate && matchesCustomer && matchesAge;
       })
       .sort((a, b) => {
         // Newest first: compare by date desc, then by invoice number desc
@@ -359,7 +376,7 @@ export default function SalesInvoice() {
         if (dateCompare !== 0) return dateCompare;
         return b.invoiceNumber.localeCompare(a.invoiceNumber);
       });
-  }, [data.invoices, searchTerm, filterStatus, filterDate, filterCustomer, currentBranchId]);
+  }, [data.invoices, searchTerm, filterStatus, filterDate, filterDateFrom, filterDateTo, filterMinAge, filterCustomer, currentBranchId]);
 
   const desktopInvoices = useMemo(() => {
     if (!invoiceTable.sort) return filteredInvoices;
@@ -669,23 +686,31 @@ export default function SalesInvoice() {
 
   useEffect(() => {
     const requestedDate = searchParams.get('date');
-    if (!requestedDate || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) return;
-    setFilterDate(requestedDate);
-  }, [searchParams]);
-
-  useEffect(() => {
     const requestedStatus = searchParams.get('status');
-    if (requestedStatus !== 'Lunas' && requestedStatus !== 'Belum Lunas') return;
-    setFilterStatus(requestedStatus);
-  }, [searchParams]);
-
-  useEffect(() => {
+    const requestedFrom = searchParams.get('from');
+    const requestedTo = searchParams.get('to');
+    const requestedMinAge = searchParams.get('minAge');
     const requestedSearch = searchParams.get('search');
-    if (!requestedSearch) return;
-    setSearchTerm(requestedSearch);
+    const validDate = (value: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+    const from = validDate(requestedFrom);
+    const to = validDate(requestedTo);
+    const date = validDate(requestedDate);
+    const status = requestedStatus === 'Lunas' || requestedStatus === 'Belum Lunas' ? requestedStatus : '';
+    const minAge = requestedMinAge && /^\d+$/.test(requestedMinAge) ? requestedMinAge : '';
+    const fromDashboard = searchParams.get('source') === 'dashboard';
+    if (!fromDashboard && !from && !to && !date && !status && !minAge && !requestedSearch) return;
+    // A dashboard link starts a fresh list scope even when this tab was already open.
+    setSearchTerm(requestedSearch || '');
+    setFilterCustomer('');
+    setFilterStatus(status);
+    setFilterDate(from || to ? '' : date);
+    setFilterDateFrom(from);
+    setFilterDateTo(to);
+    setFilterMinAge(minAge);
     setSearchParams(params => {
       const next = new URLSearchParams(params);
-      next.delete('search');
+      ['date', 'status', 'from', 'to', 'minAge', 'search'].forEach(key => next.delete(key));
+      if (fromDashboard) next.delete('source');
       return next;
     }, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -904,11 +929,17 @@ export default function SalesInvoice() {
                   <label className="block text-xs font-semibold text-gray-600">Pelanggan<select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua pelanggan</option>{invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}</select></label>
                   <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua status</option><option value="Lunas">Lunas</option><option value="Belum Lunas">Belum Lunas</option></select></label>
                   <label className="block text-xs font-semibold text-gray-600">Tanggal Faktur<IndonesianDateInput value={filterDate} onChange={updateFilterDate} className="mt-1 h-10 w-full text-sm font-normal" title="Tanggal faktur"/></label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-xs font-semibold text-gray-600">Dari Tanggal<IndonesianDateInput value={filterDateFrom} max={filterDateTo || undefined} onChange={value => { setFilterDate(''); setFilterDateFrom(value); }} ariaLabel="Dari tanggal faktur" className="mt-1 h-10 w-full text-sm font-normal" /></label>
+                    <label className="block text-xs font-semibold text-gray-600">Sampai Tanggal<IndonesianDateInput value={filterDateTo} min={filterDateFrom || undefined} onChange={value => { setFilterDate(''); setFilterDateTo(value); }} ariaLabel="Sampai tanggal faktur" className="mt-1 h-10 w-full text-sm font-normal" /></label>
+                  </div>
+                  <label className="block text-xs font-semibold text-gray-600">Umur piutang minimal (hari)<input type="number" min="0" step="1" value={filterMinAge} onChange={event => setFilterMinAge(event.target.value.replace(/\D/g, ''))} placeholder="Semua umur" className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`} /></label>
                 </div>
                 <p className="mt-2 text-xs text-gray-500">Kosongkan pilihan untuk menampilkan semua faktur.</p>
                 <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
               </div>}
             </div>
+            {(filterDateFrom || filterDateTo || filterMinAge) && <span className="order-1 text-xs text-blue-700">{filterDateFrom || filterDateTo ? `${filterDateFrom || 'Awal'} s.d. ${filterDateTo || 'Akhir'}` : ''}{filterMinAge ? `${filterDateFrom || filterDateTo ? ' · ' : ''}Piutang ≥ ${filterMinAge} hari` : ''}</span>}
             <div className="order-2 h-0 basis-full" />
             {hasPermission('invoice:create') && (
               <>

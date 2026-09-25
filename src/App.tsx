@@ -69,7 +69,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={currentUser ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/login" element={currentUser ? <Navigate to="/workorders/timeline" replace /> : <Login />} />
       <Route
         path="/"
         element={

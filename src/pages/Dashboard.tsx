@@ -1,437 +1,188 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  AlertTriangle, ArrowRight, Banknote, CalendarDays, CircleDollarSign,
-  Clock3, FileText, Landmark, PackageSearch, RefreshCw,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Activity, ArrowRight, Banknote, CalendarDays, Info, Landmark, RefreshCw, RotateCcw, Target, TrendingUp, Wallet } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
-import MobileDashboard from '../components/MobileDashboard';
-import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../lib/workOrderAttention';
-import {
-  buildBranchPerformanceSummary,
-  type BranchMonthlyTargets,
-  type BranchPerformanceSummary,
-  type BranchPerformanceRow,
-} from '../lib/branchPerformance';
 import { useMinuteClock } from '../hooks/useMinuteClock';
+import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../lib/workOrderAttention';
+import { buildDashboardMetrics, dashboardDays, getDashboardRange, getDashboardComparisonRange, isDashboardRangeValid, type DashboardPeriod, type DashboardComparison, type DashboardRange } from '../lib/dashboardMetrics';
+import type { BranchMonthlyTargets } from '../lib/branchPerformance';
+import { SummaryCard, ActionCard, SectionTitle, SalesChart, BranchTable, Unavailable, SalesChange, money, compact, shortDate, rangeLabel, panelClass } from '../components/DashboardPanels';
 
-type CustomerPayment = { id: string; date: string; amount: number; paymentMethod: string; branchId: string; invoiceNumber: string; customerName: string };
-type CashAccount = { id: string; name: string; accountType: 'cash' | 'bank' | 'qris'; branchId?: string; balance: number; unsubmitted: number; isActive: boolean };
-type DepositSummary = { branchId: string; branchName: string; cashReceived: number; deposited: number; unsubmitted: number };
-type MonthMetric = { key: string; label: string; from: string; to: string; sales: number; invoices: number; cashIn: number; cashOut: number; net: number };
-
-const rupiah = (value: number) => `Rp ${Math.round(Number(value || 0)).toLocaleString('id-ID')}`;
-const compactMoney = (value: number) => {
-  const absolute = Math.abs(value);
-  if (absolute >= 1_000_000_000) return `Rp ${(value / 1_000_000_000).toFixed(1)} M`;
-  if (absolute >= 1_000_000) return `Rp ${(value / 1_000_000).toFixed(1)} jt`;
-  if (absolute >= 1_000) return `Rp ${(value / 1_000).toFixed(0)} rb`;
-  return rupiah(value);
-};
-const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const addDays = (date: Date, amount: number) => { const next = new Date(date); next.setDate(next.getDate() + amount); return next; };
-const monthStartKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
-const monthEndKey = (date: Date) => dateKey(new Date(date.getFullYear(), date.getMonth() + 1, 0));
-const percent = (value: number, total: number) => total > 0 ? Math.round((value / total) * 100) : 0;
-const isBranchMonthlyTargets = (value: unknown): value is BranchMonthlyTargets => {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Record<string, unknown>;
-  return ['PERINTIS', 'CAKALANG', 'MAMUJU'].every(key => Number.isFinite(Number(candidate[key])) && Number(candidate[key]) >= 0);
-};
+type Payment = { id: string; date: string; amount: number; paymentMethod: string; branchId: string };
+type Account = { id: string; name: string; accountType: string; branchId?: string; balance: number; isActive: boolean };
+type Deposit = { branchId: string; unsubmitted: number };
+type Finance = { payments: Payment[] | null; accounts: Account[] | null; deposits: Deposit[] | null; targets: BranchMonthlyTargets | null; errors: string[] };
+const emptyFinance: Finance = { payments: null, accounts: null, deposits: null, targets: null, errors: [] };
+const periods: Array<{ value: DashboardPeriod; label: string }> = [
+  { value: 'today', label: 'Hari ini' }, { value: 'yesterday', label: 'Kemarin' }, { value: 'last7', label: '7 hari' },
+  { value: 'thisMonth', label: 'Bulan ini' }, { value: 'lastMonth', label: 'Bulan lalu' }, { value: 'custom', label: 'Pilih tanggal' },
+];
+const fieldClass = 'h-10 min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
 export default function Dashboard() {
-  const attentionNow = useMinuteClock();
-  const { data, currentBranchId, currentUser, hasPermission, refreshData } = useApp();
-  const canViewFinancial = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('report:view'));
-  const canUseInvoiceData = Boolean(currentUser?.isOwner || currentUser?.roleName === 'Administrator' || hasPermission('invoice:view') || hasPermission('payment:view'));
+  const { data, currentUser, currentBranchId, setCurrentBranchId, hasPermission, hasLoadedData, isLoading, dataLoadError, dataUpdatedAt, refreshData } = useApp();
+  const clock = useMinuteClock();
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Makassar', year: 'numeric', month: '2-digit', day: '2-digit' }).format(clock);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const period = periods.find(item => item.value === searchParams.get('period'))?.value || 'thisMonth';
+  const comparison: DashboardComparison = searchParams.get('compare') === 'none' ? 'none' : searchParams.get('compare') === 'lastYear' ? 'lastYear' : 'previous';
+  const requestedRange = { from: searchParams.get('from') || `${today.slice(0, 7)}-01`, to: searchParams.get('to') || today };
+  const proposedRange = getDashboardRange(period, today, requestedRange);
+  const invalidRange = !isDashboardRangeValid(proposedRange, today);
+  const range = invalidRange ? getDashboardRange('thisMonth', today, requestedRange) : proposedRange;
+  const comparisonRange = getDashboardComparisonRange(range, comparison, invalidRange ? 'thisMonth' : period);
+  const [draft, setDraft] = useState(requestedRange);
+  const [rangeError, setRangeError] = useState('');
+  const [finance, setFinance] = useState<Finance>(emptyFinance);
+  const [financeLoading, setFinanceLoading] = useState(false);
+  const requestId = useRef(0);
+  const privileged = Boolean(currentUser?.isOwner || currentUser?.roleName?.toLowerCase() === 'administrator');
+  const canViewFinancial = privileged || hasPermission('report:view');
+  const canUseInvoiceData = privileged || hasPermission('invoice:view') || hasPermission('payment:view');
+  const canViewPayments = hasPermission('payment:view');
+  const canViewWorkOrders = hasPermission('wo:view');
   const canViewBranchPerformance = canViewFinancial && canUseInvoiceData;
-  const [payments, setPayments] = useState<CustomerPayment[]>([]);
-  const [accounts, setAccounts] = useState<CashAccount[]>([]);
-  const [depositSummary, setDepositSummary] = useState<DepositSummary[]>([]);
-  const [branchTargets, setBranchTargets] = useState<BranchMonthlyTargets | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [salesTrendMode, setSalesTrendMode] = useState<'week' | 'months'>('months');
+  const dataReady = hasLoadedData && Boolean(dataUpdatedAt) && !dataLoadError;
+  const invoicesReady = dataReady && canUseInvoiceData;
+  const pending = !hasLoadedData || (isLoading && !dataUpdatedAt);
+  const currentMonth = range.from === `${today.slice(0, 7)}-01` && range.to === today;
 
-  const loadFinance = async () => {
-    if (!canViewFinancial) return;
-    setRefreshing(true);
-    const [paymentResult, accountResult, depositResult, targetResult] = await Promise.all([
-      api.get('customer-payments'), api.get('cash-accounts'), api.get('branch-deposits'), api.get('branch-targets'),
+  const loadFinance = useCallback(async () => {
+    const id = ++requestId.current;
+    if (!canViewFinancial) { setFinance(emptyFinance); setFinanceLoading(false); return; }
+    setFinanceLoading(true);
+    const [payments, accounts, deposits, targets] = await Promise.all([
+      canViewPayments ? api.get('customer-payments') : Promise.resolve(null),
+      api.get('cash-accounts'), api.get('branch-deposits'),
+      canUseInvoiceData ? api.get('branch-targets') : Promise.resolve(null),
     ]);
-    if (paymentResult.success) setPayments(paymentResult.data || []);
-    if (accountResult.success) setAccounts(accountResult.data || []);
-    if (depositResult.success) setDepositSummary(depositResult.data?.summary || []);
-    if (targetResult.success && isBranchMonthlyTargets(targetResult.data)) {
-      setBranchTargets({
-        PERINTIS: Number(targetResult.data.PERINTIS),
-        CAKALANG: Number(targetResult.data.CAKALANG),
-        MAMUJU: Number(targetResult.data.MAMUJU),
-      });
-    } else {
-      setBranchTargets(null);
-    }
-    setRefreshing(false);
-  };
+    if (id !== requestId.current) return;
+    const validPayments = payments?.success && Array.isArray(payments.data);
+    const validAccounts = accounts.success && Array.isArray(accounts.data);
+    const validDeposits = deposits.success && Array.isArray(deposits.data?.summary);
+    const validTargets = targets?.success && targets.data && ['PERINTIS', 'CAKALANG', 'MAMUJU'].every(key => targets.data[key] !== null && Number.isFinite(Number(targets.data[key])) && Number(targets.data[key]) >= 0);
+    setFinance({
+      payments: validPayments ? payments.data : null, accounts: validAccounts ? accounts.data : null,
+      deposits: validDeposits ? deposits.data.summary : null, targets: validTargets ? targets.data : null,
+      errors: [canViewPayments && !validPayments ? 'pembayaran pelanggan' : '', !validAccounts ? 'saldo rekening' : '', !validDeposits ? 'setoran cabang' : '', canUseInvoiceData && !validTargets ? 'target cabang' : ''].filter(Boolean),
+    });
+    setFinanceLoading(false);
+  }, [currentUser?.id, canViewFinancial, canViewPayments, canUseInvoiceData]);
+  useEffect(() => { void loadFinance(); return () => { requestId.current += 1; }; }, [loadFinance]);
+  useEffect(() => { setDraft({ from: range.from, to: range.to }); }, [range.from, range.to]);
 
-  useEffect(() => { void loadFinance(); }, [canViewFinancial]);
-
-  const branchName = currentBranchId === 'ALL'
-    ? 'Semua Cabang'
-    : data.branches.find(branch => branch.id === currentBranchId)?.name || 'Cabang';
-  const matchesBranch = (branchId?: string) => currentBranchId === 'ALL' || branchId === currentBranchId;
-  const visibleWOs = data.workOrders.filter(wo => matchesBranch(wo.branchId));
-  const visibleInvoices = data.invoices.filter(invoice => matchesBranch(invoice.branchId));
-  const visiblePayments = payments.filter(payment => matchesBranch(payment.branchId));
-  const visibleAccounts = accounts.filter(account => account.isActive && (matchesBranch(account.branchId) || !account.branchId));
-  const visibleDeposits = depositSummary.filter(summary => matchesBranch(summary.branchId));
-
-  const today = attentionNow;
-  const todayKey = dateKey(today);
-  const tenDaysAgo = dateKey(addDays(today, -9));
-  const receivables = visibleInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - Number(invoice.payment)), 0);
-  const cashBalance = visibleAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
-  const unsubmitted = visibleDeposits.reduce((sum, row) => sum + Number(row.unsubmitted || 0), 0);
-  const currentMonthStart = monthStartKey(today);
-  const currentMonthEnd = monthEndKey(today);
-  const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const previousMonthStart = monthStartKey(previousMonth);
-  const previousMonthEnd = monthEndKey(previousMonth);
-  const currentMonthInvoices = visibleInvoices.filter(invoice => invoice.date >= currentMonthStart && invoice.date <= currentMonthEnd);
-  const currentMonthWOs = visibleWOs.filter(wo => wo.date >= currentMonthStart && wo.date <= currentMonthEnd);
-  const currentMonthSales = currentMonthInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-  const currentMonthPaid = currentMonthInvoices.reduce((sum, invoice) => sum + Math.min(Number(invoice.total || 0), Number(invoice.payment || 0)), 0);
-  const currentMonthUnpaid = currentMonthInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
-  const currentMonthNotDue = currentMonthInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) <= 7).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
-  const currentMonthOverdue = currentMonthInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.payment || 0)), 0);
-  const currentMonthPayments = visiblePayments.filter(payment => payment.date >= currentMonthStart && payment.date <= currentMonthEnd);
-  const currentMonthCash = currentMonthPayments.filter(payment => payment.paymentMethod.toLowerCase().includes('tunai')).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const currentMonthNonCash = currentMonthPayments.filter(payment => !payment.paymentMethod.toLowerCase().includes('tunai')).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const invoicedMonthWOs = currentMonthWOs.filter(wo => wo.invoiceId || visibleInvoices.some(invoice => invoice.woId === wo.id || invoice.woNumber === wo.woNumber));
-  const completedMonthWOs = currentMonthWOs.filter(wo => wo.status === 'Selesai').length;
-  const activeMonthWOs = currentMonthWOs.filter(wo => wo.status === 'Register' || wo.status === 'Proses').length;
-  const awaitingInvoiceMonthWOs = currentMonthWOs.filter(wo => wo.status === 'Selesai' && !(wo.invoiceId || visibleInvoices.some(invoice => invoice.woId === wo.id || invoice.woNumber === wo.woNumber))).length;
-  const monthConversion = percent(invoicedMonthWOs.length, currentMonthWOs.length);
-  const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const elapsedMonthDays = Math.max(1, Math.min(today.getDate(), daysInCurrentMonth));
-  const averageDailySales = currentMonthSales / elapsedMonthDays;
-  const projectedMonthSales = Math.round(averageDailySales * daysInCurrentMonth);
-  const executiveBranchPerformance = branchTargets
-    ? buildBranchPerformanceSummary({ branches: data.branches, invoices: data.invoices, targets: branchTargets, now: today })
-    : null;
-
-  const monthlyMetrics = useMemo<MonthMetric[]>(() => Array.from({ length: 6 }, (_, index) => {
-    const month = new Date(today.getFullYear(), today.getMonth() + index - 5, 1);
-    const from = monthStartKey(month);
-    const to = monthEndKey(month);
-    const monthInvoices = visibleInvoices.filter(invoice => invoice.date >= from && invoice.date <= to);
-    const cashIn = visiblePayments.filter(payment => payment.date >= from && payment.date <= to).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const cashOut = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).flatMap(invoice => invoice.payments || []).filter(payment => payment.date >= from && payment.date <= to).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    return {
-      key: from.slice(0, 7), label: month.toLocaleDateString('id-ID', { month: 'short' }), from, to,
-      sales: monthInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0),
-      invoices: monthInvoices.length, cashIn, cashOut, net: cashIn - cashOut,
-    };
-  }), [data.invoices, data.purchaseInvoices, payments, currentBranchId]);
-
-  const weeklySales = useMemo(() => Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(today, index - 6);
-    const key = dateKey(date);
-    const dayInvoices = visibleInvoices.filter(invoice => invoice.date === key);
-    return { key, label: index === 5 ? 'Kemarin' : index === 6 ? 'Hari ini' : date.toLocaleDateString('id-ID', { weekday: 'short' }), value: dayInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0), count: dayInvoices.length };
-  }), [data.invoices, currentBranchId]);
-
-  const currentExpenseRows = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).map(invoice => ({
-    label: invoice.supplierName || 'Lainnya',
-    amount: (invoice.payments || []).filter(payment => payment.date >= currentMonthStart && payment.date <= currentMonthEnd).reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
-  })).filter(row => row.amount > 0);
-  const expensesBySupplier = Array.from(currentExpenseRows.reduce((rows, row) => rows.set(row.label, (rows.get(row.label) || 0) + row.amount), new Map<string, number>()))
-    .map(([label, amount]) => ({ label, amount })).sort((a, b) => b.amount - a.amount);
-  const currentExpenseTotal = expensesBySupplier.reduce((sum, row) => sum + row.amount, 0);
-  const previousExpenseTotal = data.purchaseInvoices.filter(invoice => matchesBranch(invoice.branchId)).flatMap(invoice => invoice.payments || []).filter(payment => payment.date >= previousMonthStart && payment.date <= previousMonthEnd).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const expenseChange = previousExpenseTotal > 0 ? Math.round(((currentExpenseTotal - previousExpenseTotal) / previousExpenseTotal) * 100) : currentExpenseTotal > 0 ? 100 : 0;
-
-  const attentionItems = buildWorkOrderAttentionItems(visibleWOs, visibleInvoices, todayKey, attentionNow);
+  const metrics = useMemo(() => buildDashboardMetrics({
+    branches: data.branches, invoices: data.invoices, workOrders: data.workOrders,
+    payments: canViewPayments ? finance.payments || [] : [], targets: finance.targets, branchId: currentBranchId, range, comparisonRange, today,
+  }), [data.branches, data.invoices, data.workOrders, finance.payments, finance.targets, canViewPayments, currentBranchId, range.from, range.to, comparisonRange?.from, comparisonRange?.to, today]);
+  const branchIds = new Set(metrics.rows.map(row => row.branchId));
+  const visibleWOs = data.workOrders.filter(row => branchIds.has(row.branchId) && row.date.slice(0, 10) <= today);
+  const visibleInvoices = data.invoices.filter(row => branchIds.has(row.branchId) && row.date.slice(0, 10) <= today);
+  const attentionItems = buildWorkOrderAttentionItems(visibleWOs, visibleInvoices, today, clock);
   const attentionCounts = countWorkOrderAttentionByKind(attentionItems);
-  const activeWarehouseIds = new Set(data.warehouses
-    .filter(warehouse => warehouse.isActive && matchesBranch(warehouse.branchId))
-    .map(warehouse => warehouse.id));
-  const inventoryItems = data.items.filter(item => item.isActive && item.type === 'Persediaan' && item.verificationStatus !== 'Merged');
-  const inventoryStockTotals = data.warehouseStocks.reduce((totals, stock) => {
-    if (!activeWarehouseIds.has(stock.warehouseId)) return totals;
-    totals.set(stock.itemId, (totals.get(stock.itemId) || 0) + Number(stock.quantity || 0));
-    return totals;
-  }, new Map<string, number>());
-  const inventoryQuantity = (itemId: string) => inventoryStockTotals.get(itemId) || 0;
-  const negativeStockCount = inventoryItems.filter(item => inventoryQuantity(item.id) < 0).length;
-  const emptyStockCount = inventoryItems.filter(item => inventoryQuantity(item.id) === 0).length;
-  const pendingVerificationCount = inventoryItems.filter(item => item.verificationStatus === 'Pending').length;
-
-  const overdueInvoices = visibleInvoices.filter(invoice => invoice.status === 'Belum Lunas' && Number(invoice.age || 0) > 7);
-
-  const branchPerformance = data.branches.filter(branch => branch.isActive && (currentBranchId === 'ALL' || branch.id === currentBranchId)).map(branch => {
-    const branchWOs = data.workOrders.filter(wo => wo.branchId === branch.id && wo.date >= tenDaysAgo && wo.date <= todayKey);
-    const branchInvoices = data.invoices.filter(invoice => invoice.branchId === branch.id);
-    const branchConverted = branchWOs.filter(wo => wo.invoiceId || branchInvoices.some(invoice => invoice.woId === wo.id || invoice.woNumber === wo.woNumber)).length;
-    const branchCash = payments.filter(payment => payment.branchId === branch.id && payment.date >= tenDaysAgo && payment.date <= todayKey).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const branchReceivable = branchInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - Number(invoice.payment)), 0);
-    return { ...branch, wo: branchWOs.length, converted: branchConverted, rate: percent(branchConverted, branchWOs.length), cash: branchCash, receivable: branchReceivable };
-  });
-
-  const refreshDashboard = async () => {
-    setRefreshing(true);
-    await Promise.all([refreshData(), loadFinance()]);
-    setRefreshing(false);
+  const agedInvoices = visibleInvoices.filter(row => Number(row.total) > Number(row.payment) && Number(row.age) >= 8);
+  const agedBalance = agedInvoices.reduce((sum, row) => sum + Math.max(0, Number(row.total) - Number(row.payment)), 0);
+  const unsubmitted = finance.deposits?.filter(row => branchIds.has(row.branchId)).reduce((sum, row) => sum + Number(row.unsubmitted || 0), 0) ?? null;
+  // Rekening pusat hanya dihitung pada Semua Cabang, bukan di setiap cabang.
+  const accounts = finance.accounts?.filter(row => row.isActive && (row.branchId ? branchIds.has(row.branchId) : currentBranchId === 'ALL'));
+  const cashAccounts = accounts?.filter(row => row.accountType === 'cash');
+  const bankAccounts = accounts?.filter(row => row.accountType !== 'cash');
+  const branchName = currentBranchId === 'ALL' ? 'Semua Cabang' : data.branches.find(row => row.id === currentBranchId)?.name.replace(/^CABANG\s+/i, '') || 'Cabang';
+  const unavailable = pending ? 'Memuat…' : 'Belum tersedia';
+  const refreshing = isLoading || financeLoading;
+  const link = (path: string, params: Record<string, string> = {}, usePeriod = true) => `${path}?${new URLSearchParams({ source: 'dashboard', ...(usePeriod ? { from: range.from, to: range.to } : {}), ...params })}`;
+  const invoiceLink = hasPermission('invoice:view') ? link('/invoices') : undefined;
+  const receivableLink = hasPermission('invoice:view') ? link('/invoices', { to: today, status: 'Belum Lunas' }, false) : undefined;
+  const updateFilters = (nextPeriod: DashboardPeriod, nextComparison = comparison, dates: DashboardRange = range) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('period', nextPeriod); next.set('compare', nextComparison);
+    if (nextPeriod === 'custom') { next.set('from', dates.from); next.set('to', dates.to); }
+    else { next.delete('from'); next.delete('to'); }
+    setSearchParams(next, { replace: true }); setRangeError('');
   };
+  const applyCustom = () => {
+    if (!isDashboardRangeValid(draft, today)) { setRangeError('Pilih tanggal yang valid, maksimal 366 hari, dengan tanggal akhir tidak melewati hari ini.'); return; }
+    updateFilters('custom', comparison, draft);
+  };
+  const updatedLabel = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' }) + ' WITA' : 'Belum diperbarui';
 
-  return <>
-    <MobileDashboard branchPerformance={executiveBranchPerformance} canViewBranchPerformance={canViewBranchPerformance} attentionNow={attentionNow} />
-    <div className="hidden space-y-3 pb-5 lg:block">
-      <section className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Ringkasan Manajemen</p>
-          <h1 className="text-xl font-bold text-slate-900">{branchName}</h1>
-          <p className="text-xs text-slate-500">Data operasional dan finansial diperbarui dari transaksi nyata.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-lg bg-white px-3 py-2 text-xs text-slate-500 shadow-sm ring-1 ring-slate-200"><CalendarDays className="mr-1.5 inline h-4 w-4" />{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-          <button onClick={() => void refreshDashboard()} title="Refresh dashboard" className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-blue-600 hover:bg-blue-50"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /></button>
-        </div>
-      </section>
-
-      {canViewFinancial && <BranchOperationalCard
-        branchName={branchName}
-        period={today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
-        sales={currentMonthSales}
-        workOrders={currentMonthWOs.length}
-        completedWorkOrders={completedMonthWOs}
-        activeWorkOrders={activeMonthWOs}
-        invoices={currentMonthInvoices.length}
-        awaitingInvoices={awaitingInvoiceMonthWOs}
-        conversion={monthConversion}
-        cash={currentMonthCash}
-        nonCash={currentMonthNonCash}
-        unpaid={currentMonthUnpaid}
-        unsubmitted={unsubmitted}
-        dailyAverage={averageDailySales}
-        projection={projectedMonthSales}
-      />}
-
-      {canViewBranchPerformance && executiveBranchPerformance && <ExecutiveBranchPerformance summary={executiveBranchPerformance} />}
-      {canViewBranchPerformance && !executiveBranchPerformance && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Target cabang belum dapat dimuat. Gunakan Refresh setelah koneksi server tersedia.</div>}
-
-      {canViewFinancial && <>
-        <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,1fr)]">
-          <DashboardPanel title="Arus Kas" subtitle="6 bulan terakhir · berdasarkan pembayaran aktual" onRefresh={() => void refreshDashboard()} refreshing={refreshing}>
-            <CashFlowMonthChart rows={monthlyMetrics} />
-            <div className="mt-3 flex justify-center gap-4 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-400" />Kas masuk</span>
-              <span className="flex items-center gap-1"><i className="h-0.5 w-4 bg-sky-500" />Arus bersih</span>
-            </div>
-          </DashboardPanel>
-
-          <DashboardPanel title="Penjualan" subtitle={`${today.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} · bulan berjalan`} onRefresh={() => void refreshDashboard()} refreshing={refreshing}>
-            <div className="grid grid-cols-3 gap-3 border-b border-slate-100 pb-3">
-              <SalesSummaryLink to="/invoices" label="Pendapatan" value={currentMonthSales} tone="slate" />
-              <SalesSummaryLink to="/invoices?status=Lunas" label="Faktur Lunas" value={currentMonthPaid} tone="emerald" />
-              <SalesSummaryLink to="/invoices?status=Belum%20Lunas" label="Belum Lunas" value={currentMonthUnpaid} tone="amber" />
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <SalesBarLink to="/invoices?status=Belum%20Lunas" label="Belum jatuh tempo" value={currentMonthNotDue} total={Math.max(1, currentMonthUnpaid)} tone="amber" />
-              <SalesBarLink to="/invoices?status=Belum%20Lunas" label="Lewat jatuh tempo" value={currentMonthOverdue} total={Math.max(1, currentMonthUnpaid)} tone="red" />
-            </div>
-            <p className="mt-3 text-[10px] text-slate-400">Jatuh tempo memakai aturan tindak lanjut 7 hari karena faktur penjualan belum memiliki tanggal jatuh tempo tersendiri.</p>
-          </DashboardPanel>
-        </section>
-
-        <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,1fr)]">
-          <DashboardPanel title="Tren Penjualan" subtitle={salesTrendMode === 'week' ? '7 hari terakhir' : '6 bulan terakhir'} onRefresh={() => void refreshDashboard()} refreshing={refreshing} action={<div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px]"><button type="button" onClick={() => setSalesTrendMode('week')} className={`rounded-md px-2.5 py-1 ${salesTrendMode === 'week' ? 'bg-white font-semibold text-blue-700 shadow-sm' : 'text-slate-500'}`}>7 Hari</button><button type="button" onClick={() => setSalesTrendMode('months')} className={`rounded-md px-2.5 py-1 ${salesTrendMode === 'months' ? 'bg-white font-semibold text-blue-700 shadow-sm' : 'text-slate-500'}`}>6 Bulan</button></div>}>
-            <SalesTrendChart rows={salesTrendMode === 'week' ? weeklySales : monthlyMetrics.map(row => ({ key: row.key, label: row.label, value: row.sales, count: row.invoices }))} />
-          </DashboardPanel>
-
-          <DashboardPanel title="Beban Perusahaan" subtitle={`${today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} · pembayaran supplier`} onRefresh={() => void refreshDashboard()} refreshing={refreshing}>
-            <div className="flex items-center gap-5">
-              <ExpenseRing value={currentExpenseTotal} change={expenseChange} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-end justify-between border-b border-slate-200 pb-2"><span className="font-semibold text-slate-700">Beban</span><b className="text-xl text-slate-900">{rupiah(currentExpenseTotal)}</b></div>
-                <div className="mt-2 space-y-2">{expensesBySupplier.slice(0, 4).map(row => <div key={row.label} className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-slate-600">{row.label}</span><b className="flex-shrink-0 text-slate-800">{rupiah(row.amount)}</b></div>)}{expensesBySupplier.length === 0 && <p className="py-3 text-xs text-slate-400">Belum ada pembayaran supplier pada periode ini.</p>}</div>
-              </div>
-            </div>
-            <Link to="/purchase-invoices" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline">Lihat transaksi beban <ArrowRight className="h-3.5 w-3.5" /></Link>
-          </DashboardPanel>
-        </section>
+  return <div className="mx-auto w-full max-w-[1600px] space-y-4 pb-6" data-dashboard-management>
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div><div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-700"><Activity className="h-3.5 w-3.5" />Ringkasan manajemen</div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-950">Dashboard <span className="font-normal text-slate-400">/</span> <span className="font-semibold">{branchName}</span></h1>
+        <p className="mt-1 text-sm text-slate-500">Hasil usaha, posisi uang, dan prioritas tindak lanjut.</p></div>
+      <div className="flex items-center gap-3"><span className="text-right text-xs text-slate-500">Transaksi diperbarui<br /><span className="font-medium text-slate-700">{updatedLabel}</span></span>
+        <button type="button" aria-label="Perbarui dashboard" disabled={refreshing} onClick={() => { void Promise.all([refreshData(), loadFinance()]); }} className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /></button></div>
+    </header>
+    <section className={`${panelClass} p-4`} aria-label="Filter dashboard">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Periode dashboard">{periods.map(item => <button key={item.value} type="button" aria-pressed={period === item.value} onClick={() => updateFilters(item.value)} className={`min-h-9 rounded-md px-3 text-xs font-medium transition-colors sm:text-sm ${period === item.value ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}>{item.label}</button>)}</div>
+        <div className="flex w-full items-center gap-2 sm:w-auto"><label htmlFor="dashboard-comparison" className="sr-only text-xs font-medium text-slate-500 sm:not-sr-only">Bandingkan</label><select id="dashboard-comparison" value={comparison} onChange={event => updateFilters(period, event.target.value as DashboardComparison)} className={`${fieldClass} flex-1 sm:flex-none`}><option value="previous">Periode sebelumnya</option><option value="lastYear">Periode sama tahun lalu</option><option value="none">Tanpa pembanding</option></select><button type="button" aria-label="Reset filter dashboard" onClick={() => updateFilters('thisMonth', 'previous')} className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"><RotateCcw className="h-4 w-4" /></button></div>
+      </div>
+      {period === 'custom' && <form onSubmit={event => { event.preventDefault(); applyCustom(); }} className="mt-3 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3"><label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">Dari tanggal<input type="date" aria-label="Tanggal awal dashboard" value={draft.from} max={draft.to || today} onChange={event => setDraft(value => ({ ...value, from: event.target.value }))} className={fieldClass} required /></label><label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">Sampai tanggal<input type="date" aria-label="Tanggal akhir dashboard" value={draft.to} min={draft.from} max={today} onChange={event => setDraft(value => ({ ...value, to: event.target.value }))} className={fieldClass} required /></label><button className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700" type="submit">Terapkan</button></form>}
+      {(rangeError || invalidRange) && <p role="alert" className="mt-2 text-xs text-red-700">{rangeError || 'Rentang tanggal tidak valid. Ringkasan menampilkan bulan ini sampai filter diperbaiki.'}</p>}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500"><span className="inline-flex items-center gap-1.5 font-medium text-slate-700"><CalendarDays className="h-3.5 w-3.5" />{rangeLabel(range)} <span className="font-normal text-slate-400">· {dashboardDays(range)} hari</span></span>{comparisonRange && <span>Pembanding: {rangeLabel(comparisonRange)} · {dashboardDays(comparisonRange)} hari</span>}</div>
+    </section>
+    {(dataLoadError || finance.errors.length > 0) && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><Info className="mt-0.5 h-4 w-4 flex-shrink-0" /><span>{dataLoadError ? 'Data transaksi belum berhasil diperbarui. ' : ''}{finance.errors.length > 0 ? `Data ${finance.errors.join(', ')} belum tersedia. ` : ''}Gunakan tombol perbarui untuk mencoba lagi.</span></div>}
+    {canViewFinancial && <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Angka utama">
+      <SummaryCard label="Omzet" icon={<TrendingUp className="h-4 w-4" />} value={invoicesReady ? money(metrics.sales) : unavailable} shortValue={invoicesReady ? compact(metrics.sales) : undefined} scope="Periode terpilih" to={invoiceLink} accent>
+        {invoicesReady && <><p>{metrics.invoiceCount} faktur · rata-rata {compact(metrics.averageInvoice)}</p><SalesChange value={metrics.sales} previous={metrics.previousSales} /></>}
+      </SummaryCard>
+      <SummaryCard label="Target tercapai" icon={<Target className="h-4 w-4" />} value={invoicesReady && metrics.achievementPercent !== null ? `${metrics.achievementPercent.toLocaleString('id-ID')}%` : pending || financeLoading ? 'Memuat…' : currentMonth ? 'Belum tersedia' : '—'} scope="Target bulan berjalan">
+        {invoicesReady && metrics.target !== null ? <><div className="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Pencapaian target omzet" aria-valuenow={Math.min(100, metrics.achievementPercent || 0)} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, metrics.achievementPercent || 0)}%` }} /></div><p>Dari target {compact(metrics.target)}</p></> : <p>{currentMonth ? 'Target seluruh cabang pilihan harus tersedia.' : 'Pilih Bulan ini untuk melihat target.'}</p>}
+      </SummaryCard>
+      <SummaryCard label="Pembayaran diterima" icon={<Banknote className="h-4 w-4" />} value={dataReady && canViewPayments && finance.payments !== null ? money(metrics.receipts) : !canViewPayments ? 'Akses terbatas' : financeLoading ? 'Memuat…' : unavailable} shortValue={dataReady && canViewPayments && finance.payments !== null ? compact(metrics.receipts) : undefined} scope="Tanggal pembayaran" to={canViewPayments ? link('/customer-payments') : undefined}>
+        {dataReady && canViewPayments && finance.payments !== null ? <><p>Tunai {compact(metrics.cash)}</p><p>Non-tunai {compact(metrics.nonCash)}</p></> : <p>{canViewPayments ? 'Penerimaan pelanggan dalam periode pilihan.' : 'Memerlukan akses pembayaran pelanggan.'}</p>}
+      </SummaryCard>
+      <SummaryCard label="Total piutang" icon={<Wallet className="h-4 w-4" />} value={invoicesReady ? money(metrics.receivable) : unavailable} shortValue={invoicesReady ? compact(metrics.receivable) : undefined} scope="Saldo saat ini · semua periode" to={receivableLink}>
+        {invoicesReady && <><p>{metrics.receivableCount} faktur belum lunas</p><p className={agedBalance > 0 ? 'font-medium text-amber-700' : ''}>{compact(agedBalance)} berumur &gt;7 hari</p></>}
+      </SummaryCard>
+    </section>}
+    <section className={`${panelClass} p-4 sm:p-5`} aria-label="Prioritas tindakan">
+      <SectionTitle title="Perlu tindakan" subtitle="Kondisi saat ini · termasuk pekerjaan dan tagihan dari periode sebelumnya" aside={<span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">{shortDate(today)}</span>} />
+      <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-5">
+        {canViewWorkOrders && <>
+          <ActionCard label="Register mengambang" value={dataReady ? `${attentionCounts.register} WO` : unavailable} note="Tentukan tindak lanjut" warning={dataReady && attentionCounts.register > 0} available={dataReady} to={link('/workorders', { attentionKind: 'register' }, false)} />
+          <ActionCard label="Pekerjaan terlambat" value={dataReady ? `${attentionCounts.process} WO` : unavailable} note="Periksa proses dan estimasi" warning={dataReady && attentionCounts.process > 0} available={dataReady} to={link('/workorders', { attentionKind: 'process' }, false)} />
+          {canUseInvoiceData && <ActionCard label="Selesai belum faktur" value={invoicesReady ? `${attentionCounts.invoice} WO` : unavailable} note="Perlu penyelesaian penagihan" warning={invoicesReady && attentionCounts.invoice > 0} available={invoicesReady} to={link('/workorders', { attentionKind: 'invoice' }, false)} />}
+        </>}
+        {canViewBranchPerformance && <ActionCard label="Belum lunas >7 hari" value={invoicesReady ? `${agedInvoices.length} faktur` : unavailable} note={invoicesReady ? money(agedBalance) : 'Saldo saat ini'} warning={invoicesReady && agedInvoices.length > 0} available={invoicesReady} to={hasPermission('invoice:view') ? link('/invoices', { to: today, status: 'Belum Lunas', minAge: '8' }, false) : undefined} />}
+        {canViewFinancial && <ActionCard label="Tunai belum disetor" value={dataReady && unsubmitted !== null ? compact(unsubmitted) : financeLoading ? 'Memuat…' : unavailable} note="Saldo saat ini · semua periode" warning={dataReady && unsubmitted !== null && unsubmitted > 0} available={dataReady && unsubmitted !== null} to="/branch-deposits" />}
+      </div>
+    </section>
+    {canViewBranchPerformance && <section className={panelClass} id="dashboard-branches">
+      <div className="p-4 sm:p-5"><SectionTitle title={currentBranchId === 'ALL' ? 'Performa cabang' : `Performa ${branchName}`} subtitle={`Realisasi berdasarkan tanggal faktur · ${rangeLabel(range)}`} aside={<span className="text-xs font-medium text-slate-500">{metrics.rows.length} cabang</span>} /></div>
+      {!invoicesReady ? <Unavailable loading={pending} /> : <>
+        {!currentMonth && <p className="mx-4 mb-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600"><Info className="h-4 w-4 flex-shrink-0" />Target dan estimasi ditampilkan untuk bulan berjalan. Target historis belum tersedia.</p>}
+        <BranchTable metrics={metrics} onBranch={setCurrentBranchId} />
+        {currentMonth && <p className="border-t border-slate-100 px-5 py-3 text-[11px] leading-relaxed text-slate-500">Estimasi memakai rata-rata omzet per hari kalender, bukan pendapatan yang sudah pasti. Tanda — berarti target belum tersedia atau belum ditetapkan.</p>}
       </>}
-
-      <section className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><div><h2 className="font-bold text-slate-900">Performa Cabang · 10 Hari</h2><p className="text-xs text-slate-500">WO, konversi, dan kas masuk 10 hari; piutang menunjukkan saldo berjalan.</p></div>{currentBranchId === 'ALL' && <span className="text-xs text-slate-400">{branchPerformance.length} cabang</span>}</div>
-          <table className="w-full text-sm"><thead className="bg-slate-50 text-left text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-2.5">Cabang</th><th className="px-3 py-2.5 text-center">WO</th><th className="px-3 py-2.5 text-center">Invoice</th><th className="px-3 py-2.5">Konversi</th>{canViewFinancial && <><th className="px-3 py-2.5 text-right">Kas Masuk</th><th className="px-4 py-2.5 text-right">Piutang</th></>}</tr></thead><tbody className="divide-y divide-slate-100">{branchPerformance.map(branch => <tr key={branch.id} className="hover:bg-slate-50"><td className="px-4 py-3"><b className="text-slate-800">{branch.name.replace('CABANG ', '')}</b><small className="block text-slate-400">{branch.code}</small></td><td className="px-3 text-center font-semibold">{branch.wo}</td><td className="px-3 text-center font-semibold text-emerald-700">{branch.converted}</td><td className="px-3"><div className="flex items-center gap-2"><div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-500" style={{ width: `${branch.rate}%` }} /></div><span className="text-xs font-semibold">{branch.rate}%</span></div></td>{canViewFinancial && <><td className="px-3 text-right font-semibold text-emerald-700">{compactMoney(branch.cash)}</td><td className="px-4 text-right font-semibold text-amber-700">{compactMoney(branch.receivable)}</td></>}</tr>)}</tbody></table>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between"><div><h2 className="font-bold text-slate-900">Perlu Perhatian</h2><p className="text-xs text-slate-500">Prioritas tindak lanjut hari ini.</p></div><AlertTriangle className="h-5 w-5 text-amber-500" /></div>
-          <div className="space-y-2">
-            <AttentionRow to="/workorders?attention=1" tone="red" icon={AlertTriangle} title={`${attentionItems.length} pekerjaan butuh tindakan`} detail={`${attentionCounts.register} register · ${attentionCounts.process} terlambat · ${attentionCounts.invoice} belum faktur · ${attentionCounts.payment} belum lunas`} />
-            <AttentionRow to="/workorders?attention=1" tone="amber" icon={Clock3} title={`${attentionCounts.register} register mengambang`} detail="Belum diputuskan menjadi Dikerjakan atau Lost Sales." />
-            {canViewFinancial && <AttentionRow to="/invoices" tone="red" icon={FileText} title={`${overdueInvoices.length} faktur menunggak lebih dari 7 hari`} detail={`Total piutang ${rupiah(receivables)}`} />}
-            {canViewFinancial && <AttentionRow to="/branch-deposits" tone="blue" icon={Banknote} title={`${rupiah(unsubmitted)} tunai belum disetor`} detail="Periksa setoran tunai masing-masing cabang." />}
-            <AttentionRow to="/reports/inventory?availability=ATTENTION" tone={negativeStockCount > 0 ? 'red' : 'amber'} icon={PackageSearch} title={`${negativeStockCount} stok negatif · ${emptyStockCount} stok kosong`} detail={`${pendingVerificationCount} barang masih menunggu verifikasi.`} />
-          </div>
-        </div>
-      </section>
-
-      {canViewFinancial && <section className="grid grid-cols-3 gap-3">
-        <FinanceStrip icon={Landmark} label="Saldo Kas & Bank" value={rupiah(cashBalance)} note={`${visibleAccounts.length} akun aktif`} tone="blue" to="/cash-accounts" />
-        <FinanceStrip icon={Banknote} label="Tunai Belum Disetor" value={rupiah(unsubmitted)} note="Tidak termasuk transfer internal" tone="amber" to="/branch-deposits" />
-        <FinanceStrip icon={CircleDollarSign} label="Pembayaran Hari Ini" value={rupiah(visiblePayments.filter(payment => payment.date === todayKey).reduce((sum, payment) => sum + Number(payment.amount || 0), 0))} note={`${visiblePayments.filter(payment => payment.date === todayKey).length} transaksi`} tone="emerald" to="/customer-payments" />
+    </section>}
+    <div className={`grid gap-4 ${canViewBranchPerformance && canViewWorkOrders ? 'xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]' : ''}`}>
+      {canViewBranchPerformance && <section className={`${panelClass} p-4 sm:p-5`}>
+        <SectionTitle title="Tren omzet" subtitle={`${metrics.trendUnit === 'week' ? 'Per kelompok 7 hari' : 'Harian'} · berdasarkan tanggal faktur`} aside={invoiceLink && <Link to={invoiceLink} className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-blue-700">Lihat faktur<ArrowRight className="h-3.5 w-3.5" /></Link>} />
+        {invoicesReady ? <SalesChart metrics={metrics} range={range} comparisonRange={comparisonRange} canOpenInvoices={hasPermission('invoice:view')} /> : <Unavailable loading={pending} />}
+      </section>}
+      {canViewWorkOrders && <section className={`${panelClass} p-4 sm:p-5`}>
+        <SectionTitle title="Alur order kerja" subtitle="WO yang dibuat dalam periode pilihan" aside={<Activity className="h-4 w-4 text-blue-600" />} />
+        {!dataReady ? <Unavailable loading={pending} /> : <div className="mt-4">
+          <Link to={link('/workorders')} className="mb-3 flex items-baseline justify-between text-sm text-slate-600 hover:text-blue-700"><span>Total WO masuk</span><b className="text-2xl text-slate-900">{metrics.workOrders.total}</b></Link>
+          <div className="space-y-1">{[{ label: 'Register', status: 'Register', count: metrics.workOrders.register }, { label: 'Dikerjakan', status: 'Proses', count: metrics.workOrders.process }, { label: 'Selesai', status: 'Selesai', count: metrics.workOrders.completed }, { label: 'Lost Sales', status: 'Closed', count: metrics.workOrders.closed }].map(row => <Link key={row.status} to={link('/workorders', { status: row.status })} className="flex items-center justify-between rounded-lg px-2 py-2.5 text-sm text-slate-600 hover:bg-slate-50"><span>{row.label}</span><span className="flex items-center gap-3 font-semibold tabular-nums text-slate-800">{row.count}<ArrowRight className="h-3.5 w-3.5 text-slate-400" /></span></Link>)}</div>
+          {canUseInvoiceData && <div className="mt-3 border-t border-slate-100 pt-4"><div className="flex justify-between text-xs text-slate-500"><span>WO menjadi faktur</span><strong className="text-slate-700">{metrics.workOrders.conversionPercent.toLocaleString('id-ID')}%</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(100, metrics.workOrders.conversionPercent)}%` }} /></div><p className="mt-2 text-xs text-slate-500">{metrics.workOrders.invoiced} dari {metrics.workOrders.total} WO sudah difakturkan.</p></div>}
+        </div>}
       </section>}
     </div>
-  </>;
-}
-
-function ExecutiveBranchPerformance({ summary }: { summary: BranchPerformanceSummary }) {
-  const statusStyles: Record<BranchPerformanceRow['status'], string> = {
-    green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    amber: 'border-amber-200 bg-amber-50 text-amber-700',
-    red: 'border-red-200 bg-red-50 text-red-700',
-  };
-  const statusLabels: Record<BranchPerformanceRow['status'], string> = {
-    green: 'Sesuai pace', amber: 'Perlu dorongan', red: 'Tertinggal',
-  };
-
-  return <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Target vs Realisasi</p>
-        <h2 className="text-lg font-bold text-slate-900">Performa Omzet Tiga Cabang</h2>
-        <p className="text-xs text-slate-500">Bulan berjalan sampai hari ke-{summary.period.elapsedDays} dari {summary.period.daysInMonth} hari.</p>
-      </div>
-      <div className="grid grid-cols-3 gap-4 text-right text-xs">
-        <div><span className="block text-slate-400">Realisasi</span><b className="text-slate-900">{rupiah(summary.total.sales)}</b></div>
-        <div><span className="block text-slate-400">Target</span><b className="text-blue-700">{rupiah(summary.total.target)}</b></div>
-        <div><span className="block text-slate-400">Proyeksi</span><b className="text-violet-700">{rupiah(summary.total.projectedSales)}</b></div>
-      </div>
-    </header>
-
-    {summary.rows.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">Cabang Perintis, Cakalang, dan Mamuju belum tersedia pada akses ini.</div> : <div className="overflow-x-auto">
-      <table className="w-full min-w-[1180px] text-sm">
-        <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr>
-          <th className="px-4 py-2.5">Cabang</th><th className="px-3 py-2.5 text-right">Realisasi</th><th className="px-3 py-2.5 text-right">Target</th><th className="px-3 py-2.5">Pencapaian</th><th className="px-3 py-2.5 text-right">Pace Hari Ini</th><th className="px-3 py-2.5 text-right">Selisih Pace</th><th className="px-3 py-2.5 text-right">Proyeksi</th><th className="px-3 py-2.5 text-center">Faktur</th><th className="px-3 py-2.5 text-right">Diterima</th><th className="px-4 py-2.5 text-right">Piutang</th>
-        </tr></thead>
-        <tbody className="divide-y divide-slate-100">{summary.rows.map(row => <tr key={row.branchId} className="hover:bg-blue-50/30">
-          <td className="px-4 py-3"><b className="block text-slate-900">{row.branchLabel}</b><span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusStyles[row.status]}`}>{statusLabels[row.status]}</span></td>
-          <td className="px-3 text-right font-bold text-slate-900">{compactMoney(row.sales)}</td>
-          <td className="px-3 text-right text-slate-600">{compactMoney(row.target)}</td>
-          <td className="px-3"><div className="flex items-center gap-2"><div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${row.status === 'green' ? 'bg-emerald-500' : row.status === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, row.achievementPercent)}%` }} /></div><b className="text-xs text-slate-700">{row.achievementPercent}%</b></div><small className="text-[10px] text-slate-400">Sisa {compactMoney(row.remainingTarget)}</small></td>
-          <td className="px-3 text-right text-slate-600">{compactMoney(row.paceTarget)}</td>
-          <td className={`px-3 text-right font-semibold ${row.paceDifference >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{row.paceDifference >= 0 ? '+' : '-'}{compactMoney(Math.abs(row.paceDifference)).replace('Rp ', '')}</td>
-          <td className="px-3 text-right font-semibold text-violet-700">{compactMoney(row.projectedSales)}</td>
-          <td className="px-3 text-center font-semibold">{row.invoiceCount}</td>
-          <td className="px-3 text-right font-semibold text-emerald-700">{compactMoney(row.received)}</td>
-          <td className="px-4 text-right font-semibold text-amber-700">{compactMoney(row.receivable)}</td>
-        </tr>)}</tbody>
-        <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold"><tr><td className="px-4 py-3">TOTAL</td><td className="px-3 text-right">{compactMoney(summary.total.sales)}</td><td className="px-3 text-right">{compactMoney(summary.total.target)}</td><td className="px-3">{summary.total.achievementPercent}%</td><td className="px-3 text-right">{compactMoney(summary.total.paceTarget)}</td><td className={`px-3 text-right ${summary.total.paceDifference >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{summary.total.paceDifference >= 0 ? '+' : '-'}{compactMoney(Math.abs(summary.total.paceDifference)).replace('Rp ', '')}</td><td className="px-3 text-right text-violet-700">{compactMoney(summary.total.projectedSales)}</td><td className="px-3 text-center">{summary.total.invoiceCount}</td><td className="px-3 text-right text-emerald-700">{compactMoney(summary.total.received)}</td><td className="px-4 text-right text-amber-700">{compactMoney(summary.total.receivable)}</td></tr></tfoot>
-      </table>
-    </div>}
-  </section>;
-}
-
-function BranchOperationalCard({ branchName, period, sales, workOrders, completedWorkOrders, activeWorkOrders, invoices, awaitingInvoices, conversion, cash, nonCash, unpaid, unsubmitted, dailyAverage, projection }: {
-  branchName: string; period: string; sales: number; workOrders: number; completedWorkOrders: number; activeWorkOrders: number; invoices: number; awaitingInvoices: number; conversion: number; cash: number; nonCash: number; unpaid: number; unsubmitted: number; dailyAverage: number; projection: number;
-}) {
-  return <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-    <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-      <div><p className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Ringkasan Operasional Cabang</p><h2 className="text-lg font-bold text-slate-900">{branchName}</h2></div>
-      <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">{period}</span>
-    </header>
-    <div className="grid xl:grid-cols-[minmax(260px,0.9fr)_minmax(480px,1.6fr)_minmax(280px,0.9fr)]">
-      <Link to="/invoices" className="group border-b border-slate-200 p-5 hover:bg-blue-50/30 xl:border-b-0 xl:border-r">
-        <span className="text-sm text-slate-500">Penjualan bulan berjalan</span>
-        <strong className="mt-1 block text-3xl text-slate-950 group-hover:text-blue-700">{rupiah(sales)}</strong>
-        <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600">Lihat daftar faktur <ArrowRight className="h-3.5 w-3.5" /></span>
-      </Link>
-
-      <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-4 sm:divide-y-0">
-        <OperationalMetric to="/workorders" label="Order Kerja" value={`${workOrders} WO`} note={`${completedWorkOrders} selesai · ${activeWorkOrders} aktif`} />
-        <OperationalMetric to="/invoices" label="Faktur" value={`${invoices} Faktur`} note={`${awaitingInvoices} WO belum faktur`} warning={awaitingInvoices > 0} />
-        <OperationalMetric to="/customer-payments" label="Tunai diterima" value={compactMoney(cash)} note="Pembayaran tunai" />
-        <OperationalMetric to="/customer-payments" label="Transfer / non-tunai" value={compactMoney(nonCash)} note="Transfer, QRIS, lainnya" />
-      </div>
-
-      <div className="border-t border-slate-200 p-5 xl:border-l xl:border-t-0">
-        <div className="flex items-end justify-between"><div><span className="text-xs text-slate-500">Proyeksi omzet</span><strong className="block text-xl text-blue-700">{rupiah(projection)}</strong></div><span className="rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{conversion}%</span></div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min(100, conversion)}%` }} /></div>
-        <div className="mt-2 flex justify-between text-[11px] text-slate-500"><span>WO → Faktur</span><span>Rata-rata {compactMoney(dailyAverage)}/hari</span></div>
-      </div>
-    </div>
-    <footer className="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2">
-      <Link to="/invoices?status=Belum%20Lunas" className="flex items-center justify-between gap-3 px-5 py-2.5 text-xs hover:bg-amber-50"><span className="text-slate-500">Belum dibayar</span><b className={unpaid > 0 ? 'text-amber-700' : 'text-emerald-700'}>{rupiah(unpaid)}</b></Link>
-      <Link to="/branch-deposits" className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-2.5 text-xs hover:bg-red-50 sm:border-l sm:border-t-0"><span className="text-slate-500">Tunai belum disetor</span><b className={unsubmitted > 0 ? 'text-red-600' : 'text-emerald-700'}>{rupiah(unsubmitted)}</b></Link>
-    </footer>
-  </section>;
-}
-
-function OperationalMetric({ to, label, value, note, warning = false }: { to: string; label: string; value: string; note: string; warning?: boolean }) {
-  return <Link to={to} className="group min-w-0 p-4 hover:bg-blue-50/30"><span className="block truncate text-xs text-slate-500">{label}</span><b className="mt-1 block truncate text-lg text-slate-900 group-hover:text-blue-700">{value}</b><small className={warning ? 'block truncate text-[10px] font-semibold text-amber-600' : 'block truncate text-[10px] text-slate-400'}>{note}</small></Link>;
-}
-
-function DashboardPanel({ title, subtitle, onRefresh, refreshing, action, children }: { title: string; subtitle: string; onRefresh: () => void; refreshing: boolean; action?: React.ReactNode; children: React.ReactNode }) {
-  return <article className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
-    <header className="flex min-h-12 items-center justify-between border-b border-slate-200 px-4 py-2.5">
-      <div><h2 className="font-bold text-slate-800">{title}</h2><p className="text-[11px] text-slate-400">{subtitle}</p></div>
-      <div className="flex items-center gap-2">{action}<button type="button" onClick={onRefresh} title={`Refresh ${title}`} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-blue-600"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /></button></div>
-    </header>
-    <div className="p-4">{children}</div>
-  </article>;
-}
-
-function CashFlowMonthChart({ rows }: { rows: MonthMetric[] }) {
-  const max = Math.max(1, ...rows.flatMap(row => [row.cashIn, Math.abs(row.net)]));
-  const netY = (value: number) => 80 - (value / max) * 55;
-  const points = rows.map((row, index) => `${50 + index * 100},${netY(row.net)}`).join(' ');
-  return <div className="relative h-48">
-    <div className="pointer-events-none absolute inset-x-0 top-2 h-36"><div className="absolute inset-x-0 top-0 border-t border-slate-100" /><div className="absolute inset-x-0 top-1/2 border-t border-slate-100" /><div className="absolute inset-x-0 bottom-0 border-t border-slate-200" /></div>
-    <div className="absolute inset-x-0 bottom-5 top-2 flex items-end">{rows.map(row => <div key={row.key} className="flex h-full flex-1 items-end justify-center"><div title={`${row.label}: kas masuk ${rupiah(row.cashIn)}`} className="w-8 max-w-[45%] rounded-t-sm bg-emerald-300 transition hover:bg-emerald-400" style={{ height: `${Math.max(row.cashIn > 0 ? 3 : 0, (row.cashIn / max) * 100)}%` }} /></div>)}</div>
-    <svg className="pointer-events-none absolute inset-x-0 top-2 h-36 w-full" viewBox="0 0 600 160" preserveAspectRatio="none" aria-label="Garis arus kas bersih"><line x1="0" y1="80" x2="600" y2="80" stroke="#bae6fd" strokeDasharray="4 4" /><polyline points={points} fill="none" stroke="#0ea5e9" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />{rows.map((row, index) => <circle key={row.key} cx={50 + index * 100} cy={netY(row.net)} r="5" fill="#0ea5e9"><title>{`${row.label}: arus bersih ${rupiah(row.net)}`}</title></circle>)}</svg>
-    <div className="absolute inset-x-0 bottom-0 flex">{rows.map(row => <span key={row.key} className="flex-1 text-center text-[11px] text-slate-500">{row.label}</span>)}</div>
+    {canViewFinancial && <section className={`${panelClass} p-4 sm:p-5`}>
+      <SectionTitle title="Posisi uang saat ini" subtitle="Saldo berjalan seluruh periode · tidak berubah mengikuti filter tanggal" aside={<Landmark className="h-4 w-4 text-slate-400" />} />
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">{[
+        { label: 'Saldo kas', value: dataReady && cashAccounts ? money(cashAccounts.reduce((sum, row) => sum + Number(row.balance || 0), 0)) : unavailable, note: cashAccounts ? `${cashAccounts.length} rekening kas aktif` : 'Data rekening belum tersedia', to: '/cash-accounts' },
+        { label: 'Saldo bank & QRIS', value: dataReady && bankAccounts ? money(bankAccounts.reduce((sum, row) => sum + Number(row.balance || 0), 0)) : unavailable, note: bankAccounts ? `${bankAccounts.length} rekening aktif` : 'Data rekening belum tersedia', to: '/bank-accounts' },
+        { label: 'Tunai belum disetor', value: dataReady && unsubmitted !== null ? money(unsubmitted) : unavailable, note: 'Bagian dari kas · tidak dijumlahkan lagi', to: '/branch-deposits' },
+      ].map(row => <Link key={row.label} to={row.to} className="rounded-lg bg-slate-50 p-4 transition-colors hover:bg-blue-50"><p className="text-xs font-medium text-slate-600">{row.label}</p><p className="mt-2 break-words text-lg font-bold tabular-nums text-slate-900">{row.value}</p><p className="mt-1 text-[11px] text-slate-500">{row.note}</p></Link>)}</div>
+      {currentBranchId !== 'ALL' && <p className="mt-3 text-xs text-slate-500">Rekening tanpa penetapan cabang hanya ditampilkan pada Semua Cabang.</p>}
+    </section>}
+    {hasPermission('report:view') && <div className="flex flex-wrap gap-4 text-xs font-medium text-blue-700"><Link to="/reports">Buka laporan lengkap →</Link><Link to="/reports/inventory?availability=ATTENTION">Periksa stok kosong / minus →</Link></div>}
+    <details className="text-xs text-slate-500"><summary className="w-fit cursor-pointer font-medium text-slate-600">Cara membaca angka Dashboard</summary><ul className="mt-3 list-disc space-y-2 pl-5 leading-relaxed"><li>Omzet mengikuti tanggal faktur. Pembayaran mengikuti tanggal penerimaan, termasuk pelunasan faktur periode sebelumnya.</li><li>Piutang, tindakan tertunda, dan saldo rekening menunjukkan kondisi saat ini. Pilihan tanggal tidak menyembunyikan kewajiban dari periode lama.</li><li>Belum lunas &gt;7 hari adalah umur faktur untuk tindak lanjut, bukan tanggal jatuh tempo kontraktual.</li><li>Target dan estimasi hanya tersedia untuk bulan berjalan. Perbandingan menampilkan rentang tanggal dan jumlah hari sebenarnya.</li></ul></details>
   </div>;
-}
-
-function SalesTrendChart({ rows }: { rows: { key: string; label: string; value: number; count: number }[] }) {
-  const max = Math.max(1, ...rows.map(row => row.value));
-  const gap = rows.length > 1 ? 540 / (rows.length - 1) : 0;
-  const points = rows.map((row, index) => `${30 + index * gap},${140 - (row.value / max) * 105}`).join(' ');
-  return <div className="h-48">
-    <svg viewBox="0 0 600 180" className="h-full w-full" role="img" aria-label="Tren nilai penjualan">
-      <line x1="30" y1="35" x2="570" y2="35" stroke="#e2e8f0" /><line x1="30" y1="87" x2="570" y2="87" stroke="#e2e8f0" /><line x1="30" y1="140" x2="570" y2="140" stroke="#cbd5e1" />
-      <polyline points={points} fill="none" stroke="#60a5fa" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-      {rows.map((row, index) => <g key={row.key}><circle cx={30 + index * gap} cy={140 - (row.value / max) * 105} r="5" fill="#60a5fa"><title>{`${row.label}: ${row.count} faktur · ${rupiah(row.value)}`}</title></circle><text x={30 + index * gap} y="165" textAnchor="middle" fontSize="11" fill="#64748b">{row.label}</text></g>)}
-    </svg>
-  </div>;
-}
-
-function ExpenseRing({ value, change }: { value: number; change: number }) {
-  const safe = Math.min(100, Math.abs(change));
-  const color = change > 0 ? '#f97316' : '#10b981';
-  return <div className="text-center"><div className="relative h-28 w-28 flex-shrink-0 rounded-full" style={{ background: `conic-gradient(${color} ${safe * 3.6}deg,#e5e7eb 0deg)` }}><div className="absolute inset-3 flex flex-col items-center justify-center rounded-full bg-white"><b className={change > 0 ? 'text-orange-600' : 'text-emerald-600'}>{change > 0 ? '+' : ''}{change}%</b><span className="text-[9px] text-slate-400">vs bulan lalu</span></div></div><span className="mt-1 block text-[10px] text-slate-400">{value > 0 ? 'Pembayaran supplier' : 'Belum ada beban'}</span></div>;
-}
-
-const salesTextTones = { slate: 'text-slate-900', emerald: 'text-emerald-600', amber: 'text-amber-600' };
-function SalesSummaryLink({ to, label, value, tone }: { to: string; label: string; value: number; tone: keyof typeof salesTextTones }) {
-  return <Link to={to} className="min-w-0 hover:opacity-75"><span className="block truncate text-[11px] text-slate-500">{label}</span><b className={`block truncate text-lg ${salesTextTones[tone]}`}>{compactMoney(value)}</b></Link>;
-}
-
-const salesBarTones = { amber: 'bg-amber-400', red: 'bg-red-500' };
-function SalesBarLink({ to, label, value, total, tone }: { to: string; label: string; value: number; total: number; tone: keyof typeof salesBarTones }) {
-  return <Link to={to} className="group"><div className="mb-1 flex justify-between gap-2 text-[11px]"><span className="truncate text-slate-500">{label}</span><b className={tone === 'red' ? 'text-red-600' : 'text-amber-600'}>{compactMoney(value)}</b></div><div className="h-2 overflow-hidden bg-slate-100"><div className={`h-full transition group-hover:opacity-80 ${salesBarTones[tone]}`} style={{ width: `${percent(value, total)}%` }} /></div></Link>;
-}
-
-const attentionTones = { amber: 'bg-amber-50 text-amber-600', red: 'bg-red-50 text-red-600', blue: 'bg-blue-50 text-blue-600', emerald: 'bg-emerald-50 text-emerald-600' };
-function AttentionRow({ to, title, detail, icon: Icon, tone }: { to: string; title: string; detail: string; icon: any; tone: keyof typeof attentionTones }) {
-  return <Link to={to} className="group flex items-start gap-3 rounded-lg border border-slate-100 p-2.5 hover:border-blue-200 hover:bg-blue-50/30"><span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${attentionTones[tone]}`}><Icon className="h-4 w-4" /></span><span className="min-w-0 flex-1"><b className="block text-xs text-slate-800">{title}</b><small className="block truncate text-[11px] text-slate-500">{detail}</small></span><ArrowRight className="mt-2 h-3.5 w-3.5 text-slate-300 group-hover:text-blue-500" /></Link>;
-}
-
-const stripTones = { blue: 'text-blue-600 bg-blue-50', amber: 'text-amber-600 bg-amber-50', emerald: 'text-emerald-600 bg-emerald-50' };
-function FinanceStrip({ label, value, note, icon: Icon, tone, to }: { label: string; value: string; note: string; icon: any; tone: keyof typeof stripTones; to: string }) {
-  return <Link to={to} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm hover:border-blue-200"><span className={`flex h-9 w-9 items-center justify-center rounded-lg ${stripTones[tone]}`}><Icon className="h-4 w-4" /></span><span><small className="block text-slate-500">{label}</small><b className="block text-slate-900">{value}</b><small className="text-[10px] text-slate-400">{note}</small></span></Link>;
 }

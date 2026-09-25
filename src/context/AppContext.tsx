@@ -22,6 +22,8 @@ interface AppContextType {
   isLoading: boolean;
   /** Data awal sudah selesai dimuat. Refresh CRUD berikutnya tidak boleh melepas halaman aktif. */
   hasLoadedData: boolean;
+  dataLoadError: string | null;
+  dataUpdatedAt: string | null;
   isDemoMode: boolean;
   refreshData: () => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
@@ -109,6 +111,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [dataUpdatedAt, setDataUpdatedAt] = useState<string | null>(null);
 
   const setCurrentBranchId = (id: string) => {
     setCurrentBranchIdState(id);
@@ -181,6 +185,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         settings: res.data.settings || demoData.settings,
       });
       setIsDemoMode(false);
+      setDataLoadError(null);
+      setDataUpdatedAt(new Date().toISOString());
       finishSystemProcess(processId, 'Data berhasil diperbarui');
     } else if (allowDemoMode) {
       // Backend not available - fallback to demo data
@@ -192,10 +198,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch { /* gunakan pengaturan bawaan */ }
       setData({ ...demoData, settings: savedSettings });
       setIsDemoMode(true);
+      setDataLoadError(null);
+      setDataUpdatedAt(new Date().toISOString());
       finishSystemProcess(processId, 'Data lokal demo berhasil dimuat');
     } else {
       console.error('Backend API tidak tersedia. Data demo dinonaktifkan di production.');
       setIsDemoMode(false);
+      setDataLoadError(res.message || 'Gagal mengambil data dari server. Silakan muat ulang.');
       failSystemProcess(processId, 'Gagal mengambil data dari server');
     }
     if (requestId === refreshRequestId.current) {
@@ -217,6 +226,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (res.success && res.data) {
       user = res.data as User;
+      // Bersihkan tab sebelum Layout dipasang oleh perubahan currentUser.
+      localStorage.removeItem('drac-workspace-tabs');
       // Pasang identitas dan izin efektif sebelum memuat data. Ini mencegah
       // halaman berizin (mis. AI) sempat menganggap user tidak punya akses.
       setCurrentUser(user);
@@ -227,6 +238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const demoUser = demoData.users.find(u => u.username === username && u.password === password && u.isActive);
       if (demoUser) {
         user = { ...demoUser };
+        localStorage.removeItem('drac-workspace-tabs');
         setData(demoData);
         setIsDemoMode(true);
       }
@@ -1149,7 +1161,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         data, currentUser, currentBranchId, setCurrentBranchId, resolveBranchId,
-        login, logout, hasPermission, isLoading, hasLoadedData, isDemoMode, refreshData,
+        login, logout, hasPermission, isLoading, hasLoadedData, dataLoadError, dataUpdatedAt, isDemoMode, refreshData,
         updateSettings, generateDocumentNumber,
         addVehicle, updateVehicle, deleteVehicle,
         addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,

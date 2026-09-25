@@ -197,9 +197,9 @@ test('semua permukaan perhatian memakai clock satu menit yang sama', () => {
   assert.match(hook, /60_000/);
   assert.match(list, /const attentionNow = useMinuteClock\(\)/);
   assert.match(list, /todayDate,\s*attentionNow/);
-  assert.match(dashboard, /const attentionNow = useMinuteClock\(\)/);
-  assert.match(dashboard, /visibleWOs, visibleInvoices, todayKey, attentionNow/);
-  assert.match(dashboard, /attentionNow=\{attentionNow\}/);
+  assert.match(dashboard, /const clock = useMinuteClock\(\)/);
+  assert.match(dashboard, /visibleWOs, visibleInvoices, today, clock/);
+  assert.doesNotMatch(dashboard, /<MobileDashboard/);
   assert.match(mobile, /attentionNow:Date/);
   assert.match(mobile, /notificationWorkOrders,data\.invoices,today,attentionNow/);
 });

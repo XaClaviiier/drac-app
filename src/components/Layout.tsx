@@ -591,7 +591,7 @@ export default function Layout() {
       );
       if (!Array.isArray(saved)) return [];
       return saved
-        .filter((tab) => tab?.path && tab.path !== "/" && tab?.label)
+        .filter((tab) => tab?.path && tab?.label)
         .reduce<Array<{ path: string; label: string }>>((tabs, tab) => {
           const path = workspacePathFor(tab.path);
           if (tabs.some((current) => current.path === path)) return tabs;
@@ -704,7 +704,7 @@ export default function Layout() {
       const guard = (window as WorkOrderEditorGuardWindow).__dracRequestCloseWorkOrderEditor;
       if (guard && !await guard()) return;
       const fallback =
-        remaining[Math.min(index, remaining.length - 1)]?.path || "/";
+        remaining[Math.min(index, remaining.length - 1)]?.path || (hasPermission("wo:view") ? "/workorders/timeline" : "/help");
       setWorkspaceTabs(remaining);
       navigate(fallback);
       return;
@@ -718,7 +718,6 @@ export default function Layout() {
     setDesktopMenuOpen(null);
   }, [location.pathname]);
   useEffect(() => {
-    if (location.pathname === "/") return;
     const path = workspacePathFor(location.pathname);
     const label = path === "/receipts" ? "Penerimaan Barang" : getPageTitle();
     setWorkspaceTabs((current) => {
@@ -796,8 +795,16 @@ export default function Layout() {
         className={`${sidebarOpen ? "w-64" : "w-[84px]"} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] pt-12 text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
       >
         <nav className="flex-1 overflow-visible py-4">
-          {/* Dashboard tetap tersedia di tab atas; spacer menjaga posisi menu desktop lain. */}
-          <div className="h-12" aria-hidden="true" />
+          {hasPermission("dashboard:view") && <button
+            type="button"
+            onClick={() => { void navigateWithEditorGuard("/"); }}
+            title="Dashboard Manajemen"
+            aria-label="Dashboard Manajemen"
+            className={`flex h-12 w-full items-center gap-3 px-7 text-sm transition-colors ${location.pathname === "/" ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+          >
+            <LayoutDashboard className="h-5 w-5 flex-shrink-0" />
+            {sidebarOpen && <span>Dashboard</span>}
+          </button>}
           {desktopGroups.map((group) => {
             const Icon = group.icon;
             const accessibleItems = group.items.filter(canAccessDesktopItem);
@@ -968,7 +975,7 @@ export default function Layout() {
       <div className="flex flex-1 flex-col overflow-hidden lg:pt-12">
         {/* Header */}
         <header
-          className={`${location.pathname === "/" || location.pathname === "/ai" ? "hidden lg:flex" : "flex"} ${branchMenuOpen ? "z-[80]" : ""} app-brand-header relative flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:fixed lg:inset-x-0 lg:top-0 lg:z-[75] lg:h-12 lg:py-1`}
+          className={`${location.pathname === "/ai" ? "hidden lg:flex" : "flex"} ${branchMenuOpen ? "z-[80]" : ""} app-brand-header relative flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:fixed lg:inset-x-0 lg:top-0 lg:z-[75] lg:h-12 lg:py-1`}
         >
           <div className="hidden items-center gap-2.5 lg:flex">
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 shadow-sm">
@@ -984,11 +991,11 @@ export default function Layout() {
           <div className="flex min-w-0 items-center gap-2 sm:gap-4 lg:hidden">
             {/* Kembali ke dashboard mobile; menu lama tidak digunakan lagi. */}
             <button
-              onClick={() => { void navigateWithEditorGuard("/"); }}
+              onClick={() => { if (location.pathname === "/") setMobileMenuOpen(true); else void navigateWithEditorGuard("/"); }}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-md active:scale-95 lg:hidden"
-              aria-label="Kembali ke Beranda"
+              aria-label={location.pathname === "/" ? "Buka menu aplikasi" : "Kembali ke Beranda"}
             >
-              <ArrowLeft className="h-5 w-5" />
+              {location.pathname === "/" ? <Menu className="h-5 w-5" /> : <ArrowLeft className="h-5 w-5" />}
             </button>
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-white sm:text-xl">
@@ -1307,13 +1314,6 @@ export default function Layout() {
         {/* Legacy layout contract marker: className={`${ui.workspaceBar} hidden lg:flex`} */}
         <div className={`${ui.workspaceBar} relative z-[70] ${location.pathname === "/chart-of-accounts" ? "!flex" : "flex"}`}>
           <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-0.5 overflow-x-auto overflow-y-hidden">
-            <button
-              type="button"
-              onClick={() => { void navigateWithEditorGuard("/"); }}
-              className={`${workspaceTabClass(location.pathname === "/")} justify-between gap-3 px-4 text-sm`}
-            >
-              <span className="truncate">Dashboard</span>
-            </button>
             {workspaceTabs.map((tab) => {
               const active = workspacePathFor(location.pathname) === tab.path;
               return (
@@ -1351,8 +1351,7 @@ export default function Layout() {
               }}
               className="relative z-10 ml-1 h-[34px] w-16 flex-shrink-0 rounded-t-md border border-b-0 border-gray-300 bg-gray-200 px-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
             >
-              <option value="">{workspaceTabs.length + 1}</option>
-              <option value="/">Dashboard</option>
+              <option value="">{workspaceTabs.length}</option>
               {workspaceTabs.map((tab) => (
                 <option key={tab.path} value={tab.path}>
                   {tab.label}
@@ -1369,16 +1368,16 @@ export default function Layout() {
         )}
 
         <main
-          className={`app-page-scroll min-h-0 flex-1 ${location.pathname === "/ai" ? "overflow-hidden p-0 pb-[64px] lg:overflow-y-auto lg:p-6 lg:pb-6" : location.pathname === "/" ? "overflow-y-auto p-0 lg:p-6" : location.pathname.startsWith("/receipts") || location.pathname === "/items" || location.pathname === "/opening-stock" ? "overflow-y-auto p-0 pb-24 lg:pb-0" : "app-page-scroll--padded overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6"}`}
+          className={`app-page-scroll min-h-0 flex-1 ${location.pathname === "/ai" ? "overflow-hidden p-0 pb-[64px] lg:overflow-y-auto lg:p-6 lg:pb-6" : location.pathname === "/" ? "overflow-y-auto p-3 pb-24 sm:p-5 lg:p-6" : location.pathname.startsWith("/receipts") || location.pathname === "/items" || location.pathname === "/opening-stock" ? "overflow-y-auto p-0 pb-24 lg:pb-0" : "app-page-scroll--padded overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6"}`}
         >
           <Outlet />
         </main>
-        {location.pathname !== "/" && (
+        {(
           <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md items-end justify-around rounded-t-3xl border border-white/10 bg-[#092542]/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 text-white shadow-2xl backdrop-blur-xl lg:hidden">
             <MobileBottom
               icon={Home}
               label="Beranda"
-              active={false}
+              active={location.pathname === "/"}
               onClick={() => { void navigateWithEditorGuard("/"); }}
             />
             <MobileBottom

@@ -542,7 +542,7 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.doesNotMatch(layout, /app-brand-header absolute left-0 top-0 flex h-12 w-\[320px\]/);
   assert.match(layout, /bg-\[#061a3a\] pt-12/);
   assert.match(layout, /lg:fixed lg:inset-x-0 lg:top-0 lg:z-\[75\]/);
-  assert.match(layout, /Dashboard tetap tersedia di tab atas; spacer menjaga posisi menu desktop lain/);
+  assert.match(layout, /aria-label="Dashboard Manajemen"/);
   assert.match(layout, /mx-auto w-12 justify-center p-0/);
   assert.match(layout, /top-12[^"\n]*rounded-r-xl/);
   assert.match(layout, /left-\[84px\]/);

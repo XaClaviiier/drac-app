@@ -19,7 +19,7 @@ import AccurateNotificationDialog from '../components/AccurateNotificationDialog
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import { ConfigurableTableHeaderCell, useConfigurableTable } from '../components/ConfigurableTable';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
-import { buildWorkOrderAttentionItems } from '../lib/workOrderAttention';
+import { buildWorkOrderAttentionItems, WORK_ORDER_ATTENTION_LABELS, type WorkOrderAttentionKind } from '../lib/workOrderAttention';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import { timelineStageFromReason } from '../lib/workOrderTimeline';
 import { formatVehicleCompatibility } from '../components/VehicleCompatibilityPicker';
@@ -235,7 +235,7 @@ export default function WorkOrders() {
   const [savingPendingTemplates, setSavingPendingTemplates] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterAttention, setFilterAttention] = useState<'all' | 'attention' | 'overdue'>('all');
+  const [filterAttention, setFilterAttention] = useState<'all' | 'attention' | 'overdue' | WorkOrderAttentionKind>('all');
   const [periodFilter, setPeriodFilter] = useState<WorkOrderPeriod>('all');
   // State lama dipertahankan sementara agar tampilan mobile lama tetap kompatibel.
   const [todayOnly, setTodayOnly] = useState(false);
@@ -1071,7 +1071,8 @@ export default function WorkOrders() {
   const filteredWOs = useMemo(() => {
     return branchScopedWorkOrders
       .filter((wo) => {
-        const dateMatch = (!periodRange.from || wo.date >= periodRange.from) && (!periodRange.to || wo.date <= periodRange.to);
+        const workOrderDate = wo.date.slice(0, 10);
+        const dateMatch = (!periodRange.from || workOrderDate >= periodRange.from) && (!periodRange.to || workOrderDate <= periodRange.to);
         if (!dateMatch) return false;
 
         const customer = data.customers.find(item => item.id === wo.customerRefId || item.customerCode === wo.customerId);
@@ -1103,7 +1104,8 @@ export default function WorkOrders() {
         const attention = attentionByWorkOrderId.get(wo.id);
         const matchesAttention = filterAttention === 'all'
           || (filterAttention === 'attention' && Boolean(attention))
-          || (filterAttention === 'overdue' && (attention?.kind === 'register' || attention?.kind === 'process'));
+          || (filterAttention === 'overdue' && (attention?.kind === 'register' || attention?.kind === 'process'))
+          || attention?.kind === filterAttention;
         return matchesSearch && matchesStatus && matchesAttention;
       })
       .sort((a, b) => {
@@ -1156,7 +1158,7 @@ export default function WorkOrders() {
     setDateFrom(value);
     setDateTo(value);
   };
-  const activeFilterCount = Number(Boolean(selectedWorkOrderDate)) + Number(Boolean(filterStatus)) + Number(filterAttention !== 'all');
+  const activeFilterCount = Number(Boolean(periodRange.from || periodRange.to)) + Number(Boolean(filterStatus)) + Number(filterAttention !== 'all');
   const resetWorkOrderFilters = () => {
     setFilterStatus('');
     setFilterAttention('all');
@@ -1168,6 +1170,9 @@ export default function WorkOrders() {
       next.delete('date');
       next.delete('attention');
       next.delete('status');
+      next.delete('from');
+      next.delete('to');
+      next.delete('attentionKind');
       return next;
     }, { replace: true });
   };
@@ -1319,27 +1324,36 @@ export default function WorkOrders() {
   const requestedViewWO = searchParams.get('view');
 
   useEffect(() => {
-    if (searchParams.get('attention') !== '1') return;
-    setFilterAttention('attention');
-    setDetailWO(null);
+    const requestedDate = searchParams.get('date');
+    const requestedFrom = searchParams.get('from');
+    const requestedTo = searchParams.get('to');
+    const requestedStatus = searchParams.get('status');
+    const requestedAttention = searchParams.get('attentionKind');
+    const attentionKind = requestedAttention && Object.prototype.hasOwnProperty.call(WORK_ORDER_ATTENTION_LABELS, requestedAttention)
+      ? requestedAttention as WorkOrderAttentionKind : '';
+    const allAttention = searchParams.get('attention') === '1';
+    const fromDashboard = searchParams.get('source') === 'dashboard';
+    const validDate = (value: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+    const date = validDate(requestedDate);
+    const from = validDate(requestedFrom);
+    const to = validDate(requestedTo);
+    const status = requestedStatus && ['Register', 'Proses', 'Selesai', 'Closed', 'active', 'inactive'].includes(requestedStatus) ? requestedStatus : '';
+    if (!fromDashboard && !date && !from && !to && !status && !attentionKind && !allAttention) return;
+    setSearchTerm('');
+    setFilterStatus(status);
+    setFilterAttention(attentionKind || (allAttention ? 'attention' : 'all'));
+    setPeriodFilter(from || to || date ? 'custom' : 'all');
+    setDateFrom(from || (to ? '' : date));
+    setDateTo(to || (from ? '' : date));
+    setTodayOnly(false);
+    if (attentionKind || allAttention) setDetailWO(null);
     setSearchParams(params => {
       const next = new URLSearchParams(params);
-      next.delete('attention');
+      ['date', 'from', 'to', 'status', 'attention', 'attentionKind'].forEach(key => next.delete(key));
+      if (fromDashboard) next.delete('source');
       return next;
     }, { replace: true });
   }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    const requestedDate = searchParams.get('date');
-    if (!requestedDate || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) return;
-    setSelectedWorkOrderDate(requestedDate);
-  }, [searchParams]);
-
-  useEffect(() => {
-    const requestedStatus = searchParams.get('status');
-    if (!requestedStatus || !['Register', 'Proses', 'Selesai', 'Closed'].includes(requestedStatus)) return;
-    setFilterStatus(requestedStatus);
-  }, [searchParams]);
 
   // Aksi dari WO Timeline selalu membawa ID WO agar baris yang dipilih itulah
   // yang dibuka. WO yang sudah difakturkan hanya boleh dilihat (read-only).
@@ -2897,24 +2911,34 @@ export default function WorkOrders() {
             {showFilterPanel && <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-16px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl lg:left-0 lg:right-auto lg:w-[min(360px,calc(100vw-24px))]">
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Order Kerja</strong><button type="button" onClick={resetWorkOrderFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button></div>
               <label className="block text-xs font-semibold text-gray-600">Tanggal<IndonesianDateInput value={selectedWorkOrderDate} onChange={setSelectedWorkOrderDate} ariaLabel="Filter satu tanggal WO" className="mt-1 h-10 w-full text-sm font-normal" /></label>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="block text-xs font-semibold text-gray-600">Dari Tanggal<IndonesianDateInput value={dateFrom} max={dateTo || undefined} onChange={value => { setPeriodFilter('custom'); setDateFrom(value); }} ariaLabel="Dari tanggal WO" className="mt-1 h-10 w-full text-sm font-normal" /></label>
+                <label className="block text-xs font-semibold text-gray-600">Sampai Tanggal<IndonesianDateInput value={dateTo} min={dateFrom || undefined} onChange={value => { setPeriodFilter('custom'); setDateTo(value); }} ariaLabel="Sampai tanggal WO" className="mt-1 h-10 w-full text-sm font-normal" /></label>
+              </div>
               <p className="mt-2 text-xs text-gray-500">Kosongkan tanggal untuk menampilkan semua tanggal.</p>
               <label className="mt-3 block text-xs font-semibold text-gray-600">Status WO
                 <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-400 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
                   <option value="">Semua</option>
                   <option value="active">Aktif — Register &amp; Dikerjakan</option>
                   <option value="inactive">Nonaktif — Selesai &amp; Lost Sales</option>
+                  <option value="Register">Register</option>
+                  <option value="Proses">Dikerjakan</option>
+                  <option value="Selesai">Selesai</option>
+                  <option value="Closed">Lost Sales</option>
                 </select>
               </label>
               <label className="mt-3 block text-xs font-semibold text-gray-600">Perhatian
-                <select value={filterAttention} onChange={(event) => setFilterAttention(event.target.value as 'all' | 'attention' | 'overdue')} className="mt-1 h-10 w-full rounded border border-gray-400 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
+                <select value={filterAttention} onChange={(event) => setFilterAttention(event.target.value as typeof filterAttention)} className="mt-1 h-10 w-full rounded border border-gray-400 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300">
                   <option value="all">Semua</option>
                   <option value="attention">Butuh Tindakan</option>
                   <option value="overdue">Terlambat / Kritis</option>
+                  {Object.entries(WORK_ORDER_ATTENTION_LABELS).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
                 </select>
               </label>
               <button type="button" onClick={() => setShowFilterPanel(false)} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white">Terapkan Filter</button>
             </div>}
           </div>
+          {(periodFilter === 'custom' && (dateFrom || dateTo) && dateFrom !== dateTo) && <span className="order-4 text-xs text-blue-700 lg:order-1">{dateFrom || 'Awal'} s.d. {dateTo || 'Akhir'}</span>}
           <div className="order-2 hidden h-0 basis-full lg:block" />
           <div className="order-6 hidden flex-wrap items-center gap-2 lg:flex xl:flex-nowrap">
           <button type="button" className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50" title="Download"><Download className="h-4 w-4" /></button>

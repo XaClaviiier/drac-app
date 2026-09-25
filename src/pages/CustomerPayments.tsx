@@ -140,6 +140,32 @@ export default function CustomerPayments() {
   }, []);
 
   useEffect(() => {
+    const requestedFrom = searchParams.get("from");
+    const requestedTo = searchParams.get("to");
+    const requestedMethod = searchParams.get("method");
+    const fromDashboard = searchParams.get("source") === "dashboard";
+    const validDate = (value: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
+    const from = validDate(requestedFrom);
+    const to = validDate(requestedTo);
+    const method = requestedMethod === "Tunai" || requestedMethod === "nonCash" ? requestedMethod : "ALL";
+    if (!fromDashboard && !from && !to && method === "ALL") return;
+    setPeriod(from || to ? "custom" : "all");
+    setDateFrom(from);
+    setDateTo(to);
+    setSearch("");
+    setMethodFilter(method);
+    setStatusFilter("ALL");
+    setAccountFilter("ALL");
+    setUserFilter("ALL");
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      ["from", "to", "method"].forEach(key => next.delete(key));
+      if (fromDashboard) next.delete("source");
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     const requestedPayment = searchParams.get("view");
     if (!requestedPayment || !rows.length) return;
     const selected = rows.find((row) => row.id === requestedPayment || row.paymentNumber === requestedPayment);
@@ -231,9 +257,9 @@ export default function CustomerPayments() {
       rows.filter(
         (r) =>
           (currentBranchId === "ALL" || r.branchId === currentBranchId) &&
-          (!periodRange[0] || r.date >= periodRange[0]) &&
-          (!periodRange[1] || r.date <= periodRange[1]) &&
-          (methodFilter === "ALL" || r.paymentMethod === methodFilter) &&
+          (!periodRange[0] || r.date.slice(0, 10) >= periodRange[0]) &&
+          (!periodRange[1] || r.date.slice(0, 10) <= periodRange[1]) &&
+          (methodFilter === "ALL" || (methodFilter === "nonCash" ? r.paymentMethod !== "Tunai" : r.paymentMethod === methodFilter)) &&
           (accountFilter === "ALL" || r.accountId === accountFilter) &&
           (userFilter === "ALL" || (r.createdByName || "-") === userFilter) &&
           (statusFilter === "ALL" || r.paymentStatus === statusFilter) &&
@@ -418,7 +444,7 @@ export default function CustomerPayments() {
               <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Pembayaran</strong><button type="button" onClick={resetPaymentFilters} className="text-xs font-semibold text-blue-700 hover:underline">Reset</button></div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-semibold text-gray-600">Periode<select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="today">Hari Ini</option><option value="this_month">Bulan Ini</option><option value="last_month">Bulan Lalu</option><option value="custom">Pilih Tanggal</option><option value="all">Semua Tanggal</option></select></label>
-                <label className="text-xs font-semibold text-gray-600">Metode<select value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Metode</option><option>Tunai</option><option>Transfer</option></select></label>
+                <label className="text-xs font-semibold text-gray-600">Metode<select value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Metode</option><option>Tunai</option><option>Transfer</option><option value="nonCash">Semua Non-tunai</option></select></label>
                 <label className="text-xs font-semibold text-gray-600">Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Status</option><option>Lunas</option><option>Cicilan</option></select></label>
                 <label className="text-xs font-semibold text-gray-600">Akun<select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Akun</option>{visibleAccounts.map(account => <option value={account.id} key={account.id}>{account.name}</option>)}</select></label>
                 <label className="col-span-2 text-xs font-semibold text-gray-600">Diinput Oleh<select value={userFilter} onChange={(event) => setUserFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2 text-sm font-normal"><option value="ALL">Semua Input</option>{inputUsers.map(name => <option key={name}>{name}</option>)}</select></label>
@@ -428,6 +454,10 @@ export default function CustomerPayments() {
           )}
         </div>
         </div>
+        {period === "custom" && <div className="mt-2 flex flex-wrap items-end gap-2">
+          <label className="text-xs font-semibold text-gray-600">Dari Tanggal<IndonesianDateInput value={dateFrom} max={dateTo || undefined} onChange={setDateFrom} ariaLabel="Dari tanggal pembayaran" className="mt-1 h-9 w-40 text-sm font-normal" /></label>
+          <label className="text-xs font-semibold text-gray-600">Sampai Tanggal<IndonesianDateInput value={dateTo} min={dateFrom || undefined} onChange={setDateTo} ariaLabel="Sampai tanggal pembayaran" className="mt-1 h-9 w-40 text-sm font-normal" /></label>
+        </div>}
         <div className="order-2 h-0 basis-full" />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">

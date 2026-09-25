@@ -1,73 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+const source = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-
-test('dashboard menjadi pusat kendali yang dapat membuka daftar terfilter', () => {
+test('dashboard membedakan periode transaksi, saldo saat ini, dan sumber yang gagal dimuat', () => {
   const dashboard = source('src/pages/Dashboard.tsx');
-
-  assert.match(dashboard, /buildWorkOrderAttentionItems\(visibleWOs, visibleInvoices, todayKey, attentionNow\)/);
+  assert.match(dashboard, /buildDashboardMetrics/);
+  assert.match(dashboard, /getDashboardComparisonRange/);
   assert.match(dashboard, /countWorkOrderAttentionByKind\(attentionItems\)/);
-  assert.doesNotMatch(dashboard, /label="WO Hari Ini"/);
-  assert.doesNotMatch(dashboard, /label="Sedang Dikerjakan"/);
-  assert.doesNotMatch(dashboard, /label="Selesai Belum Faktur"/);
-  assert.doesNotMatch(dashboard, /label="Kas Masuk · 10 Hari"/);
-  assert.doesNotMatch(dashboard, /function KpiCard/);
-  assert.match(dashboard, /data\.warehouseStocks/);
-  assert.match(dashboard, /negativeStockCount/);
-  assert.match(dashboard, /pendingVerificationCount/);
-  assert.match(dashboard, /title="Arus Kas"/);
-  assert.match(dashboard, /CashFlowMonthChart rows=\{monthlyMetrics\}/);
-  assert.match(dashboard, /title="Penjualan"/);
-  assert.match(dashboard, /title="Tren Penjualan"/);
-  assert.match(dashboard, /title="Beban Perusahaan"/);
-  assert.match(dashboard, /invoice\.payments \|\| \[\]/);
-  assert.match(dashboard, /Ringkasan Operasional Cabang/);
-  assert.match(dashboard, /currentMonthWOs/);
-  assert.match(dashboard, /currentMonthCash/);
-  assert.match(dashboard, /currentMonthNonCash/);
-  assert.match(dashboard, /projectedMonthSales/);
-  assert.match(dashboard, /Tunai belum disetor/);
+  assert.match(dashboard, /dataLoadError/);
+  assert.match(dashboard, /payments: validPayments \? payments\.data : null/);
+  assert.match(dashboard, /Saldo saat ini · semua periode/);
+  assert.match(dashboard, /Tanggal pembayaran/);
+  assert.doesNotMatch(dashboard, /title="Beban Perusahaan"|title="Arus Kas"|Lewat jatuh tempo/);
+  assert.match(dashboard, /source: 'dashboard'/);
+  assert.match(dashboard, /minAge: '8'/);
 });
 
-test('daftar faktur dan WO membaca filter tanggal dari tautan dashboard', () => {
-  const invoices = source('src/pages/SalesInvoice.tsx');
-  const workOrders = source('src/pages/WorkOrders.tsx');
-
-  assert.match(invoices, /const requestedDate = searchParams\.get\('date'\)/);
-  assert.match(invoices, /setFilterDate\(requestedDate\)/);
-  assert.match(invoices, /const updateFilterDate = \(date: string\)/);
-  assert.match(invoices, /next\.delete\('date'\)/);
-  assert.match(invoices, /const requestedStatus = searchParams\.get\('status'\)/);
-  assert.match(invoices, /setFilterStatus\(requestedStatus\)/);
-  assert.match(workOrders, /const requestedDate = searchParams\.get\('date'\)/);
-  assert.match(workOrders, /setSelectedWorkOrderDate\(requestedDate\)/);
-  assert.match(workOrders, /const requestedStatus = searchParams\.get\('status'\)/);
-  assert.match(workOrders, /setFilterStatus\(requestedStatus\)/);
-});
-
-test('dashboard desktop dan mobile memakai ringkasan target cabang yang sama', () => {
+test('dashboard desktop dan HP menggunakan angka dan hak akses yang sama', () => {
   const dashboard = source('src/pages/Dashboard.tsx');
-  const mobile = source('src/components/MobileDashboard.tsx');
-  const calculator = source('src/lib/branchPerformance.ts');
+  const panels = source('src/components/DashboardPanels.tsx');
+  assert.doesNotMatch(dashboard, /<MobileDashboard/);
+  assert.match(dashboard, /const canViewBranchPerformance = canViewFinancial && canUseInvoiceData/);
+  assert.match(dashboard, /canViewPayments \? api\.get\('customer-payments'\)/);
+  assert.match(dashboard, /<BranchTable metrics=\{metrics\}/);
+  assert.match(panels, /hidden overflow-x-auto md:block/);
+  assert.match(panels, /md:hidden/);
+  assert.match(panels, /ResizeObserver/);
+  const calculator = source('src/lib/dashboardMetrics.ts');
+  assert.doesNotMatch(calculator, /150_000_000|75_000_000/);
+});
+
+test('target cabang dan data faktur tetap dilindungi permission di server', () => {
   const apiRouter = source('api/index.php');
   const apiHelpers = source('api/helpers.php');
   const allData = source('api/endpoints/all-data.php');
   const targetEndpoint = source('api/endpoints/branch-targets.php');
-
-  assert.match(dashboard, /buildBranchPerformanceSummary/);
-  assert.match(dashboard, /api\.get\('branch-targets'\)/);
-  assert.match(dashboard, /const canViewBranchPerformance = canViewFinancial && canUseInvoiceData/);
-  assert.match(dashboard, /ExecutiveBranchPerformance/);
-  assert.match(dashboard, /Target vs Realisasi/);
-  assert.match(dashboard, /<MobileDashboard branchPerformance=.*canViewBranchPerformance=/);
-  assert.doesNotMatch(dashboard, /const executiveBranchPerformance = useMemo/);
-  assert.match(mobile, /branchPerformance: BranchPerformanceSummary \| null/);
-  assert.doesNotMatch(mobile, /useMemo\(\(\)=>buildBranchPerformanceSummary/);
-  assert.match(mobile, /Target Cabang Bulan Ini/);
-  assert.match(mobile, /Target cabang belum dapat dimuat/);
-  assert.doesNotMatch(calculator, /150_000_000|75_000_000/);
   assert.match(apiRouter, /\$resource === 'branch-targets'/);
   assert.match(apiHelpers, /function authenticatedUserIsOwnerOrAdministrator/);
   assert.match(apiRouter, /authenticatedUserIsOwnerOrAdministrator\(\$pdo, \$requestUser\)/);
