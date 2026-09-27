@@ -193,7 +193,10 @@ switch ($method) {
                 }, $services);
                 $normalizedInvoice = $normalizeSalesInvoiceItems($pdo,$rawInvoiceItems);
                 $invoiceItems=$prepareSalesStockItems($pdo,(string)$wo['branch_id'],$normalizedInvoice['items']);$total=$normalizedInvoice['total'];
-                if($payment!==0.0 && abs($payment-$total)>0.001)throw new InvalidArgumentException('Jumlah Tunai + Transfer harus sama dengan total faktur, atau keduanya Rp0 untuk Belum Bayar');
+                // Pembayaran awal boleh sebagian. Status dan saldo berikutnya
+                // direkonsiliasi dari customer_payments; yang tidak boleh hanya
+                // pembayaran melebihi nilai faktur.
+                if($payment-$total>0.001)throw new InvalidArgumentException('Jumlah pembayaran tidak boleh melebihi total faktur');
                 $status = $payment >= $total ? 'Lunas' : 'Belum Lunas';
                 $invoiceId = generateId();
                 $invoiceNumber = nextDocumentNumber($pdo, 'sales_invoice', $wo['branch_id'], $date);

@@ -22,6 +22,16 @@ test('pembuatan faktur berjalan atomik, memilih gudang, dan mengizinkan stok min
   assert.match(help, /peringatan, bukan sebagai pemblokir transaksi/);
 });
 
+test('faktur dari WO menerima pembayaran awal sebagian dan menolak kelebihan bayar', () => {
+  const endpoint = source('api/endpoints/sales-invoices.php');
+  assert.match(endpoint, /Pembayaran awal boleh sebagian/);
+  assert.match(endpoint, /if\(\$payment-\$total>0\.001\)/);
+  assert.match(endpoint, /Jumlah pembayaran tidak boleh melebihi total faktur/);
+  assert.match(endpoint, /\$status = \$payment >= \$total \? 'Lunas' : 'Belum Lunas'/);
+  assert.match(endpoint, /\$recordInitialCustomerPayment\(\$pdo,[\s\S]*\$cashPayment,'Tunai'/);
+  assert.match(endpoint, /\$recordInitialCustomerPayment\(\$pdo,[\s\S]*\$transferPayment,'Transfer'/);
+});
+
 test('faktur dari WO memilih gudang per barang dan memperingatkan stok negatif', () => {
   const page = source('src/pages/WorkOrders.tsx');
   const endpoint = source('api/endpoints/sales-invoices.php');
