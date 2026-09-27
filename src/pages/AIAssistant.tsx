@@ -1371,12 +1371,45 @@ ${buildSmartContext(userMsgText)}`;
     }
 
     // 1. Pelanggan
+    // Nomor HP adalah identitas yang lebih kuat daripada nama. Sebelumnya
+    // pencarian memakai `nama || telepon`, sehingga nama yang sama dapat
+    // dipilih lebih dulu lalu updateCustomer gagal karena telepon tersebut
+    // sudah dimiliki pelanggan lain. Deteksi konflik sebelum ada perubahan
+    // master pelanggan/kendaraan agar satu percobaan tidak meninggalkan
+    // sebagian data tersimpan.
+    const normalizeRegistrationPhone = (value: unknown) => {
+      let digits = String(value || '').replace(/\D/g, '');
+      if (digits.startsWith('62')) digits = `0${digits.slice(2)}`;
+      return digits;
+    };
+    const normalizedPhone = normalizeRegistrationPhone(a.phone);
+    const customerByPhone = normalizedPhone
+      ? data.customers.find(c => normalizeRegistrationPhone(c.phone) === normalizedPhone)
+      : undefined;
+    const customerByName = a.createNewCustomer
+      ? undefined
+      : data.customers.find(c => c.name.toUpperCase() === String(a.customerName || '').toUpperCase());
+    if (customerByPhone && a.createNewCustomer) {
+      throw new Error(`Nomor HP sudah digunakan pelanggan lain: ${customerByPhone.name} (${customerByPhone.customerCode}). Gunakan pelanggan tersebut atau gunakan nomor HP yang benar.`);
+    }
+    if (customerByPhone && customerByName && customerByPhone.id !== customerByName.id) {
+      throw new Error(`Nomor HP sudah digunakan pelanggan lain: ${customerByPhone.name} (${customerByPhone.customerCode}). Pilih pelanggan tersebut atau gunakan nomor HP yang benar.`);
+    }
+    if (customerByName && normalizedPhone && normalizeRegistrationPhone(customerByName.phone) !== normalizedPhone) {
+      throw new Error(`Nama pelanggan ${customerByName.name} sudah terdaftar dengan nomor HP berbeda. Pilih pelanggan yang benar atau konfirmasi pelanggan baru.`);
+    }
     let customerUpdateSkipped = false;
-    let customer = data.customers.find(c =>
-      c.customerCode.toUpperCase() === String(a.customerId || '').toUpperCase() ||
-      c.name.toUpperCase() === String(a.customerName || '').toUpperCase() ||
-      (a.phone && c.phone.replace(/\D/g, '') === String(a.phone).replace(/\D/g, ''))
+    let customer = customerByPhone || customerByName || data.customers.find(c =>
+      c.customerCode.toUpperCase() === String(a.customerId || '').toUpperCase()
     );
+    // all-data dapat tertinggal sesaat setelah perubahan dari tab/perangkat
+    // lain. Baca ulang master hanya ketika akan membuat pelanggan baru.
+    if (!customer && normalizedPhone) {
+      const latestCustomers = await api.get<any[]>('customers');
+      if (latestCustomers.success) {
+        customer = (latestCustomers.data || []).find((c: any) => normalizeRegistrationPhone(c.phone) === normalizedPhone);
+      }
+    }
     if (!customer && a.customerName) {
       customer = await addCustomer({
         id: Date.now().toString(),
@@ -2571,7 +2604,7 @@ ${buildSmartContext(userMsgText)}`;
                           if (!customer) return null;
                           return <button key={customer.id} type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerName: customer.name, phone: customer.phone, customerId: customer.customerCode, customerRefId: customer.id, customerMatchResolved: true }))} className="w-full rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-left text-xs text-white hover:border-amber-300">Pakai <b>{customer.name}</b> · {customer.phone || 'tanpa telepon'}</button>;
                         })}
-                        <button type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerMatchResolved: true, customerCandidates: [] }))} className="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500">Lanjut buat pelanggan baru: {pendingAction.customerName}</button>
+                        <button type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerMatchResolved: true, customerCandidates: [], createNewCustomer: true }))} className="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500">Lanjut buat pelanggan baru: {pendingAction.customerName}</button>
                       </div>
                     </div>
                   )}

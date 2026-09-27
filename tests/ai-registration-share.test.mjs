@@ -17,3 +17,12 @@ test('share registrasi lama mengambil alamat terkini dari master pelanggan atau 
   assert.match(assistant, /text\.replace\(\/\^👤\[\^\\n\]\*\$\/m, customerLine => `\$\{customerLine\}\\n📍 \$\{address\}`\)/);
   assert.match(assistant, /navigator\.share\(\{ title: 'Register Servis Baru', text: shareText \}\)/);
 });
+
+test('REG WO menolak konflik nomor HP sebelum mengubah master pelanggan', () => {
+  assert.match(assistant, /const customerByPhone = normalizedPhone/);
+  assert.match(assistant, /customerByPhone && customerByName && customerByPhone\.id !== customerByName\.id/);
+  assert.match(assistant, /customerByName && normalizedPhone && normalizeRegistrationPhone\(customerByName\.phone\) !== normalizedPhone/);
+  assert.match(assistant, /createNewCustomer: true/);
+  assert.match(assistant, /Nomor HP sudah digunakan pelanggan lain/);
+  assert.match(assistant, /const latestCustomers = await api\.get<any\[]>\('customers'\)/);
+});
