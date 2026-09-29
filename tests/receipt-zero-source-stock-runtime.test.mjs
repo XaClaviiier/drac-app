@@ -18,7 +18,6 @@ for(const input of [
  {name:'apply source shortage',sourceStock:2},
  {name:'edit source shortage after undo',oldStatus:'Diterima',body:()=>body(21)},
  {name:'edit destination shortage',oldStatus:'Diterima',destinationStock:1},
- {name:'delete destination shortage',method:'DELETE',oldStatus:'Diterima',destinationStock:1},
  {name:'edit permission revoked',permissions:[],oldStatus:'Diterima'},
  {name:'delete permission revoked',method:'DELETE',permissions:[],oldStatus:'Diterima'},
  {name:'delete invoiced',method:'DELETE',oldStatus:'Diterima',linkedInvoices:1},
@@ -34,6 +33,25 @@ test('notes-only received edit leaves balances, versions and journal unchanged',
 test('DELETE restores received zero source and voids journal',()=>{
  const r=run({method:'DELETE',oldStatus:'Diterima'});assert.equal(r.status,200,JSON.stringify(r));
  assert.deepEqual(r.state.warehouse,{src:20,dst:0});parity(r);assert.equal(r.state.receipt,null);
+});
+
+for(const sourceType of ['Supplier','Transfer Gudang'])for(const consumedQty of [0,3,4,6])test(`DELETE ${sourceType} reverses exactly the receipt after ${consumedQty} units used`,()=>{
+ const r=run({method:'DELETE',oldStatus:'Diterima',sourceType,consumedQty});
+ assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.committed,true);assert.equal(r.rolledBack,false);
+ assert.equal(r.state.receipt,null);assert.deepEqual(r.state.lines,[]);
+ assert.equal(r.state.warehouse.dst,0-consumedQty);
+ assert.equal(r.state.warehouse.src,20);
+ assert.deepEqual(r.state.branch['b:DEST'],[0-consumedQty,0-consumedQty]);
+ assert.deepEqual(r.state.branch['b:0'],[20,20]);
+ assert.equal(r.state.versions.dst,r.initial.versions.dst+1);
+ assert.equal(r.state.movements.find(m=>m.id==='old-movement').is_voided,1);
+ assert.deepEqual(r.state.movements.filter(m=>m.reference_type!=='goods_receipt'),r.initial.movements.filter(m=>m.reference_type!=='goods_receipt'));
+ assert.equal(r.state.logs.length,1);
+ const snapshot=JSON.parse(r.state.logs[0][3]);
+ assert.equal(snapshot.document.id,'receipt');assert.equal(snapshot.items[0].qty,4);
+ // Remaining stock must still agree with the active stock ledger.
+ const net=r.state.movements.filter(m=>!m.is_voided).reduce((n,m)=>n+(m.destination_warehouse_id==='dst'?m.quantity:0)-(m.source_warehouse_id==='dst'?m.quantity:0),0);
+ assert.equal(r.state.warehouse.dst,net);
 });
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

@@ -20,9 +20,12 @@ final class ReceiptZeroSourcePDO extends PDO {
         $this->warehouses=['src'=>['id'=>'src','branch_id'=>$source,'is_active'=>1,'is_system'=>0],'dst'=>['id'=>'dst','branch_id'=>'DEST','is_active'=>1,'is_system'=>0]];
         $row=['id'=>'receipt','receipt_number'=>'GR-TEST','date'=>'2026-09-08','status'=>$input['oldStatus']??'Draft','branch_id'=>'DEST','warehouse_id'=>'dst','source_type'=>'Transfer Gudang','source_warehouse_id'=>'src','source_branch_id'=>$source,'received_by_id'=>'receiver','received_by'=>'Receiver','supplier_id'=>null];
         $movement=['id'=>'old-movement','item_id'=>'item','source_warehouse_id'=>'src','destination_warehouse_id'=>'dst','quantity'=>4,'reference_type'=>'goods_receipt','reference_id'=>'receipt','is_voided'=>0];
-        $stocks=['src'=>$input['sourceStock']??(20-$qty),'dst'=>$input['destinationStock']??$qty];
+        $supplier=($input['sourceType']??'Transfer Gudang')==='Supplier';
+        if($supplier){$row['source_type']='Supplier';$row['source_warehouse_id']=null;$row['source_branch_id']=null;$movement['source_warehouse_id']=null;}
+        $stocks=['src'=>$input['sourceStock']??($supplier?20:20-$qty),'dst'=>$input['destinationStock']??($qty-($input['consumedQty']??0))];
         $this->state=['receipt'=>($input['method']??'PUT')==='POST'?null:$row,'lines'=>[['item_id'=>'item','qty'=>4,'qty_invoiced'=>0]],'warehouse'=>$stocks,'branch'=>['b:'.$source=>[$stocks['src'],$stocks['src']],'b:DEST'=>[$stocks['dst'],$stocks['dst']]],'itemStock'=>$stocks['src'],'movements'=>$received?[$movement]:[],'logs'=>[],'versions'=>['src'=>0,'dst'=>0]];
         if(($input['method']??'PUT')==='POST')$this->state['lines']=[];
+        if(($input['consumedQty']??0)>0)$this->state['movements'][]=['id'=>'sale-movement','item_id'=>'item','source_warehouse_id'=>'dst','destination_warehouse_id'=>null,'quantity'=>$input['consumedQty'],'reference_type'=>'sales_invoice','reference_id'=>'invoice','is_voided'=>0];
         $this->initial=$this->state;
     }
     public function prepare(string $query,array $options=[]):PDOStatement|false {return new ReceiptZeroSourceStatement($this,$query);}
@@ -69,7 +72,7 @@ final class ReceiptZeroSourcePDO extends PDO {
         if(str_starts_with($q,'INSERT INTO goods_receipt_items ')) {$this->state['lines'][]=['item_id'=>$p[1],'qty'=>$p[4],'qty_invoiced'=>$p[6]];return [];}
         if(str_starts_with($q,'DELETE FROM goods_receipts ')) {$this->state['receipt']=null;$this->state['lines']=[];return [];}
         if(str_starts_with($q,'INSERT INTO transaction_activity_logs')) {$this->state['logs'][]=$p;return [];}
-        if(str_starts_with($q,'UPDATE stock_movements SET is_voided=1')) {foreach($this->state['movements'] as &$m)$m['is_voided']=1;return [];}
+        if(str_starts_with($q,'UPDATE stock_movements SET is_voided=1')) {foreach($this->state['movements'] as &$m)if($m['reference_type']==='goods_receipt'&&$m['reference_id']===end($p))$m['is_voided']=1;return [];}
         if(str_starts_with($q,'SELECT id FROM stock_movements WHERE idempotency_key'))return [];
         if(str_starts_with($q,'INSERT INTO stock_movements(')) {$cols=['id','item_id','source_warehouse_id','destination_warehouse_id','quantity','unit_cost','movement_type','reference_type','reference_id','reference_number','reversal_of_id','correction_group_id','idempotency_key','notes','occurred_at','created_by'];$this->state['movements'][]=array_combine($cols,$p)+['is_voided'=>0];return [];}
         if(str_starts_with($q,'INSERT IGNORE INTO goods_receipt_sequences')||str_starts_with($q,'UPDATE goods_receipt_sequences'))return [];
