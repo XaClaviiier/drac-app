@@ -115,8 +115,10 @@ export default function CustomerPayments() {
     invoiceId: "",
     date: today,
     amount: 0,
+    amount2: 0,
     paymentMethod: "Tunai",
     accountId: "",
+    accountId2: "",
     notes: "",
     reason: "",
   };
@@ -202,11 +204,8 @@ export default function CustomerPayments() {
       })
       .slice(0, 60);
   }, [unpaid, invoiceSearch, data.customers]);
-  const expectedAccountType = form.paymentMethod === "Tunai" ? "cash" : "bank";
-  const availableAccounts = accounts.filter(
-    (a) =>
-      a.accountType === expectedAccountType &&
-      (!a.branchId || a.branchId === invoice?.branchId),
+  const paymentAccountOptions = accounts.filter(
+    (a) => !a.branchId || a.branchId === invoice?.branchId,
   );
 
   useEffect(() => {
@@ -229,8 +228,10 @@ export default function CustomerPayments() {
       invoiceId: selected.id,
       date: today,
       amount: Math.max(0, selected.total - selected.payment),
+      amount2: 0,
       paymentMethod: "Tunai",
       accountId: "",
+      accountId2: "",
       notes: "",
       reason: "",
     });
@@ -308,14 +309,35 @@ export default function CustomerPayments() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const maximum = editingPayment ? maximumEditableAmount : outstanding;
-    if (!invoice || form.amount <= 0 || form.amount > maximum)
+    const amount2 = Number(form.amount2 || 0);
+    const combinedAmount = Number(form.amount || 0) + amount2;
+    if (!invoice || form.amount <= 0 || combinedAmount > maximum)
       return window.alert("Periksa faktur dan nominal pembayaran.");
+    if (!editingPayment && amount2 > 0 && !form.accountId2)
+      return window.alert("Pilih akun penerimaan untuk Pembayaran 2.");
+    if (!editingPayment && !form.accountId)
+      return window.alert("Pilih akun penerimaan untuk Pembayaran 1.");
     if (editingPayment && !form.reason.trim())
       return window.alert("Alasan perubahan pembayaran wajib diisi.");
-    const r = editingPayment
-      ? await api.update("customer-payments", editingPayment.id, form)
-      : await api.create("customer-payments", form);
-    if (!r.success) return window.alert(r.message);
+    if (editingPayment) {
+      const r = await api.update("customer-payments", editingPayment.id, form);
+      if (!r.success) return window.alert(r.message);
+    } else {
+      const payments = [
+        { amount: Number(form.amount || 0), accountId: form.accountId },
+        { amount: amount2, accountId: form.accountId2 },
+      ].filter((item) => item.amount > 0);
+      for (const item of payments) {
+        const account = paymentAccountOptions.find((a) => a.id === item.accountId);
+        const r = await api.create("customer-payments", {
+          ...form,
+          amount: item.amount,
+          accountId: item.accountId,
+          paymentMethod: account?.accountType === "bank" ? "Transfer" : "Tunai",
+        });
+        if (!r.success) return window.alert(r.message);
+      }
+    }
     await refreshData();
     await load();
     closeForm();
@@ -384,8 +406,10 @@ export default function CustomerPayments() {
       invoiceId: row.invoiceId,
       date: row.date,
       amount: row.amount,
+      amount2: 0,
       paymentMethod: row.paymentMethod === "Transfer" ? "Transfer" : "Tunai",
       accountId: row.accountId || "",
+      accountId2: "",
       notes: row.notes || "",
       reason: "",
     });
@@ -739,7 +763,9 @@ export default function CustomerPayments() {
                 </select>
               </label>
               {invoice && (
-                <div className="grid grid-cols-3 rounded-lg bg-blue-50 p-3 text-sm">
+                <div className="rounded-lg bg-blue-50 p-3 text-sm">
+                  <div className="mb-2 text-xs text-blue-800">No. WO: <b>{invoice.woNumber || invoice.woId || "-"}</b></div>
+                  <div className="grid grid-cols-3">
                   <span>
                     Total
                     <br />
@@ -755,6 +781,7 @@ export default function CustomerPayments() {
                     <br />
                     <b className="text-red-600">{rupiah(editingPayment ? maximumEditableAmount : outstanding)}</b>
                   </span>
+                  </div>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
@@ -762,57 +789,21 @@ export default function CustomerPayments() {
                   Tanggal
                   <IndonesianDateInput min={invoice?.date} max={today} value={form.date} onChange={date=>setForm({...form,date})} className="mt-1 h-11 w-full"/>
                 </label>
-                <label className="text-sm">
-                  Metode
-                  <select
-                    value={form.paymentMethod}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        paymentMethod: e.target.value,
-                        accountId: "",
-                      })
-                    }
-                    className="mt-1 w-full rounded-lg border p-2.5"
-                  >
-                    <option>Tunai</option>
-                    <option>Transfer</option>
-                  </select>
-                </label>
+                <div className="text-sm text-gray-600">Pembayaran dapat dibagi ke dua akun kas/bank di bawah.</div>
               </div>
-              <label className="block text-sm">
-                Diterima ke
-                <select
-                  value={form.accountId}
-                  onChange={(e) =>
-                    setForm({ ...form, accountId: e.target.value })
-                  }
-                  className="mt-1 w-full rounded-lg border p-2.5"
-                >
-                  <option value="">Otomatis sesuai pengaturan cabang</option>
-                  {availableAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-                <small className="text-gray-500">
-                  Pilihan akun otomatis mengikuti metode pembayaran.
-                </small>
-              </label>
-              <label className="block text-sm">
-                Nominal
-                <input
-                  type="number"
-                  min="1"
-                  max={editingPayment ? maximumEditableAmount : outstanding}
-                  value={form.amount || ""}
-                  onChange={(e) =>
-                    setForm({ ...form, amount: Number(e.target.value) })
-                  }
-                  className="mt-1 w-full rounded-lg border p-2.5 text-lg font-bold"
-                />
-              </label>
+              <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+                {[{label: "Pembayaran 1", amount: "amount", account: "accountId", required: true}, {label: "Pembayaran 2", amount: "amount2", account: "accountId2", required: false}].map((item) => (
+                  <div key={item.label} className="grid grid-cols-[7rem_8rem_minmax(0,1fr)] items-center gap-2">
+                    <b className="text-xs whitespace-nowrap">{item.label}</b>
+                    <input type="number" min={item.required ? 1 : 0} max={editingPayment ? maximumEditableAmount : outstanding} value={form[item.amount as "amount" | "amount2"] || ""} onChange={(e) => setForm({ ...form, [item.amount]: Number(e.target.value) })} className="w-full rounded-lg border p-2 text-right text-sm font-semibold" />
+                    <select disabled={!!editingPayment && item.amount === "amount2"} required={item.required && !editingPayment} value={form[item.account as "accountId" | "accountId2"]} onChange={(e) => setForm({ ...form, [item.account]: e.target.value })} className="w-full min-w-0 rounded-lg border p-2 text-sm">
+                      <option value="">Pilih kas/bank</option>
+                      {paymentAccountOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <small className="block text-gray-500">Nominal Pembayaran 2 boleh dikosongkan.</small>
+              </div>
               <label className="block text-sm">
                 Catatan (opsional)
                 <textarea
