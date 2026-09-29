@@ -377,7 +377,12 @@ switch ($method) {
             if ($row && in_array($row['status'], ['Diterima', 'Difakturkan', 'Sebagian'])) {
                 foreach ($receiptItems as $i) {
                     if (!empty($i['item_id'])) {
-                        adjustWarehouseStock($pdo,(string)($row['warehouse_id']?:defaultWarehouseId($pdo,(string)$row['branch_id'])),(string)$row['branch_id'],$i['item_id'],-(int)$i['qty']);
+                        // Penghapusan membalik seluruh penerimaan, meskipun stoknya
+                        // sudah terpakai pada transaksi berikutnya. Saldo negatif
+                        // menunjukkan stok sumber yang dihapus memang sudah dipakai;
+                        // validasi stok normal di sini membuat dokumen tidak dapat
+                        // dihapus dan meninggalkan saldo penerimaan yang keliru.
+                        adjustWarehouseStockAllowNegative($pdo,(string)($row['warehouse_id']?:defaultWarehouseId($pdo,(string)$row['branch_id'])),(string)$row['branch_id'],$i['item_id'],-(int)$i['qty']);
                         if(($row['source_type']??'Supplier')==='Transfer Gudang'&&!empty($row['source_warehouse_id'])&&isset($row['source_branch_id'])&&(string)$row['source_branch_id']!=='')adjustWarehouseStockAllowNegative($pdo,(string)$row['source_warehouse_id'],(string)$row['source_branch_id'],$i['item_id'],(int)$i['qty']);
                     }
                 }
