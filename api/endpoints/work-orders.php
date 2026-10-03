@@ -774,7 +774,8 @@ switch ($method) {
             $linkedInvoiceStmt = $pdo->prepare('SELECT id,invoice_number FROM sales_invoices WHERE wo_id=? LIMIT 1 FOR UPDATE');
             $linkedInvoiceStmt->execute([$id]);
             $reverseLinkedInvoice = $linkedInvoiceStmt->fetch();
-            if (!empty($currentWorkOrder['invoice_id']) || $reverseLinkedInvoice) {
+            $hasLinkedInvoice = !empty($currentWorkOrder['invoice_id']) || $reverseLinkedInvoice;
+            if ($hasLinkedInvoice && !authenticatedUserHasPermission($actor, 'invoice:edit')) {
                 throw new DomainException('WO yang sudah difakturkan tidak dapat diedit. Ubah rincian pada faktur atau hapus faktur terlebih dahulu.');
             }
             $vehicleChanged = (string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id'];

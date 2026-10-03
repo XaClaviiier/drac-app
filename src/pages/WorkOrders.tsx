@@ -429,7 +429,12 @@ export default function WorkOrders() {
       || hasPermission('all_branches')
       || assignedBranchIds.has(wo.branchId)
     );
+    // WO yang sudah ditagihkan hanya boleh dikoreksi oleh user yang juga
+    // berwenang mengedit faktur. Ini mengikuti pola koreksi finansial
+    // Accurate: user WO biasa tetap melihat data dalam keadaan terkunci.
+    const canCorrectInvoicedWorkOrder = !wo.invoiceId || hasPermission('invoice:edit');
     return hasPermission('wo:edit')
+      && canCorrectInvoicedWorkOrder
       && Boolean(activeBranch)
       && currentBranchId !== 'ALL'
       && wo.branchId === currentBranchId
@@ -438,7 +443,9 @@ export default function WorkOrders() {
 
   const requireEditableWorkOrder = (wo: WorkOrder) => {
     if (canEditWorkOrderInActiveBranch(wo)) return true;
-    showAccurateNotice('Pilih cabang aktif yang sesuai dan pastikan Anda memiliki hak Edit WO.');
+    showAccurateNotice(wo.invoiceId && !hasPermission('invoice:edit')
+      ? 'WO sudah memiliki faktur. Koreksi WO berfaktur memerlukan hak Edit Faktur.'
+      : 'Pilih cabang aktif yang sesuai dan pastikan Anda memiliki hak Edit WO.');
     return false;
   };
 
@@ -845,8 +852,9 @@ export default function WorkOrders() {
     name: eligibleTechnicians.find(user => user.id === id)?.name || formData.assistantTechnicianNames[index] || id,
   }));
   const infoPanelInvoiceLocked = Boolean(
-    editingWO?.invoiceId
-    || (editingWO && financialTimeline.woId === editingWO.id && financialTimeline.invoice),
+    (editingWO?.invoiceId
+      || (editingWO && financialTimeline.woId === editingWO.id && financialTimeline.invoice))
+    && !hasPermission('invoice:edit'),
   );
   const infoPanelLocked = workOrderViewOnly || infoPanelInvoiceLocked;
 
@@ -1188,7 +1196,6 @@ export default function WorkOrders() {
   );
   const serviceEditorReadOnly = Boolean(
     workOrderViewOnly
-    || editingWO?.invoiceId
     || (editingWO && !canEditWorkOrderInActiveBranch(editingWO))
   );
   const resetForm = () => {
@@ -1636,8 +1643,8 @@ export default function WorkOrders() {
       return;
     }
 
-    if (editingWO?.invoiceId) {
-      showAccurateNotice(`WO ${editingWO.woNumber} sudah difakturkan dan tidak dapat diubah.`);
+    if (editingWO?.invoiceId && !hasPermission('invoice:edit')) {
+      showAccurateNotice(`WO ${editingWO.woNumber} sudah difakturkan. Koreksi memerlukan hak Edit Faktur.`);
       return;
     }
     if (editingWO && !requireEditableWorkOrder(editingWO)) return;

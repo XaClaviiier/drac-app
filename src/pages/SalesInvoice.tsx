@@ -1353,6 +1353,7 @@ export default function SalesInvoice() {
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Piutang / Sisa</dt><dd className={`font-semibold tabular-nums ${remaining > 0 ? 'text-amber-700' : 'text-gray-900'}`}>Rp {remaining.toLocaleString('id-ID')}</dd></div>
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Status</dt><dd><span className={`inline-flex rounded border px-2 py-0.5 text-xs font-semibold ${remaining <= 0 && invoice.total > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{remaining <= 0 && invoice.total > 0 ? 'Lunas' : 'Belum Lunas'}</span></dd></div>
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Tanggal Faktur</dt><dd className="font-medium">{formatShareDate(invoice.date)}</dd></div>
+                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Referensi WO</dt><dd className="font-semibold text-orange-700">{invoice.woNumber || linkedWO?.woNumber || '-'}</dd></div>
                       <div className="flex items-center justify-between gap-4 px-3 py-2"><dt>Metode Terakhir</dt><dd className="font-medium">{invoice.payment > 0 ? invoice.paymentMethod || 'Tunai' : '-'}</dd></div>
                     </dl>
                   </div>
