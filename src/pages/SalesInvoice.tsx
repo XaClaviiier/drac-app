@@ -77,7 +77,7 @@ export default function SalesInvoice() {
   const [woDraftItems, setWoDraftItems] = useState<NonNullable<SalesInvoice['items']>>([]);
   const [woItemToAdd, setWoItemToAdd] = useState('');
   const [woPayment, setWoPayment] = useState(0);
-  const [woPaymentMethod, setWoPaymentMethod] = useState<'Tunai' | 'Transfer'>('Tunai');
+  const [woPaymentMethod, setWoPaymentMethod] = useState<'Pembayaran 1' | 'Pembayaran 2'>('Pembayaran 1');
   const [invoiceDateUnlocked, setInvoiceDateUnlocked] = useState(false);
   const [woInvoiceDate, setWoInvoiceDate] = useState(localDateKey());
   const [woPaymentDate, setWoPaymentDate] = useState(localDateKey());
@@ -656,7 +656,7 @@ export default function SalesInvoice() {
     setWoDraftItems([]);
     setWoItemToAdd('');
     setWoPayment(0);
-    setWoPaymentMethod('Tunai');
+    setWoPaymentMethod('Pembayaran 1');
     const today = localDateKey();
     setWoInvoiceDate(today);
     setWoPaymentDate(today);
@@ -850,8 +850,8 @@ export default function SalesInvoice() {
         }
         const invoice = await createInvoiceFromWO(
           selectedWO.id,
-          woPaymentMethod === 'Tunai' ? woPayment : 0,
-          woPaymentMethod === 'Transfer' ? woPayment : 0,
+          woPaymentMethod === 'Pembayaran 1' ? woPayment : 0,
+          woPaymentMethod === 'Pembayaran 2' ? woPayment : 0,
           woInvoiceDate,
           woPayment > 0 ? woPaymentDate : undefined,
           woBackdateReason,
@@ -1767,7 +1767,7 @@ export default function SalesInvoice() {
                       <div className="pt-3 border-t border-gray-200">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Metode Pembayaran</label>
                         <div className="mb-3 grid grid-cols-2 gap-2">
-                          {(['Tunai', 'Transfer'] as const).map((method) => (
+                          {(['Pembayaran 1', 'Pembayaran 2'] as const).map((method) => (
                             <button
                               key={method}
                               type="button"
