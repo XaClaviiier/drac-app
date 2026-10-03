@@ -1633,8 +1633,17 @@ export default function SalesInvoice() {
 
       {/* Faktur dari WO: layar penuh di HP dan subtab dokumen di desktop. */}
       {showWOPicker && (
-        <section className="mx-1 border border-gray-300 bg-white shadow-sm lg:mx-3 lg:mt-0.5" aria-label="Data Baru Faktur dari Order Kerja">
-          <div ref={woPickerPanelRef} className="w-full overflow-y-auto">
+        <section className="mx-1 border border-gray-300 bg-white shadow-sm lg:mx-0 lg:mt-0.5 lg:border-0 lg:bg-[var(--app-canvas)] lg:shadow-none" aria-label="Data Baru Faktur dari Order Kerja">
+          <div ref={woPickerPanelRef} className="relative w-full overflow-y-auto lg:pr-[104px]">
+            <AccurateFormActionRail
+              ariaLabel="Aksi Faktur Penjualan dari Order Kerja"
+              className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
+              save={{ onClick: handleCreateFromWO, disabled: !selectedWO || !woDraftItems.length || isCreatingFromWO, title: 'Buat faktur dari WO' }}
+              print={{ onClick: () => window.print(), title: 'Cetak / simpan sebagai' }}
+              attachment={{ disabled: true, title: 'Lampiran belum tersedia untuk Faktur Penjualan' }}
+              more={{ disabled: true, title: 'Pilihan lainnya' }}
+              remove={{ disabled: true, title: 'Hapus barang/jasa terpilih' }}
+            />
             <div className="flex items-center justify-between bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-3 lg:hidden">
               <div className="flex items-center gap-3 text-white">
                 <Wrench className="w-6 h-6" />
@@ -1711,21 +1720,20 @@ export default function SalesInvoice() {
                   </div>
 
                   {selectedWO && (
-                    <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
-                      <div className="grid grid-cols-1 gap-2 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm sm:grid-cols-3">
-                        <div><span className="block text-[10px] font-bold uppercase text-blue-500">Pelanggan · terkunci</span><strong>{selectedWO.customerName}</strong></div>
-                        <div><span className="block text-[10px] font-bold uppercase text-blue-500">Nomor WO · terkunci</span><strong>{selectedWO.woNumber}</strong></div>
-                        <div><span className="block text-[10px] font-bold uppercase text-blue-500">Kendaraan · terkunci</span><strong>{selectedWO.plateNumber}</strong><span className="block text-xs text-gray-500">{selectedWO.vehicleInfo}</span></div>
+                    <div className="space-y-3 border border-gray-200 bg-transparent p-1 lg:space-y-2 lg:border-0 lg:p-0">
+                      <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
+                        <label className="flex h-10 items-center text-sm font-medium text-gray-700">Pelanggan <span className="ml-1 text-red-500">*</span></label>
+                        <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{selectedWO.customerName}</div>
+                        <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{selectedWO.vehicleInfo || selectedWO.plateNumber}</div>
+                        <label className="flex h-10 items-center justify-end pr-2 text-sm font-medium text-gray-700">Tanggal <span className="ml-1 text-red-500">*</span></label>
+                        <IndonesianDateInput max={localDateKey()} value={woInvoiceDate} onChange={setWoInvoiceDate} disabled={!hasPermission('invoice:backdate')} className="h-10 min-w-0 w-full" />
+                        <div className="hidden h-10 items-center justify-center rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 lg:flex">WO</div>
+                        <label className="flex h-10 items-center text-sm font-medium text-gray-700">No. Nota Fisik</label>
+                        <input value={woManualReceiptNumber} onChange={(event) => setWoManualReceiptNumber(event.target.value.toUpperCase())} maxLength={50} placeholder="Opsional, harus unik" className="app-field h-10 w-full px-3 text-sm font-semibold uppercase lg:col-span-2" />
+                        <div className="hidden lg:block" />
+                        <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold lg:col-span-2">{selectedWO.woNumber}</div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold mb-1">No. Nota Fisik <span className="font-normal text-gray-400">(opsional, unik)</span></label>
-                          <input value={woManualReceiptNumber} onChange={(event) => setWoManualReceiptNumber(event.target.value.toUpperCase())} maxLength={50} placeholder="Sesuai nota asli" className="app-field h-10 w-full px-3 text-sm font-semibold uppercase" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold mb-1">Tanggal Faktur</label>
-                          <IndonesianDateInput max={localDateKey()} value={woInvoiceDate} onChange={setWoInvoiceDate} disabled={!hasPermission('invoice:backdate')} className="h-10 w-full" />
-                        </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         {woPayment > 0 && <div>
                           <label className="block text-xs font-semibold mb-1">Tanggal Pembayaran</label>
                           <IndonesianDateInput min={woInvoiceDate} max={localDateKey()} value={woPaymentDate} onChange={setWoPaymentDate} disabled={!hasPermission('payment:backdate')} className="h-10 w-full" />
@@ -1763,9 +1771,13 @@ export default function SalesInvoice() {
                           );
                         })}
                       </div>
-                      <div className="flex justify-between border-t pt-3 text-sm font-bold"><span>Total Invoice</span><span>Rp {woDraftTotal.toLocaleString('id-ID')}</span></div>
-                      <div className="pt-3 border-t border-gray-200">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Metode Pembayaran</label>
+                      <div className="ml-auto mt-2 hidden w-full max-w-[700px] grid-cols-3 divide-x divide-gray-300 border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.2)] sm:grid">
+                        <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Sub Total</span><strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {woDraftTotal.toLocaleString('id-ID')}</strong></div>
+                        <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Diskon</span><strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp 0</strong></div>
+                        <div className="flex min-h-[72px] flex-col justify-between px-4 py-2.5"><span className="text-sm font-medium text-gray-900">Total</span><strong className="text-right text-base font-bold tabular-nums text-gray-950">Rp {woDraftTotal.toLocaleString('id-ID')}</strong></div>
+                      </div>
+                      <div className="border-t border-gray-200 pt-3">
+                        <label className="mb-2 block text-sm font-medium text-gray-700">Metode Pembayaran</label>
                         <div className="mb-3 grid grid-cols-2 gap-2">
                           {(['Pembayaran 1', 'Pembayaran 2'] as const).map((method) => (
                             <button
