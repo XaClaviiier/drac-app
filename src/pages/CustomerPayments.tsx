@@ -327,18 +327,26 @@ export default function CustomerPayments() {
         { amount: Number(form.amount || 0), accountId: form.accountId },
         { amount: amount2, accountId: form.accountId2 },
       ].filter((item) => item.amount > 0);
-      let sharedPaymentNumber = "";
-      for (const item of payments) {
+      const isSplitPayment = payments.length === 2;
+      let sharedPaymentBase = "";
+      for (const [index, item] of payments.entries()) {
         const account = paymentAccountOptions.find((a) => a.id === item.accountId);
         const r = await api.create("customer-payments", {
           ...form,
           amount: item.amount,
           accountId: item.accountId,
-          paymentNumber: sharedPaymentNumber || undefined,
+          paymentNumber:
+            isSplitPayment && index > 0
+              ? `${sharedPaymentBase}-${index + 1}`
+              : undefined,
+          paymentParts: payments.length,
+          paymentPart: index + 1,
           paymentMethod: account?.accountType === "bank" ? "Transfer" : "Tunai",
         });
         if (!r.success) return window.alert(r.message);
-        sharedPaymentNumber = r.data?.paymentNumber || sharedPaymentNumber;
+        if (isSplitPayment && index === 0) {
+          sharedPaymentBase = (r.data?.paymentNumber || "").replace(/-1$/, "");
+        }
       }
     }
     await refreshData();

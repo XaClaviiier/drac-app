@@ -138,7 +138,11 @@ case 'POST':
         $branch=$pdo->prepare("SELECT code FROM branches WHERE id=?");$branch->execute([$invoice['branch_id']]);
         $requestedNumber=trim((string)($d['paymentNumber']??''));
         if($requestedNumber!==''&&!preg_match('/^PAY-[A-Z0-9-]{4,40}$/',$requestedNumber))throw new Exception('Nomor pembayaran tidak valid');
-        $number=$requestedNumber!==''?$requestedNumber:nextCustomerPaymentNumber($pdo,(string)$invoice['branch_id'],(string)$branch->fetchColumn(),$date);$paymentId=generateId();
+        $paymentParts=(int)($d['paymentParts']??1);$paymentPart=(int)($d['paymentPart']??1);
+        if(!in_array($paymentParts,[1,2],true)||$paymentPart<1||$paymentPart>$paymentParts)throw new Exception('Rincian pembayaran tidak valid');
+        $number=$requestedNumber!==''?$requestedNumber:nextCustomerPaymentNumber($pdo,(string)$invoice['branch_id'],(string)$branch->fetchColumn(),$date);
+        if($requestedNumber===''&&$paymentParts===2)$number.='-'.$paymentPart;
+        $paymentId=generateId();
         $insert=$pdo->prepare("INSERT INTO customer_payments(id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by,created_by_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
         $insert->execute([$paymentId,$number,$invoiceId,$date,$amount,$methodName,$account['id'],$account['name'],trim((string)($d['notes']??''))?:null,$invoice['branch_id'],$user['id']??null,$user['name']??$user['username']??null]);
         postCustomerPaymentJournal($pdo,['id'=>$paymentId,'payment_number'=>$number,'invoice_id'=>$invoiceId,'date'=>$date,'amount'=>$amount,'account_id'=>$account['id'],'branch_id'=>$invoice['branch_id']],$invoice,$user);
