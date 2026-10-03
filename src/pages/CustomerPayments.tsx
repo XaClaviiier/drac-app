@@ -327,15 +327,18 @@ export default function CustomerPayments() {
         { amount: Number(form.amount || 0), accountId: form.accountId },
         { amount: amount2, accountId: form.accountId2 },
       ].filter((item) => item.amount > 0);
+      let sharedPaymentNumber = "";
       for (const item of payments) {
         const account = paymentAccountOptions.find((a) => a.id === item.accountId);
         const r = await api.create("customer-payments", {
           ...form,
           amount: item.amount,
           accountId: item.accountId,
+          paymentNumber: sharedPaymentNumber || undefined,
           paymentMethod: account?.accountType === "bank" ? "Transfer" : "Tunai",
         });
         if (!r.success) return window.alert(r.message);
+        sharedPaymentNumber = r.data?.paymentNumber || sharedPaymentNumber;
       }
     }
     await refreshData();
