@@ -560,8 +560,8 @@ export default function SalesInvoice() {
       try {
         const invoice = await createInvoiceFromWO(
           selectedWO.id,
-          woPaymentMethod === 'Pembayaran 1' ? woPayment : 0,
-          woPaymentMethod === 'Pembayaran 2' ? woPayment : 0,
+          options.openPaymentAfterSave ? 0 : woPaymentMethod === 'Pembayaran 1' ? woPayment : 0,
+          options.openPaymentAfterSave ? 0 : woPaymentMethod === 'Pembayaran 2' ? woPayment : 0,
           formData.date,
           woPayment > 0 ? formData.paymentDate : undefined,
           formData.backdateReason,
