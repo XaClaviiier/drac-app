@@ -522,7 +522,7 @@ export default function SalesInvoice() {
     resetForm();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, options: { openPaymentAfterSave?: boolean } = {}) => {
     e.preventDefault();
     const normalizedManualReceiptNumber = formData.manualReceiptNumber.trim().toUpperCase();
     const duplicateManualReceipt = normalizedManualReceiptNumber && data.invoices.find(invoice =>
@@ -569,8 +569,12 @@ export default function SalesInvoice() {
           normalizedManualReceiptNumber,
         );
         if (invoice) {
-          setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
-          setTimeout(() => setSuccessMsg(''), 4000);
+          if (options.openPaymentAfterSave) {
+            window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(invoice.id)}`);
+          } else {
+            setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
+            setTimeout(() => setSuccessMsg(''), 4000);
+          }
         }
         handleCloseModal();
       } catch (error: any) {
@@ -1524,7 +1528,7 @@ export default function SalesInvoice() {
                   <div className="hidden lg:block" />
                   <div className="flex justify-end gap-1 lg:col-span-2">
                     <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'ambil' ? null : 'ambil')} className={ui.documentAction}>Ambil <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'ambil' && <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => { setFormActionMenu(null); setShowModal(false); handleOpenWOPicker(); }} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Wrench className="h-4 w-4 text-emerald-600"/>Ambil dari Order Kerja</button></div>}</div>
-                    {editingInvoice ? <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'proses' ? null : 'proses')} className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'proses' && <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Eye className="h-4 w-4"/>Lihat Riwayat Pembayaran</button><button type="button" disabled={formGrandTotal <= editingInvoice.payment} onClick={() => formGrandTotal > editingInvoice.payment && window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"><Receipt className="h-4 w-4"/>Tambah Pembayaran</button></div>}</div> : <button type="button" disabled title="Simpan faktur terlebih dahulu" className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>}
+                    {editingInvoice || formFromWO ? <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'proses' ? null : 'proses')} className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'proses' && <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded border bg-white p-1 shadow-xl">{editingInvoice ? <><button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Eye className="h-4 w-4"/>Lihat Riwayat Pembayaran</button><button type="button" disabled={formGrandTotal <= editingInvoice.payment} onClick={() => formGrandTotal > editingInvoice.payment && window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"><Receipt className="h-4 w-4"/>Tambah Pembayaran</button></> : <button type="button" onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent, { openPaymentAfterSave: true })} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Receipt className="h-4 w-4"/>Simpan &amp; lanjut Pembayaran</button>}</div>}</div> : <button type="button" disabled title="Simpan faktur terlebih dahulu" className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>}
                   </div>
                 </div>
                 {editingInvoice && <div className="mt-2 text-xs text-gray-500">Nomor Faktur: <strong className="text-gray-800">{editingInvoice.invoiceNumber}</strong>{editingInvoice.woNumber && <> · Referensi WO: <strong className="text-gray-800">{editingInvoice.woNumber}</strong></>}</div>}
