@@ -3962,7 +3962,7 @@ export default function WorkOrders() {
                     void handleSubmit();
                   },
                   disabled: workOrderViewOnly || (editingWO
-                    ? Boolean(editingWO.invoiceId) || (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)
+                    ? (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)
                     : isAutoRegistering),
                   title: editingWO ? 'Simpan & Tutup Work Order' : 'Register Work Order',
                 }}
@@ -5498,7 +5498,7 @@ export default function WorkOrders() {
                       value={serviceEditor.qty}
                       onChange={(event) => setServiceEditor(previous => previous ? { ...previous, qty: event.target.value } : previous)}
                       disabled={serviceEditorReadOnly}
-                      className="h-9 min-w-0 rounded border border-gray-300 px-3 text-right tabular-nums outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                      className="h-9 min-w-0 rounded border border-gray-300 px-3 text-right tabular-nums outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                     <div title="Satuan dari Master Barang & Jasa" className="flex h-9 items-center justify-center truncate rounded border border-gray-300 bg-gray-50 px-2 text-center font-semibold uppercase text-gray-700">{activeServiceEditorUnit}</div>
                   </div>
@@ -5513,7 +5513,7 @@ export default function WorkOrders() {
                       value={serviceEditor.price}
                       onChange={(event) => setServiceEditor(previous => previous ? { ...previous, price: event.target.value } : previous)}
                       disabled={serviceEditorReadOnly}
-                      className="min-w-0 flex-1 px-3 text-right tabular-nums outline-none disabled:bg-gray-100"
+                      className="min-w-0 flex-1 px-3 text-right tabular-nums outline-none disabled:bg-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </div>
                   <span className="text-xs text-gray-600 sm:text-sm">Total Harga</span>
