@@ -74,6 +74,7 @@ export default function SalesInvoice() {
   const [showWOPicker, setShowWOPicker] = useState(false);
   const [woSearchTerm, setWoSearchTerm] = useState('');
   const [selectedWOId, setSelectedWOId] = useState('');
+  const [formFromWOId, setFormFromWOId] = useState('');
   const [woDraftItems, setWoDraftItems] = useState<NonNullable<SalesInvoice['items']>>([]);
   const [woItemToAdd, setWoItemToAdd] = useState('');
   const [woPayment, setWoPayment] = useState(0);
@@ -477,12 +478,14 @@ export default function SalesInvoice() {
     setInvoiceDateUnlocked(false);
     setInvoiceDocumentTab('details');
     setInvoiceRailMenu('');
+    setFormFromWOId('');
   };
 
   const handleOpenModal = (invoice?: SalesInvoice) => {
     setFormActionMenu(null);
     setInvoiceDocumentTab('details');
     setInvoiceRailMenu('');
+    setFormFromWOId('');
     if (invoice) {
       setEditingInvoice(invoice);
       const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
@@ -550,6 +553,31 @@ export default function SalesInvoice() {
     const finalTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
     if (finalTotal <= 0) {
       window.alert('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
+      return;
+    }
+    if (formFromWOId && selectedWO) {
+      setIsCreatingFromWO(true);
+      try {
+        const invoice = await createInvoiceFromWO(
+          selectedWO.id,
+          woPaymentMethod === 'Pembayaran 1' ? woPayment : 0,
+          woPaymentMethod === 'Pembayaran 2' ? woPayment : 0,
+          formData.date,
+          woPayment > 0 ? formData.paymentDate : undefined,
+          formData.backdateReason,
+          formItems,
+          normalizedManualReceiptNumber,
+        );
+        if (invoice) {
+          setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
+          setTimeout(() => setSuccessMsg(''), 4000);
+        }
+        handleCloseModal();
+      } catch (error: any) {
+        window.alert(`Gagal membuat faktur: ${error?.message || 'terjadi kesalahan'}`);
+      } finally {
+        setIsCreatingFromWO(false);
+      }
       return;
     }
     const updatedInvoiceTotal = Math.max(0, finalTotal - formDiscount);
@@ -644,6 +672,7 @@ export default function SalesInvoice() {
       .some((value) => value?.toLowerCase().includes(term));
   });
   const selectedWO = data.workOrders.find((wo) => wo.id === selectedWOId);
+  const formFromWO = Boolean(formFromWOId && selectedWO?.id === formFromWOId);
   const woDraftTotal = woDraftItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const handleOpenWOPicker = () => {
@@ -670,9 +699,30 @@ export default function SalesInvoice() {
     if (wo) {
       const copiedItems = wo.services.map((item, index) => ({ ...item, id: `invoice-${Date.now()}-${index}` }));
       setWoDraftItems(copiedItems);
-      setWoPayment(copiedItems.reduce((sum, item) => sum + item.price * item.qty, 0));
+      const total = copiedItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+      setWoPayment(total);
+      setFormFromWOId(wo.id);
+      setFormData({
+        date: localDateKey(),
+        manualReceiptNumber: '',
+        customerRefId: wo.customerRefId || '',
+        customerId: wo.customerId || '',
+        customerName: wo.customerName,
+        vehicleRefId: wo.vehicleRefId || '',
+        vehicleInfo: wo.vehicleInfo || `${wo.plateNumber || ''}`.trim(),
+        description: wo.description || '',
+        total,
+        payment: total,
+        paymentDate: localDateKey(),
+        backdateReason: '',
+        paymentMethod: 'Tunai',
+        status: 'Lunas',
+      });
+      setFormItems(copiedItems);
+      setFormDiscount(0);
+      setShowWOPicker(false);
+      setShowModal(true);
     }
-    window.requestAnimationFrame(() => woPickerPanelRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
   };
   const orderedVisibleInvoiceColumns = (invoiceTable.isDesktop ? invoiceTable.order : DEFAULT_SALES_INVOICE_COLUMNS).filter(column => isInvoiceColumnVisible(column) && (column !== 'branch' || currentBranchId === 'ALL'));
 
@@ -887,7 +937,7 @@ export default function SalesInvoice() {
         </button>
         {showModal && (
           <div className={`${ui.childTabActive} min-w-48 max-w-80`}>
-            <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">{editingInvoice ? editingInvoice.invoiceNumber : 'Data Baru'}</button>
+            <button type="button" className="min-w-0 flex-1 truncate px-4 text-left text-sm font-semibold">{editingInvoice ? editingInvoice.invoiceNumber : formFromWO ? `Data Baru · ${selectedWO?.woNumber || 'WO'}` : 'Data Baru'}</button>
             <button type="button" onClick={handleCloseModal} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
         )}
@@ -1464,8 +1514,8 @@ export default function SalesInvoice() {
               <section className="bg-transparent p-1 lg:p-0">
                 <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
                   <label className="flex h-10 items-center text-sm font-medium text-gray-700">Pelanggan <span className="ml-1 text-red-500">*</span></label>
-                  {editingInvoice ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice.customerName}</div> : <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} onVehicleSelect={handleVehicleSelect} />}
-                  {editingInvoice ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice.vehicleInfo}</div> : <VehiclePicker customer={selectedCustomer} value={formData.vehicleRefId} onChange={handleVehicleSelect} />}
+                  {editingInvoice || formFromWO ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice?.customerName || formData.customerName}</div> : <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} onVehicleSelect={handleVehicleSelect} />}
+                  {editingInvoice || formFromWO ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice?.vehicleInfo || formData.vehicleInfo}</div> : <VehiclePicker customer={selectedCustomer} value={formData.vehicleRefId} onChange={handleVehicleSelect} />}
                   <label className="flex h-10 items-center justify-end pr-2 text-sm font-medium text-gray-700">Tanggal <span className="ml-1 text-red-500">*</span></label>
                   <IndonesianDateInput required max={localDateKey()} disabled={!invoiceDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-10 min-w-0 w-full" />
                   <button type="button" onClick={() => hasPermission('invoice:backdate') ? setInvoiceDateUnlocked(v => !v) : window.alert('Tidak memiliki hak ubah tanggal faktur.')} title={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} aria-label={invoiceDateUnlocked ? 'Kunci tanggal faktur' : 'Ubah tanggal faktur'} className={`inline-flex h-10 w-10 items-center justify-center rounded border ${invoiceDateUnlocked ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 bg-white text-blue-600 hover:bg-blue-50'}`}><Edit className="h-4 w-4" /></button>
