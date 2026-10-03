@@ -4884,7 +4884,7 @@ export default function WorkOrders() {
                   type="submit"
                   form="work-order-entry-form"
                   disabled={infoPanelLocked
-                    || Boolean(editingWO && statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)
+                    || Boolean(editingWO && (Boolean(editingWO.invoiceId) || (statusLabel(editingWO.status) === 'Lost Sales' && !customerVehicleCorrectionUnlocked)))
                     || (!editingWO ? isAutoRegistering : false)}
                   onClick={() => {
                     diagnosisSubmitAction.current = 'save';
