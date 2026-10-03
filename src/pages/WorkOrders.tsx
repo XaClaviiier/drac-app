@@ -821,18 +821,18 @@ export default function WorkOrders() {
     };
     await addItem(newItem);
 
-    await persistServicesAfterAdd([
-      ...formData.services,
-      {
-        id: Date.now().toString() + '-svc',
-        itemId: newItem.id,
-        code: newItem.code,
-        name: newItem.name,
-        description: '',
-        price: newItem.sellingPrice,
-        qty: 1,
-      },
-    ]);
+    const newService: WorkOrderService = {
+      id: Date.now().toString() + '-svc',
+      itemId: newItem.id,
+      code: newItem.code,
+      name: newItem.name,
+      description: '',
+      price: newItem.sellingPrice,
+      qty: 1,
+    };
+    if (await persistServicesAfterAdd([...formData.services, newService])) {
+      openServiceEditor(newService);
+    }
 
     setQuickItemForm({ name: '', type: 'Jasa', unit: 'JASA', sellingPrice: 0, categoryId: '' });
     setShowQuickAddItem(false);
@@ -1568,7 +1568,7 @@ export default function WorkOrders() {
     return true;
   };
 
-  // Klik item/favorit langsung menambah satu baris. Panel tetap terbuka agar bisa tambah banyak.
+  // Pilih item/favorit langsung membuka modal rincian seperti Accurate.
   const handleUseItem = async (itemId: string) => {
     if (!editingWO) {
       showAccurateNotice('Register WO terlebih dahulu sebelum menambahkan layanan.');
@@ -1607,7 +1607,9 @@ export default function WorkOrders() {
         qty: member.qty,
       }));
 
-      await persistServicesAfterAdd([...formData.services, groupHeader, ...memberLines]);
+      if (await persistServicesAfterAdd([...formData.services, groupHeader, ...memberLines])) {
+        openServiceEditor(groupHeader);
+      }
       return;
     }
 
@@ -1621,7 +1623,9 @@ export default function WorkOrders() {
       qty: 1,
     };
 
-    await persistServicesAfterAdd([...formData.services, service]);
+    if (await persistServicesAfterAdd([...formData.services, service])) {
+      openServiceEditor(service);
+    }
   };
 
   const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
