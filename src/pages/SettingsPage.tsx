@@ -357,22 +357,32 @@ export default function SettingsPage() {
                   const branchCashAccounts = cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === branch.id));
                   const activeLedgerAccounts = ledgerAccounts.filter(account => account.isActive !== false);
                   return (
-                    <div key={branch.id} className="rounded-lg border border-gray-200 p-3">
-                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
-                        <div><p className="font-semibold text-gray-900">{branch.name}</p><p className="text-xs text-gray-500">{branch.id} · {branch.address}</p></div>
+                    <div key={branch.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="min-w-0"><p className="font-bold uppercase tracking-wide text-slate-800">{branch.name}</p><p className="mt-0.5 truncate text-xs text-slate-500">{branch.id} · {branch.address}</p></div>
                         <div className="flex items-center gap-3">
-                          <label className="flex items-center gap-2 text-sm text-gray-600">Kode dokumen<input className="h-9 w-14 rounded-md border border-gray-300 text-center font-semibold uppercase" maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></label>
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">Kode dokumen<input className="h-8 w-12 rounded border border-slate-300 bg-white text-center font-bold uppercase" maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></label>
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
                         </div>
                       </div>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <SettingSelect label="Kas tunai cabang" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />
-                        <SettingSelect label="Bank cabang" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />
-                        <SettingSelect label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />
-                        <SettingSelect label="Piutang pelanggan" value={mapping.receivableCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'receivableCoaId', value)} />
-                        <SettingSelect label="Pendapatan jasa" value={mapping.serviceRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'serviceRevenueCoaId', value)} />
-                        <SettingSelect label="Penjualan barang" value={mapping.goodsRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'goodsRevenueCoaId', value)} />
-                        <SettingSelect label="Persediaan" value={mapping.inventoryCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'inventoryCoaId', value)} />
+                      <div className="space-y-4 p-4">
+                        <section>
+                          <div className="mb-2 flex items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-800">Penerimaan & Kas/Bank</h4><p className="text-xs text-slate-500">Dipakai otomatis saat menerima pembayaran pelanggan.</p></div><span className="text-xs font-medium text-slate-400">3 pengaturan</span></div>
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <SettingSelect label="Kas tunai default" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />
+                            <SettingSelect label="Bank transfer default" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />
+                            <SettingSelect label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />
+                          </div>
+                        </section>
+                        <section className="border-t border-slate-100 pt-4">
+                          <div className="mb-2 flex items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-800">Akun Penjualan</h4><p className="text-xs text-slate-500">Dipakai untuk jurnal faktur dan saldo pelanggan.</p></div><span className="text-xs font-medium text-slate-400">4 pengaturan</span></div>
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <SettingSelect label="Piutang pelanggan" value={mapping.receivableCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'receivableCoaId', value)} />
+                            <SettingSelect label="Pendapatan jasa" value={mapping.serviceRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'serviceRevenueCoaId', value)} />
+                            <SettingSelect label="Penjualan barang" value={mapping.goodsRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'goodsRevenueCoaId', value)} />
+                            <SettingSelect label="Persediaan" value={mapping.inventoryCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'inventoryCoaId', value)} />
+                          </div>
+                        </section>
                       </div>
                     </div>
                   );
