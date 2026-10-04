@@ -116,7 +116,17 @@ if ($requestUser && $resource === 'receipt-ocr') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
 }
 if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
-    requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
+    if ($method === 'GET' && $resource === 'cash-accounts') {
+        // Pengguna pembayaran perlu membaca akun kas/bank untuk mengisi penerimaan,
+        // meskipun tidak diberi akses ke laporan keuangan.
+        if (!authenticatedUserHasPermission($pdo, $requestUser, 'report:view')
+            && !authenticatedUserHasPermission($pdo, $requestUser, 'payment:view')
+            && !authenticatedUserHasPermission($pdo, $requestUser, 'settings:view')) {
+            requireAuthenticatedUserPermission($pdo, $requestUser, 'report:view');
+        }
+    } else {
+        requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
+    }
 }
 if ($requestUser && $resource === 'general-ledger') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'report:view');
