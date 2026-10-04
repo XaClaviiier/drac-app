@@ -57,6 +57,10 @@ type Period = "today" | "this_month" | "last_month" | "custom" | "all";
 
 const rupiah = (value: number) =>
   `Rp ${Number(value || 0).toLocaleString("id-ID")}`;
+const formatAmountInput = (value: number) =>
+  value > 0 ? value.toLocaleString("id-ID") : "";
+const parseAmountInput = (value: string) =>
+  Number(value.replace(/\D/g, "")) || 0;
 const localDate = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const displayDate = (value: string) =>
@@ -850,7 +854,7 @@ export default function CustomerPayments() {
                 ).map((item) => (
                   <div key={item.label} className="grid grid-cols-[7rem_8rem_minmax(0,1fr)] items-center gap-2">
                     <b className="text-xs whitespace-nowrap">{item.label}</b>
-                    <input type="number" min={item.required ? 1 : 0} max={editingPayment ? maximumEditableAmount : outstanding} value={form[item.amount as "amount" | "amount2"] || ""} onChange={(e) => setForm({ ...form, [item.amount]: Number(e.target.value) })} className="w-full rounded-lg border p-2 text-right text-sm font-semibold" />
+                    <input type="text" inputMode="numeric" pattern="[0-9.]*" placeholder="0" value={formatAmountInput(form[item.amount as "amount" | "amount2"])} onChange={(e) => setForm({ ...form, [item.amount]: parseAmountInput(e.target.value) })} className="w-full rounded-lg border p-2 text-right text-sm font-semibold" />
                     <select disabled={!!editingPayment && item.amount === "amount2"} required={item.required && !editingPayment} value={form[item.account as "accountId" | "accountId2"]} onChange={(e) => setForm({ ...form, [item.account]: e.target.value })} className="w-full min-w-0 rounded-lg border p-2 text-sm">
                       <option value="">Pilih {item.type === "bank" ? "bank" : item.type === "cash" ? "kas" : "kas/bank"}</option>
                       {paymentAccountOptions.filter((a) => !item.type || a.accountType === item.type).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
