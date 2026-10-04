@@ -40,6 +40,7 @@ type PaymentRow = {
   createdByName?: string;
   notes?: string;
   isDeposited?: boolean;
+  splitParts?: PaymentRow[];
 };
 type CashAccount = {
   id: string;
@@ -313,6 +314,30 @@ export default function CustomerPayments() {
       search,
     ],
   );
+  const displayRows = useMemo(() => {
+    const groups = new Map<string, PaymentRow[]>();
+    filtered.forEach((row) => {
+      const match = row.paymentNumber.match(/^(.*)-[12]$/);
+      const key = match ? `${row.invoiceId}|${match[1]}` : row.id;
+      groups.set(key, [...(groups.get(key) || []), row]);
+    });
+    return Array.from(groups.values()).map((parts) => {
+      if (parts.length < 2) return parts[0];
+      const finalPart = parts.find((part) => part.balanceAfter === 0) || parts[parts.length - 1];
+      const baseNumber = parts[0].paymentNumber.replace(/-[12]$/, "");
+      return {
+        ...finalPart,
+        id: `multi-${baseNumber}`,
+        paymentNumber: baseNumber,
+        amount: parts.reduce((sum, part) => sum + part.amount, 0),
+        paymentMethod: "Multi",
+        accountName: `${parts.length} akun penerimaan`,
+        paymentStatus: finalPart.balanceAfter > 0 ? "Cicilan" : "Lunas",
+        isDeposited: parts.some((part) => part.isDeposited),
+        splitParts: parts,
+      } satisfies PaymentRow;
+    });
+  }, [filtered]);
   const inputUsers = useMemo(
     () =>
       Array.from(
@@ -547,7 +572,7 @@ export default function CustomerPayments() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari pembayaran, faktur, pelanggan, plat..." className={`${ui.search} w-full pl-9 pr-3`} />
             </div>
-            <span className="flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filtered.length}</span>
+            <span className="flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{displayRows.length}</span>
           </div>
         </div>
       </div>
@@ -577,7 +602,7 @@ export default function CustomerPayments() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {filtered.map((r) => (
+            {displayRows.map((r) => (
               <tr key={r.id} className="hover:bg-blue-50/40">
                 <td className="whitespace-nowrap px-3 py-2.5">
                   {displayDate(r.date)}
@@ -620,7 +645,7 @@ export default function CustomerPayments() {
                       <button
                         onClick={() => openEdit(r)}
                         title={r.isDeposited ? "Terkunci karena sudah masuk setoran" : "Edit pembayaran"}
-                        disabled={r.isDeposited}
+                        disabled={r.isDeposited || !!r.splitParts}
                         className="rounded p-1.5 text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300"
                       >
                         {r.isDeposited ? <LockKeyhole className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
@@ -638,7 +663,7 @@ export default function CustomerPayments() {
                       <button
                         onClick={() => void remove(r)}
                         title={r.isDeposited ? "Terkunci karena sudah masuk setoran" : "Hapus pembayaran"}
-                        disabled={r.isDeposited}
+                        disabled={r.isDeposited || !!r.splitParts}
                         className="rounded p-2 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-gray-300"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -648,7 +673,7 @@ export default function CustomerPayments() {
                 </td>
               </tr>
             ))}
-            {!filtered.length && (
+            {!displayRows.length && (
               <tr>
                 <td colSpan={9} className="p-12 text-center text-gray-400">
                   Belum ada pembayaran pada filter ini
@@ -659,7 +684,7 @@ export default function CustomerPayments() {
         </table>
       </div>
       <div className="space-y-2 md:hidden">
-        {filtered.map((r) => (
+        {displayRows.map((r) => (
           <article
             key={r.id}
             className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
@@ -690,7 +715,7 @@ export default function CustomerPayments() {
                 {hasPermission("payment:edit") && (
                   <button
                     onClick={() => openEdit(r)}
-                    disabled={r.isDeposited}
+                    disabled={r.isDeposited || !!r.splitParts}
                     title={r.isDeposited ? "Terkunci karena sudah masuk setoran" : "Edit pembayaran"}
                     className="rounded-lg bg-blue-50 p-1.5 text-blue-600 disabled:bg-gray-50 disabled:text-gray-300"
                   >
@@ -711,7 +736,7 @@ export default function CustomerPayments() {
             {hasPermission("payment:delete") && (
               <button
                 onClick={() => void remove(r)}
-                disabled={r.isDeposited}
+                disabled={r.isDeposited || !!r.splitParts}
                 className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-red-200 py-2 text-xs font-semibold text-red-600 disabled:border-gray-200 disabled:text-gray-400"
               >
                 {r.isDeposited ? <LockKeyhole className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -720,7 +745,7 @@ export default function CustomerPayments() {
             )}
           </article>
         ))}
-        {!filtered.length && (
+        {!displayRows.length && (
           <div className="rounded-xl border bg-white p-10 text-center text-gray-400">
             Belum ada pembayaran
           </div>
@@ -743,6 +768,15 @@ export default function CustomerPayments() {
               <div><span className="text-gray-500">Masuk ke</span><strong className="block">{viewingPayment.accountName || "-"}</strong></div>
               <div><span className="text-gray-500">Saldo Faktur Setelah Pembayaran</span><strong className={`block ${viewingPayment.balanceAfter > 0 ? "text-amber-700" : "text-emerald-700"}`}>{rupiah(viewingPayment.balanceAfter)} · {viewingPayment.paymentStatus}</strong></div>
               <div><span className="text-gray-500">Input Oleh</span><strong className="block">{viewingPayment.createdByName || "-"}</strong></div>
+              {viewingPayment.splitParts && <div className="sm:col-span-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-blue-800">Rincian Multi Pembayaran</span>
+                <div className="mt-2 space-y-2">
+                  {viewingPayment.splitParts.map((part, index) => <div key={part.id} className="flex items-center justify-between gap-3 rounded border border-blue-100 bg-white px-3 py-2 text-sm">
+                    <div><b>{index === 0 ? "Pembayaran 1" : "Pembayaran 2"} · {part.paymentMethod}</b><small className="block text-gray-500">{part.paymentNumber} · {part.accountName || "-"}</small></div>
+                    <strong className="whitespace-nowrap text-emerald-700">{rupiah(part.amount)}</strong>
+                  </div>)}
+                </div>
+              </div>}
               {viewingPayment.notes && <div className="sm:col-span-2"><span className="text-gray-500">Keterangan</span><p className="mt-1 rounded border border-gray-200 bg-gray-50 p-3">{viewingPayment.notes}</p></div>}
             </div>
             <footer className="flex justify-end gap-2 border-t bg-gray-50 px-5 py-3">
