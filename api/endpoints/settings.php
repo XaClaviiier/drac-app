@@ -11,6 +11,7 @@ $defaultSettings = [
         'sequenceDigits' => 3, 'resetPeriod' => 'daily',
     ],
     'security' => ['sessionHours' => 8, 'maxLoginAttempts' => 5, 'auditLogEnabled' => true, 'requireBackdateReason' => true],
+    'defaultAccounts' => [],
     'ai' => [
         'provider' => 'groq', 'model' => 'openai/gpt-oss-120b',
         'allowCustomerData' => true, 'allowInventoryData' => true,

@@ -16,7 +16,7 @@ const tabs = [
   { id: 'company' as const, label: 'Perusahaan', hint: 'Profil, logo, alamat, identitas pajak', group: 'Preferensi Utama', icon: Building2 },
   { id: 'features' as const, label: 'Fitur', hint: 'Aktifkan modul sesuai kebutuhan usaha', group: 'Preferensi Utama', icon: ClipboardCheck },
   { id: 'tax' as const, label: 'Pajak', hint: 'PPN dan akun pajak', group: 'Preferensi Utama', icon: FileText },
-  { id: 'defaultAccounts' as const, label: 'Akun Default', hint: 'Akun otomatis untuk transaksi', group: 'Preferensi Utama', icon: WalletCards },
+  { id: 'defaultAccounts' as const, label: 'Akun Perkiraan', hint: 'Akun default untuk seluruh transaksi dan cabang', group: 'Preferensi Utama', icon: WalletCards },
   { id: 'cashBranches' as const, label: 'Kas Cabang', hint: 'Kas tunai, bank transfer, dan tujuan setoran per cabang', group: 'Preferensi Utama', icon: MapPin },
   { id: 'documents' as const, label: 'Penomoran Dokumen', hint: 'Nomor WO dan faktur', group: 'Transaksi', icon: Hash },
   { id: 'sales' as const, label: 'Penjualan', hint: 'Aturan faktur dan pembayaran pelanggan', group: 'Transaksi', icon: FileText },
@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const [cashAccounts, setCashAccounts] = useState<any[]>([]);
   const [ledgerAccounts, setLedgerAccounts] = useState<any[]>([]);
   const [branchAccountSettings, setBranchAccountSettings] = useState<any[]>([]);
+  const [defaultAccountSettings, setDefaultAccountSettings] = useState<Record<string, string | null>>({});
   const [maintenanceFrom, setMaintenanceFrom] = useState('2000-01-01');
   const [maintenanceTo, setMaintenanceTo] = useState('2026-07-31');
   const [maintenanceBranchId, setMaintenanceBranchId] = useState('');
@@ -116,7 +117,19 @@ export default function SettingsPage() {
     ]).then(([cashResult, ledgerResult, mappingResult]) => {
       if (cashResult.success) setCashAccounts(cashResult.data || []);
       if (ledgerResult.success) setLedgerAccounts(ledgerResult.data || []);
-      if (mappingResult.success) setBranchAccountSettings(mappingResult.data || []);
+      if (mappingResult.success) {
+        const mappings = mappingResult.data || [];
+        setBranchAccountSettings(mappings);
+        const first = mappings.find((mapping: any) => mapping.receivableCoaId || mapping.serviceRevenueCoaId || mapping.goodsRevenueCoaId || mapping.inventoryCoaId) || mappings[0] || {};
+        const configured = data.settings.defaultAccounts || {};
+        setDefaultAccountSettings({
+          ...configured,
+          receivableCoaId: configured.receivableCoaId || first.receivableCoaId || null,
+          serviceRevenueCoaId: configured.serviceRevenueCoaId || first.serviceRevenueCoaId || null,
+          goodsRevenueCoaId: configured.goodsRevenueCoaId || first.goodsRevenueCoaId || null,
+          inventoryCoaId: configured.inventoryCoaId || first.inventoryCoaId || null,
+        });
+      }
     });
   }, []);
 
@@ -137,9 +150,13 @@ export default function SettingsPage() {
     if (!canEdit) return;
     setSaving(true);
     try {
-      await updateSettings(draft);
+      await updateSettings({ ...draft, defaultAccounts: defaultAccountSettings });
       if (tab === 'cashBranches' || tab === 'defaultAccounts') {
-        for (const mapping of branchAccountSettings) {
+        const mappingsToSave = data.branches.map(branch => {
+          const current = branchAccountSettings.find(mapping => mapping.branchId === branch.id) || { branchId: branch.id };
+          return tab === 'defaultAccounts' ? { ...current, ...defaultAccountSettings } : current;
+        });
+        for (const mapping of mappingsToSave) {
           const result = await api.update('branch-account-settings', mapping.branchId, mapping);
           if (!result.success) throw new Error(result.message || 'Gagal menyimpan pengaitan akun cabang');
         }
@@ -172,6 +189,13 @@ export default function SettingsPage() {
       return [...prev, { branchId, [key]: value || null }];
     });
   };
+  const setDefaultAccount = (key: string, value: string) => {
+    setDefaultAccountSettings(prev => ({ ...prev, [key]: value || null }));
+  };
+  const activeLedgerAccounts = ledgerAccounts.filter(account => account.isActive !== false);
+  const defaultAccountField = (key: string, label: string, types: string[]) => (
+    <SettingSelect horizontal label={label} value={defaultAccountSettings[key] || ''} options={activeLedgerAccounts.filter(account => types.includes(account.accountType))} onChange={value => setDefaultAccount(key, value)} />
+  );
   const previewMaintenance = async () => {
     if (!maintenanceBranchId) { window.alert('Pilih cabang yang transaksinya akan diperiksa.'); return; }
     setMaintenanceLoading(true);
@@ -337,21 +361,33 @@ export default function SettingsPage() {
 
           {tab === 'defaultAccounts' && innerTab !== 'kasCabang' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-              <TabHeader title="Akun Default" description="Akun jurnal dikelompokkan sesuai fungsi transaksi, mengikuti pola pengaturan Accurate." />
-              <div className="space-y-4">
-                {data.branches.map(branch => {
-                  const mapping = branchAccountSettings.find(item => item.branchId === branch.id) || { branchId: branch.id };
-                  const activeLedgerAccounts = ledgerAccounts.filter(account => account.isActive !== false);
-                  return <div key={branch.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><p className="font-bold uppercase tracking-wide text-slate-800">{branch.name}</p><p className="mt-0.5 text-xs text-slate-500">Akun default jurnal untuk transaksi cabang ini</p></div>
-                    <div className="grid gap-4 p-4 xl:grid-cols-2">
-                      <section className="rounded-lg border border-slate-200 p-3"><h4 className="font-bold text-slate-800">Default Barang & Jasa</h4><p className="mb-3 mt-0.5 text-xs text-slate-500">Akun untuk barang, jasa, penjualan, dan persediaan.</p><div className="grid gap-3 sm:grid-cols-2"><SettingSelect label="Persediaan" value={mapping.inventoryCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'inventoryCoaId', value)} /><SettingSelect label="Pendapatan jasa" value={mapping.serviceRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'serviceRevenueCoaId', value)} /><SettingSelect label="Penjualan barang" value={mapping.goodsRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'goodsRevenueCoaId', value)} /></div></section>
-                      <section className="rounded-lg border border-slate-200 p-3"><h4 className="font-bold text-slate-800">Default Penjualan & Pembelian</h4><p className="mb-3 mt-0.5 text-xs text-slate-500">Akun piutang dan akun kontrol transaksi pelanggan.</p><div className="grid gap-3 sm:grid-cols-2"><SettingSelect label="Piutang pelanggan" value={mapping.receivableCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'receivableCoaId', value)} /><div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Akun hutang supplier dan retur pembelian belum memiliki mapping cabang pada sistem.</div></div></section>
-                    </div>
-                  </div>;
-                })}
-              </div>
-              <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun yang belum dipetakan akan memblokir posting otomatis agar Buku Besar tidak menerima jurnal yang tidak lengkap.</p>
+              <TabHeader title="Akun Perkiraan" description="Pengaturan akun default yang berlaku sama untuk seluruh cabang." />
+              {innerTab === 'barang' && <DefaultAccountSection title="Barang & Jasa" fields={[
+                defaultAccountField('inventoryCoaId', 'Persediaan', ['Asset']),
+                defaultAccountField('goodsRevenueCoaId', 'Penjualan', ['Revenue']),
+                defaultAccountField('salesReturnCoaId', 'Retur Penjualan', ['Revenue', 'Expense']),
+                defaultAccountField('salesDiscountCoaId', 'Diskon Penjualan', ['Revenue', 'Expense']),
+                defaultAccountField('goodsInTransitCoaId', 'Barang Terkirim', ['Asset']),
+                defaultAccountField('cogsCoaId', 'Beban Pokok Penjualan', ['Expense']),
+                defaultAccountField('purchaseReturnCoaId', 'Retur Pembelian', ['Asset', 'Revenue']),
+                defaultAccountField('expenseCoaId', 'Beban', ['Expense']),
+              ]} />}
+              {innerTab === 'perusahaan' && <>
+                <DefaultAccountSection title="Neraca" fields={[defaultAccountField('openingEquityCoaId', 'Ekuitas Saldo Awal', ['Equity']), defaultAccountField('retainedEarningsCoaId', 'Laba Ditahan', ['Equity'])]} />
+                <DefaultAccountSection title="Laba/Rugi" fields={[defaultAccountField('incomeTaxCoaId', 'Pajak Penghasilan', ['Expense', 'Liability'])]} />
+                <DefaultAccountSection title="Penggajian Karyawan" fields={[defaultAccountField('payrollPph21CoaId', 'Utang PPh21', ['Liability']), defaultAccountField('pensionPayableCoaId', 'Utang Premi Pensiun', ['Liability']), defaultAccountField('healthPayableCoaId', 'Utang Premi Kesehatan', ['Liability'])]} />
+                <DefaultAccountSection title="Peminjaman Karyawan" fields={[defaultAccountField('employeeReceivableCoaId', 'Piutang Karyawan', ['Asset']), defaultAccountField('interestReceivableCoaId', 'Piutang Bunga', ['Asset']), defaultAccountField('deferredInterestIncomeCoaId', 'Pendapatan Bunga Dimuka', ['Liability']), defaultAccountField('interestIncomeCoaId', 'Pendapatan Bunga', ['Revenue'])]} />
+              </>}
+              {innerTab === 'penjualanPembelian' && <>
+                <DefaultAccountSection title="Penerimaan/Pembayaran" fields={[defaultAccountField('salesDiscountCoaId', 'Akun Diskon', ['Revenue', 'Expense'])]} />
+                <DefaultAccountSection title="Faktur Pembelian" fields={[defaultAccountField('purchaseRoundingCoaId', 'Akun Pembulatan', ['Expense', 'Revenue'])]} note="Dipakai untuk menampung pembulatan pajak dan pembulatan nilai biaya barang akibat diskon atau alokasi biaya pembelian." />
+              </>}
+              {innerTab === 'persediaan' && <>
+                <DefaultAccountSection title="Penyesuaian Persediaan" fields={[defaultAccountField('inventoryAdjustmentCoaId', 'Akun Penyesuaian', ['Equity', 'Expense'])]} />
+                <DefaultAccountSection title="Perintah Stok Opname" fields={[defaultAccountField('stockVarianceCoaId', 'Beban Selisih Stok', ['Expense'])]} />
+                <DefaultAccountSection title="Pekerjaan Pesanan" fields={[defaultAccountField('jobAccountCoaId', 'Akun Pekerjaan', ['Asset', 'Expense']), defaultAccountField('jobCostDifferenceCoaId', 'Selisih Biaya', ['Expense'])]} />
+              </>}
+              <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun di halaman ini berlaku sama untuk semua cabang. Akun kas, bank, dan tujuan setoran tetap diatur pada tab <b>Kas Cabang</b>.</p>
             </div>
           )}
 
@@ -363,15 +399,21 @@ export default function SettingsPage() {
                   const mapping = branchAccountSettings.find(item => item.branchId === branch.id) || { branchId: branch.id };
                   const branchCashAccounts = cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === branch.id));
                   return (
-                    <div key={branch.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <div key={branch.id} className="overflow-hidden rounded-md border border-gray-300 bg-white">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-300 bg-white px-3 py-3">
                         <div className="min-w-0"><p className="font-bold uppercase tracking-wide text-slate-800">{branch.name}</p><p className="mt-0.5 truncate text-xs text-slate-500">{branch.id} · {branch.address}</p></div>
                         <div className="flex items-center gap-3">
                           <label className="flex items-center gap-2 text-xs font-medium text-slate-600">Kode dokumen<input className="h-8 w-12 rounded border border-slate-300 bg-white text-center font-bold uppercase" maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></label>
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
                         </div>
                       </div>
-                      <div className="p-4"><div className="mb-3 flex items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-800">Rekening penerimaan</h4><p className="text-xs text-slate-500">Dipakai otomatis saat menerima pembayaran pelanggan.</p></div><span className="text-xs font-medium text-slate-400">3 pengaturan</span></div><div className="grid gap-3 md:grid-cols-3"><SettingSelect label="Kas tunai default" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} /><SettingSelect label="Bank transfer default" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} /><SettingSelect label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} /></div></div>
+                      <div className="p-3">
+                        <DefaultAccountSection title="Kas & Bank" fields={[
+                          <SettingSelect horizontal label="Kas tunai default" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />,
+                          <SettingSelect horizontal label="Bank transfer default" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />,
+                          <SettingSelect horizontal label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />,
+                        ]} note="Kas tunai dan bank diatur per cabang agar penerimaan dan setoran tidak tercampur antar cabang." />
+                      </div>
                     </div>
                   );
                 })}
@@ -629,9 +671,9 @@ function CompanyField({ label, multiline = false, children }: { label: string; m
   );
 }
 
-function SettingSelect({ label, value, options, onChange }: { label: string; value?: string | null; options: any[]; onChange: (value: string) => void }) {
+function SettingSelect({ label, value, options, onChange, horizontal = false }: { label: string; value?: string | null; options: any[]; onChange: (value: string) => void; horizontal?: boolean }) {
   return (
-    <label className={labelClass}>
+    <label className={horizontal ? 'grid items-center gap-2 md:grid-cols-[240px_minmax(0,1fr)] text-sm font-medium text-gray-700' : labelClass}>
       <span>{label}</span>
       <select className={inputClass} value={value || ''} onChange={event => onChange(event.target.value)}>
         <option value="">Belum dikaitkan</option>
@@ -639,6 +681,14 @@ function SettingSelect({ label, value, options, onChange }: { label: string; val
       </select>
     </label>
   );
+}
+
+function DefaultAccountSection({ title, fields, note }: { title: string; fields: ReactNode[]; note?: string }) {
+  return <section className="mb-4 overflow-hidden rounded-md border border-gray-300 last:mb-0">
+    <h3 className="border-b border-gray-300 bg-white px-3 py-2 text-lg font-semibold text-blue-700">{title}</h3>
+    <div className="space-y-3 p-3">{fields.map((field, index) => <div key={index}>{field}</div>)}</div>
+    {note && <p className="mx-3 mb-3 border-l-4 border-gray-400 pl-3 text-xs italic text-red-600">{note}</p>}
+  </section>;
 }
 
 function DocumentCard({ title, value, preview, onChange }: { title: string; value: string; preview: string; onChange: (value: string) => void }) {
