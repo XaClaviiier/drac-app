@@ -58,7 +58,7 @@ function writePaymentAudit(PDO $pdo, array $payment, string $action, string $rea
 function postCustomerPaymentJournal(PDO $pdo, array $payment, array $invoice, array $user): void {
 
     $check=$pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1');$check->execute(['customer_payment',$payment['id'],'PAYMENT']);if($check->fetchColumn())return;
-    $mapping=$pdo->prepare('SELECT receivable_coa_id FROM branch_account_settings WHERE branch_id=?');$mapping->execute([$payment['branch_id']]);$receivable=(string)($mapping->fetchColumn()?:'');
+    $accountDefaults=getDefaultAccountSettings($pdo,(string)$payment['branch_id']);$receivable=(string)($accountDefaults['receivableCoaId']??'');
     $cash=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$cash->execute([$payment['account_id']]);$cashAccount=(string)($cash->fetchColumn()?:'');
     if($receivable===''||$cashAccount==='')throw new InvalidArgumentException('Mapping akun piutang atau akun penerimaan belum lengkap');
     $journalId=generateId();$userId=$user['id']??null;$number=$payment['payment_number'];

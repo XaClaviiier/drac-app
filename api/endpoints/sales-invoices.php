@@ -69,11 +69,12 @@ $journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,
 $postSalesRevenueJournal = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $branchId,float $total,float $cash,float $transfer,float $serviceTotal,float $goodsTotal,array $actor):void {
 
     $exists=$pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1');$exists->execute(['sales_invoice',$invoiceId,'SALES_REVENUE']);if($exists->fetchColumn())return;
-    $setting=$pdo->prepare('SELECT receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,cash_account_id,bank_account_id FROM branch_account_settings WHERE branch_id=?');$setting->execute([$branchId]);$map=$setting->fetch()?:[];
+    $setting=$pdo->prepare('SELECT cash_account_id,bank_account_id FROM branch_account_settings WHERE branch_id=?');$setting->execute([$branchId]);$branchMap=$setting->fetch()?:[];
+    $map=array_merge(getDefaultAccountSettings($pdo,$branchId),$branchMap);
     $lines=[];$add=function(string $account,float $debit,float $credit)use(&$lines){if($account!==''&&($debit>0||$credit>0))$lines[]=[$account,$debit,$credit];};
     if($cash>0){$q=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$q->execute([$map['cash_account_id']??'']);$add((string)$q->fetchColumn(),$cash,0);}
     if($transfer>0){$q=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$q->execute([$map['bank_account_id']??'']);$add((string)$q->fetchColumn(),$transfer,0);}
-    $unpaid=max(0,$total-$cash-$transfer);$add((string)($map['receivable_coa_id']??''),$unpaid,0);$add((string)($map['service_revenue_coa_id']??''),0,$serviceTotal);$add((string)($map['goods_revenue_coa_id']??''),0,$goodsTotal);
+    $unpaid=max(0,$total-$cash-$transfer);$add((string)($map['receivableCoaId']??''),$unpaid,0);$add((string)($map['serviceRevenueCoaId']??''),0,$serviceTotal);$add((string)($map['goodsRevenueCoaId']??''),0,$goodsTotal);
     $debit=array_sum(array_column($lines,1));$credit=array_sum(array_column($lines,2));if(!$lines||round($debit,2)!==round($credit,2))throw new InvalidArgumentException('Mapping akun penjualan belum lengkap atau tidak seimbang');
     $journalId=generateId();$userId=$actor['id']??null;$pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")->execute([$journalId,$date,$invoiceNumber,'Penjualan '.$invoiceNumber,$branchId,'sales_invoice',$invoiceId,$userId,$userId]);
     $lineInsert=$pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');foreach($lines as [$account,$dr,$cr])$lineInsert->execute([generateId(),$journalId,$account,$dr,$cr,'Penjualan '.$invoiceNumber]);

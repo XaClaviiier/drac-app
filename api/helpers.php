@@ -1996,6 +1996,36 @@ function isBackdateReasonRequired(PDO $pdo): bool {
     }
 }
 
+/**
+ * Akun jurnal utama bersifat global seperti Preferensi Akun Accurate.
+ * Mapping cabang dipakai hanya sebagai fallback untuk data lama yang belum
+ * memiliki defaultAccounts, sehingga migrasi tidak memutus transaksi lama.
+ */
+function getDefaultAccountSettings(PDO $pdo, ?string $branchId = null): array {
+    $global = [];
+    try {
+        $row = $pdo->query("SELECT settings_json FROM app_settings WHERE id=1")->fetch();
+        $settings = $row ? json_decode((string)$row['settings_json'], true) : [];
+        if (is_array($settings['defaultAccounts'] ?? null)) $global = $settings['defaultAccounts'];
+    } catch (Throwable $e) {
+        $global = [];
+    }
+    if ($branchId === null || $branchId === '') return $global;
+    $stmt = $pdo->prepare('SELECT receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id FROM branch_account_settings WHERE branch_id=?');
+    $stmt->execute([$branchId]);
+    $legacy = $stmt->fetch() ?: [];
+    $fallback = [
+        'receivableCoaId' => $legacy['receivable_coa_id'] ?? null,
+        'serviceRevenueCoaId' => $legacy['service_revenue_coa_id'] ?? null,
+        'goodsRevenueCoaId' => $legacy['goods_revenue_coa_id'] ?? null,
+        'inventoryCoaId' => $legacy['inventory_coa_id'] ?? null,
+    ];
+    foreach ($fallback as $key => $value) {
+        if (($global[$key] ?? '') === '' && $value) $global[$key] = $value;
+    }
+    return $global;
+}
+
 function requireUserPermission(PDO $pdo, string $permission): array {
     $user = requireAuthenticatedUser($pdo);
     if (!authenticatedUserHasPermission($pdo, $user, $permission)) {
