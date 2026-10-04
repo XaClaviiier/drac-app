@@ -1433,6 +1433,16 @@ export default function SalesInvoice() {
                         <div className="relative z-[1] w-[120%] -rotate-0 border-y-[3px] border-emerald-500/25 bg-white/70 py-1 text-center text-xl font-black tracking-widest">LUNAS</div>
                       </div>
                     )}
+                    {(linkedWO || invoice.woNumber) && <div className="mt-4 rounded border border-orange-200 bg-orange-50 p-3 text-sm">
+                      <h3 className="mb-2 flex items-center gap-2 font-semibold text-orange-800"><Wrench className="h-4 w-4" />Informasi Work Order</h3>
+                      <dl className="grid gap-x-5 gap-y-1.5 sm:grid-cols-2">
+                        <div><dt className="text-xs text-gray-500">Nomor WO</dt><dd className="font-semibold text-orange-700">{linkedWO?.woNumber || invoice.woNumber}</dd></div>
+                        <div><dt className="text-xs text-gray-500">Status WO</dt><dd className="font-semibold text-gray-800">{linkedWO?.status || "-"}</dd></div>
+                        <div><dt className="text-xs text-gray-500">Kendaraan</dt><dd className="truncate font-medium text-gray-800">{linkedWO?.vehicleInfo || invoice.vehicleInfo || "-"}</dd></div>
+                        <div><dt className="text-xs text-gray-500">Total WO</dt><dd className="font-semibold text-gray-800">Rp {(linkedWO?.total ?? invoice.total).toLocaleString('id-ID')}</dd></div>
+                        {linkedWO?.description && <div className="sm:col-span-2"><dt className="text-xs text-gray-500">Keluhan</dt><dd className="whitespace-pre-wrap text-gray-800">{linkedWO.description}</dd></div>}
+                      </dl>
+                    </div>}
                   </div>
                 </section>
 
