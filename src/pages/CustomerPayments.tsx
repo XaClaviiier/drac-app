@@ -260,7 +260,7 @@ export default function CustomerPayments() {
       amount: Math.max(0, selected.total - selected.payment),
       amount2: 0,
       paymentMethod: paymentMode === "transfer" ? "Transfer" : "Tunai",
-      accountId: paymentMode === "transfer" ? defaultAccountId("bank") : defaultAccountId("cash"),
+      accountId: paymentMode === "transfer" ? defaultAccountId("bank", selected.branchId) : defaultAccountId("cash", selected.branchId),
       accountId2: "",
       notes: "",
       reason: "",
