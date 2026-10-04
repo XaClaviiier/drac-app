@@ -115,6 +115,7 @@ export default function CustomerPayments() {
   const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
   const [viewingPayment, setViewingPayment] = useState<PaymentRow | null>(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [isFromWorkOrder, setIsFromWorkOrder] = useState(false);
   const [period, setPeriod] = useState<Period>("this_month"),
     [dateFrom, setDateFrom] = useState(""),
     [dateTo, setDateTo] = useState("");
@@ -222,6 +223,11 @@ export default function CustomerPayments() {
   const paymentAccountOptions = accounts.filter(
     (a) => !a.branchId || a.branchId === invoice?.branchId,
   );
+  const totalReceived = Number(form.amount || 0) + Number(form.amount2 || 0);
+  const paymentMaximum = editingPayment ? maximumEditableAmount : outstanding;
+  const allocatedAmount = Math.min(totalReceived, paymentMaximum);
+  const unappliedAmount = Math.max(0, totalReceived - allocatedAmount);
+  const balanceAfterPayment = Math.max(0, paymentMaximum - allocatedAmount);
   const defaultAccountId = (type: CashAccount["accountType"], branchId = invoice?.branchId) => {
     const options = accounts.filter((a) => !a.branchId || a.branchId === branchId);
     const setting = accountSettings.find((item) => item.branchId === branchId);
@@ -258,6 +264,7 @@ export default function CustomerPayments() {
     if (!invoiceId) return;
     const selected = data.invoices.find((item) => item.id === invoiceId);
     if (!selected || selected.total <= selected.payment) return;
+    setIsFromWorkOrder(true);
     setInvoiceSearch("");
     setForm({
       invoiceId: selected.id,
@@ -461,6 +468,7 @@ export default function CustomerPayments() {
   };
   const openForm = () => {
     setEditingPayment(null);
+    setIsFromWorkOrder(false);
     setPaymentMode("cash");
     setForm(emptyForm);
     setInvoiceSearch("");
@@ -472,6 +480,7 @@ export default function CustomerPayments() {
         "Pembayaran sudah masuk setoran cabang. Batalkan setoran terlebih dahulu.",
       );
     setEditingPayment(row);
+    setIsFromWorkOrder(false);
     setPaymentMode(row.paymentMethod === "Transfer" ? "transfer" : "cash");
     setInvoiceSearch("");
     setForm({
@@ -490,6 +499,7 @@ export default function CustomerPayments() {
   const closeForm = () => {
     setShowForm(false);
     setEditingPayment(null);
+    setIsFromWorkOrder(false);
     setPaymentMode("cash");
     setInvoiceSearch("");
     setForm(emptyForm);
@@ -803,7 +813,7 @@ export default function CustomerPayments() {
               </button>
             </header>
             <div className="space-y-4 p-5">
-              {!editingPayment && (
+              {!editingPayment && !isFromWorkOrder && (
                 <label className="block text-sm">
                   Cari Faktur
                   <input
@@ -847,7 +857,6 @@ export default function CustomerPayments() {
               </label>
               {invoice && (
                 <div className="rounded-lg bg-blue-50 p-3 text-sm">
-                  <div className="mb-2 text-xs text-blue-800">No. WO: <b>{invoice.woNumber || invoice.woId || "-"}</b></div>
                   <div className="grid grid-cols-3">
                   <span>
                     Total
@@ -865,6 +874,7 @@ export default function CustomerPayments() {
                     <b className="text-red-600">{rupiah(editingPayment ? maximumEditableAmount : outstanding)}</b>
                   </span>
                   </div>
+                  <div className="mt-3 border-t border-blue-100 pt-2 text-xs text-blue-800">No. WO: <b>{invoice.woNumber || invoice.woId || "-"}</b></div>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
@@ -896,6 +906,19 @@ export default function CustomerPayments() {
                   </div>
                 ))}
                 {!editingPayment && paymentMode === "multi" && <small className="block text-gray-500">Nominal Transfer boleh dikosongkan jika pembayaran hanya tunai.</small>}
+              </div>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm">
+                <h3 className="mb-2 font-semibold text-blue-900">Distribusi Pembayaran</h3>
+                <div className="grid grid-cols-2 gap-y-1.5">
+                  <span className="text-gray-600">Total diterima</span>
+                  <b className="text-right">{rupiah(totalReceived)}</b>
+                  <span className="text-gray-600">Dialokasikan ke faktur</span>
+                  <b className="text-right">{rupiah(allocatedAmount)}</b>
+                  <span className="text-gray-600">Belum dialokasikan</span>
+                  <b className={`text-right ${unappliedAmount > 0 ? "text-red-600" : "text-gray-800"}`}>{rupiah(unappliedAmount)}</b>
+                  <span className="border-t border-blue-100 pt-1.5 font-semibold">Sisa faktur</span>
+                  <b className={`border-t border-blue-100 pt-1.5 text-right ${balanceAfterPayment > 0 ? "text-amber-700" : "text-emerald-700"}`}>{rupiah(balanceAfterPayment)} · {totalReceived > 0 && balanceAfterPayment === 0 ? "Lunas" : totalReceived > 0 ? "Cicilan" : "Belum diisi"}</b>
+                </div>
               </div>
               <label className="block text-sm">
                 Catatan (opsional)
