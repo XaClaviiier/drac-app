@@ -47,6 +47,12 @@ type CashAccount = {
   accountType: "cash" | "bank";
   branchId?: string;
 };
+type BranchAccountSetting = {
+  branchId: string;
+  cashAccountId?: string;
+  bankAccountId?: string;
+};
+type PaymentMode = "cash" | "transfer" | "multi";
 type Period = "today" | "this_month" | "last_month" | "custom" | "all";
 
 const rupiah = (value: number) =>
@@ -95,7 +101,8 @@ export default function CustomerPayments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, currentBranchId, hasPermission, refreshData } = useApp();
   const [rows, setRows] = useState<PaymentRow[]>([]),
-    [accounts, setAccounts] = useState<CashAccount[]>([]);
+    [accounts, setAccounts] = useState<CashAccount[]>([]),
+    [accountSettings, setAccountSettings] = useState<BranchAccountSetting[]>([]);
   const [loading, setLoading] = useState(false),
     [search, setSearch] = useState(""),
     [showForm, setShowForm] = useState(false),
@@ -123,18 +130,21 @@ export default function CustomerPayments() {
     reason: "",
   };
   const [form, setForm] = useState(emptyForm);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
 
   const load = async () => {
     setLoading(true);
-    const [p, a] = await Promise.all([
+    const [p, a, s] = await Promise.all([
       api.get("customer-payments"),
       api.get("cash-accounts"),
+      api.get<BranchAccountSetting[]>("branch-account-settings"),
     ]);
     if (p.success) setRows(p.data || []);
     else if (import.meta.env.DEV) setRows(demoPaymentRows);
     else window.alert(p.message);
     if (a.success) setAccounts(a.data || []);
     else if (import.meta.env.DEV) setAccounts(demoCashAccounts);
+    if (s.success) setAccountSettings(s.data || []);
     setLoading(false);
   };
   useEffect(() => {
@@ -207,6 +217,26 @@ export default function CustomerPayments() {
   const paymentAccountOptions = accounts.filter(
     (a) => !a.branchId || a.branchId === invoice?.branchId,
   );
+  const defaultAccountId = (type: CashAccount["accountType"], branchId = invoice?.branchId) => {
+    const options = accounts.filter((a) => !a.branchId || a.branchId === branchId);
+    const setting = accountSettings.find((item) => item.branchId === branchId);
+    const configured = type === "cash" ? setting?.cashAccountId : setting?.bankAccountId;
+    return configured && options.some((account) => account.id === configured)
+      ? configured
+      : options.find((account) => account.accountType === type)?.id || "";
+  };
+  const changePaymentMode = (mode: PaymentMode) => {
+    setPaymentMode(mode);
+    const cashAccountId = defaultAccountId("cash");
+    const bankAccountId = defaultAccountId("bank");
+    setForm((current) => ({
+      ...current,
+      paymentMethod: mode === "transfer" ? "Transfer" : "Tunai",
+      accountId: mode === "transfer" ? bankAccountId : cashAccountId,
+      accountId2: mode === "multi" ? bankAccountId : "",
+      amount2: mode === "multi" ? current.amount2 : 0,
+    }));
+  };
 
   useEffect(() => {
     const viewInvoiceId = searchParams.get("viewInvoiceId");
@@ -229,8 +259,8 @@ export default function CustomerPayments() {
       date: today,
       amount: Math.max(0, selected.total - selected.payment),
       amount2: 0,
-      paymentMethod: "Tunai",
-      accountId: "",
+      paymentMethod: paymentMode === "transfer" ? "Transfer" : "Tunai",
+      accountId: paymentMode === "transfer" ? defaultAccountId("bank") : defaultAccountId("cash"),
       accountId2: "",
       notes: "",
       reason: "",
@@ -402,6 +432,7 @@ export default function CustomerPayments() {
   };
   const openForm = () => {
     setEditingPayment(null);
+    setPaymentMode("cash");
     setForm(emptyForm);
     setInvoiceSearch("");
     setShowForm(true);
@@ -412,6 +443,7 @@ export default function CustomerPayments() {
         "Pembayaran sudah masuk setoran cabang. Batalkan setoran terlebih dahulu.",
       );
     setEditingPayment(row);
+    setPaymentMode(row.paymentMethod === "Transfer" ? "transfer" : "cash");
     setInvoiceSearch("");
     setForm({
       invoiceId: row.invoiceId,
@@ -429,6 +461,7 @@ export default function CustomerPayments() {
   const closeForm = () => {
     setShowForm(false);
     setEditingPayment(null);
+    setPaymentMode("cash");
     setInvoiceSearch("");
     setForm(emptyForm);
   };
@@ -757,7 +790,8 @@ export default function CustomerPayments() {
                       ...form,
                       invoiceId: e.target.value,
                       amount: selected ? selected.total - selected.payment : 0,
-                      accountId: "",
+                      accountId: paymentMode === "transfer" ? defaultAccountId("bank", selected?.branchId) : defaultAccountId("cash", selected?.branchId),
+                      accountId2: paymentMode === "multi" ? defaultAccountId("bank", selected?.branchId) : "",
                     });
                   }}
                   className="mt-1 w-full rounded-lg border p-2.5 disabled:bg-gray-100"
@@ -800,20 +834,30 @@ export default function CustomerPayments() {
                   Tanggal
                   <IndonesianDateInput min={invoice?.date} max={today} value={form.date} onChange={date=>setForm({...form,date})} className="mt-1 h-11 w-full"/>
                 </label>
-                <div className="text-sm text-gray-600">Pembayaran dapat dibagi ke dua akun kas/bank di bawah.</div>
+                <div className="text-sm text-gray-600">Pilih satu metode atau bagi pembayaran ke tunai dan transfer.</div>
               </div>
+              {!editingPayment && <div className="grid grid-cols-3 gap-2 rounded-lg bg-gray-100 p-1 text-sm font-semibold">
+                {([['cash', 'Tunai'], ['transfer', 'Transfer'], ['multi', 'Multi']] as const).map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => changePaymentMode(value)} className={`rounded-md px-3 py-2 ${paymentMode === value ? "bg-white text-blue-700 shadow-sm" : "text-gray-600"}`}>{label}</button>
+                ))}
+              </div>}
               <div className="space-y-2 rounded-lg border border-gray-200 p-3">
-                {[{label: "Pembayaran 1", amount: "amount", account: "accountId", required: true}, {label: "Pembayaran 2", amount: "amount2", account: "accountId2", required: false}].map((item) => (
+                {(editingPayment
+                  ? [{label: "Pembayaran 1", amount: "amount", account: "accountId", type: undefined as CashAccount["accountType"] | undefined, required: true}]
+                  : paymentMode === "multi"
+                    ? [{label: "Tunai", amount: "amount", account: "accountId", type: "cash" as const, required: true}, {label: "Transfer", amount: "amount2", account: "accountId2", type: "bank" as const, required: false}]
+                    : [{label: paymentMode === "transfer" ? "Transfer" : "Tunai", amount: "amount", account: "accountId", type: (paymentMode === "transfer" ? "bank" : "cash") as CashAccount["accountType"], required: true}]
+                ).map((item) => (
                   <div key={item.label} className="grid grid-cols-[7rem_8rem_minmax(0,1fr)] items-center gap-2">
                     <b className="text-xs whitespace-nowrap">{item.label}</b>
                     <input type="number" min={item.required ? 1 : 0} max={editingPayment ? maximumEditableAmount : outstanding} value={form[item.amount as "amount" | "amount2"] || ""} onChange={(e) => setForm({ ...form, [item.amount]: Number(e.target.value) })} className="w-full rounded-lg border p-2 text-right text-sm font-semibold" />
                     <select disabled={!!editingPayment && item.amount === "amount2"} required={item.required && !editingPayment} value={form[item.account as "accountId" | "accountId2"]} onChange={(e) => setForm({ ...form, [item.account]: e.target.value })} className="w-full min-w-0 rounded-lg border p-2 text-sm">
-                      <option value="">Pilih kas/bank</option>
-                      {paymentAccountOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      <option value="">Pilih {item.type === "bank" ? "bank" : item.type === "cash" ? "kas" : "kas/bank"}</option>
+                      {paymentAccountOptions.filter((a) => !item.type || a.accountType === item.type).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
                   </div>
                 ))}
-                <small className="block text-gray-500">Nominal Pembayaran 2 boleh dikosongkan.</small>
+                {!editingPayment && paymentMode === "multi" && <small className="block text-gray-500">Nominal Transfer boleh dikosongkan jika pembayaran hanya tunai.</small>}
               </div>
               <label className="block text-sm">
                 Catatan (opsional)
