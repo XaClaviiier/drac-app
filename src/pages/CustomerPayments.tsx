@@ -801,7 +801,7 @@ export default function CustomerPayments() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
           <form
             onSubmit={save}
-            className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white"
+            className="max-h-[calc(100dvh-1rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
           >
             <header className="sticky top-0 z-10 flex justify-between border-b bg-white p-4">
               <b className="flex items-center gap-2">
@@ -812,7 +812,7 @@ export default function CustomerPayments() {
                 <X />
               </button>
             </header>
-            <div className="space-y-4 p-5">
+            <div className="space-y-4 p-4 sm:p-5">
               {!editingPayment && !isFromWorkOrder && (
                 <label className="block text-sm">
                   Cari Faktur
@@ -856,8 +856,8 @@ export default function CustomerPayments() {
                 </select>
               </label>
               {invoice && (
-                <div className="rounded-lg bg-blue-50 p-3 text-sm">
-                  <div className="grid grid-cols-3">
+                <div className="rounded-xl bg-blue-50 p-3 text-sm">
+                  <div className="grid grid-cols-3 gap-2">
                   <span>
                     Total
                     <br />
@@ -877,29 +877,29 @@ export default function CustomerPayments() {
                   <div className="mt-3 border-t border-blue-100 pt-2 text-xs text-blue-800">No. WO: <b>{invoice.woNumber || invoice.woId || "-"}</b></div>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
                 <label className="text-sm">
                   Tanggal
                   <IndonesianDateInput min={invoice?.date} max={today} value={form.date} onChange={date=>setForm({...form,date})} className="mt-1 h-11 w-full"/>
                 </label>
-                <div className="text-sm text-gray-600">Pilih satu metode atau bagi pembayaran ke tunai dan transfer.</div>
+                <div className="text-xs leading-5 text-gray-600 sm:text-sm">Pilih satu metode atau bagi pembayaran ke tunai dan transfer.</div>
               </div>
               {!editingPayment && <div className="grid grid-cols-3 gap-2 rounded-lg bg-gray-100 p-1 text-sm font-semibold">
                 {([['cash', 'Tunai'], ['transfer', 'Transfer'], ['multi', 'Multi']] as const).map(([value, label]) => (
                   <button key={value} type="button" onClick={() => changePaymentMode(value)} className={`rounded-md px-3 py-2 ${paymentMode === value ? "bg-white text-blue-700 shadow-sm" : "text-gray-600"}`}>{label}</button>
                 ))}
               </div>}
-              <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+              <div className="space-y-2 rounded-xl border border-gray-200 p-3">
                 {(editingPayment
                   ? [{label: "Pembayaran 1", amount: "amount", account: "accountId", type: undefined as CashAccount["accountType"] | undefined, required: true}]
                   : paymentMode === "multi"
                     ? [{label: "Tunai", amount: "amount", account: "accountId", type: "cash" as const, required: true}, {label: "Transfer", amount: "amount2", account: "accountId2", type: "bank" as const, required: false}]
                     : [{label: paymentMode === "transfer" ? "Transfer" : "Tunai", amount: "amount", account: "accountId", type: (paymentMode === "transfer" ? "bank" : "cash") as CashAccount["accountType"], required: true}]
                 ).map((item) => (
-                  <div key={item.label} className="grid grid-cols-[7rem_8rem_minmax(0,1fr)] items-center gap-2">
-                    <b className="text-xs whitespace-nowrap">{item.label}</b>
-                    <input type="text" inputMode="numeric" pattern="[0-9.]*" placeholder="0" value={formatAmountInput(form[item.amount as "amount" | "amount2"])} onChange={(e) => setForm({ ...form, [item.amount]: parseAmountInput(e.target.value) })} className="w-full rounded-lg border p-2 text-right text-sm font-semibold" />
-                    <select disabled={!!editingPayment && item.amount === "amount2"} required={item.required && !editingPayment} value={form[item.account as "accountId" | "accountId2"]} onChange={(e) => setForm({ ...form, [item.account]: e.target.value })} className="w-full min-w-0 rounded-lg border p-2 text-sm">
+                  <div key={item.label} className="grid min-w-0 grid-cols-[4.75rem_minmax(7rem,0.9fr)_minmax(0,1.2fr)] items-center gap-1.5 sm:grid-cols-[7rem_8rem_minmax(0,1fr)] sm:gap-2">
+                    <b className="whitespace-nowrap text-[11px] sm:text-xs">{item.label}</b>
+                    <input type="text" inputMode="numeric" pattern="[0-9.]*" placeholder="0" value={formatAmountInput(form[item.amount as "amount" | "amount2"])} onChange={(e) => setForm({ ...form, [item.amount]: parseAmountInput(e.target.value) })} className="min-w-0 rounded-lg border px-2 py-2 text-right text-xs font-semibold sm:text-sm" />
+                    <select disabled={!!editingPayment && item.amount === "amount2"} required={item.required && !editingPayment} value={form[item.account as "accountId" | "accountId2"]} onChange={(e) => setForm({ ...form, [item.account]: e.target.value })} className="min-w-0 rounded-lg border px-1.5 py-2 text-[11px] sm:px-2 sm:text-sm">
                       <option value="">Pilih {item.type === "bank" ? "bank" : item.type === "cash" ? "kas" : "kas/bank"}</option>
                       {paymentAccountOptions.filter((a) => !item.type || a.accountType === item.type).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
@@ -907,7 +907,7 @@ export default function CustomerPayments() {
                 ))}
                 {!editingPayment && paymentMode === "multi" && <small className="block text-gray-500">Nominal Transfer boleh dikosongkan jika pembayaran hanya tunai.</small>}
               </div>
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm">
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm">
                 <h3 className="mb-2 font-semibold text-blue-900">Distribusi Pembayaran</h3>
                 <div className="grid grid-cols-2 gap-y-1.5">
                   <span className="text-gray-600">Total diterima</span>

@@ -1322,6 +1322,17 @@ export default function SalesInvoice() {
         const itemsSubtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
         const displayedSubtotal = itemsSubtotal > 0 ? itemsSubtotal : invoice.total;
         const displayedDiscount = Math.max(0, displayedSubtotal - invoice.total);
+        const historyTotal = invoicePaymentHistory.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        const legacyPaymentAmount = Math.max(0, Number(invoice.payment || 0) - historyTotal);
+        const displayedPaymentHistory: InvoicePaymentHistory[] = legacyPaymentAmount > 0
+          ? [...invoicePaymentHistory, {
+            id: `legacy-${invoice.id}`,
+            paymentNumber: 'Pembayaran sebelumnya',
+            date: invoice.paymentDate || invoice.date,
+            amount: legacyPaymentAmount,
+            paymentMethod: invoice.paymentMethod || 'Tunai',
+          }]
+          : invoicePaymentHistory;
         return (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-0 sm:p-3 lg:static lg:z-auto lg:block lg:bg-transparent lg:p-0">
             <section className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50 shadow-2xl sm:h-[94vh] sm:max-w-6xl sm:rounded-xl sm:border sm:border-gray-300 lg:h-auto lg:max-w-none lg:overflow-visible lg:rounded-md lg:border-gray-200 lg:bg-[var(--app-canvas)] lg:shadow-sm" role="dialog" aria-modal="true" aria-label={`Detail faktur ${invoice.invoiceNumber}`}>
@@ -1412,13 +1423,16 @@ export default function SalesInvoice() {
                     </dl>
                   </div>
                   <div className="relative min-h-[250px] p-3">
-                    <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-blue-700"><Receipt className="h-5 w-5" />Riwayat Pembayaran</h3>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-2 text-base font-semibold text-blue-700"><Receipt className="h-5 w-5" />Riwayat Pembayaran</h3>
+                      {displayedPaymentHistory.length > 1 && <span className="rounded border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">Multi Nota · {displayedPaymentHistory.length} pembayaran</span>}
+                    </div>
                     <div className="relative z-[1] max-h-40 space-y-2 overflow-y-auto pr-1">
                       {invoicePaymentHistoryLoading ? (
                         <div className="flex items-center justify-center rounded border border-dashed border-gray-300 py-6 text-sm text-gray-500"><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Memuat riwayat pembayaran...</div>
-                      ) : invoicePaymentHistory.length > 0 ? invoicePaymentHistory.map(payment => (
+                      ) : displayedPaymentHistory.length > 0 ? displayedPaymentHistory.map((payment, index) => (
                         <div key={payment.id} className="rounded border border-gray-300 bg-white px-3 py-2 text-sm">
-                          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><button type="button" onClick={() => window.location.assign(`/customer-payments?view=${encodeURIComponent(payment.id || payment.paymentNumber)}`)} className="block max-w-full truncate font-semibold text-blue-700 hover:underline" title="Buka detail pembayaran">{payment.paymentNumber}</button><span className="text-[11px] text-gray-500">{formatShareDate(payment.date)} · {payment.paymentMethod || payment.accountName || '-'}</span></div><strong className="whitespace-nowrap tabular-nums">Rp {Number(payment.amount || 0).toLocaleString('id-ID')}</strong></div>
+                          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="mb-0.5 block text-[10px] font-bold uppercase tracking-wide text-gray-500">Pembayaran {index + 1}</span>{payment.id.startsWith('legacy-') ? <strong className="block truncate text-gray-700">{payment.paymentNumber}</strong> : <button type="button" onClick={() => window.location.assign(`/customer-payments?view=${encodeURIComponent(payment.id || payment.paymentNumber)}`)} className="block max-w-full truncate font-semibold text-blue-700 hover:underline" title="Buka detail pembayaran">{payment.paymentNumber}</button>}<span className="text-[11px] text-gray-500">{formatShareDate(payment.date)} · {payment.paymentMethod || payment.accountName || '-'}</span></div><strong className="whitespace-nowrap tabular-nums">Rp {Number(payment.amount || 0).toLocaleString('id-ID')}</strong></div>
                           {(payment.accountName || payment.createdByName) && <p className="mt-1 truncate text-[11px] text-gray-500">{payment.accountName || '-'}{payment.createdByName ? ` · Input: ${payment.createdByName}` : ''}</p>}
                         </div>
                       )) : invoice.payment > 0 ? (

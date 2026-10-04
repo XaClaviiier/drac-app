@@ -10,14 +10,14 @@ import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 
-type Tab = 'company' | 'features' | 'tax' | 'sales' | 'purchases' | 'security' | 'approval' | 'attachments' | 'attributes' | 'defaultAccounts' | 'other' | 'branches' | 'documents' | 'workflow' | 'inventory' | 'ai' | 'guide' | 'backup' | 'maintenance';
+type Tab = 'company' | 'features' | 'tax' | 'sales' | 'purchases' | 'security' | 'approval' | 'attachments' | 'attributes' | 'defaultAccounts' | 'other' | 'branches' | 'cashBranches' | 'documents' | 'workflow' | 'inventory' | 'ai' | 'guide' | 'backup' | 'maintenance';
 
 const tabs = [
   { id: 'company' as const, label: 'Perusahaan', hint: 'Profil, logo, alamat, identitas pajak', group: 'Preferensi Utama', icon: Building2 },
   { id: 'features' as const, label: 'Fitur', hint: 'Aktifkan modul sesuai kebutuhan usaha', group: 'Preferensi Utama', icon: ClipboardCheck },
   { id: 'tax' as const, label: 'Pajak', hint: 'PPN dan akun pajak', group: 'Preferensi Utama', icon: FileText },
   { id: 'defaultAccounts' as const, label: 'Akun Default', hint: 'Akun otomatis untuk transaksi', group: 'Preferensi Utama', icon: WalletCards },
-  { id: 'branches' as const, label: 'Cabang & Akun', hint: 'Kas, bank, piutang, pendapatan, persediaan', group: 'Preferensi Utama', icon: MapPin },
+  { id: 'cashBranches' as const, label: 'Kas Cabang', hint: 'Kas tunai, bank transfer, dan tujuan setoran per cabang', group: 'Preferensi Utama', icon: MapPin },
   { id: 'documents' as const, label: 'Penomoran Dokumen', hint: 'Nomor WO dan faktur', group: 'Transaksi', icon: Hash },
   { id: 'sales' as const, label: 'Penjualan', hint: 'Aturan faktur dan pembayaran pelanggan', group: 'Transaksi', icon: FileText },
   { id: 'purchases' as const, label: 'Pembelian', hint: 'Aturan penerimaan dan hutang supplier', group: 'Transaksi', icon: WalletCards },
@@ -43,7 +43,7 @@ export default function SettingsPage() {
   const { data, currentUser, updateSettings } = useApp();
   const [tab, setTab] = useState<Tab>(() => {
     const saved = localStorage.getItem('drac-settings-tab') as Tab | null;
-    return tabs.some(item => item.id === saved) ? saved! : 'company';
+    return saved === 'branches' ? 'cashBranches' : (tabs.some(item => item.id === saved) ? saved! : 'company');
   });
   const [innerTab, setInnerTab] = useState('perusahaan');
   const [companyTab, setCompanyTab] = useState<'info' | 'address'>('info');
@@ -94,7 +94,7 @@ export default function SettingsPage() {
   }, [data.settings]);
 
   useEffect(() => {
-    const next = tab === 'company' ? 'info' : tab === 'features' ? 'perusahaan' : tab === 'inventory' ? 'persediaan' : tab === 'sales' ? 'penjualan' : tab === 'purchases' ? 'pembelian' : tab === 'tax' ? 'pajak' : tab;
+    const next = tab === 'company' ? 'info' : tab === 'features' ? 'perusahaan' : tab === 'inventory' ? 'persediaan' : tab === 'sales' ? 'penjualan' : tab === 'purchases' ? 'pembelian' : tab === 'tax' ? 'pajak' : tab === 'defaultAccounts' ? 'barang' : tab;
     setInnerTab(next);
     if (tab === 'company') setCompanyTab('info');
   }, [tab]);
@@ -138,7 +138,7 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await updateSettings(draft);
-      if (tab === 'branches') {
+      if (tab === 'cashBranches' || tab === 'defaultAccounts') {
         for (const mapping of branchAccountSettings) {
           const result = await api.update('branch-account-settings', mapping.branchId, mapping);
           if (!result.success) throw new Error(result.message || 'Gagal menyimpan pengaitan akun cabang');
@@ -323,7 +323,7 @@ export default function SettingsPage() {
         <div className="space-y-0">
         <div className="flex items-start border-b border-gray-300 bg-[#edf1f4]">
         <nav className="w-full flex-shrink-0 overflow-x-auto border-r border-gray-300 bg-[#e5e8eb] p-2 lg:w-[168px] lg:space-y-1">
-          {['company','features','tax','sales','purchases','security','approval','attachments','attributes','defaultAccounts','branches','other'].map(id => { const item=tabs.find(candidate=>candidate.id===id); if(!item)return null; const Icon=item.icon; return <button key={item.id} onClick={()=>selectTab(item.id)} title={item.hint} className={`relative flex min-w-[145px] items-center justify-end gap-2 border px-3 py-2 text-right text-xs transition lg:w-full ${tab===item.id?'z-10 mr-[-1px] border-[#ff4081] border-r-white bg-white font-bold text-gray-800':'border-gray-300 bg-[#f1f2f3] text-gray-600 hover:bg-white'}`}><Icon className="hidden h-4 w-4 text-blue-600 lg:block" />{item.label}</button>; })}
+          {['company','features','tax','sales','purchases','security','approval','attachments','attributes','defaultAccounts','other'].map(id => { const item=tabs.find(candidate=>candidate.id===id); if(!item)return null; const Icon=item.icon; return <button key={item.id} onClick={()=>selectTab(item.id)} title={item.hint} className={`relative flex min-w-[145px] items-center justify-end gap-2 border px-3 py-2 text-right text-xs transition lg:w-full ${tab===item.id?'z-10 mr-[-1px] border-[#ff4081] border-r-white bg-white font-bold text-gray-800':'border-gray-300 bg-[#f1f2f3] text-gray-600 hover:bg-white'}`}><Icon className="hidden h-4 w-4 text-blue-600 lg:block" />{item.label}</button>; })}
         </nav>
         <div className="min-w-0 flex-1 border-l border-gray-300 bg-white">
         <InnerTabs tab={tab} active={innerTab} onChange={id => { setInnerTab(id); if (tab === 'company') setCompanyTab(id === 'alamat' ? 'address' : 'info'); }} />
@@ -335,27 +335,33 @@ export default function SettingsPage() {
           {tab === 'sales' && <AccurateSalesPanel />}
           {['tax', 'purchases', 'inventory', 'other'].includes(tab) && <PreferencePanel tab={tab} />}
 
-          {tab === 'defaultAccounts' && (
+          {tab === 'defaultAccounts' && innerTab !== 'kasCabang' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-              <TabHeader title="Akun Default" description="Seperti tab Akun di Accurate: tentukan akun yang digunakan otomatis oleh transaksi CerdikApp." />
-              <div className="grid gap-4 lg:grid-cols-2">
-                {(innerTab === 'barang' || innerTab === 'perusahaan') && <PreferenceAccountGroup title="Barang & Jasa" rows={['Persediaan', 'Pendapatan Jasa', 'Pendapatan Barang', 'HPP', 'Retur Penjualan', 'Diskon Penjualan']} />}
-                {(innerTab === 'penjualanPembelian' || innerTab === 'barang') && <PreferenceAccountGroup title="Pembelian" rows={['Hutang Usaha', 'Persediaan', 'Pembelian Belum Tertagih', 'Retur Pembelian', 'Diskon Pembelian']} />}
-                {(innerTab === 'penjualanPembelian' || innerTab === 'perusahaan') && <PreferenceAccountGroup title="Kas & Pembayaran" rows={['Kas Tunai', 'Bank / Transfer', 'Piutang Usaha', 'Akun Pembayaran Supplier']} />}
-                {(innerTab === 'persediaan' || innerTab === 'perusahaan') && <PreferenceAccountGroup title="Saldo & Penyesuaian" rows={['Ekuitas Saldo Awal', 'Penyesuaian Persediaan', 'Selisih Stok', 'Pembulatan']} />}
+              <TabHeader title="Akun Default" description="Akun jurnal dikelompokkan sesuai fungsi transaksi, mengikuti pola pengaturan Accurate." />
+              <div className="space-y-4">
+                {data.branches.map(branch => {
+                  const mapping = branchAccountSettings.find(item => item.branchId === branch.id) || { branchId: branch.id };
+                  const activeLedgerAccounts = ledgerAccounts.filter(account => account.isActive !== false);
+                  return <div key={branch.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><p className="font-bold uppercase tracking-wide text-slate-800">{branch.name}</p><p className="mt-0.5 text-xs text-slate-500">Akun default jurnal untuk transaksi cabang ini</p></div>
+                    <div className="grid gap-4 p-4 xl:grid-cols-2">
+                      <section className="rounded-lg border border-slate-200 p-3"><h4 className="font-bold text-slate-800">Default Barang & Jasa</h4><p className="mb-3 mt-0.5 text-xs text-slate-500">Akun untuk barang, jasa, penjualan, dan persediaan.</p><div className="grid gap-3 sm:grid-cols-2"><SettingSelect label="Persediaan" value={mapping.inventoryCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'inventoryCoaId', value)} /><SettingSelect label="Pendapatan jasa" value={mapping.serviceRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'serviceRevenueCoaId', value)} /><SettingSelect label="Penjualan barang" value={mapping.goodsRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'goodsRevenueCoaId', value)} /></div></section>
+                      <section className="rounded-lg border border-slate-200 p-3"><h4 className="font-bold text-slate-800">Default Penjualan & Pembelian</h4><p className="mb-3 mt-0.5 text-xs text-slate-500">Akun piutang dan akun kontrol transaksi pelanggan.</p><div className="grid gap-3 sm:grid-cols-2"><SettingSelect label="Piutang pelanggan" value={mapping.receivableCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'receivableCoaId', value)} /><div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Akun hutang supplier dan retur pembelian belum memiliki mapping cabang pada sistem.</div></div></section>
+                    </div>
+                  </div>;
+                })}
               </div>
               <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun yang belum dipetakan akan memblokir posting otomatis agar Buku Besar tidak menerima jurnal yang tidak lengkap.</p>
             </div>
           )}
 
-          {tab === 'branches' && (
+          {(tab === 'cashBranches' || (tab === 'defaultAccounts' && innerTab === 'kasCabang')) && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-              <TabHeader title="Cabang & Pengaitan Akun" description="Tentukan akun kas, bank, setoran, piutang, pendapatan, dan persediaan untuk setiap cabang." />
+              <TabHeader title="Kas Cabang" description="Tentukan rekening penerimaan dan tujuan setoran untuk setiap cabang." />
               <div className="space-y-3">
                 {data.branches.map(branch => {
                   const mapping = branchAccountSettings.find(item => item.branchId === branch.id) || { branchId: branch.id };
                   const branchCashAccounts = cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === branch.id));
-                  const activeLedgerAccounts = ledgerAccounts.filter(account => account.isActive !== false);
                   return (
                     <div key={branch.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
@@ -365,25 +371,7 @@ export default function SettingsPage() {
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
                         </div>
                       </div>
-                      <div className="space-y-4 p-4">
-                        <section>
-                          <div className="mb-2 flex items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-800">Penerimaan & Kas/Bank</h4><p className="text-xs text-slate-500">Dipakai otomatis saat menerima pembayaran pelanggan.</p></div><span className="text-xs font-medium text-slate-400">3 pengaturan</span></div>
-                          <div className="grid gap-3 md:grid-cols-3">
-                            <SettingSelect label="Kas tunai default" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />
-                            <SettingSelect label="Bank transfer default" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />
-                            <SettingSelect label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />
-                          </div>
-                        </section>
-                        <section className="border-t border-slate-100 pt-4">
-                          <div className="mb-2 flex items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-800">Akun Penjualan</h4><p className="text-xs text-slate-500">Dipakai untuk jurnal faktur dan saldo pelanggan.</p></div><span className="text-xs font-medium text-slate-400">4 pengaturan</span></div>
-                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                            <SettingSelect label="Piutang pelanggan" value={mapping.receivableCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'receivableCoaId', value)} />
-                            <SettingSelect label="Pendapatan jasa" value={mapping.serviceRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'serviceRevenueCoaId', value)} />
-                            <SettingSelect label="Penjualan barang" value={mapping.goodsRevenueCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Revenue')} onChange={value => setBranchAccount(branch.id, 'goodsRevenueCoaId', value)} />
-                            <SettingSelect label="Persediaan" value={mapping.inventoryCoaId} options={activeLedgerAccounts.filter(account => account.accountType === 'Asset')} onChange={value => setBranchAccount(branch.id, 'inventoryCoaId', value)} />
-                          </div>
-                        </section>
-                      </div>
+                      <div className="p-4"><div className="mb-3 flex items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-800">Rekening penerimaan</h4><p className="text-xs text-slate-500">Dipakai otomatis saat menerima pembayaran pelanggan.</p></div><span className="text-xs font-medium text-slate-400">3 pengaturan</span></div><div className="grid gap-3 md:grid-cols-3"><SettingSelect label="Kas tunai default" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} /><SettingSelect label="Bank transfer default" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} /><SettingSelect label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} /></div></div>
                     </div>
                   );
                 })}
@@ -592,7 +580,7 @@ function InnerTabs({ tab, active, onChange }: { tab: Tab; active: string; onChan
     purchases: [['pembelian', 'Pembelian']],
     inventory: [['persediaan', 'Persediaan']],
     tax: [['pajak', 'Pajak']],
-    defaultAccounts: [['barang', 'Barang & Jasa'], ['perusahaan', 'Perusahaan'], ['penjualanPembelian', 'Penjualan/Pembelian'], ['persediaan', 'Persediaan']],
+    defaultAccounts: [['barang', 'Barang & Jasa'], ['perusahaan', 'Perusahaan'], ['penjualanPembelian', 'Penjualan/Pembelian'], ['persediaan', 'Persediaan'], ['kasCabang', 'Kas Cabang']],
     workflow: [['operasional', 'Operasional Bengkel']],
     security: [['keamanan', 'Keamanan & Pembatasan']],
     ai: [['ai', 'Integrasi AI']],
@@ -630,10 +618,6 @@ function PreferencePanel({ tab }: { tab: string }) {
   const current = content[tab];
   if (!current) return null;
   return <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm"><TabHeader title={current.title} description={current.description} /><div className="grid gap-4 lg:grid-cols-2">{current.groups.map(group => <section key={group.title} className="rounded-xl border border-gray-200 p-4"><h3 className="mb-3 font-bold text-gray-900">{group.title}</h3><div className="space-y-2">{group.items.map(item => <div key={item} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm"><span>{item}</span><span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">Tersedia</span></div>)}</div></section>)}</div><p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Pengaturan rinci akan mengikuti mapping akun dan aturan transaksi CerdikApp. Fitur yang belum memiliki konfigurasi tidak dapat diposting otomatis.</p></div>;
-}
-
-function PreferenceAccountGroup({ title, rows }: { title: string; rows: string[] }) {
-  return <section className="rounded-xl border border-gray-200 p-4"><h3 className="mb-3 border-b border-gray-100 pb-2 font-bold text-gray-900">{title}</h3><div className="space-y-2">{rows.map(row => <div key={row} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm"><span>{row}</span><button type="button" className="rounded-md border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Pilih akun</button></div>)}</div></section>;
 }
 
 function CompanyField({ label, multiline = false, children }: { label: string; multiline?: boolean; children: ReactNode }) {
