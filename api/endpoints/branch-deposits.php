@@ -35,7 +35,17 @@ case 'POST':
     } catch(Exception $e){$pdo->rollBack();respondError($e->getMessage(),422);}break;
 case 'PUT':
     if(!$id)respondError('ID wajib',422);$actor=$requestUser??requireAuthenticatedUser($pdo);$d=getInput();$status=$d['status']??'';if(!in_array($status,['Terverifikasi','Ditolak'],true))respondError('Status tidak valid',422);
-    $current=$pdo->prepare("SELECT branch_id,status FROM branch_deposits WHERE id=?");$current->execute([$id]);$deposit=$current->fetch();if(!$deposit)respondError('Setoran tidak ditemukan',404);requireAccessibleBranch($pdo,$actor,(string)$deposit['branch_id']);if($deposit['status']!=='Dikirim')respondError('Setoran yang sudah diproses tidak dapat diverifikasi ulang',409);
-    $stmt=$pdo->prepare("UPDATE branch_deposits SET status=?,verified_by=?,verified_by_name=?,verified_at=NOW(),notes=CONCAT(COALESCE(notes,''),?) WHERE id=? AND status='Dikirim'");$stmt->execute([$status,$actor['id']??null,$actor['name']??$actor['username']??null,!empty($d['reason'])?' | '.$d['reason']:'',$id]);respondSuccess(null,'Setoran diperbarui');break;
+    $pdo->beginTransaction();
+    try{
+        $current=$pdo->prepare("SELECT * FROM branch_deposits WHERE id=? FOR UPDATE");$current->execute([$id]);$deposit=$current->fetch();if(!$deposit)throw new Exception('Setoran tidak ditemukan');requireAccessibleBranch($pdo,$actor,(string)$deposit['branch_id']);if($deposit['status']!=='Dikirim')throw new Exception('Setoran yang sudah diproses tidak dapat diverifikasi ulang');
+        $stmt=$pdo->prepare("UPDATE branch_deposits SET status=?,verified_by=?,verified_by_name=?,verified_at=NOW(),notes=CONCAT(COALESCE(notes,''),?) WHERE id=? AND status='Dikirim'");$stmt->execute([$status,$actor['id']??null,$actor['name']??$actor['username']??null,!empty($d['reason'])?' | '.$d['reason']:'',$id]);
+        if($status==='Terverifikasi'){
+            $accounts=$pdo->prepare('SELECT id,ledger_account_id FROM cash_accounts WHERE id IN (?,?) AND is_active=1');$accounts->execute([$deposit['source_account_id'],$deposit['destination_account_id']]);$ledger=[];foreach($accounts->fetchAll() as $account)$ledger[(string)$account['id']]=(string)$account['ledger_account_id'];
+            postOperationalJournal($pdo,$deposit['date'],'Setoran kas '.$deposit['deposit_number'],(string)$deposit['branch_id'],'branch_deposit',(string)$id,'DEPOSIT',[
+                [$ledger[(string)$deposit['destination_account_id']]??'',(float)$deposit['amount'],0,'Bank tujuan setoran'],[$ledger[(string)$deposit['source_account_id']]??'',0,(float)$deposit['amount'],'Kas sumber setoran']
+            ],$actor['id']??null);
+        }
+        $pdo->commit();respondSuccess(null,'Setoran diperbarui');
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}break;
 default:respondError('Method not allowed',405);
 }

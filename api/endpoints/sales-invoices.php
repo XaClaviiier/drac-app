@@ -66,7 +66,7 @@ $prepareSalesStockItems=static function(PDO $pdo,string $branchId,array $items)u
 $journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $warehouseId,string $itemId,int $qty,bool $reverse,array $actor,?string $correctionGroupId=null,?string $reversalOfId=null,?string $idempotencyKey=null):string{
     return recordStockMovement($pdo,$itemId,$reverse?null:$warehouseId,$reverse?$warehouseId:null,abs($qty),$reverse?'reversal':'sale','sales_invoice',$invoiceId,$invoiceNumber,($reverse?'Pembalik penjualan ':'Penjualan ').$invoiceNumber,(string)($actor['id']??''),$date.' 12:00:00',$reversalOfId,$correctionGroupId,$idempotencyKey);
 };
-$postSalesRevenueJournal = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $branchId,float $total,float $cash,float $transfer,float $serviceTotal,float $goodsTotal,array $actor):void {
+$postSalesRevenueJournal = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $branchId,float $total,float $cash,float $transfer,float $serviceTotal,float $goodsTotal,float $goodsCost,array $actor):void {
 
     $exists=$pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1');$exists->execute(['sales_invoice',$invoiceId,'SALES_REVENUE']);if($exists->fetchColumn())return;
     $setting=$pdo->prepare('SELECT cash_account_id,bank_account_id FROM branch_account_settings WHERE branch_id=?');$setting->execute([$branchId]);$branchMap=$setting->fetch()?:[];
@@ -75,6 +75,7 @@ $postSalesRevenueJournal = static function(PDO $pdo,string $invoiceId,string $in
     if($cash>0){$q=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$q->execute([$map['cash_account_id']??'']);$add((string)$q->fetchColumn(),$cash,0);}
     if($transfer>0){$q=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$q->execute([$map['bank_account_id']??'']);$add((string)$q->fetchColumn(),$transfer,0);}
     $unpaid=max(0,$total-$cash-$transfer);$add((string)($map['receivableCoaId']??''),$unpaid,0);$add((string)($map['serviceRevenueCoaId']??''),0,$serviceTotal);$add((string)($map['goodsRevenueCoaId']??''),0,$goodsTotal);
+    if($goodsCost>0){$defaults=getDefaultAccountSettings($pdo,$branchId);$add(resolveDefaultCoaId($pdo,$defaults,'cogsCoaId','5101'),$goodsCost,0);$add(resolveDefaultCoaId($pdo,$defaults,'inventoryCoaId','110401'),0,$goodsCost);}
     $debit=array_sum(array_column($lines,1));$credit=array_sum(array_column($lines,2));if(!$lines||round($debit,2)!==round($credit,2))throw new InvalidArgumentException('Mapping akun penjualan belum lengkap atau tidak seimbang');
     $journalId=generateId();$userId=$actor['id']??null;$pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")->execute([$journalId,$date,$invoiceNumber,'Penjualan '.$invoiceNumber,$branchId,'sales_invoice',$invoiceId,$userId,$userId]);
     $lineInsert=$pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');foreach($lines as [$account,$dr,$cr])$lineInsert->execute([generateId(),$journalId,$account,$dr,$cr,'Penjualan '.$invoiceNumber]);
@@ -228,6 +229,7 @@ switch ($method) {
                     (invoice_id, item_id, warehouse_id, code, name, description, price, qty, subtotal)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
+                $goodsCost=0.0;
                 foreach ($invoiceItems as $service) {
                     $insertItem->execute([
                         $invoiceId, $service['itemId'], $service['warehouseId'], $service['code'], $service['name'],
@@ -237,11 +239,12 @@ switch ($method) {
                         $salesWarehouseId=$resolveSalesWarehouse($pdo,(string)$wo['branch_id'],$service['warehouseId']);
                         adjustWarehouseStockAllowNegative($pdo,$salesWarehouseId,(string)$wo['branch_id'],(string)$service['itemId'],-(int)$service['qty']);
                         $journalSale($pdo,$invoiceId,$invoiceNumber,$date,$salesWarehouseId,(string)$service['itemId'],(int)$service['qty'],false,$actor);
+                        $goodsCost+=estimateInventoryUnitCost($pdo,(string)$service['itemId'],$salesWarehouseId,$date)*(int)$service['qty'];
                     }
                 }
                 $serviceTotal=array_sum(array_map(static fn(array $item):float=>!$item['isStockItem']?(float)$item['subtotal']:0.0,$invoiceItems));
                 $goodsTotal=$total-$serviceTotal;
-                $postSalesRevenueJournal($pdo,$invoiceId,$invoiceNumber,$date,(string)$wo['branch_id'],$total,$cashPayment,$transferPayment,$serviceTotal,$goodsTotal,$actor);
+                $postSalesRevenueJournal($pdo,$invoiceId,$invoiceNumber,$date,(string)$wo['branch_id'],$total,$cashPayment,$transferPayment,$serviceTotal,$goodsTotal,$goodsCost,$actor);
 
                 $updateWo = $pdo->prepare("
                     UPDATE work_orders
@@ -298,6 +301,7 @@ switch ($method) {
 
             // Stok dipotong di AKHIR, saat faktur dibuat dari WO.
             // Hanya item Persediaan; jasa dan header Group tidak mengurangi stok.
+            $goodsCost=0.0;
             if (!empty($normalizedInvoice['items'])) {
                 $itemStmt = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id, item_id, warehouse_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 foreach ($normalizedInvoice['items'] as $item) {
@@ -310,6 +314,7 @@ switch ($method) {
                         $salesWarehouseId=$resolveSalesWarehouse($pdo,$branchId,$item['warehouseId']);
                         adjustWarehouseStockAllowNegative($pdo,$salesWarehouseId,$branchId,(string)$item['itemId'],-(int)$item['qty']);
                         $journalSale($pdo,$invoiceId,$invoiceNumber,$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor);
+                        $goodsCost+=estimateInventoryUnitCost($pdo,(string)$item['itemId'],$salesWarehouseId,$invoiceDate)*(int)$item['qty'];
                     }
                 }
             }
@@ -317,7 +322,7 @@ switch ($method) {
             $goodsTotal=$invoiceTotal-$serviceTotal;
             $cashInitial=$paymentMethod==='Tunai'?$initialPayment:0.0;
             $transferInitial=$paymentMethod==='Transfer'?$initialPayment:0.0;
-            $postSalesRevenueJournal($pdo,$invoiceId,$invoiceNumber,$invoiceDate,$branchId,$invoiceTotal,$cashInitial,$transferInitial,$serviceTotal,$goodsTotal,$actor);
+            $postSalesRevenueJournal($pdo,$invoiceId,$invoiceNumber,$invoiceDate,$branchId,$invoiceTotal,$cashInitial,$transferInitial,$serviceTotal,$goodsTotal,$goodsCost,$actor);
             $recordInitialCustomerPayment($pdo,$invoiceId,$branchId,(string)($paymentDate??$invoiceDate),$initialPayment,$paymentMethod,$actor);
 
             $pdo->commit();
@@ -483,6 +488,7 @@ switch ($method) {
 
             $pdo->prepare("DELETE FROM sales_invoice_items WHERE invoice_id=?")->execute([$id]);
             $insertItem = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id,item_id,warehouse_id,code,name,description,price,qty,subtotal) VALUES (?,?,?,?,?,?,?,?,?)");
+            $goodsCost=0.0;
             foreach ($items as $lineIndex=>$item) {
                 $insertItem->execute([$id,$item['itemId'],$item['warehouseId'],$item['code'],$item['name'],$item['description'],$item['price'],$item['qty'],$item['subtotal']]);
                 if ($stockImpactChanged && !empty($item['itemId']) && $item['isStockItem']) {
@@ -490,7 +496,13 @@ switch ($method) {
                     adjustWarehouseStockAllowNegative($pdo,$salesWarehouseId,(string)$branchId,(string)$item['itemId'],-(int)$item['qty']);
                     $journalSale($pdo,$id,(string)$current['invoice_number'],$invoiceDate,$salesWarehouseId,(string)$item['itemId'],(int)$item['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$item['itemId'].':'.$salesWarehouseId.':'.$lineIndex.':apply');
                 }
+                if(!empty($item['itemId'])&&$item['isStockItem'])$goodsCost+=estimateInventoryUnitCost($pdo,(string)$item['itemId'],(string)$item['warehouseId'],$invoiceDate)*(int)$item['qty'];
             }
+            $paymentBreakdown=$pdo->prepare("SELECT COALESCE(SUM(CASE WHEN payment_method='Tunai' THEN amount ELSE 0 END),0) cash_amount,COALESCE(SUM(CASE WHEN payment_method='Transfer' THEN amount ELSE 0 END),0) transfer_amount FROM customer_payments WHERE invoice_id=?");
+            $paymentBreakdown->execute([$id]);$paymentParts=$paymentBreakdown->fetch()?:[];
+            deleteOperationalJournal($pdo,'sales_invoice',(string)$id,'SALES_REVENUE');
+            $serviceTotal=array_sum(array_map(static fn(array $item):float=>!$item['isStockItem']?(float)$item['subtotal']:0.0,$items));
+            $postSalesRevenueJournal($pdo,$id,(string)$current['invoice_number'],$invoiceDate,(string)$branchId,$total,(float)($paymentParts['cash_amount']??0),(float)($paymentParts['transfer_amount']??0),$serviceTotal,$total-$serviceTotal,$goodsCost,$actor);
             if(!$stockImpactChanged&&$movementDateChanged)bumpStockVersionsForMovementReference($pdo,'sales_invoice',$id);
             if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
                 ->execute([$invoiceDate,$id]);
@@ -571,6 +583,7 @@ switch ($method) {
                 ->execute([$id,$invoiceRow['invoice_number'],substr($deleteReason,0,255),json_encode($snapshot,JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
             $pdo->prepare("UPDATE stock_movements SET is_voided=1,voided_at=NOW(),voided_by=?,void_reason=? WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
                 ->execute([$actor['id']??null,substr($deleteReason,0,255),$id]);
+            deleteOperationalJournal($pdo,'sales_invoice',(string)$id,'SALES_REVENUE');
             if ($linkedWoId !== null) {
                 $unlinkWoStmt = $pdo->prepare("UPDATE work_orders SET status='Selesai', invoice_id=NULL, invoice_number=NULL, updated_at=CURRENT_TIMESTAMP(6) WHERE id=? AND invoice_id=? AND invoice_number=?");
                 $unlinkWoStmt->execute([$linkedWoId, $id, $invoiceRow['invoice_number']]);

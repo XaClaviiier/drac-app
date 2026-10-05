@@ -380,7 +380,7 @@ export default function SettingsPage() {
               </>}
               {innerTab === 'penjualanPembelian' && <>
                 <DefaultAccountSection title="Penerimaan/Pembayaran" fields={[defaultAccountField('salesDiscountCoaId', 'Akun Diskon', ['Revenue', 'Expense'])]} />
-                <DefaultAccountSection title="Faktur Pembelian" fields={[defaultAccountField('purchaseRoundingCoaId', 'Akun Pembulatan', ['Expense', 'Revenue'])]} note="Dipakai untuk menampung pembulatan pajak dan pembulatan nilai biaya barang akibat diskon atau alokasi biaya pembelian." />
+                <DefaultAccountSection title="Faktur Pembelian" fields={[defaultAccountField('payableCoaId', 'Hutang Supplier', ['Liability']), defaultAccountField('purchaseTaxCoaId', 'Pajak Masukan', ['Asset']), defaultAccountField('purchaseRoundingCoaId', 'Akun Pembulatan', ['Expense', 'Revenue'])]} note="Dipakai untuk jurnal persediaan, hutang supplier, pajak masukan, dan pembulatan pembelian." />
               </>}
               {innerTab === 'persediaan' && <>
                 <DefaultAccountSection title="Penyesuaian Persediaan" fields={[defaultAccountField('inventoryAdjustmentCoaId', 'Akun Penyesuaian', ['Equity', 'Expense'])]} />
@@ -398,6 +398,7 @@ export default function SettingsPage() {
                 {data.branches.map(branch => {
                   const mapping = branchAccountSettings.find(item => item.branchId === branch.id) || { branchId: branch.id };
                   const branchCashAccounts = cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === branch.id));
+                  const journalCashAccounts = branchCashAccounts.map(account => ({ ...account, name: `${account.name} · Jurnal: ${account.ledgerAccountName || 'belum dikaitkan'}` }));
                   return (
                     <div key={branch.id} className="overflow-hidden rounded-md border border-gray-300 bg-white">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-300 bg-white px-3 py-3">
@@ -409,9 +410,9 @@ export default function SettingsPage() {
                       </div>
                       <div className="p-3">
                         <DefaultAccountSection title="Kas & Bank" fields={[
-                          <SettingSelect horizontal label="Kas tunai default" value={mapping.cashAccountId} options={branchCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />,
-                          <SettingSelect horizontal label="Bank transfer default" value={mapping.bankAccountId} options={branchCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />,
-                          <SettingSelect horizontal label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={branchCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />,
+                          <SettingSelect horizontal label="Kas tunai default" value={mapping.cashAccountId} options={journalCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />,
+                          <SettingSelect horizontal label="Bank transfer default" value={mapping.bankAccountId} options={journalCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />,
+                          <SettingSelect horizontal label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={journalCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />,
                         ]} note="Kas tunai dan bank diatur per cabang agar penerimaan dan setoran tidak tercampur antar cabang." />
                       </div>
                     </div>

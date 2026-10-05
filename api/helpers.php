@@ -1107,6 +1107,23 @@ function ensureApiSupportTables(PDO $pdo): void {
         $markBranchMapping = $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)');
         $markBranchMapping->execute([$branchMappingKey]);
     }
+    $cashLedgerRepairKey = 'repair_branch_cash_ledger_mapping_20261005_v1';
+    $cashLedgerRepairCheck = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $cashLedgerRepairCheck->execute([$cashLedgerRepairKey]);
+    if ((int)$cashLedgerRepairCheck->fetchColumn() === 0) {
+        $cashLedgerByBranch = $pdo->query('SELECT id,name FROM branches')->fetchAll();
+        $repairAccount = $pdo->prepare('UPDATE cash_accounts SET ledger_account_id=? WHERE id=? AND branch_id=?');
+        foreach ($cashLedgerByBranch as $branch) {
+            $name = strtoupper((string)$branch['name']);
+            $codes = str_contains($name,'PERINTIS')
+                ? ['PR.110102','PR.110101']
+                : (str_contains($name,'CAKALANG') ? ['CK.1101-01','CK.1101-02'] : (str_contains($name,'MAMUJU') ? ['MM.1101-01','MM.1101-02'] : []));
+            if (count($codes) !== 2) continue;
+            $repairAccount->execute([$coaIds[$codes[0]] ?? null,'CASH-'.$branch['id'],$branch['id']]);
+            $repairAccount->execute([$coaIds[$codes[1]] ?? null,'BANK-'.$branch['id'],$branch['id']]);
+        }
+        $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$cashLedgerRepairKey]);
+    }
     $pdo->exec("UPDATE cash_accounts SET is_active=0 WHERE account_type='qris' OR code LIKE '%QRIS%'");
 
     // Database yang sudah pernah dipakai dapat memiliki tabel pembayaran versi lama.
@@ -2024,6 +2041,81 @@ function getDefaultAccountSettings(PDO $pdo, ?string $branchId = null): array {
         if (($global[$key] ?? '') === '' && $value) $global[$key] = $value;
     }
     return $global;
+}
+
+function resolveDefaultCoaId(PDO $pdo, array $settings, string $key, string $fallbackCode = ''): string {
+    $configured = trim((string)($settings[$key] ?? ''));
+    if ($configured !== '') {
+        $stmt = $pdo->prepare('SELECT id FROM chart_of_accounts WHERE id=? AND is_active=1 LIMIT 1');
+        $stmt->execute([$configured]);
+        if ($stmt->fetchColumn()) return $configured;
+    }
+    if ($fallbackCode === '') return '';
+    $stmt = $pdo->prepare('SELECT id FROM chart_of_accounts WHERE code=? AND is_active=1 LIMIT 1');
+    $stmt->execute([$fallbackCode]);
+    return (string)($stmt->fetchColumn() ?: '');
+}
+
+function postOperationalJournal(
+    PDO $pdo,
+    string $date,
+    string $description,
+    ?string $branchId,
+    string $sourceType,
+    string $sourceId,
+    string $postingKey,
+    array $lines,
+    ?string $userId = null
+): string {
+    $existing = $pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1 FOR UPDATE');
+    $existing->execute([$sourceType, $sourceId, $postingKey]);
+    $journalId = $existing->fetchColumn();
+    if ($journalId) return (string)$journalId;
+    $clean = [];
+    $debit = 0.0;
+    $credit = 0.0;
+    foreach ($lines as $line) {
+        $accountId = trim((string)($line[0] ?? ''));
+        $dr = round((float)($line[1] ?? 0), 2);
+        $cr = round((float)($line[2] ?? 0), 2);
+        if ($accountId === '' || ($dr <= 0 && $cr <= 0)) continue;
+        if ($dr > 0 && $cr > 0) throw new InvalidArgumentException('Satu baris jurnal tidak boleh berisi debit dan kredit sekaligus');
+        $clean[] = [$accountId, $dr, $cr, (string)($line[3] ?? $description)];
+        $debit += $dr;
+        $credit += $cr;
+    }
+    if (!$clean || round($debit, 2) !== round($credit, 2)) {
+        throw new InvalidArgumentException('Jurnal '.$description.' tidak seimbang atau akun belum lengkap');
+    }
+    $journalId = generateId();
+    $entryNumber = 'JRN-'.date('ymdHis', strtotime($date)).'-'.strtoupper(substr($journalId, -6));
+    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
+        ->execute([$journalId,$date,$entryNumber,$description,$branchId ?: null,$sourceType,$sourceId,$userId,$userId]);
+    $insert = $pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');
+    foreach ($clean as [$accountId,$dr,$cr,$memo]) $insert->execute([generateId(),$journalId,$accountId,$dr,$cr,$memo]);
+    $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")
+        ->execute([generateId(),$journalId,$sourceType,$sourceId,$postingKey]);
+    return $journalId;
+}
+
+function deleteOperationalJournal(PDO $pdo, string $sourceType, string $sourceId, string $postingKey): void {
+    $stmt = $pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? FOR UPDATE');
+    $stmt->execute([$sourceType,$sourceId,$postingKey]);
+    $journalId = $stmt->fetchColumn();
+    if (!$journalId) return;
+    $pdo->prepare('DELETE FROM journal_lines WHERE journal_id=?')->execute([$journalId]);
+    $pdo->prepare('DELETE FROM journal_postings WHERE journal_id=?')->execute([$journalId]);
+    $pdo->prepare('DELETE FROM journal_entries WHERE id=?')->execute([$journalId]);
+}
+
+function estimateInventoryUnitCost(PDO $pdo, string $itemId, string $warehouseId, string $date): float {
+    $stmt = $pdo->prepare("SELECT unit_cost FROM stock_movements WHERE item_id=? AND destination_warehouse_id=? AND unit_cost>0 AND is_voided=0 AND occurred_at<=? ORDER BY occurred_at DESC,created_at DESC LIMIT 1");
+    $stmt->execute([$itemId,$warehouseId,$date.' 23:59:59']);
+    $cost = $stmt->fetchColumn();
+    if ($cost !== false && (float)$cost > 0) return (float)$cost;
+    $stmt = $pdo->prepare('SELECT purchase_price FROM items WHERE id=? LIMIT 1');
+    $stmt->execute([$itemId]);
+    return max(0,(float)($stmt->fetchColumn() ?: 0));
 }
 
 function requireUserPermission(PDO $pdo, string $permission): array {

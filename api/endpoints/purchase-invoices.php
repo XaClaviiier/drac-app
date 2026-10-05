@@ -61,6 +61,7 @@ if ($action === 'payments') {
             $delete = $pdo->prepare("DELETE FROM purchase_payments WHERE id=? AND invoice_id=?");
             $delete->execute([$paymentId, $id]);
             if ($delete->rowCount() !== 1) throw new InvalidArgumentException('Pembayaran supplier tidak ditemukan');
+            deleteOperationalJournal($pdo,'supplier_payment',$paymentId,'PAYMENT');
             $paidStmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM purchase_payments WHERE invoice_id=?");
             $paidStmt->execute([$id]);
             $paid = (float)$paidStmt->fetchColumn();
@@ -107,6 +108,13 @@ if ($action === 'payments') {
         $paymentNumber = 'PP-' . date('ymdHis') . '-' . strtoupper(substr($payId, -4));
         $pdo->prepare("INSERT INTO purchase_payments (id,payment_number,invoice_id,date,amount,payment_method,account_id,bank_account,notes,branch_id) VALUES (?,?,?,?,?,?,?,?,?,?)")
             ->execute([$payId,$paymentNumber,$id,$paymentDate,$amount,$paymentMethod,$accountId,$accountId,$d['notes'] ?? '',$invoice['branch_id']]);
+        $accountDefaults=getDefaultAccountSettings($pdo,(string)$invoice['branch_id']);
+        $payable=resolveDefaultCoaId($pdo,$accountDefaults,'payableCoaId','210101');
+        $cashLedger=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$cashLedger->execute([$accountId]);
+        $cashLedgerId=(string)($cashLedger->fetchColumn()?:'');
+        postOperationalJournal($pdo,$paymentDate,'Pembayaran supplier '.$paymentNumber,(string)$invoice['branch_id'],'supplier_payment',(string)$payId,'PAYMENT',[
+            [$payable,0,$amount,'Pembayaran hutang supplier'],[$cashLedgerId,$amount,0,'Kas/Bank pembayaran supplier']
+        ],$actor['id']??null);
         $paid = (float)$invoice['paid_amount'] + $amount;
         $status = $paid >= (float)$invoice['total'] ? 'Lunas' : 'Sebagian';
         $pdo->prepare("UPDATE purchase_invoices SET paid_amount=?,status=? WHERE id=?")->execute([$paid,$status,$id]);
@@ -186,7 +194,8 @@ switch ($method) {
     case 'POST':
         $d = getInput();
         $branchId = (string)($d['branchId'] ?? '');
-        requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        requireAccessibleBranch($pdo, $actor, $branchId);
         if (empty($d['supplierId'])) respondError('Supplier wajib dipilih', 422);
         $supplierStmt = $pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");
         $supplierStmt->execute([$d['supplierId']]);
@@ -236,6 +245,16 @@ switch ($method) {
                 }
             }
 
+            $accountDefaults=getDefaultAccountSettings($pdo,$branchId);
+            $inventory=resolveDefaultCoaId($pdo,$accountDefaults,'inventoryCoaId','110401');
+            $payable=resolveDefaultCoaId($pdo,$accountDefaults,'payableCoaId','210101');
+            $purchaseTax=resolveDefaultCoaId($pdo,$accountDefaults,'purchaseTaxCoaId','110504');
+            $purchaseDebit=max(0,$subtotal-$invoiceDiscount);
+            $purchaseLines=[[$inventory,$purchaseDebit,0,'Persediaan dari faktur pembelian']];
+            if($invoiceTax>0)$purchaseLines[] = [$purchaseTax,$invoiceTax,0,'Pajak masukan faktur pembelian'];
+            $purchaseLines[] = [$payable,0,$total,'Hutang supplier'];
+            postOperationalJournal($pdo,$d['date'],'Faktur pembelian '.$d['invoiceNumber'],$branchId,'purchase_invoice',(string)$piId,'PURCHASE', $purchaseLines,$actor['id']??null);
+
             $pdo->commit();
             respondSuccess(['id' => $piId], 'Faktur pembelian dibuat');
         } catch (InvalidArgumentException $e) {
@@ -250,6 +269,7 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         $pdo->beginTransaction();
         try {
             $currentStmt = $pdo->prepare("SELECT * FROM purchase_invoices WHERE id=? FOR UPDATE");
@@ -257,7 +277,7 @@ switch ($method) {
             $current = $currentStmt->fetch();
             if (!$current) throw new InvalidArgumentException('Faktur pembelian tidak ditemukan');
             $branchId = (string)$current['branch_id'];
-            requireAccessibleBranch($pdo, $requestUser ?? requireAuthenticatedUser($pdo), $branchId);
+            requireAccessibleBranch($pdo, $actor, $branchId);
             if (empty($d['items']) || !is_array($d['items'])) throw new InvalidArgumentException('Faktur pembelian wajib memiliki rincian barang');
 
             $oldItemsStmt = $pdo->prepare("SELECT * FROM purchase_invoice_items WHERE invoice_id=? FOR UPDATE");
@@ -292,6 +312,16 @@ switch ($method) {
             $pdo->prepare("UPDATE purchase_invoices SET date=?,due_date=?,supplier_invoice_number=?,subtotal=?,discount=?,tax=?,total=?,status=?,notes=? WHERE id=?")
                 ->execute([$d['date'],$d['dueDate'] ?? null,$d['supplierInvoiceNumber'] ?? '',$subtotal,$invoiceDiscount,$invoiceTax,$total,$status,$d['notes'] ?? '',$id]);
             foreach (array_keys($touchedReceipts) as $receiptId) $refreshReceiptStatus($pdo, $receiptId);
+            deleteOperationalJournal($pdo,'purchase_invoice',(string)$id,'PURCHASE');
+            $accountDefaults=getDefaultAccountSettings($pdo,$branchId);
+            $inventory=resolveDefaultCoaId($pdo,$accountDefaults,'inventoryCoaId','110401');
+            $payable=resolveDefaultCoaId($pdo,$accountDefaults,'payableCoaId','210101');
+            $purchaseTax=resolveDefaultCoaId($pdo,$accountDefaults,'purchaseTaxCoaId','110504');
+            $purchaseDebit=max(0,$subtotal-$invoiceDiscount);
+            $purchaseLines=[[$inventory,$purchaseDebit,0,'Persediaan dari faktur pembelian']];
+            if($invoiceTax>0)$purchaseLines[] = [$purchaseTax,$invoiceTax,0,'Pajak masukan faktur pembelian'];
+            $purchaseLines[] = [$payable,0,$total,'Hutang supplier'];
+            postOperationalJournal($pdo,$d['date'],'Faktur pembelian '.$current['invoice_number'],$branchId,'purchase_invoice',(string)$id,'PURCHASE',$purchaseLines,$actor['id']??null);
             $pdo->commit();
             respondSuccess(null, 'Faktur pembelian diupdate');
         } catch (InvalidArgumentException $e) {
@@ -325,6 +355,7 @@ switch ($method) {
             }
             $pdo->prepare("DELETE FROM purchase_invoices WHERE id=?")->execute([$id]);
             foreach (array_keys($touchedReceipts) as $receiptId) $refreshReceiptStatus($pdo, $receiptId);
+            deleteOperationalJournal($pdo,'purchase_invoice',(string)$id,'PURCHASE');
             $pdo->commit();
             respondSuccess(null, 'Faktur pembelian dihapus');
         } catch (InvalidArgumentException $e) {
