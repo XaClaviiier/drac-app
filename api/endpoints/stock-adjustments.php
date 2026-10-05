@@ -124,7 +124,9 @@ if ($method === 'PUT' && $id) {
             recordStockMovement($pdo,(string)$line['item_id'],$source,$destination,abs($delta),$requestedAction==='post'?'adjustment':'reversal','stock_adjustment',(string)$doc['id'],(string)$doc['adjustment_number'],$note,(string)$actor['id'],$requestedAction==='post'?$doc['adjustment_date'].' 00:00:00':null);
             $unitCost=max(0,(float)($line['unit_cost']??0));if($unitCost<=0)$unitCost=estimateInventoryUnitCost($pdo,(string)$line['item_id'],(string)$line['warehouse_id'],(string)$doc['adjustment_date']);$journalGroups[$branchId][]=['delta'=>$delta,'value'=>abs($delta)*$unitCost];
         }
-        foreach($journalGroups as $journalBranch=>$group){$defaults=getDefaultAccountSettings($pdo,$journalBranch);$inventory=resolveDefaultCoaId($pdo,$defaults,'inventoryCoaId','110401');$adjustment=resolveDefaultCoaId($pdo,$defaults,'inventoryAdjustmentCoaId','6002');$debitInventory=0.0;$creditInventory=0.0;foreach($group as $entry){if($entry['delta']>0)$debitInventory+=$entry['value'];else $creditInventory+=abs($entry['value']);}$linesJournal=[];if($debitInventory>0)$linesJournal[]=[$inventory,$debitInventory,0,'Penambahan persediaan'];if($creditInventory>0)$linesJournal[]=[$adjustment,$creditInventory,0,'Selisih pengurangan persediaan'];if($creditInventory>0)$linesJournal[]=[$inventory,0,$creditInventory,'Pengurangan persediaan'];if($debitInventory>0)$linesJournal[]=[$adjustment,0,$debitInventory,'Selisih penambahan persediaan'];postOperationalJournal($pdo,(string)$doc['adjustment_date'],'Penyesuaian stok '.$doc['adjustment_number'],$journalBranch,'stock_adjustment',(string)$doc['id'],$requestedAction==='post'?'ADJUSTMENT':'ADJUSTMENT_REVERSAL',$linesJournal,$actor['id']??null);}
+        if (function_exists('getDefaultAccountSettings') && function_exists('postOperationalJournal')) {
+            foreach($journalGroups as $journalBranch=>$group){$defaults=getDefaultAccountSettings($pdo,$journalBranch);$inventory=resolveDefaultCoaId($pdo,$defaults,'inventoryCoaId','110401');$adjustment=resolveDefaultCoaId($pdo,$defaults,'inventoryAdjustmentCoaId','6002');$debitInventory=0.0;$creditInventory=0.0;foreach($group as $entry){if($entry['delta']>0)$debitInventory+=$entry['value'];else $creditInventory+=abs($entry['value']);}$linesJournal=[];if($debitInventory>0)$linesJournal[]=[$inventory,$debitInventory,0,'Penambahan persediaan'];if($creditInventory>0)$linesJournal[]=[$adjustment,$creditInventory,0,'Selisih pengurangan persediaan'];if($creditInventory>0)$linesJournal[]=[$inventory,0,$creditInventory,'Pengurangan persediaan'];if($debitInventory>0)$linesJournal[]=[$adjustment,0,$debitInventory,'Selisih penambahan persediaan'];postOperationalJournal($pdo,(string)$doc['adjustment_date'],'Penyesuaian stok '.$doc['adjustment_number'],$journalBranch,'stock_adjustment',(string)$doc['id'],$requestedAction==='post'?'ADJUSTMENT':'ADJUSTMENT_REVERSAL',$linesJournal,$actor['id']??null);}
+        }
         if($requestedAction==='post') $pdo->prepare("UPDATE stock_adjustments SET status='Posted',posted_by=?,posted_at=NOW() WHERE id=?")->execute([$actor['id'],$id]);
         else {
             $pdo->prepare("UPDATE stock_adjustments SET status='Cancelled',cancelled_by=?,cancelled_at=NOW(),cancellation_reason=? WHERE id=?")->execute([$actor['id'],$reason,$id]);
@@ -199,8 +201,10 @@ if ($method === 'DELETE' && $id) {
         }
         $deleteMovement=$pdo->prepare("DELETE FROM stock_movements WHERE id=?");
         foreach($movementRows as $movement)$deleteMovement->execute([$movement['id']]);
-        deleteOperationalJournal($pdo,'stock_adjustment',(string)$id,'ADJUSTMENT');
-        deleteOperationalJournal($pdo,'stock_adjustment',(string)$id,'ADJUSTMENT_REVERSAL');
+        if (function_exists('deleteOperationalJournal')) {
+            deleteOperationalJournal($pdo,'stock_adjustment',(string)$id,'ADJUSTMENT');
+            deleteOperationalJournal($pdo,'stock_adjustment',(string)$id,'ADJUSTMENT_REVERSAL');
+        }
         $pdo->prepare("DELETE FROM stock_adjustment_items WHERE adjustment_id=?")->execute([$id]);
         $pdo->prepare("DELETE FROM stock_adjustments WHERE id=?")->execute([$id]);
         $pdo->commit();
