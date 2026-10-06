@@ -8,6 +8,7 @@ import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSyste
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import { childTabClass, ui } from '../components/ui/interfaceStandards';
+import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
@@ -1531,7 +1532,16 @@ export default function ItemsAndServices() {
                 <button type="button" onClick={() => setItemFormTab('warehouse')} className={`rounded-t border border-b-0 px-5 py-2 text-sm ${itemFormTab === 'warehouse' ? 'border-t-2 border-t-blue-600 bg-white font-semibold text-slate-900' : 'bg-[#d6d6d6] text-slate-600 hover:bg-[#e2e2e2]'}`}>Gudang</button>
               </div>}
             </div>
-            <form onSubmit={saveItem} className="relative min-h-0 flex-1 overflow-y-auto bg-[#f4f4f4] p-2 pr-[76px] sm:p-3 sm:pr-[84px]">
+            <form id="item-entry-form" onSubmit={saveItem} className="relative min-h-0 flex-1 overflow-y-auto bg-[#f4f4f4] p-2 sm:p-3 lg:pr-[104px]">
+              <AccurateFormActionRail
+                ariaLabel="Aksi Barang dan Jasa"
+                className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
+                save={{ type: 'submit', form: 'item-entry-form', disabled: isSavingItem, title: editingItem ? 'Simpan perubahan barang/jasa' : 'Simpan barang/jasa' }}
+                print={{ onClick: () => window.print(), title: 'Cetak / simpan sebagai' }}
+                attachment={{ disabled: true, title: 'Lampiran belum tersedia untuk Barang & Jasa' }}
+                more={{ onClick: () => setItemFormTab('other'), title: 'Buka informasi lain-lain' }}
+                remove={editingItem && hasPermission('item:delete') ? { onClick: () => removeItem(editingItem), title: 'Hapus barang/jasa' } : undefined}
+              />
               {itemFormTab === 'general' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-4 shadow-sm">
                 <div className="grid gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-12">
                   <section>
@@ -1826,9 +1836,9 @@ export default function ItemsAndServices() {
                   Layanan Cepat (Template)
                 </label>
               </div>}
-              <div className="absolute right-2 top-2 flex w-16 flex-col items-center gap-2 sm:right-2">
-                <button type="submit" disabled={isSavingItem} title="Simpan" className="flex h-12 w-12 items-center justify-center rounded border border-blue-700 bg-blue-600 text-white shadow-md hover:bg-blue-700 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400"><Save className="h-6 w-6" /></button>
-                <button type="button" onClick={() => setShowItemModal(false)} title="Tutup" className="flex h-10 w-12 items-center justify-center rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+              <div className="flex justify-end gap-2 border-t border-slate-300 pt-3 lg:hidden">
+                <button type="button" onClick={() => setShowItemModal(false)} title="Tutup" className="flex h-10 items-center justify-center rounded border border-slate-300 bg-white px-4 text-slate-600 hover:bg-slate-100"><X className="mr-2 h-5 w-5" />Tutup</button>
+                <button type="submit" disabled={isSavingItem} title="Simpan" className="flex h-10 items-center justify-center rounded border border-blue-700 bg-blue-600 px-5 font-semibold text-white shadow-md hover:bg-blue-700 disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-400"><Save className="mr-2 h-5 w-5" />Simpan</button>
               </div>
             </form>
           </div>
