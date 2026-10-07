@@ -1621,7 +1621,7 @@ export default function ItemsAndServices() {
                     <label className="grid grid-cols-[155px_minmax(0,1fr)] items-start gap-3 text-sm text-slate-700"><span className="pt-2">Catatan Teknis</span><textarea rows={2} value={itemForm.technicalNotes} onChange={event=>setItemForm({...itemForm,technicalNotes:event.target.value})} placeholder="Soket, dudukan, ukuran kipas…" className="w-full rounded border border-slate-300 px-3 py-2"/></label>
                   </div>
                 </div>
-                <VehicleCompatibilityPicker canVerifyFitment={canVerifyItems} catalog={vehicleCatalog} onCatalogChange={nextCatalog=>{setVehicleCatalog(nextCatalog);setVehicleBrands(nextCatalog);}} value={itemForm.vehicleCompatibilities} onChange={vehicleCompatibilities=>setItemForm({...itemForm,vehicleCompatibilities})}/>
+                <VehicleCompatibilityPicker canVerifyFitment={canVerifyItems} catalog={vehicleCatalog} value={itemForm.vehicleCompatibilities} onChange={vehicleCompatibilities=>setItemForm({...itemForm,vehicleCompatibilities})}/>
               </div>}
               {itemFormTab === 'movement' && <div className="min-h-[560px] rounded border border-slate-300 bg-white shadow-sm">
                 <div className="flex flex-wrap items-end gap-x-4 gap-y-3 border-b border-slate-200 bg-slate-50 px-3 py-3">
