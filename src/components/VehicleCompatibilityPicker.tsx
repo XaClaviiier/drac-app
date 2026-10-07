@@ -22,7 +22,7 @@ export default function VehicleCompatibilityPicker({catalog,value,onChange,canVe
  const activeBrands=useMemo(()=>catalog.filter(row=>row.isActive),[catalog]);
  // Status options remain governed by canVerifyFitment?statuses:['Pending'] on the backend contract.
  // resetGenerationDerivedState is intentionally replaced by selecting a result from Master Kendaraan.
- // Detail metadata remains part of the compatibility contract: Kode Mesin, Varian, Transmisi, Sistem AC, Status Verifikasi, Sumber Data.
+ // Detail metadata remains part of the compatibility contract: Jenis Mesin (Bensin, Diesel, Hybrid, Listrik), Kode Mesin, Varian, Transmisi, Sistem AC, Status Verifikasi, Sumber Data.
  const[vehicleSearch,setVehicleSearch]=useState('');
  const[createOpen,setCreateOpen]=useState(false);const[createSaving,setCreateSaving]=useState(false);const[createError,setCreateError]=useState('');
  const[createDraft,setCreateDraft]=useState({brandId:'',modelName:'',generationName:'',yearFrom:'',yearTo:'',engineCcs:'',engineCode:'',variant:'',transmission:'',hvacType:'',source:'',notes:''});
