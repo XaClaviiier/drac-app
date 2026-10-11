@@ -83,7 +83,10 @@ if ($action === 'password' && $method === 'PUT') {
     }
     $newPassword = trim((string)($d['newPassword'] ?? ''));
     if (strlen($newPassword) < 6) respondError('Password minimal 6 karakter', 422);
-    $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")->execute([password_hash($newPassword, PASSWORD_DEFAULT), $id]);
+    // Reset password juga menjadi titik unlock: auth.php hanya menghitung
+    // kegagalan login yang terjadi setelah updated_at terakhir.
+    $pdo->prepare("UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        ->execute([password_hash($newPassword, PASSWORD_DEFAULT), $id]);
     respondSuccess(null, 'Password berhasil diubah');
 }
 
