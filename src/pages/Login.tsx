@@ -20,7 +20,7 @@ export default function Login() {
         setError('Username atau password salah.');
       }
     } catch (err: any) {
-      setError('Koneksi ke server gagal. Pastikan backend API sudah diupload.');
+      setError(err?.message || 'Login gagal. Silakan coba lagi.');
     } finally {
       setLoading(false);
     }

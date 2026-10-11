@@ -223,6 +223,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Try backend API first
     const res = await api.login(username, password);
     let user: User | null = null;
+    const loginError = res.message || res.error || '';
 
     if (res.success && res.data) {
       user = res.data as User;
@@ -244,7 +245,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (!user) return null;
+    if (!user) {
+      // Pertahankan alasan penolakan dari backend agar halaman login dapat
+      // membedakan password salah, akun diblokir, batas perangkat, jadwal,
+      // dan gangguan koneksi/API.
+      throw new Error(loginError || 'Username atau password salah.');
+    }
     if (isDemoMode) {
       setCurrentUser(user);
       localStorage.setItem('currentUser', JSON.stringify(user));
