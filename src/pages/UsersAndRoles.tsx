@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Building2, Edit, Eye, KeyRound, Plus, Save, Search, Shield, Trash2, Users, X } from 'lucide-react';
+import { Building2, Edit, Eye, KeyRound, Plus, Save, Search, Shield, Trash2, Unlock, Users, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
@@ -59,7 +59,7 @@ const permLabels: Record<string, string> = {
 };
 
 export default function UsersAndRoles() {
-  const { data, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, addBranch, updateBranch, deleteBranch, currentUser, hasPermission } = useApp();
+  const { data, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, addBranch, updateBranch, deleteBranch, currentUser, hasPermission, refreshData } = useApp();
 
   const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'branches' | 'sessions'>('users');
   const [search, setSearch] = useState('');
@@ -88,6 +88,13 @@ export default function UsersAndRoles() {
     const q = search.toLowerCase();
     return data.users.filter((u) => u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q) || u.roleName.toLowerCase().includes(q));
   }, [data.users, search]);
+
+  const unlockUser = async (user: User) => {
+    if (!window.confirm(`Buka blokir login untuk ${user.name}?`)) return;
+    const result = await api.update('user-sessions', `${user.id}/unlock`, {});
+    if (!result.success) { window.alert(result.message || 'Blokir gagal dibuka.'); return; }
+    await refreshData();
+  };
 
   const openUserModal = (user?: User) => {
     if (user) {
@@ -282,6 +289,9 @@ export default function UsersAndRoles() {
                 <div className="flex gap-2">
                   {canEdit && (
                     <button title="Edit" onClick={() => openUserModal(user)} className="rounded-lg border p-2 text-gray-700"><Edit className="h-4 w-4" /></button>
+                  )}
+                  {canEdit && user.isBlocked && (
+                    <button title="Buka blokir" onClick={() => void unlockUser(user)} className="rounded-lg border border-emerald-200 p-2 text-emerald-700"><Unlock className="h-4 w-4" /></button>
                   )}
                   {canDelete && !user.isProtected && user.id !== currentUser?.id && (
                     <button title="Hapus" onClick={() => { if (window.confirm(`Hapus user ${user.name}?`)) deleteUser(user.id); }} className="rounded-lg border border-red-200 p-2 text-red-600"><Trash2 className="h-4 w-4" /></button>
