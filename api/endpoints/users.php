@@ -9,6 +9,7 @@ function mapUserRow(PDO $pdo, array $row): array {
     $row['branchId'] = $row['branch_id'];
     $row['branchIds'] = getUserBranchIds($pdo, $row['id']);
     $row['isActive'] = (bool)$row['is_active'];
+    $row['isBlocked'] = (bool)($row['is_blocked'] ?? false);
     $row['isOwner'] = (bool)($row['is_owner'] ?? false);
     $row['isProtected'] = (bool)($row['is_protected'] ?? false);
     $row['lastLogin'] = $row['last_login'];
@@ -94,7 +95,14 @@ switch ($method) {
     case 'GET':
         requireAuthenticatedUserPermission($pdo, $actor, 'user:view');
         $rows = $pdo->query("
-            SELECT u.*, r.name role_name, b.name branch_name
+            SELECT u.*, r.name role_name, b.name branch_name,
+                   EXISTS(
+                       SELECT 1 FROM login_audit_logs blocked
+                       WHERE blocked.username=u.username
+                         AND blocked.event_type='login_blocked'
+                         AND blocked.created_at >= DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+                         AND blocked.created_at > COALESCE(u.updated_at, '1970-01-01 00:00:00')
+                   ) AS is_blocked
             FROM users u LEFT JOIN roles r ON u.role_id=r.id LEFT JOIN branches b ON u.branch_id=b.id
             ORDER BY u.is_owner DESC, u.name
         ")->fetchAll();

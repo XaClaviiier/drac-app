@@ -278,7 +278,7 @@ export default function UsersAndRoles() {
                 </div>
                 <span className="text-sm">{user.roleName}</span>
                 <div className="flex flex-wrap gap-1">{(user.branchIds||[user.branchId]).map(id=><span key={id} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{data.branches.find(b=>b.id===id)?.name||id}</span>)}</div>
-                <span className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{user.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                <span className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isBlocked ? 'bg-red-100 text-red-700' : user.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{user.isBlocked ? 'Diblokir' : user.isActive ? 'Aktif' : 'Nonaktif'}</span>
                 <div className="flex gap-2">
                   {canEdit && (
                     <button title="Edit" onClick={() => openUserModal(user)} className="rounded-lg border p-2 text-gray-700"><Edit className="h-4 w-4" /></button>

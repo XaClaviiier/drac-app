@@ -391,6 +391,7 @@ export interface User {
   branchName: string;
   branchIds?: string[];
   isActive: boolean;
+  isBlocked?: boolean;
   createdAt: string;
   lastLogin?: string;
   isOwner?: boolean;
