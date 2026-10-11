@@ -23,9 +23,11 @@ try {
 }
 $attemptStmt = $pdo->prepare("
     SELECT COUNT(*) FROM login_audit_logs failed
+    LEFT JOIN users lock_user ON lock_user.username = failed.username
     WHERE failed.username = ? AND failed.ip_address = ?
       AND failed.event_type = 'login_failed'
       AND failed.created_at >= DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+      AND failed.created_at > COALESCE(lock_user.updated_at, '1970-01-01 00:00:00')
       AND failed.created_at > COALESCE((
           SELECT MAX(ok.created_at) FROM login_audit_logs ok
           WHERE ok.username = failed.username AND ok.ip_address = failed.ip_address
