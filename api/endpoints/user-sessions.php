@@ -35,6 +35,16 @@ if($method==='PUT'&&$action==='rules'){
     respondSuccess(null,'Aturan login disimpan');
 }
 
+if($method==='PUT'&&$action==='unlock'){
+    if(!$id)respondError('User wajib dipilih');
+    $target=$pdo->prepare("SELECT id,is_owner FROM users WHERE id=?");$target->execute([$id]);$user=$target->fetch();
+    if(!$user)respondError('User tidak ditemukan',404);
+    // updated_at menjadi penanda bahwa seluruh percobaan gagal sebelum aksi
+    // Owner ini tidak lagi boleh dihitung sebagai blokir login.
+    $pdo->prepare("UPDATE users SET updated_at=CURRENT_TIMESTAMP WHERE id=?")->execute([$id]);
+    respondSuccess(null,'Blokir login dibuka');
+}
+
 if($method==='DELETE'){
     if(!$id)respondError('Sesi wajib dipilih');
     $stmt=$pdo->prepare("SELECT s.user_id,u.username,u.is_owner FROM api_sessions s JOIN users u ON u.id=s.user_id COLLATE utf8mb4_unicode_ci WHERE s.token_hash=?");$stmt->execute([$id]);$session=$stmt->fetch();
