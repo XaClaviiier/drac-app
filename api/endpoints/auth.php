@@ -37,7 +37,7 @@ $attemptStmt = $pdo->prepare("
 $attemptStmt->execute([$username, requestIp()]);
 if ((int)$attemptStmt->fetchColumn() >= $maxLoginAttempts) {
     writeLoginAudit($pdo, null, $username, 'login_blocked', 'Terlalu banyak percobaan login');
-    respondError('Terlalu banyak percobaan login. Coba kembali dalam 15 menit.', 429);
+    respondError('Login diblokir sementara karena terlalu banyak percobaan gagal. Coba kembali dalam 15 menit.', 429);
 }
 
 $stmt = $pdo->prepare("
@@ -79,10 +79,10 @@ if(empty($user['is_owner'])){
         $idleTimeoutMinutes=max(0,min(240,(int)($rule['idle_timeout_minutes']??30)));
         if($rule['schedule_mode']==='custom'){
             $tz=new DateTimeZone('Asia/Makassar');$now=new DateTime('now',$tz);$schedule=json_decode($rule['schedule_json']??'[]',true)?:[];$day=(string)$now->format('N');$today=$schedule[$day]??null;
-            if(!$today||empty($today['enabled'])){writeLoginAudit($pdo,$user['id'],$username,'login_blocked','Login di luar hari kerja');respondError('Login tidak diizinkan pada hari ini',403);}
+            if(!$today||empty($today['enabled'])){writeLoginAudit($pdo,$user['id'],$username,'login_blocked','Login di luar hari kerja');respondError('Login diblokir: akun tidak diizinkan login pada hari ini.',403);}
             $start=DateTime::createFromFormat('Y-m-d H:i',$now->format('Y-m-d').' '.($today['start']??'00:00'),$tz);
             $end=DateTime::createFromFormat('Y-m-d H:i',$now->format('Y-m-d').' '.($today['end']??'23:59'),$tz);
-            if(!$start||!$end||$now<$start||$now>$end){writeLoginAudit($pdo,$user['id'],$username,'login_blocked','Login di luar jam kerja');respondError('Login hanya diizinkan pukul '.($today['start']??'-').'–'.($today['end']??'-').' WITA',403);}
+            if(!$start||!$end||$now<$start||$now>$end){writeLoginAudit($pdo,$user['id'],$username,'login_blocked','Login di luar jam kerja');respondError('Login diblokir di luar jam kerja. Login hanya diizinkan pukul '.($today['start']??'-').'–'.($today['end']??'-').' WITA.',403);}
             if(!empty($rule['auto_logout']))$scheduleEnd=$end;
         }
     }
