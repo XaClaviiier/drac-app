@@ -2602,7 +2602,7 @@ ${buildSmartContext(userMsgText)}`;
                         {pendingAction.customerCandidates.map((customerId: string) => {
                           const customer = data.customers.find(item => item.id === customerId);
                           if (!customer) return null;
-                          return <button key={customer.id} type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerName: customer.name, phone: customer.phone, customerId: customer.customerCode, customerRefId: customer.id, customerMatchResolved: true }))} className="w-full rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-left text-xs text-white hover:border-amber-300">Pakai <b>{customer.name}</b> · {customer.phone || 'tanpa telepon'}</button>;
+                          return <button key={customer.id} type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerName: customer.name, phone: customer.phone, customerId: customer.customerCode, customerRefId: customer.id, createNewCustomer: false, customerMatchResolved: true }))} className="w-full rounded-lg border border-amber-500/60 bg-slate-800 px-3 py-2 text-left text-xs text-white hover:border-amber-300">Pakai <b>{customer.name}</b> · {customer.phone || 'tanpa telepon'}</button>;
                         })}
                         <button type="button" onClick={() => setPendingAction((current: any) => ({ ...current, customerMatchResolved: true, customerCandidates: [], createNewCustomer: true }))} className="w-full rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500">Lanjut buat pelanggan baru: {pendingAction.customerName}</button>
                       </div>
