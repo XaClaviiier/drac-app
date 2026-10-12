@@ -1389,9 +1389,10 @@ ${buildSmartContext(userMsgText)}`;
     const customerByName = a.createNewCustomer
       ? undefined
       : data.customers.find(c => c.name.toUpperCase() === String(a.customerName || '').toUpperCase());
-    if (customerByPhone && a.createNewCustomer) {
-      throw new Error(`Nomor HP sudah digunakan pelanggan lain: ${customerByPhone.name} (${customerByPhone.customerCode}). Gunakan pelanggan tersebut atau gunakan nomor HP yang benar.`);
-    }
+    // Nomor HP existing adalah identitas customer yang lebih kuat daripada
+    // flag createNewCustomer dari AI. Jika operator melanjutkan WO dengan
+    // nomor yang sudah terdaftar, pakai master tersebut tanpa meminta input
+    // ulang atau mencoba membuat customer duplikat.
     if (customerByPhone && customerByName && customerByPhone.id !== customerByName.id) {
       throw new Error(`Nomor HP sudah digunakan pelanggan lain: ${customerByPhone.name} (${customerByPhone.customerCode}). Pilih pelanggan tersebut atau gunakan nomor HP yang benar.`);
     }
