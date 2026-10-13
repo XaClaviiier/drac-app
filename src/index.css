@@ -206,6 +206,9 @@ body { margin: 0; background: #f3f4f6; }
   border-radius: 6px 6px 0 0;
   background: #cfd5dd;
   color: #334155;
+  font-family: "Segoe UI", "Open Sans", Verdana, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
   box-sizing: border-box;
 }
 .app-workspace-tab:hover { background: #cfd5dd; color: #334155; }
@@ -213,9 +216,10 @@ body { margin: 0; background: #f3f4f6; }
   border-color: #1e4fa3;
   background: #1e4fa3;
   color: #fff;
-  font-weight: 600;
+  font-weight: 500;
 }
 .app-workspace-tab--active:hover { background: #1e4fa3; color: #fff; }
+.app-workspace-bar > select { font-family: "Segoe UI", "Open Sans", Verdana, Arial, sans-serif; font-size: 16px; }
 
 .app-child-bar {
   position: sticky;

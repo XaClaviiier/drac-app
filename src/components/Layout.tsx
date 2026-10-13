@@ -1326,7 +1326,7 @@ export default function Layout() {
                     type="button"
                     onClick={() => { void navigateWithEditorGuard(tab.path); }}
                     title={tab.label}
-                    className={`min-w-0 flex-1 truncate px-3 text-left text-sm ${active ? "font-semibold" : ""}`}
+                    className={`min-w-0 flex-1 truncate px-3 text-left text-base ${active ? "font-medium" : ""}`}
                   >
                     {tab.label}
                   </button>
