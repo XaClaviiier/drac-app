@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, BarChart3, BookOpen, Calculator, Eye, FileText, Landmark, MoreHorizontal, Package, Paperclip, Plus, Printer, Save, Search, Settings, ShoppingCart, Trash2, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, BookOpen, Calculator, Eye, Landmark, Package, Plus, Printer, Save, Search, Settings, ShoppingCart, X } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
 
