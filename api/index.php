@@ -283,6 +283,9 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
         case 'general-ledger':
             require 'endpoints/general-ledger.php';
             break;
+        case 'journal-entries':
+            require 'endpoints/journal-entries.php';
+            break;
         case 'opening-balances':
             require 'endpoints/opening-balances.php';
             break;
