@@ -14,10 +14,6 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payment_audit_logs (
     INDEX idx_payment_audit_invoice (invoice_id), INDEX idx_payment_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-// Pertahankan pembayaran faktur lama dan pastikan ringkasan faktur selalu sama
-// dengan ledger sebelum data pembayaran ditampilkan.
-reconcileCustomerPaymentLedger($pdo);
-
 function paymentUserCanAccessBranch(PDO $pdo, array $user, string $branchId): bool {
     if (!empty($user['is_owner'])) return true;
     static $branchCache = [];
@@ -53,18 +49,6 @@ function recalculateCustomerInvoice(PDO $pdo, string $invoiceId): void {
 function writePaymentAudit(PDO $pdo, array $payment, string $action, string $reason, array $user): void {
     $pdo->prepare("INSERT INTO customer_payment_audit_logs(payment_id,payment_number,invoice_id,action,reason,snapshot_json,user_id,user_name) VALUES(?,?,?,?,?,?,?,?)")
         ->execute([$payment['id'] ?? null,$payment['payment_number'] ?? '',$payment['invoice_id'] ?? '',$action,substr($reason,0,255),json_encode($payment),$user['id'] ?? null,$user['name'] ?? $user['username'] ?? null]);
-}
-
-function postCustomerPaymentJournal(PDO $pdo, array $payment, array $invoice, array $user): void {
-
-    $check=$pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1');$check->execute(['customer_payment',$payment['id'],'PAYMENT']);if($check->fetchColumn())return;
-    $accountDefaults=getDefaultAccountSettings($pdo,(string)$payment['branch_id']);$receivable=(string)($accountDefaults['receivableCoaId']??'');
-    $cash=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$cash->execute([$payment['account_id']]);$cashAccount=(string)($cash->fetchColumn()?:'');
-    if($receivable===''||$cashAccount==='')throw new InvalidArgumentException('Mapping akun piutang atau akun penerimaan belum lengkap');
-    $journalId=generateId();$userId=$user['id']??null;$number=$payment['payment_number'];
-    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")->execute([$journalId,$payment['date'],$number,'Pembayaran '.$payment['payment_number'],$payment['branch_id'],'customer_payment',$payment['id'],$userId,$userId]);
-    $line=$pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');$line->execute([generateId(),$journalId,$cashAccount,$payment['amount'],0,'Pembayaran '.$payment['payment_number']]);$line->execute([generateId(),$journalId,$receivable,0,$payment['amount'],'Pelunasan faktur '.$invoice['invoice_number']]);
-    $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")->execute([generateId(),$journalId,'customer_payment',$payment['id'],'PAYMENT']);
 }
 
 function deleteCustomerPaymentJournal(PDO $pdo, string $paymentId): void {
@@ -125,7 +109,9 @@ case 'POST':
         $invoiceStmt=$pdo->prepare("SELECT * FROM sales_invoices WHERE id=? FOR UPDATE");$invoiceStmt->execute([$invoiceId]);$invoice=$invoiceStmt->fetch();
         if(!$invoice)throw new Exception('Faktur tidak ditemukan');
         if(!paymentUserCanAccessBranch($pdo,$user,(string)$invoice['branch_id']))throw new Exception('Tidak memiliki akses ke cabang faktur');
-        $amount=(float)($d['amount']??0);$outstanding=max(0,(float)$invoice['total']-(float)$invoice['payment']);
+        $paidStmt=$pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE invoice_id=?');
+        $paidStmt->execute([$invoiceId]);
+        $outstanding=max(0,(float)$invoice['total']-(float)$paidStmt->fetchColumn());
         if($amount<=0)throw new Exception('Nominal pembayaran harus lebih dari Rp0');
         if($amount>$outstanding)throw new Exception('Nominal pembayaran melebihi sisa tagihan');
         $date=(string)($d['date']??date('Y-m-d'));

@@ -464,9 +464,8 @@ try {
     }
     $data['workOrders'] = $canUseWorkOrders ? array_values(array_filter($rows, fn($row) => isset($allowedBranchMap[(string)$row['branch_id']]))) : [];
 
-    // Sales Invoices. Ringkasan Lunas/Belum Lunas selalu berasal dari ledger
-    // pembayaran, termasuk rekonsiliasi satu kali untuk data faktur lama.
-    reconcileCustomerPaymentLedger($pdo);
+    // Sales invoice summaries are maintained by invoice/payment mutations and
+    // the one-time legacy ledger migration in the API bootstrap.
     $rows = $pdo->query("SELECT * FROM sales_invoices ORDER BY date DESC, invoice_number DESC")->fetchAll();
     $invoiceItemRows = $pdo->query("SELECT * FROM sales_invoice_items ORDER BY id")->fetchAll();
     $itemsBySalesInvoice = [];

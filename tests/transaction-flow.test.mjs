@@ -1153,12 +1153,17 @@ test('status Lunas selalu direkonsiliasi dari ledger pembayaran pelanggan', () =
   const payments = source('api/endpoints/customer-payments.php');
 
   assert.match(helpers, /function reconcileCustomerPaymentLedger\(PDO \$pdo\): void/);
-  assert.match(helpers, /NOT EXISTS \(SELECT 1 FROM customer_payments existing WHERE existing\.invoice_id=i\.id\)/);
+  assert.match(helpers, /function migrateLegacyCustomerPaymentLedger\(PDO \$pdo\): void/);
+  assert.match(helpers, /recalculateCustomerPaymentSummaries\(\$pdo\)/);
+  assert.match(helpers, /postCustomerPaymentJournal\(/);
+  assert.match(helpers, /DELETE FROM journal_lines WHERE journal_id=\? AND account_id IN/);
   assert.match(helpers, /COALESCE\(SUM\(amount\),0\) paid/);
   assert.match(helpers, /i\.status=CASE WHEN COALESCE\(ledger\.paid,0\)>=i\.total/);
-  assert.match(invoices, /reconcileCustomerPaymentLedger\(\$pdo\)/);
-  assert.match(allData, /reconcileCustomerPaymentLedger\(\$pdo\)/);
-  assert.match(payments, /reconcileCustomerPaymentLedger\(\$pdo\)/);
+  assert.doesNotMatch(invoices, /reconcileCustomerPaymentLedger\(\$pdo\)/);
+  assert.doesNotMatch(allData, /reconcileCustomerPaymentLedger\(\$pdo\)/);
+  assert.doesNotMatch(payments, /reconcileCustomerPaymentLedger\(\$pdo\)/);
+  assert.match(invoices, /postCustomerPaymentJournal\(\$pdo/);
+  assert.match(invoices, /\$postSalesRevenueJournal = static function\([\s\S]*?\$add\(\(string\)\(\$map\['receivableCoaId'\]\?\?''\),\$total,0\)/);
   assert.doesNotMatch(invoices, /max\(\$recordedPayment,\(float\)\$current\['payment'\]\)/);
   assert.match(invoices, /\$recordInitialCustomerPayment\([\s\S]*?\$cashPayment,'Tunai'/);
   assert.match(invoices, /\$recordInitialCustomerPayment\([\s\S]*?\$transferPayment,'Transfer'/);

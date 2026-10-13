@@ -1889,28 +1889,10 @@ if (!function_exists('nextCustomerPaymentNumber')) {
     }
 }
 
-if (!function_exists('reconcileCustomerPaymentLedger')) {
-    /**
-     * Customer payments are the accounting source of truth. Legacy invoices that
-     * only carried a payment total receive one traceable migration row, then every
-     * invoice summary is recalculated from the ledger.
-     */
-    function reconcileCustomerPaymentLedger(PDO $pdo): void {
+if (!function_exists('recalculateCustomerPaymentSummaries')) {
+    function recalculateCustomerPaymentSummaries(PDO $pdo): void {
         if (!$pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()
             || !$pdo->query("SHOW TABLES LIKE 'customer_payments'")->fetch()) return;
-
-        $pdo->exec("INSERT IGNORE INTO customer_payments
-            (id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by_name)
-            SELECT CONCAT('legacy-',i.id),CONCAT('PAY-',i.invoice_number),i.id,
-                   COALESCE(i.payment_date,i.date),i.payment,
-                   CASE WHEN i.payment_method='Tunai' THEN 'Tunai' ELSE 'Transfer' END,
-                   a.id,a.name,'Migrasi pembayaran faktur lama',i.branch_id,'Migrasi Sistem'
-            FROM sales_invoices i
-            LEFT JOIN branch_account_settings s ON s.branch_id COLLATE utf8mb4_unicode_ci=i.branch_id COLLATE utf8mb4_unicode_ci
-            LEFT JOIN cash_accounts a ON a.id COLLATE utf8mb4_unicode_ci=(CASE
-                WHEN i.payment_method='Tunai' THEN s.cash_account_id ELSE s.bank_account_id END) COLLATE utf8mb4_unicode_ci
-            WHERE i.payment>0
-              AND NOT EXISTS (SELECT 1 FROM customer_payments existing WHERE existing.invoice_id=i.id)");
 
         $pdo->exec("UPDATE sales_invoices i
             LEFT JOIN (
@@ -1928,6 +1910,115 @@ if (!function_exists('reconcileCustomerPaymentLedger')) {
                     ELSE 'Transfer' END,
                 i.status=CASE WHEN COALESCE(ledger.paid,0)>=i.total AND i.total>0 THEN 'Lunas' ELSE 'Belum Lunas' END");
     }
+}
+
+if (!function_exists('reconcileCustomerPaymentLedger')) {
+    /** Summary fields are projections; legacy conversion runs only in the versioned bootstrap. */
+    function reconcileCustomerPaymentLedger(PDO $pdo): void {
+        recalculateCustomerPaymentSummaries($pdo);
+    }
+}
+
+function migrateLegacyCustomerPaymentLedger(PDO $pdo): void {
+    if (!$pdo->query("SHOW TABLES LIKE 'sales_invoices'")->fetch()
+        || !$pdo->query("SHOW TABLES LIKE 'customer_payments'")->fetch()) return;
+    $invoices = $pdo->query("SELECT i.id,i.invoice_number,i.date,i.payment_date,i.payment,i.payment_method,i.branch_id,
+            COALESCE((SELECT SUM(p.amount) FROM customer_payments p WHERE p.invoice_id=i.id),0) ledger_paid
+        FROM sales_invoices i WHERE i.payment>0 FOR UPDATE")->fetchAll();
+    $accountStmt = $pdo->prepare("SELECT CASE WHEN ?='Tunai' THEN s.cash_account_id ELSE s.bank_account_id END
+        FROM branch_account_settings s WHERE s.branch_id=? LIMIT 1");
+    $accountInfo = $pdo->prepare("SELECT id,name FROM cash_accounts WHERE id=? LIMIT 1");
+    $exists = $pdo->prepare('SELECT 1 FROM customer_payments WHERE id=? OR (invoice_id=? AND notes=?) LIMIT 1');
+    $insert = $pdo->prepare("INSERT INTO customer_payments
+        (id,payment_number,invoice_id,date,amount,payment_method,account_id,account_name,notes,branch_id,created_by_name)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+    foreach ($invoices as $invoice) {
+        $difference = round((float)$invoice['payment'] - (float)$invoice['ledger_paid'], 2);
+        if ($difference <= 0) continue;
+        $method = (string)($invoice['payment_method'] ?? 'Tunai');
+        $method = $method === 'Tunai' ? 'Tunai' : 'Transfer';
+        $legacyId = 'legacy-' . substr(hash('sha256', (string)$invoice['id']), 0, 32);
+        $exists->execute([$legacyId, $invoice['id'], 'Migrasi pembayaran faktur lama']);
+        if ($exists->fetchColumn()) continue;
+        $accountStmt->execute([$method, $invoice['branch_id']]);
+        $accountId = (string)($accountStmt->fetchColumn() ?: '');
+        $accountName = null;
+        if ($accountId !== '') {
+            $accountInfo->execute([$accountId]);
+            $account = $accountInfo->fetch();
+            $accountName = $account['name'] ?? null;
+        }
+        $paymentNumber = 'PAY-MIG-' . substr(strtoupper((string)$invoice['id']), 0, 24);
+        $insert->execute([$legacyId,$paymentNumber,$invoice['id'],($invoice['payment_date'] ?: $invoice['date']),$difference,$method,$accountId ?: null,$accountName,'Migrasi pembayaran faktur lama',$invoice['branch_id'],'Migrasi Sistem']);
+    }
+
+    $paymentRows = $pdo->query("SELECT p.*,i.invoice_number,i.branch_id invoice_branch_id
+        FROM customer_payments p JOIN sales_invoices i ON i.id=p.invoice_id
+        WHERE p.amount>0 FOR UPDATE")->fetchAll();
+    foreach ($paymentRows as $payment) {
+        if (trim((string)($payment['account_id'] ?? '')) === '') {
+            throw new RuntimeException('Pembayaran '.$payment['payment_number'].' belum memiliki akun kas/bank yang valid. Lengkapi mapping akun sebelum migrasi dilanjutkan.');
+        }
+        postCustomerPaymentJournal(
+            $pdo,
+            ['id'=>$payment['id'],'payment_number'=>$payment['payment_number'],'invoice_id'=>$payment['invoice_id'],'date'=>$payment['date'],'amount'=>$payment['amount'],'account_id'=>$payment['account_id'],'branch_id'=>$payment['invoice_branch_id']],
+            ['invoice_number'=>$payment['invoice_number']],
+            ['id'=>$payment['created_by'] ?? null]
+        );
+    }
+
+    $invoiceJournals = $pdo->query("SELECT i.id,i.total,i.branch_id,jp.journal_id
+        FROM sales_invoices i JOIN journal_postings jp
+          ON jp.source_type='sales_invoice' AND jp.source_id=i.id AND jp.posting_key='SALES_REVENUE'
+        JOIN journal_entries je ON je.id=jp.journal_id AND je.status='Posted'
+        FOR UPDATE")->fetchAll();
+    $receivableByBranch = [];
+    $cashIdsByBranch = [];
+    foreach ($invoiceJournals as $invoice) {
+        $branchId=(string)$invoice['branch_id'];
+        if (!isset($receivableByBranch[$branchId])) {
+            $settings=$pdo->prepare('SELECT cash_account_id,bank_account_id FROM branch_account_settings WHERE branch_id=?');
+            $settings->execute([$branchId]);$settings=$settings->fetch()?:[];
+            $defaults=getDefaultAccountSettings($pdo,$branchId);
+            $receivableByBranch[$branchId]=(string)($defaults['receivableCoaId']??'');
+            $accountIds=array_values(array_filter([(string)($settings['cash_account_id']??''),(string)($settings['bank_account_id']??'')]));
+            $cashIds=[];
+            if ($accountIds) {
+                $marks=implode(',',array_fill(0,count($accountIds),'?'));
+                $stmt=$pdo->prepare("SELECT ledger_account_id FROM cash_accounts WHERE id IN ($marks) AND ledger_account_id IS NOT NULL");$stmt->execute($accountIds);
+                $cashIds=array_values(array_filter(array_map('strval',$stmt->fetchAll(PDO::FETCH_COLUMN))));
+            }
+            $cashIdsByBranch[$branchId]=$cashIds;
+        }
+        $receivable=$receivableByBranch[$branchId];$cashIds=$cashIdsByBranch[$branchId];
+        if ($receivable==='' || !$cashIds) continue;
+        $marks=implode(',',array_fill(0,count($cashIds),'?'));
+        $pdo->prepare("DELETE FROM journal_lines WHERE journal_id=? AND account_id IN ($marks)")->execute(array_merge([(string)$invoice['journal_id']],$cashIds));
+        $pdo->prepare('DELETE FROM journal_lines WHERE journal_id=? AND account_id=?')->execute([(string)$invoice['journal_id'],$receivable]);
+        $pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)')
+            ->execute([generateId(),$invoice['journal_id'],$receivable,(float)$invoice['total'],0,'Piutang faktur '.$invoice['id']]);
+    }
+    recalculateCustomerPaymentSummaries($pdo);
+}
+
+function postCustomerPaymentJournal(PDO $pdo, array $payment, array $invoice, array $user): void {
+    $check=$pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1');
+    $check->execute(['customer_payment',$payment['id'],'PAYMENT']);
+    if($check->fetchColumn())return;
+    $accountDefaults=getDefaultAccountSettings($pdo,(string)$payment['branch_id']);
+    $receivable=(string)($accountDefaults['receivableCoaId']??'');
+    $cash=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');
+    $cash->execute([$payment['account_id']]);
+    $cashAccount=(string)($cash->fetchColumn()?:'');
+    if($receivable===''||$cashAccount==='')throw new InvalidArgumentException('Mapping akun piutang atau akun penerimaan belum lengkap');
+    $journalId=generateId();$userId=$user['id']??null;$number=$payment['payment_number'];
+    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
+        ->execute([$journalId,$payment['date'],$number,'Pembayaran '.$payment['payment_number'],$payment['branch_id'],'customer_payment',$payment['id'],$userId,$userId]);
+    $line=$pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');
+    $line->execute([generateId(),$journalId,$cashAccount,$payment['amount'],0,'Pembayaran '.$payment['payment_number']]);
+    $line->execute([generateId(),$journalId,$receivable,0,$payment['amount'],'Pelunasan faktur '.$invoice['invoice_number']]);
+    $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")
+        ->execute([generateId(),$journalId,'customer_payment',$payment['id'],'PAYMENT']);
 }
 
 if (!function_exists('adjustBranchStock')) {
