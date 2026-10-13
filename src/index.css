@@ -1,9 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Segoe UI", "Open Sans", Verdana, Arial, sans-serif;
+  --font-display: "Segoe UI", "Open Sans", Verdana, Arial, sans-serif;
 }
 
 @keyframes msg-in {
@@ -27,7 +26,16 @@
 .animate-glow { animation: glow-pulse 2.2s infinite; }
 
 html, body, #root { min-height: 100%; }
-body { margin: 0; background: #f3f4f6; }
+body {
+  margin: 0;
+  background: #f3f4f6;
+  color: #172033;
+  font-family: var(--app-font-family);
+  font-size: var(--app-font-size-base);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
 
 /*
  * Standar antarmuka administrasi.
@@ -35,6 +43,13 @@ body { margin: 0; background: #f3f4f6; }
  * tidak ditulis ulang. Nilainya memakai HEX/RGB agar tetap aman di Chrome 109.
  */
 :root {
+  --app-font-family: "Segoe UI", "Open Sans", Verdana, Arial, sans-serif;
+  --app-font-size-base: 14px;
+  --app-font-size-small: 13px;
+  --app-font-size-tab: 16px;
+  --app-font-weight-normal: 400;
+  --app-font-weight-medium: 500;
+  --app-font-weight-semibold: 600;
   --app-blue: #2563eb;
   --app-blue-dark: #1d4ed8;
   --app-field-border: #a6a6a6;
