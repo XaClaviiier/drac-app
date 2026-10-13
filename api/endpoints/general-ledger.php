@@ -9,6 +9,8 @@ function ensureGeneralLedgerTables(PDO $pdo): void {
         branch_id VARCHAR(64) NULL,
         source_type VARCHAR(30) NOT NULL DEFAULT 'manual',
         source_id VARCHAR(64) NULL,
+        party_type VARCHAR(20) NULL,
+        party_id VARCHAR(64) NULL,
         posted TINYINT(1) NOT NULL DEFAULT 1,
         status ENUM('Draft','Posted','Reversed','Voided') NOT NULL DEFAULT 'Posted',
         created_by VARCHAR(64) NULL,
@@ -19,6 +21,7 @@ function ensureGeneralLedgerTables(PDO $pdo): void {
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_journal_entries_date (entry_date),
         INDEX idx_journal_entries_branch_date (branch_id, entry_date)
+        ,INDEX idx_journal_party (party_type, party_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $columns = array_column($pdo->query('SHOW COLUMNS FROM journal_entries')->fetchAll(), 'Field');
     if (!in_array('status', $columns, true)) $pdo->exec("ALTER TABLE journal_entries ADD status ENUM('Draft','Posted','Reversed','Voided') NOT NULL DEFAULT 'Posted' AFTER posted");
@@ -26,6 +29,8 @@ function ensureGeneralLedgerTables(PDO $pdo): void {
     if (!in_array('posted_at', $columns, true)) $pdo->exec("ALTER TABLE journal_entries ADD posted_at DATETIME NULL AFTER posted_by");
     if (!in_array('reversal_of_id', $columns, true)) $pdo->exec("ALTER TABLE journal_entries ADD reversal_of_id VARCHAR(64) NULL AFTER posted_at");
     if (!in_array('void_reason', $columns, true)) $pdo->exec("ALTER TABLE journal_entries ADD void_reason VARCHAR(500) NULL AFTER reversal_of_id");
+    if (!in_array('party_type', $columns, true)) $pdo->exec("ALTER TABLE journal_entries ADD party_type VARCHAR(20) NULL AFTER source_id");
+    if (!in_array('party_id', $columns, true)) $pdo->exec("ALTER TABLE journal_entries ADD party_id VARCHAR(64) NULL AFTER party_type");
     $pdo->exec("CREATE TABLE IF NOT EXISTS journal_lines (
         id VARCHAR(64) PRIMARY KEY,
         journal_id VARCHAR(64) NOT NULL,
@@ -71,7 +76,7 @@ if ($method === 'POST') {
         $prefix = 'JRN-' . str_replace('-', '', substr($date, 0, 7)) . '-'; $next = $pdo->prepare('SELECT COUNT(*) FROM journal_entries WHERE entry_number LIKE ?'); $next->execute([$prefix . '%']);
         $number = $prefix . str_pad((string)((int)$next->fetchColumn() + 1), 4, '0', STR_PAD_LEFT); $journalId = generateId();
         $userId = $requestUser['id'] ?? null;
-        $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,1,'Posted',?,?,NOW())")->execute([$journalId,$date,$number,$description,$branchId?:null,'manual',$userId,$userId]);
+        $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,party_type,party_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,NULL,NULL,1,'Posted',?,?,NOW())")->execute([$journalId,$date,$number,$description,$branchId?:null,'manual',$userId,$userId]);
         $insert = $pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)'); foreach ($clean as [$accountId,$dr,$cr,$memo]) $insert->execute([generateId(),$journalId,$accountId,$dr,$cr,$memo?:null]);
         $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")->execute([generateId(),$journalId,'manual',null,'MANUAL']);
         $pdo->prepare('INSERT INTO journal_audit_logs(journal_id,action,snapshot_json,user_id) VALUES(?,?,?,?)')->execute([$journalId,'created',json_encode(['number'=>$number,'date'=>$date,'description'=>$description,'lines'=>$clean],JSON_UNESCAPED_UNICODE),$userId]);
@@ -93,7 +98,7 @@ if ($branchId !== '') { $beforeSql .= ' AND j.branch_id=?'; $params[] = $branchI
 $stmt = $pdo->prepare($beforeSql); $stmt->execute($params);
 $opening = (float)$stmt->fetchColumn();
 
-$sql = 'SELECT j.id journalId,j.entry_date entryDate,j.entry_number entryNumber,j.description,l.debit,l.credit,l.memo,j.branch_id branchId,b.name branchName FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_id LEFT JOIN branches b ON b.id=j.branch_id WHERE l.account_id=? AND j.posted=1 AND j.entry_date BETWEEN ? AND ?';
+$sql = 'SELECT j.id journalId,j.entry_date entryDate,j.entry_number entryNumber,j.description,j.party_type partyType,j.party_id partyId,l.debit,l.credit,l.memo,j.branch_id branchId,b.name branchName FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_id LEFT JOIN branches b ON b.id=j.branch_id WHERE l.account_id=? AND j.posted=1 AND j.entry_date BETWEEN ? AND ?';
 $params = [$accountId, $from, $to];
 if ($branchId !== '') { $sql .= ' AND j.branch_id=?'; $params[] = $branchId; }
 $sql .= ' ORDER BY j.entry_date,j.entry_number,l.id';

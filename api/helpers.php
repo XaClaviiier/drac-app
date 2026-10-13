@@ -2012,13 +2012,23 @@ function postCustomerPaymentJournal(PDO $pdo, array $payment, array $invoice, ar
     $cashAccount=(string)($cash->fetchColumn()?:'');
     if($receivable===''||$cashAccount==='')throw new InvalidArgumentException('Mapping akun piutang atau akun penerimaan belum lengkap');
     $journalId=generateId();$userId=$user['id']??null;$number=$payment['payment_number'];
-    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
-        ->execute([$journalId,$payment['date'],$number,'Pembayaran '.$payment['payment_number'],$payment['branch_id'],'customer_payment',$payment['id'],$userId,$userId]);
+    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,party_type,party_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
+        ->execute([$journalId,$payment['date'],$number,'Pembayaran '.$payment['payment_number'],$payment['branch_id'],'customer_payment',$payment['id'],'customer',(string)($invoice['customer_id'] ?? ''),$userId,$userId]);
     $line=$pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');
     $line->execute([generateId(),$journalId,$cashAccount,$payment['amount'],0,'Pembayaran '.$payment['payment_number']]);
     $line->execute([generateId(),$journalId,$receivable,0,$payment['amount'],'Pelunasan faktur '.$invoice['invoice_number']]);
     $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")
         ->execute([generateId(),$journalId,'customer_payment',$payment['id'],'PAYMENT']);
+}
+
+function migrateJournalPartyReferences(PDO $pdo): void {
+    $updates = [
+        "UPDATE journal_entries j JOIN sales_invoices s ON s.id=j.source_id SET j.party_type='customer',j.party_id=s.customer_id WHERE j.source_type='sales_invoice' AND (j.party_id IS NULL OR j.party_id='') AND s.customer_id IS NOT NULL AND s.customer_id<>''",
+        "UPDATE journal_entries j JOIN customer_payments p ON p.id=j.source_id JOIN sales_invoices s ON s.id=p.invoice_id SET j.party_type='customer',j.party_id=s.customer_id WHERE j.source_type='customer_payment' AND (j.party_id IS NULL OR j.party_id='') AND s.customer_id IS NOT NULL AND s.customer_id<>''",
+        "UPDATE journal_entries j JOIN purchase_invoices p ON p.id=j.source_id SET j.party_type='supplier',j.party_id=p.supplier_id WHERE j.source_type='purchase_invoice' AND (j.party_id IS NULL OR j.party_id='') AND p.supplier_id IS NOT NULL AND p.supplier_id<>''",
+        "UPDATE journal_entries j JOIN purchase_payments pp ON pp.id=j.source_id JOIN purchase_invoices p ON p.id=pp.invoice_id SET j.party_type='supplier',j.party_id=p.supplier_id WHERE j.source_type='supplier_payment' AND (j.party_id IS NULL OR j.party_id='') AND p.supplier_id IS NOT NULL AND p.supplier_id<>''",
+    ];
+    foreach ($updates as $sql) $pdo->exec($sql);
 }
 
 if (!function_exists('adjustBranchStock')) {
@@ -2180,13 +2190,43 @@ function postOperationalJournal(
     }
     $journalId = generateId();
     $entryNumber = 'JRN-'.date('ymdHis', strtotime($date)).'-'.strtoupper(substr($journalId, -6));
-    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
-        ->execute([$journalId,$date,$entryNumber,$description,$branchId ?: null,$sourceType,$sourceId,$userId,$userId]);
+    [$partyType, $partyId] = resolveJournalParty($pdo, $sourceType, $sourceId);
+    $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,party_type,party_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
+        ->execute([$journalId,$date,$entryNumber,$description,$branchId ?: null,$sourceType,$sourceId,$partyType,$partyId,$userId,$userId]);
     $insert = $pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');
     foreach ($clean as [$accountId,$dr,$cr,$memo]) $insert->execute([generateId(),$journalId,$accountId,$dr,$cr,$memo]);
     $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")
         ->execute([generateId(),$journalId,$sourceType,$sourceId,$postingKey]);
     return $journalId;
+}
+
+function resolveJournalParty(PDO $pdo, string $sourceType, ?string $sourceId): array {
+    if (!$sourceId) return [null, null];
+    if ($sourceType === 'sales_invoice') {
+        $stmt = $pdo->prepare('SELECT customer_id FROM sales_invoices WHERE id=? LIMIT 1');
+        $stmt->execute([$sourceId]);
+        $id = (string)($stmt->fetchColumn() ?: '');
+        return $id !== '' ? ['customer', $id] : [null, null];
+    }
+    if ($sourceType === 'customer_payment') {
+        $stmt = $pdo->prepare('SELECT s.customer_id FROM customer_payments p JOIN sales_invoices s ON s.id=p.invoice_id WHERE p.id=? LIMIT 1');
+        $stmt->execute([$sourceId]);
+        $id = (string)($stmt->fetchColumn() ?: '');
+        return $id !== '' ? ['customer', $id] : [null, null];
+    }
+    if ($sourceType === 'purchase_invoice') {
+        $stmt = $pdo->prepare('SELECT supplier_id FROM purchase_invoices WHERE id=? LIMIT 1');
+        $stmt->execute([$sourceId]);
+        $id = (string)($stmt->fetchColumn() ?: '');
+        return $id !== '' ? ['supplier', $id] : [null, null];
+    }
+    if ($sourceType === 'supplier_payment') {
+        $stmt = $pdo->prepare('SELECT p.supplier_id FROM purchase_payments pp JOIN purchase_invoices p ON p.id=pp.invoice_id WHERE pp.id=? LIMIT 1');
+        $stmt->execute([$sourceId]);
+        $id = (string)($stmt->fetchColumn() ?: '');
+        return $id !== '' ? ['supplier', $id] : [null, null];
+    }
+    return [null, null];
 }
 
 function deleteOperationalJournal(PDO $pdo, string $sourceType, string $sourceId, string $postingKey): void {
