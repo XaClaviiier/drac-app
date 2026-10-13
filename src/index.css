@@ -176,6 +176,12 @@ body {
   position: relative;
   z-index: 1;
 }
+@media (min-width: 1024px) {
+  .app-brand-header {
+    height: 40px !important;
+    min-height: 40px;
+  }
+}
 
 .app-workspace-bar {
   position: relative;
@@ -193,6 +199,7 @@ body {
 @media (min-width: 1024px) {
   .app-workspace-bar {
     display: flex !important;
+    margin-top: 4px;
   }
 }
 .app-workspace-bar::after {

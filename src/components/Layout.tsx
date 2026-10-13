@@ -973,7 +973,7 @@ export default function Layout() {
         })()}
 
       {/* ========== MAIN ========== */}
-      <div className="flex flex-1 flex-col overflow-hidden lg:pt-12">
+      <div className="flex flex-1 flex-col overflow-hidden lg:pt-10">
         {/* Header */}
         <header
           className={`${location.pathname === "/ai" ? "hidden lg:flex" : "flex"} ${branchMenuOpen ? "z-[80]" : ""} app-brand-header relative flex-shrink-0 items-center justify-between border-b border-blue-300/30 px-3 py-2.5 shadow-sm sm:px-5 sm:py-2 lg:fixed lg:inset-x-0 lg:top-0 lg:z-[75] lg:h-12 lg:py-1`}
