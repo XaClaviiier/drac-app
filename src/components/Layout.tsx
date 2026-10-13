@@ -246,6 +246,7 @@ const pageTitles: Record<string, string> = {
   "/bank-accounts": "Rekening Bank",
   "/branch-deposits": "Setoran Cabang",
   "/chart-of-accounts": "Akun Perkiraan",
+  "/general-journal": "Jurnal Umum",
   "/performance-bonus": "Kinerja & Bonus",
   "/historical-entry": "Input Cepat Historis",
 };
