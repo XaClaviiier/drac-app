@@ -1314,7 +1314,7 @@ export default function Layout() {
 
         {/* Legacy layout contract marker: className={`${ui.workspaceBar} hidden lg:flex`} */}
         <div className={`${ui.workspaceBar} relative z-[70] ${location.pathname === "/chart-of-accounts" ? "!flex" : "flex"}`}>
-          <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-0.5 overflow-x-auto overflow-y-hidden">
+          <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-[3px] overflow-x-auto overflow-y-hidden">
             {workspaceTabs.map((tab) => {
               const active = workspacePathFor(location.pathname) === tab.path;
               return (
@@ -1334,7 +1334,7 @@ export default function Layout() {
                     type="button"
                     onClick={() => { void closeWorkspaceTab(tab.path); }}
                     title={`Tutup ${tab.label}`}
-                    className={`mr-1 rounded p-1 ${active ? "hover:bg-blue-700" : "hover:bg-gray-300"}`}
+                    className="mr-1 rounded p-1"
                   >
                     <X className="h-4 w-4" />
                   </button>
