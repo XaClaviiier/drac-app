@@ -793,7 +793,7 @@ export default function Layout() {
     <div className="flex h-[100dvh] overflow-hidden bg-gray-100 lg:h-screen">
       {/* ========== SIDEBAR (desktop) ========== */}
       <aside
-        className={`${sidebarOpen ? "w-[180px]" : "w-[84px]"} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] pt-12 text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
+        className={`app-sidebar ${sidebarOpen ? "app-sidebar--open w-[180px]" : "app-sidebar--collapsed w-[84px]"} relative z-[70] hidden flex-shrink-0 flex-col bg-[#061a3a] pt-12 text-white shadow-[4px_0_18px_rgba(2,12,30,0.22)] transition-all duration-300 lg:flex`}
       >
         <nav className="flex-1 overflow-visible py-4">
           {hasPermission("dashboard:view") && <button
@@ -922,7 +922,7 @@ export default function Layout() {
               />
               <section
                 data-menu-model={usesAccurateTileMenu ? "accurate" : "standard"}
-          className={`fixed top-[112px] z-[60] hidden max-h-[calc(100vh-112px)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateCompactMenu ? "w-[420px]" : isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-13rem))]" : "w-[min(520px,calc(100vw-13rem))]"} ${sidebarOpen ? "left-[180px]" : "left-[84px]"}`}
+                className={`app-desktop-menu ${sidebarOpen ? "app-desktop-menu--open" : "app-desktop-menu--collapsed"} fixed top-[112px] z-[60] hidden max-h-[calc(100vh-112px)] overflow-hidden rounded-r-xl border-y border-r border-gray-200 bg-white shadow-[10px_12px_30px_rgba(15,23,42,0.20)] lg:block ${isAccurateCompactMenu ? "w-[420px]" : isAccurateInventoryMenu ? "w-[min(828px,calc(100vw-18rem))]" : "w-[min(520px,calc(100vw-18rem))]"} ${sidebarOpen ? "left-[180px]" : "left-[84px]"}`}
               >
                 <div className="px-4 pb-0 pt-4">
                   <div className="flex items-center justify-between">

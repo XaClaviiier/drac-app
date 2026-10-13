@@ -50,6 +50,8 @@ body {
   --app-font-weight-normal: 400;
   --app-font-weight-medium: 500;
   --app-font-weight-semibold: 600;
+  --app-sidebar-open-width: 180px;
+  --app-sidebar-collapsed-width: 84px;
   --app-blue: #2563eb;
   --app-blue-dark: #1d4ed8;
   --app-field-border: #a6a6a6;
@@ -61,6 +63,13 @@ body {
   --app-table-head: #637c93;
   --app-row-alt: #f5f5f5;
 }
+
+/* Lebar navigasi desktop dikendalikan dari satu token global agar sidebar,
+ * menu popover, dan layout utama selalu memakai titik ukur yang sama. */
+.app-sidebar--open { width: var(--app-sidebar-open-width) !important; }
+.app-sidebar--collapsed { width: var(--app-sidebar-collapsed-width) !important; }
+.app-desktop-menu--open { left: var(--app-sidebar-open-width) !important; }
+.app-desktop-menu--collapsed { left: var(--app-sidebar-collapsed-width) !important; }
 
 /*
  * Standar baku field ala Accurate.
