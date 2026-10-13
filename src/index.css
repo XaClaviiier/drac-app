@@ -190,7 +190,7 @@ body { margin: 0; background: #f3f4f6; }
   content: "";
   background: var(--app-blue);
 }
-.app-workspace-bar > div:first-child { gap: 3px; }
+.app-workspace-bar > div:first-child { gap: 6px; }
 .app-workspace-tab {
   position: relative;
   z-index: 2;
