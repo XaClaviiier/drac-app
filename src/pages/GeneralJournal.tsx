@@ -22,7 +22,7 @@ function initialColumns(): string[] {
 
 export default function GeneralJournal() {
   const navigate = useNavigate();
-  const { hasPermission, currentBranchId } = useApp();
+  const { data, hasPermission, currentBranchId } = useApp();
   const [accounts, setAccounts] = useState<JournalAccount[]>([]);
   const [branches, setBranches] = useState<JournalBranch[]>([]);
   const [rows, setRows] = useState<JournalRow[]>([]);
@@ -105,6 +105,7 @@ export default function GeneralJournal() {
     window.history.replaceState({}, '', '/general-journal');
   };
   const create = () => {
+    if (currentBranchId === 'ALL') { setNotice('Pilih satu cabang pada header aplikasi sebelum membuat jurnal.'); return; }
     setDetail(null); setDraftOpen(true); setView('draft'); setNotice('');
     window.history.replaceState({}, '', '/general-journal');
   };
@@ -122,12 +123,12 @@ export default function GeneralJournal() {
     : draftOpen ? { label: (draftDirty ? '* ' : '') + 'Data Baru', active: view === 'draft', onSelect: () => setView('draft'), onClose: closeEditor, closeDisabled: editorBusy } : undefined;
 
   return <div className="app-module-page app-accounting-page gj-preview">
-    <AccountingModuleTabs listActive={view === 'list'} listLabel="Daftar jurnal" onList={() => setView('list')} editor={editor} onHelp={() => setNotice('Gunakan + untuk menambah jurnal. Filter tanggal dan tipe transaksi berada di atas; Cabang dapat ditambahkan lewat tombol filter. Klik baris untuk melihat rincian.')} />
+    <AccountingModuleTabs listActive={view === 'list'} listLabel="Daftar jurnal" onList={() => setView('list')} editor={editor} onHelp={() => setNotice('Pilih satu cabang pada header sebelum membuat jurnal. Tipe transaksi manual selalu Jurnal Umum; nomor otomatis dapat dimatikan bila nomor manual sudah tersedia.')} />
     <div className="app-module-panel app-fill-stack">
       {notice && <div role="status" className="app-module-notice">{notice}<button type="button" aria-label="Tutup pesan" onClick={() => setNotice('')}><X size={14} /></button></div>}
       <div className={view === 'list' ? 'app-fill-stack' : 'hidden'}>
         <JournalListFilters dateFilter={dateFilter} onDateChange={value => { setNotice(''); setDateFilter(value); }} types={typeFilters} onTypesChange={setTypeFilters} branches={branches} selectedBranches={branchFilters} onBranchesChange={setBranchFilters} onError={setNotice} />
-        <AccountingListToolbar noun="jurnal" busy={busy || detailBusy || editorBusy} createDisabled={!canCreate} onCreate={create} onRefresh={() => { setNotice(''); void load(); }} onExport={exportCsv} columns={columns} columnOptions={JOURNAL_COLUMNS} onColumnsChange={changeColumns} query={query} onQueryChange={value => { setQuery(value); if (!value) setSearch(''); }} onSearch={() => setSearch(query)} count={shown.length} />
+        <AccountingListToolbar noun="jurnal" busy={busy || detailBusy || editorBusy} createDisabled={!canCreate || currentBranchId === 'ALL'} onCreate={create} onRefresh={() => { setNotice(''); void load(); }} onExport={exportCsv} columns={columns} columnOptions={JOURNAL_COLUMNS} onColumnsChange={changeColumns} query={query} onQueryChange={value => { setQuery(value); if (!value) setSearch(''); }} onSearch={() => setSearch(query)} count={shown.length} />
         {rows.length === 200 && <div className="app-list-limit" role="status">Maksimal 200 jurnal per pemuatan. Persempit tanggal, tipe transaksi, atau cabang untuk menampilkan jurnal lainnya.</div>}
         <div className="app-table-shell app-table-scroll app-table-scroll--fill" data-accounting-list aria-busy={busy || detailBusy}>
           <h1 className="app-print-title">Jurnal Umum</h1>
@@ -144,7 +145,7 @@ export default function GeneralJournal() {
           </table>
         </div>
       </div>
-      {draftOpen && <div className={view === 'draft' ? 'app-fill-stack' : 'hidden'}><JournalEntryEditor accounts={accounts} branches={branches} initialBranchId={currentBranchId === 'ALL' ? '' : currentBranchId} canCreate={canCreate} onDirtyChange={setDraftDirty} onBusyChange={setEditorBusy} onNotice={setNotice} onNavigate={navigate} onSaved={message => { setDraftDirty(false); setDraftOpen(false); setView('list'); setNotice(message); void load(); }} /></div>}
+      {draftOpen && <div className={view === 'draft' ? 'app-fill-stack' : 'hidden'}><JournalEntryEditor accounts={accounts} branches={branches} initialBranchId={currentBranchId} initialBranchName={data.branches.find(branch => branch.id === currentBranchId)?.name} canCreate={canCreate && currentBranchId !== 'ALL'} onDirtyChange={setDraftDirty} onBusyChange={setEditorBusy} onNotice={setNotice} onNavigate={navigate} onSaved={message => { setDraftDirty(false); setDraftOpen(false); setView('list'); setNotice(message); void load(); }} /></div>}
       {detail && view === 'detail' && <JournalEntryEditor key={detail.id} detail={detail} accounts={accounts} branches={branches} initialBranchId="" canCreate={false} onDirtyChange={setDraftDirty} onBusyChange={setEditorBusy} onNotice={setNotice} onNavigate={navigate} onSaved={() => {}} />}
     </div>
   </div>;

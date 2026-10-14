@@ -58,9 +58,11 @@ function ensureGeneralLedgerTables(PDO $pdo): void {
 ensureGeneralLedgerTables($pdo);
 if ($method === 'POST') {
     $d = getInput(); $date = trim((string)($d['date'] ?? '')); $description = trim((string)($d['description'] ?? ''));
-    $branchId = trim((string)($d['branchId'] ?? '')); $lines = $d['lines'] ?? [];
+    $branchId = trim((string)($d['branchId'] ?? '')); $autoNumber = !array_key_exists('autoNumber', $d) || (bool)$d['autoNumber']; $entryNumber = trim((string)($d['entryNumber'] ?? '')); $lines = $d['lines'] ?? [];
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) || $description === '' || !is_array($lines) || count($lines) < 2) respondError('Tanggal, keterangan, dan minimal dua baris jurnal wajib diisi', 422);
-    if ($branchId !== '') requireAccessibleBranch($pdo, $requestUser, $branchId);
+    if ($branchId === '' || $branchId === 'ALL') respondError('Pilih satu cabang sebelum membuat jurnal', 422);
+    requireAccessibleBranch($pdo, $requestUser, $branchId);
+    if (!$autoNumber && $entryNumber === '') respondError('Nomor jurnal wajib diisi jika nomor otomatis dimatikan', 422);
     $debit = 0.0; $credit = 0.0; $clean = [];
     foreach ($lines as $line) {
         $accountId = trim((string)($line['accountId'] ?? '')); $dr = round((float)($line['debit'] ?? 0), 2); $cr = round((float)($line['credit'] ?? 0), 2);
@@ -73,8 +75,14 @@ if ($method === 'POST') {
     if ((int)$check->fetchColumn() !== count($ids)) respondError('Ada akun yang tidak ditemukan atau nonaktif', 422);
     $pdo->beginTransaction();
     try {
-        $prefix = 'JRN-' . str_replace('-', '', substr($date, 0, 7)) . '-'; $next = $pdo->prepare('SELECT COUNT(*) FROM journal_entries WHERE entry_number LIKE ?'); $next->execute([$prefix . '%']);
-        $number = $prefix . str_pad((string)((int)$next->fetchColumn() + 1), 4, '0', STR_PAD_LEFT); $journalId = generateId();
+        if ($autoNumber) {
+            $prefix = 'JRN-' . str_replace('-', '', substr($date, 0, 7)) . '-'; $next = $pdo->prepare('SELECT COUNT(*) FROM journal_entries WHERE entry_number LIKE ?'); $next->execute([$prefix . '%']);
+            $number = $prefix . str_pad((string)((int)$next->fetchColumn() + 1), 4, '0', STR_PAD_LEFT);
+        } else {
+            $number = $entryNumber; $exists = $pdo->prepare('SELECT COUNT(*) FROM journal_entries WHERE entry_number=?'); $exists->execute([$number]);
+            if ((int)$exists->fetchColumn() > 0) throw new InvalidArgumentException('Nomor jurnal sudah digunakan');
+        }
+        $journalId = generateId();
         $userId = $requestUser['id'] ?? null;
         $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,party_type,party_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,NULL,NULL,1,'Posted',?,?,NOW())")->execute([$journalId,$date,$number,$description,$branchId?:null,'manual',$userId,$userId]);
         $insert = $pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)'); foreach ($clean as [$accountId,$dr,$cr,$memo]) $insert->execute([generateId(),$journalId,$accountId,$dr,$cr,$memo?:null]);

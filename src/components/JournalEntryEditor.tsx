@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, FileText, Info, MoreHorizontal, Paperclip, Plus, Save, Trash2 } from 'lucide-react';
+import { Search, Trash2 } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import { localDate, sourceLabel, type JournalRow } from '../lib/journalList';
 import type { JournalBranch } from './JournalListFilters';
+import AccurateDocumentSideTabs, { type AccurateDocumentTab } from './AccurateDocumentSideTabs';
+import AccurateFormActionRail from './AccurateFormActionRail';
 
 export type JournalDetail = JournalRow & { lines: Array<{ account_code?: string; account_name?: string; debit: number; credit: number; memo?: string }> };
 export type JournalAccount = { id: string; code: string; name: string; isActive: boolean };
@@ -10,11 +12,12 @@ type EntryLine = { accountId: string; debit: string; credit: string; memo: strin
 const blank = (): EntryLine => ({ accountId: '', debit: '', credit: '', memo: '' });
 export const journalMoney = (value: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value);
 
-export default function JournalEntryEditor({ detail, accounts, branches, initialBranchId, canCreate, onDirtyChange, onBusyChange, onSaved, onNotice, onNavigate }: {
+export default function JournalEntryEditor({ detail, accounts, branches, initialBranchId, initialBranchName, canCreate, onDirtyChange, onBusyChange, onSaved, onNotice, onNavigate }: {
   detail?: JournalDetail;
   accounts: JournalAccount[];
   branches: JournalBranch[];
   initialBranchId: string;
+  initialBranchName?: string;
   canCreate: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
@@ -22,25 +25,39 @@ export default function JournalEntryEditor({ detail, accounts, branches, initial
   onNotice: (message: string) => void;
   onNavigate: (path: string) => void;
 }) {
-  const [tab, setTab] = useState('Informasi Umum');
+  const [tab, setTab] = useState<AccurateDocumentTab>('details');
   const [initialDate] = useState(localDate);
   const [date, setDate] = useState(initialDate);
   const [description, setDescription] = useState('');
   const [branchId, setBranchId] = useState(initialBranchId);
+  const [autoNumber, setAutoNumber] = useState(true);
+  const [entryNumber, setEntryNumber] = useState('');
   const [lines, setLines] = useState<EntryLine[]>([]);
+  const [accountSearch, setAccountSearch] = useState('');
   const [busy, setBusy] = useState(false);
-  const dirty = !detail && (date !== initialDate || !!description || branchId !== initialBranchId || lines.length > 0 || lines.some(line => !!line.accountId || !!line.debit || !!line.credit || !!line.memo));
+  const dirty = !detail && (date !== initialDate || !!description || branchId !== initialBranchId || !autoNumber || !!entryNumber || lines.length > 0 || lines.some(line => !!line.accountId || !!line.debit || !!line.credit || !!line.memo));
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => { if (!detail) setBranchId(initialBranchId); }, [detail, initialBranchId]);
   const debit = detail ? detail.lines.reduce((sum, line) => sum + Number(line.debit), 0) : lines.reduce((sum, line) => sum + Number(line.debit || 0), 0);
   const credit = detail ? detail.lines.reduce((sum, line) => sum + Number(line.credit), 0) : lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
   const balanced = debit > 0 && Math.round(debit * 100) === Math.round(credit * 100);
   const update = (index: number, patch: Partial<EntryLine>) => setLines(values => values.map((value, i) => i === index ? { ...value, ...patch } : value));
+  const addAccountLine = () => {
+    const query = accountSearch.trim().toLowerCase();
+    if (!query || detail || busy || !canCreate) return;
+    const account = accounts.find(value => `${value.code} · ${value.name}`.toLowerCase() === query || value.code.toLowerCase() === query || value.name.toLowerCase() === query);
+    if (!account) return;
+    setLines(values => [...values, { ...blank(), accountId: account.id }]);
+    setAccountSearch('');
+  };
   const sourcePath = detail?.sourceId && detail.sourceType === 'sales_invoice' ? '/invoices?view=' + encodeURIComponent(detail.sourceId)
     : detail?.sourceId && detail.sourceType === 'customer_payment' ? '/customer-payments?viewInvoiceId=' + encodeURIComponent(detail.sourceId)
     : detail?.sourceType === 'purchase_invoice' ? '/purchase-invoices' : detail?.sourceType === 'supplier_payment' ? '/purchase-payments' : '';
   const save = async () => {
     if (detail || busy || !canCreate) return;
-    if (!date || !description.trim()) { onNotice('Tanggal dan keterangan jurnal wajib diisi.'); setTab('Informasi Umum'); return; }
+    if (!branchId || branchId === 'ALL') { onNotice('Pilih satu cabang pada header aplikasi sebelum membuat jurnal.'); return; }
+    if (!date || !description.trim()) { onNotice('Tanggal dan keterangan jurnal wajib diisi.'); setTab(!description.trim() ? 'info' : 'details'); return; }
+    if (!autoNumber && !entryNumber.trim()) { onNotice('Nomor jurnal wajib diisi jika nomor otomatis dimatikan.'); setTab('details'); return; }
     if (lines.some(line => !line.accountId || !Number.isFinite(Number(line.debit || 0)) || !Number.isFinite(Number(line.credit || 0)) || Number(line.debit || 0) < 0 || Number(line.credit || 0) < 0 || (Number(line.debit || 0) > 0) === (Number(line.credit || 0) > 0))) {
       onNotice('Setiap baris harus memilih akun dan memiliki debit atau kredit positif saja.'); return;
     }
@@ -48,34 +65,36 @@ export default function JournalEntryEditor({ detail, accounts, branches, initial
     setBusy(true);
     onBusyChange(true);
     try {
-      const response = await api.create('general-ledger', { date, description: description.trim(), branchId: branchId || null, lines: lines.map(line => ({ ...line, debit: Number(line.debit || 0), credit: Number(line.credit || 0) })) });
+      const response = await api.create('general-ledger', { date, description: description.trim(), branchId, autoNumber, entryNumber: entryNumber.trim(), numberSeries: 'Jurnal Umum', lines: lines.map(line => ({ ...line, debit: Number(line.debit || 0), credit: Number(line.credit || 0) })) });
       if (!response.success) throw new Error(response.message || 'Jurnal gagal disimpan.');
       onDirtyChange(false);
       onSaved('Jurnal ' + (response.data?.number || '') + ' berhasil disimpan.');
     } catch (error) { onNotice(error instanceof Error ? error.message : 'Jurnal gagal disimpan.'); }
     finally { setBusy(false); onBusyChange(false); }
   };
+  const entryBranchName = detail?.branchName || (detail?.branchId ? detail.branchId : '') || initialBranchName || branches.find(branch => branch.id === branchId)?.name || branchId;
 
   return <div className="app-entry-editor" aria-busy={busy}>
-    <aside className="app-entry-side-tabs" aria-label="Tab rincian jurnal">
-      <button type="button" className={tab === 'Informasi Umum' ? 'active' : ''} aria-label="Rincian jurnal" onClick={() => setTab('Informasi Umum')}><FileText size={20} /></button>
-      <button type="button" className={tab === 'Lain-lain' ? 'active' : ''} aria-label="Informasi lainnya" onClick={() => setTab('Lain-lain')}><Info size={20} /></button>
-    </aside>
     <div className="app-entry-main" data-accounting-print>
-      {tab === 'Informasi Umum' ? <>
-        <section className="app-entry-header-fields">
-          <label>Tanggal <span className="app-required">*</span><input aria-label="Tanggal jurnal" type="date" value={detail?.date || date} disabled={!!detail || busy || !canCreate} onChange={event => setDate(event.target.value)} /></label>
-          <label>Nomor # <span className="app-required">*</span><input aria-label="Nomor jurnal" readOnly value={detail?.number || 'Otomatis saat disimpan'} /></label>
-          <label className="app-entry-type">Tipe Transaksi<input aria-label="Tipe transaksi jurnal" readOnly value={sourceLabel(detail?.sourceType)} /></label>
-          <label className="app-entry-kind">Jenis jurnal<select aria-label="Jenis jurnal" disabled={!!detail || busy || !canCreate}><option>Jurnal Umum</option></select></label>
-          <label className="app-entry-description">Keterangan <span className="app-required">*</span><input aria-label="Keterangan jurnal" value={detail?.description || description} disabled={!!detail || busy || !canCreate} onChange={event => setDescription(event.target.value)} /></label>
-          <label className="app-entry-branch">Cabang<select aria-label="Cabang jurnal" value={detail ? detail.branchId || '' : branchId} disabled={!!detail || busy || !canCreate} onChange={event => setBranchId(event.target.value)}>
-            <option value="">Tanpa cabang / umum</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-            {detail?.branchId && !branches.some(branch => branch.id === detail.branchId) && <option value={detail.branchId}>{detail.branchName || detail.branchId}</option>}
-          </select></label>
-        </section>
+      <section className="app-entry-header-fields">
+        <label className="app-entry-date"><span>Tanggal <span className="app-required">*</span></span><input aria-label="Tanggal jurnal" type="date" value={detail?.date || date} disabled={!!detail || busy || !canCreate} onChange={event => setDate(event.target.value)} /></label>
+        <div className="app-entry-number-kind"><label><span>Nomor # <span className="app-required">*</span></span><div className="app-entry-number-control"><input className="app-entry-auto-toggle" aria-label="Nomor otomatis" type="checkbox" checked={detail ? true : autoNumber} disabled={!!detail || busy || !canCreate} onChange={event => { setAutoNumber(event.target.checked); setEntryNumber(''); }} /><input aria-label="Nomor jurnal" readOnly={autoNumber || !!detail} value={detail?.number || (autoNumber ? 'Auto' : entryNumber)} placeholder="Isi manual" onChange={event => setEntryNumber(event.target.value)} /></div></label></div>
+        <label className="app-entry-type"><span>Tipe Transaksi</span><input aria-label="Tipe transaksi jurnal" readOnly value={sourceLabel(detail?.sourceType)} /></label>
+        <label className="app-entry-branch"><span>Cabang</span><input aria-label="Cabang jurnal" readOnly value={entryBranchName || 'Pilih cabang pada header aplikasi'} /></label>
+      </section>
+      <div data-journal-document-shell className="app-entry-document-shell relative min-h-[320px] bg-white lg:ml-10 lg:border lg:border-gray-400 lg:shadow-[0_2px_7px_rgba(15,23,42,0.18)]">
+        <AccurateDocumentSideTabs active={tab} onChange={setTab} visibleTabs={['details', 'info']} ariaLabel="Bagian dokumen Jurnal Umum" />
+        {tab === 'details' ? <>
         <section className="app-entry-lines-panel">
-          <div className="app-entry-lines-toolbar"><div className="app-entry-account-search"><input aria-label="Cari akun perkiraan" placeholder="Cari/Pilih Akun Perkiraan..." readOnly /><span>⌕</span></div><div className="app-entry-lines-title"><button type="button" aria-label="Cari rincian jurnal"><Info size={19} /></button>Rincian Jurnal <span className="app-required">*</span></div></div>
+          <div className="app-entry-lines-toolbar">
+            <div className="app-entry-account-search">
+              <Search className="app-entry-search-icon" size={16} />
+              <input aria-label="Cari akun perkiraan" list="journal-account-options" placeholder="Cari/Pilih Akun Perkiraan..." value={accountSearch} disabled={busy || !canCreate || !!detail} onChange={event => setAccountSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addAccountLine(); } }} />
+              <button type="button" aria-label="Tambah akun ke rincian jurnal" disabled={busy || !canCreate || !!detail} onClick={addAccountLine}><Search size={20} /></button>
+              <datalist id="journal-account-options">{accounts.map(account => <option key={account.id} value={`${account.code} · ${account.name}`} />)}</datalist>
+            </div>
+            <strong className="app-entry-lines-count">{detail ? detail.lines.length : lines.length} Akun</strong>
+          </div>
           <div className="app-table-scroll app-table-shell">
             <table className="app-data-table app-accounting-table app-journal-lines">
               <thead><tr><th className="app-entry-row-handle" /><th>Kode #</th><th>Nama Perkiraan</th><th className="amount">Debit</th><th className="amount">Kredit</th></tr></thead>
@@ -88,18 +107,24 @@ export default function JournalEntryEditor({ detail, accounts, branches, initial
               {!detail && !lines.length && <tbody><tr><td colSpan={5} className="app-data-empty">Belum ada data</td></tr></tbody>}
             </table>
           </div>
-          {!detail && <button type="button" className="app-entry-add-line" disabled={busy || !canCreate} onClick={() => setLines(values => [...values, blank()])}><Plus size={16} />Tambah baris</button>}
         </section>
-      </> : <section className="app-entry-panel app-entry-metadata"><h2>Informasi Transaksi</h2><p>{detail ? 'Jurnal terposting ditampilkan dalam mode baca saja.' : 'Jurnal manual diposting setelah debit dan kredit seimbang dan disimpan.'}</p>{detail && <><p>Tipe transaksi: {sourceLabel(detail.sourceType)}</p><p>No. Trans #: {detail.transactionNumber || detail.sourceId || '—'}</p><p>Nama pihak: {detail.partyName || '—'}</p></>}</section>}
+        </>
+          : <section className="app-entry-metadata"><h2>Informasi Transaksi</h2><p>{detail ? 'Jurnal terposting ditampilkan dalam mode baca saja.' : 'Jurnal manual diposting setelah debit dan kredit seimbang dan disimpan.'}</p>{!detail && <label className="app-entry-metadata-description"><span>Keterangan <span className="app-required">*</span></span><input aria-label="Keterangan jurnal" value={description} disabled={busy || !canCreate} onChange={event => setDescription(event.target.value)} /></label>}{detail && <><p>Tipe transaksi: {sourceLabel(detail.sourceType)}</p><p>No. Trans #: {detail.transactionNumber || detail.sourceId || '—'}</p><p>Nama pihak: {detail.partyName || '—'}</p></>}</section>}
+      </div>
+      {tab === 'details' && <div className="app-entry-total"><div><span>Total Debit</span><strong>{journalMoney(debit)}</strong></div><div><span>Total Kredit</span><strong>{journalMoney(credit)}</strong></div></div>}
     </div>
-    <aside className="app-entry-actions" aria-label="Aksi Jurnal Umum">
-      <button type="button" className="app-entry-save" aria-label="Simpan jurnal" title={detail ? 'Jurnal terposting hanya dapat dilihat' : 'Simpan jurnal'} disabled={!!detail || busy || !canCreate || !dirty || !balanced} onClick={() => void save()}><Save size={33} /></button>
-      <button type="button" className="app-entry-secondary app-entry-doc" aria-label="Dokumen jurnal" title="Cetak jurnal" onClick={() => window.print()}><FileText size={29} /><span>⌄</span></button>
-      <button type="button" className="app-entry-secondary app-entry-doc" aria-label="Lampiran jurnal" title="Lampiran belum tersedia" disabled><Paperclip size={29} /><span>⌄</span></button>
-      <button type="button" className="app-entry-more" aria-label="Menu jurnal" title={sourcePath ? 'Buka transaksi sumber' : 'Lain-lain'} onClick={() => sourcePath ? onNavigate(sourcePath) : setTab('Lain-lain')}><MoreHorizontal size={29} /><span>⌄</span></button>
-      <button type="button" className="app-entry-delete" aria-label="Hapus jurnal" disabled><Trash2 size={29} /></button>
-      {sourcePath && <button type="button" className="app-entry-source-hidden" aria-label="Buka transaksi sumber" onClick={() => onNavigate(sourcePath)}><ExternalLink size={16} /></button>}
-    </aside>
-    <div className="app-entry-total"><div><span>Total Debit</span><strong>{journalMoney(debit)}</strong></div><div><span>Total Credit</span><strong>{journalMoney(credit)}</strong></div></div>
+    <AccurateFormActionRail
+      ariaLabel="Aksi Jurnal Umum"
+      className="absolute right-4 top-4 z-20 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
+      save={{ onClick: () => void save(), disabled: !!detail || busy || !canCreate || !dirty || !balanced, title: detail ? 'Jurnal terposting hanya dapat dilihat' : 'Simpan jurnal' }}
+      print={{ onClick: () => window.print(), title: 'Cetak jurnal' }}
+      attachment={{ disabled: true, title: 'Lampiran belum tersedia' }}
+      more={{ onClick: () => sourcePath ? onNavigate(sourcePath) : setTab('info'), title: sourcePath ? 'Buka transaksi sumber' : 'Info lainnya' }}
+      remove={{ disabled: true, title: 'Hapus jurnal' }}
+    />
+    <div className="mt-3 flex justify-end gap-2 lg:hidden">
+      <button type="button" className="rounded border border-gray-300 bg-white px-3 py-2" onClick={() => window.print()}>Cetak jurnal</button>
+      <button type="button" className="rounded bg-blue-700 px-3 py-2 text-white disabled:opacity-50" disabled={!!detail || busy || !canCreate || !dirty || !balanced} onClick={() => void save()}>Simpan jurnal</button>
+    </div>
   </div>;
 }
