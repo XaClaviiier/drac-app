@@ -52,11 +52,12 @@ export default function Warehouses() {
     await Promise.all([load(), refreshData()]); setTab('list');
   };
 
-  return <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
-    <div className="flex items-end border-b border-blue-600 bg-slate-100 px-2 pt-2">
+  return <div className="app-module-page">
+    <div className="app-child-bar">
       <TabButton active={tab === 'list'} onClick={() => setTab('list')} icon={<List className="h-4 w-4"/>}>Daftar Gudang</TabButton>
       {tab === 'form' && <TabButton active onClick={() => undefined} icon={<Building2 className="h-4 w-4"/>}>{editing ? 'Edit Gudang' : 'Data Baru'}<button type="button" onClick={() => setTab('list')} className="ml-3"><X className="h-4 w-4"/></button></TabButton>}
     </div>
+      <div className="app-module-panel app-fill-stack">
 
     {tab === 'list' ? <>
       <div className="space-y-3 bg-slate-50 p-3">
@@ -67,7 +68,7 @@ export default function Warehouses() {
         <div className="flex gap-2">{canCreate && <button onClick={openNew} title="Tambah Gudang" className="rounded bg-blue-700 px-5 py-2 text-white"><Plus className="h-5 w-5"/></button>}<button onClick={() => void load()} title="Refresh" className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700"><RotateCw className="h-4 w-4"/></button></div>
       </div>
       {message && <div className="border-y border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700">{message}</div>}
-      <div className="min-h-[430px] overflow-x-auto">
+      <div className="app-table-scroll app-table-scroll--fill min-h-[430px] overflow-x-auto">
         <table className="w-full text-sm"><thead className="bg-slate-600 text-white"><tr><th className="w-12 p-2"></th><th className="w-[36%] p-2 text-left">Nama</th><th className="p-2 text-left">Alamat</th></tr></thead>
           <tbody>{filtered.map(row => <tr key={row.id} onDoubleClick={() => openEdit(row)} className="border-b even:bg-slate-50 hover:bg-blue-50">
             <td className="p-2 text-center">{canEdit && !row.isSystem && <button onClick={() => openEdit(row)} title="Edit"><Edit3 className="h-4 w-4 text-blue-600"/></button>}</td>
@@ -87,8 +88,9 @@ export default function Warehouses() {
       </div>
       <div className="mt-5 flex flex-wrap gap-5 border-t pt-4"><label className="flex items-center gap-2"><input type="checkbox" checked={form.isActive} onChange={event => setForm({...form,isActive:event.target.checked})}/> Aktif</label><label className="flex items-center gap-2"><input type="checkbox" checked={form.isSellable} onChange={event => setForm({...form,isSellable:event.target.checked})}/> Dapat dipakai transaksi</label></div>
     </form>}
-  </div>;
+  </div>
+    </div>;
 }
 
-function TabButton({active,onClick,icon,children}:{active:boolean;onClick:()=>void;icon:React.ReactNode;children:React.ReactNode}) { return <button type="button" onClick={onClick} className={`flex min-h-10 items-center gap-2 rounded-t border border-b-0 px-4 py-2 text-sm ${active ? 'bg-blue-600 font-semibold text-white' : 'bg-slate-200 text-slate-700'}`}>{icon}{children}</button>; }
+function TabButton({active,onClick,icon,children}:{active:boolean;onClick:()=>void;icon:React.ReactNode;children:React.ReactNode}) { return <button type="button" onClick={onClick} className={`app-child-tab gap-2 px-4 text-sm ${active ? 'app-child-tab--active' : ''}`}>{icon}{children}</button>; }
 function Field({label,children}:{label:string;children:React.ReactNode}) { return <label className="block text-sm"><span className="mb-1 block font-medium text-slate-700">{label}</span><span className="block [&_input]:w-full [&_input]:rounded [&_input]:border [&_input]:px-3 [&_input]:py-2.5 [&_select]:w-full [&_select]:rounded [&_select]:border [&_select]:px-3 [&_select]:py-2.5">{children}</span></label>; }

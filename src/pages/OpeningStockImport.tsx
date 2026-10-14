@@ -585,9 +585,9 @@ export default function OpeningStockImport() {
   const orderBy = (key: typeof sortKey) => { setSortAsc(sortKey === key ? !sortAsc : true); setSortKey(key); };
 
   return (
-    <div className="adjustment-workspace">
+    <div className="app-module-page adjustment-workspace">
       <div className={ui.childBar}>
-        <button type="button" title="Daftar Penyesuaian Persediaan" className={`${ui.childListTab} ${!showForm ? "adjustment-list-active" : ""}`} onClick={() => { setSelectedDocument(null); setViewMode("list"); setMenu(null); }}><List size={22}/></button>
+        <button type="button" title="Daftar Penyesuaian Persediaan" className={`${ui.childListTab} ${!showForm ? "app-child-list-tab--active" : ""}`} onClick={() => { setSelectedDocument(null); setViewMode("list"); setMenu(null); }}><List size={22}/></button>
         {entryTabOpen && <div className={childTabClass(!selectedDocument && viewMode === "entry")}>
           <button type="button" onClick={() => { setSelectedDocument(null); setViewMode("entry"); setMenu(null); }}>
             {editingId ? documents.find(document => document.id === editingId)?.adjustmentNumber : "Data Baru"}
@@ -607,10 +607,11 @@ export default function OpeningStockImport() {
           {menu === "settings" && <div className="adjustment-menu"><button onClick={() => { setDocumentDate(""); setDocumentSearch(""); setStatusFilter(""); setSortKey("date"); setSortAsc(false); setMenu(null); }}>Reset filter dan urutan</button><button onClick={() => { setMenu(null); void Promise.all([loadDocuments(),refreshData()]); }}>Muat ulang data</button></div>}
         </div>
       </div>
+      <div className="app-module-panel app-fill-stack">
       {message && <div role="status" className="adjustment-message">{message}</div>}
       <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={event => { void loadFile(event.target.files?.[0]); event.target.value = ""; }}/>
       <input ref={listImportRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={event => void importFromMainList(event.target.files?.[0])}/>
-      {!showForm ? <section className="adjustment-list">
+      {!showForm ? <section className="app-fill-stack adjustment-list">
         <div className="adjustment-filter-row">
           <label className="adjustment-date-filter">Tanggal: <IndonesianDateInput value={documentDate} onChange={setDocumentDate}/></label>
           <button className="adjustment-icon adjustment-filter" title="Tambah kriteria" onClick={() => setShowFilter(!showFilter)}><Filter size={16}/><ChevronDown size={12}/></button>
@@ -628,7 +629,7 @@ export default function OpeningStockImport() {
             <output className="adjustment-count">{orderedDocuments.length}</output>
           </div>
         </div>
-        <div className="adjustment-table-scroll adjustment-list-table"><table>
+        <div className="app-table-scroll app-table-scroll--fill adjustment-table-scroll adjustment-list-table"><table>
           <colgroup><col style={{width:"38%"}}/><col style={{width:"23%"}}/><col/></colgroup>
           <thead><tr>{([['adjustmentNumber','Nomor #'],['date','Tanggal'],['notes','Keterangan']] as const).map(([key,label]) => <th key={key}><button onClick={() => orderBy(key)}><ArrowUpDown size={12}/>{label}</button></th>)}</tr></thead>
           <tbody>{orderedDocuments.map(document => <tr key={document.id} className="adjustment-clickable" onClick={() => openDocument(document)}>
@@ -659,7 +660,7 @@ export default function OpeningStockImport() {
                   <h2>{displayRows.length ? `${displayRows.length} Barang (${quantityTotal.toLocaleString("id-ID")})` : "Rincian Barang"} <span>*</span></h2>
                 </div>
                 {!selectedDocument && (errorRows.length > 0 || duplicateKeys.size > 0) && <div className="adjustment-message"><AlertTriangle size={16}/> {errorRows.length} baris bermasalah{duplicateKeys.size ? ` · ${duplicateKeys.size} barang/gudang duplikat` : ""}. Periksa rincian sebelum menyimpan.</div>}
-                <div className="adjustment-table-scroll adjustment-items-table"><table>
+                <div className="app-table-scroll adjustment-table-scroll adjustment-items-table"><table>
                   <colgroup><col style={{width:"12%"}}/><col style={{width:"46%"}}/><col style={{width:"9%"}}/><col style={{width:"23%"}}/><col style={{width:"10%"}}/></colgroup>
                   <thead><tr><th>Kode #</th><th>Nama Barang</th><th>Kuantitas</th><th>Tipe</th><th>Satuan</th></tr></thead>
                   <tbody>{displayRows.map((row,index) => (!selectedDocument || `${row.code} ${row.itemName}`.toLowerCase().includes(detailSearch.toLowerCase())) && <tr key={`${row.row}-${index}`} className={`adjustment-clickable ${row.error ? "adjustment-row-error" : ""}`} onClick={() => setRowDialog({index,row:{...row},readOnly:!!selectedDocument})}>
@@ -714,6 +715,7 @@ export default function OpeningStockImport() {
           <footer>{!rowDialog.readOnly && rowDialog.index < rows.length && <button className="adjustment-outline" onClick={() => {setRows(current=>current.filter((_,index)=>index!==rowDialog.index));setRowDialog(null);}}>Hapus</button>}<button className="adjustment-primary" onClick={rowDialog.readOnly ? () => setRowDialog(null) : saveRow}>{rowDialog.readOnly ? "Tutup" : "Lanjut"}</button></footer>
         </section>
       </div>}
+    </div>
     </div>
   );
 }

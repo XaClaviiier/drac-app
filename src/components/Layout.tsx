@@ -1313,7 +1313,7 @@ export default function Layout() {
         </header>
 
         {/* Legacy layout contract marker: className={`${ui.workspaceBar} hidden lg:flex`} */}
-        <div className={`${ui.workspaceBar} relative z-[70] ${location.pathname === "/chart-of-accounts" ? "!flex" : "flex"}`}>
+        <div className={`${ui.workspaceBar} relative z-[70] flex`}>
           <div className="relative z-10 flex h-[34px] min-w-0 flex-1 items-start gap-0.5 overflow-x-auto overflow-y-hidden">
             {workspaceTabs.map((tab) => {
               const active = workspacePathFor(location.pathname) === tab.path;
@@ -1369,9 +1369,11 @@ export default function Layout() {
         )}
 
         <main
-          className={`app-page-scroll min-h-0 flex-1 ${["/general-journal", "/chart-of-accounts"].includes(location.pathname) ? "app-page-scroll--module-frame" : ""} ${location.pathname === "/general-journal" ? "app-page-scroll--general-journal" : location.pathname === "/chart-of-accounts" ? "app-page-scroll--chart-of-accounts" : ""} ${location.pathname === "/ai" ? "overflow-hidden p-0 pb-[64px] lg:overflow-y-auto lg:p-6 lg:pb-6" : location.pathname === "/" ? "overflow-y-auto p-3 pb-24 sm:p-5 lg:p-6" : location.pathname.startsWith("/receipts") || location.pathname === "/items" || location.pathname === "/opening-stock" ? "overflow-y-auto p-0 pb-24 lg:pb-0" : "app-page-scroll--padded overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6"}`}
+          className="app-page-scroll app-page-scroll--module-frame min-h-0 flex-1"
         >
-          <Outlet />
+          <div className="app-module-content">
+            <Outlet />
+          </div>
         </main>
         {(
           <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md items-end justify-around rounded-t-3xl border border-white/10 bg-[#092542]/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 text-white shadow-2xl backdrop-blur-xl lg:hidden">

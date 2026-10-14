@@ -2836,7 +2836,7 @@ export default function WorkOrders() {
   };
 
   return (
-    <div className="space-y-0 lg:-mx-6 lg:-mt-6">
+    <div className="app-module-page">
       <div className={`${ui.childBar} ${showModal ? '!hidden lg:!flex' : ''}`}>
         <button type="button" onClick={() => { void requestCloseEditor(); }} className={ui.childListTab} title="Daftar Order Kerja">
           <ListPlus className="h-5 w-5" />
@@ -2886,6 +2886,7 @@ export default function WorkOrders() {
           <button type="button" onClick={() => window.open('/help?article=alur-order-kerja', '_blank')} className="flex h-8 w-10 items-center justify-center rounded bg-amber-500 text-white" title="Panduan Work Order"><Lightbulb className="h-4 w-4" /></button>
         </div>
       </div>
+      <div className="app-module-panel app-fill-stack">
 
       {!showModal && !detailWO && <>
       {/* Success Message */}
@@ -3144,8 +3145,8 @@ export default function WorkOrders() {
 
       {/* Desktop Work Order List */}
       {filteredWOs.length > 0 && (
-        <div className={`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`}>
-          <div className="max-h-[calc(100vh-238px)] overflow-auto">
+        <div className={"app-fill-stack " + (`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`)}>
+          <div className="app-table-scroll app-table-scroll--fill max-h-[calc(100vh-238px)] overflow-auto">
             <table className="w-full min-w-[1200px] table-fixed text-left" style={{ minWidth: Math.max(1200, orderedVisibleWorkOrderColumns.reduce((sum, key) => sum + (workOrderTable.isDesktop ? workOrderTable.widths[key] : WORK_ORDER_COLUMN_WIDTHS[key]), 0)) }}>
               <colgroup>
                 {orderedVisibleWorkOrderColumns.map(key => <col key={key} style={{ width: workOrderTable.isDesktop ? workOrderTable.widths[key] : WORK_ORDER_COLUMN_WIDTHS[key] }} />)}
@@ -3667,7 +3668,7 @@ export default function WorkOrders() {
                   <button type="button" disabled={!canEditWorkOrderInActiveBranch(detailWO) || detailWO.status === 'Closed' || Boolean(detailWO.invoiceId)} onClick={() => handleOpenModal(detailWO, true)} className="relative max-w-xl flex-1 text-left disabled:cursor-default"><span className="flex h-10 w-full items-center rounded-lg border border-gray-300 bg-white py-2.5 pl-3 pr-10 text-sm text-gray-500">Cari/Pilih Barang dan Jasa</span><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /></button>
                   <strong className="ml-auto shrink-0 text-sm text-gray-700">{detailWO.services.length} Barang/Jasa</strong>
                 </div>
-                <div className="overflow-hidden rounded border border-gray-200">
+                <div className="app-table-scroll overflow-hidden rounded border border-gray-200">
                 <div className="divide-y divide-gray-100 sm:hidden">
                   {detailWO.services.filter(service => !isPackageMemberService(service)).map(service => (
                     <div key={service.id} className="flex items-center justify-between px-4 py-3 text-sm">
@@ -4410,7 +4411,7 @@ export default function WorkOrders() {
                     </div>
 
                     {/* Master service table */}
-                    <div className="max-h-64 overflow-auto">
+                    <div className="app-table-scroll max-h-64 overflow-auto">
                       <table className="min-w-[650px] w-full text-sm">
                         <thead className="sticky top-0 z-[1] bg-gray-100 text-xs text-gray-600">
                           <tr>
@@ -4534,7 +4535,7 @@ export default function WorkOrders() {
                       );
                     })}
                   </div>
-                  <div data-wo-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
+                  <div data-wo-items-table className="app-table-scroll hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
                     <table className="min-w-[920px] w-full text-sm">
                       <thead className="bg-[var(--app-table-head)] text-xs uppercase text-white">
                         <tr>
@@ -5861,6 +5862,7 @@ export default function WorkOrders() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

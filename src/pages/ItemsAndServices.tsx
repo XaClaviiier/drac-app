@@ -1277,7 +1277,7 @@ export default function ItemsAndServices() {
   };
 
   return (
-    <div className="space-y-0">
+    <div className="app-module-page">
       <div className={ui.childBar}>
         <button type="button" onClick={() => { setShowItemModal(false); setItemListTab('list'); }} title="Daftar Barang & Jasa" className={ui.childListTab}>
           <List className="h-5 w-5" />
@@ -1291,7 +1291,8 @@ export default function ItemsAndServices() {
           </div>
         )}
       </div>
-      {!showItemModal && <div className="space-y-3 px-1 lg:space-y-0 lg:px-0">
+      <div className="app-module-panel app-fill-stack">
+      {!showItemModal && <div className="app-fill-stack space-y-3 px-1 lg:space-y-0 lg:px-0">
       {itemListTab === 'verification' && <section className="min-h-[560px] border border-slate-300 bg-[#eeeeee] p-4">
         <div className="mb-4"><h3 className="text-lg font-semibold text-slate-900">Verifikasi Barang Baru</h3><p className="text-sm text-slate-600">Sahkan jika data benar, atau gabungkan ke master lama jika barang ternyata duplikat.</p></div>
         {verificationFeedback && <div role="status" aria-live="polite" className={`mb-3 flex items-center gap-2 rounded border px-3 py-2 text-sm font-medium ${verificationFeedback.type === 'success' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : verificationFeedback.type === 'error' ? 'border-red-300 bg-red-50 text-red-800' : 'border-blue-300 bg-blue-50 text-blue-800'}`}>{verificationFeedback.type === 'success' ? <CheckCircle2 className="h-5 w-5 shrink-0"/> : <AlertCircle className="h-5 w-5 shrink-0"/>}<span>{verificationFeedback.message}</span><button type="button" onClick={() => setVerificationFeedback(null)} className="ml-auto rounded p-1 hover:bg-black/5" aria-label="Tutup pemberitahuan"><X className="h-4 w-4"/></button></div>}
@@ -1305,7 +1306,7 @@ export default function ItemsAndServices() {
           {!pendingItems.length && <div className="py-24 text-center text-slate-500"><CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-400"/>Tidak ada barang yang menunggu verifikasi.</div>}
         </div>
       </section>}
-      <div className={itemListTab === 'list' ? '' : 'hidden'}>
+      <div className={"app-fill-stack " + (itemListTab === 'list' ? '' : 'hidden')}>
       {/* Header */}
       <div className="lg:hidden">
         <div>
@@ -1369,7 +1370,7 @@ export default function ItemsAndServices() {
       </div>
 
       {/* Table */}
-      <div className={`${ui.tableShell} mx-1 lg:mx-3 lg:mt-0.5`}>
+      <div className={"app-fill-stack " + (`${ui.tableShell} mx-1 lg:mx-3 lg:mt-0.5`)}>
         <div className="lg:hidden">
           <div className="grid grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 bg-[#2442a8] px-2 py-2 text-[10px] font-semibold uppercase text-white">
             <span>Barang/Jasa</span><span className="text-center">Stok</span><span>Kategori</span><span className="text-center">Aksi</span>
@@ -1412,7 +1413,7 @@ export default function ItemsAndServices() {
             )}
           </div>
         </div>
-        <div className="hidden max-h-[calc(100vh-420px)] overflow-auto lg:block lg:max-h-[calc(100vh-265px)]">
+        <div className="app-table-scroll app-table-scroll--fill hidden max-h-[calc(100vh-420px)] overflow-auto lg:block lg:max-h-[calc(100vh-265px)]">
           <table className="w-full table-fixed" style={{ minWidth: tableMinWidth }}>
             <thead className="sticky top-0 z-10 bg-[#637c93] text-white">
               <tr>
@@ -1470,7 +1471,7 @@ export default function ItemsAndServices() {
                       {/* Expanded group members */}
                       {isGroup && expanded && (
                         <div className="border-t border-purple-100 bg-purple-50/40">
-                          <div className="px-14 py-2">
+                          <div className="app-table-scroll px-14 py-2">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-purple-600">Isi Group / Paket</p>
                             <table className="w-full text-sm">
                               <thead>
@@ -1598,7 +1599,7 @@ export default function ItemsAndServices() {
                 <h4 className="mb-2 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Stok per Gudang</h4>
                 <p className="mb-5 text-sm text-slate-600">Stok hanya berubah melalui penerimaan barang, transfer gudang, pemakaian, dan penyesuaian stok. Nilai di bawah tidak dapat diedit dari master barang.</p>
                 {!editingItem && <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">Simpan barang terlebih dahulu untuk melihat stok per gudang.</div>}
-                {editingItem && <div className="overflow-hidden rounded-t-lg border border-slate-300">
+                {editingItem && <div className="app-table-scroll overflow-hidden rounded-t-lg border border-slate-300">
                   <table className="w-full border-collapse text-sm">
                     <thead className="bg-[#637c93] text-left text-white"><tr><th className="px-4 py-2.5">Gudang</th><th className="px-4 py-2.5">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead>
                     <tbody>{itemWarehouseRows.map(({ warehouse, quantity, reserved, available }) => <tr key={warehouse.id} className="border-b border-slate-200 odd:bg-white even:bg-slate-50"><td className="px-4 py-2.5 font-medium text-slate-900">{warehouse.name}</td><td className="px-4 py-2.5 text-slate-600">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right tabular-nums">{quantity} {editingItem.unit}</td><td className="px-4 py-2.5 text-right tabular-nums text-amber-700">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>)}</tbody>
@@ -1635,7 +1636,7 @@ export default function ItemsAndServices() {
                   <button type="button" onClick={loadItemMovements} disabled={movementLoading} className="flex h-9 items-center gap-2 rounded bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50" title="Terapkan filter dan refresh mutasi"><RefreshCw className={`h-4 w-4 ${movementLoading ? 'animate-spin' : ''}`} />Tampilkan</button>
                   <div className="relative w-full sm:ml-auto sm:w-72"><input value={movementSearch} onChange={event => setMovementSearch(event.target.value)} placeholder="Cari nomor sumber / keterangan…" className="h-9 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-sm"/><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/></div>
                 </div>
-                <div className="min-h-[340px] overflow-auto">
+                <div className="app-table-scroll min-h-[340px] overflow-auto">
                   <table className="min-w-[900px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="w-[96px] px-3 py-2.5 text-left">Tanggal</th><th className="w-[142px] px-3 py-2.5 text-left">No. Sumber</th><th className="w-[145px] px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="w-[145px] px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
                     <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5 whitespace-nowrap">{new Date(movement.occurredAt||movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.referenceNumber || movement.id}</td><td className="px-3 py-2.5">{stockMovementLabels[movement.movementType]||movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{movement.incoming || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-red-700">{movement.outgoing || '—'}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td></tr>)}</tbody>
                   </table>
@@ -1647,7 +1648,7 @@ export default function ItemsAndServices() {
               </div>}
               {itemFormTab === 'warehouse' && <div className="min-h-[560px] rounded border border-slate-300 bg-white p-3 shadow-sm">
                 <div className="mb-3 flex items-end gap-3"><label className="block w-[180px] text-xs font-medium text-slate-600"><span className="mb-1 block">Saldo per Tanggal</span><IndonesianDateInput value={movementDateTo} onChange={setMovementDateTo} className="h-10 w-full text-sm"/></label><button type="button" onClick={loadWarehouseBalances} disabled={movementLoading} title="Tampilkan saldo" aria-label="Tampilkan saldo" className="flex h-10 w-12 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 disabled:opacity-50"><RefreshCw className={`h-5 w-5 ${movementLoading?'animate-spin':''}`}/></button></div>
-                <div className="overflow-hidden rounded-t-lg border border-slate-300"><table className="w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-4 py-2.5 text-left">Gudang</th><th className="px-4 py-2.5 text-left">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead><tbody>{itemWarehouseRows.map(({ warehouse, reserved }, index) => {const quantity=warehouseBalanceById[warehouse.id]??0,available=quantity-reserved;return <tr key={warehouse.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-4 py-2.5 font-medium">{warehouse.name}</td><td className="px-4 py-2.5">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right">{quantity}</td><td className="px-4 py-2.5 text-right">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>})}</tbody></table>{movementError&&<div className="bg-red-50 py-3 text-center text-sm text-red-700">{movementError}</div>}{!itemWarehouseRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada gudang aktif.</div>}</div>
+                <div className="app-table-scroll overflow-hidden rounded-t-lg border border-slate-300"><table className="w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="px-4 py-2.5 text-left">Gudang</th><th className="px-4 py-2.5 text-left">Cabang</th><th className="px-4 py-2.5 text-right">Stok</th><th className="px-4 py-2.5 text-right">Dipesan</th><th className="px-4 py-2.5 text-right">Tersedia</th></tr></thead><tbody>{itemWarehouseRows.map(({ warehouse, reserved }, index) => {const quantity=warehouseBalanceById[warehouse.id]??0,available=quantity-reserved;return <tr key={warehouse.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-4 py-2.5 font-medium">{warehouse.name}</td><td className="px-4 py-2.5">{warehouse.branchName}</td><td className="px-4 py-2.5 text-right">{quantity}</td><td className="px-4 py-2.5 text-right">{reserved}</td><td className={`px-4 py-2.5 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{available}</td></tr>})}</tbody></table>{movementError&&<div className="bg-red-50 py-3 text-center text-sm text-red-700">{movementError}</div>}{!itemWarehouseRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada gudang aktif.</div>}</div>
               </div>}
               {itemFormTab === 'account' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Akun Barang &amp; Jasa</h4><p className="text-sm text-slate-600">Pemetaan akun mengikuti kategori barang dan pengaturan akun perkiraan perusahaan.</p></div>}
               {itemFormTab === 'image' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm"><h4 className="mb-4 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Gambar Barang</h4><div className="flex h-56 max-w-lg items-center justify-center rounded border-2 border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">Fitur gambar barang akan ditambahkan pada penyimpanan media.</div></div>}
@@ -1779,7 +1780,7 @@ export default function ItemsAndServices() {
                       <p className="text-sm text-purple-600">Belum ada item dalam group. Cari & tambahkan item di atas.</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-purple-200 bg-white">
+                    <div className="app-table-scroll overflow-x-auto rounded-lg border border-purple-200 bg-white">
                       <table className="w-full text-sm">
                         <thead className="bg-purple-100/70">
                           <tr>
@@ -1894,7 +1895,7 @@ export default function ItemsAndServices() {
         </div>
       )}
 
-      {showVehicleBrandModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="text-lg font-bold">Master Merek Kendaraan</h3><p className="text-sm text-slate-500">Kode digunakan sebagai bagian kode barang otomatis.</p></div><button type="button" onClick={()=>setShowVehicleBrandModal(false)}><X/></button></header><form onSubmit={addVehicleBrand} className="flex gap-2 border-b bg-slate-50 p-4"><input value={newVehicleBrand} onChange={e=>setNewVehicleBrand(e.target.value)} placeholder="Nama merek kendaraan baru" className="min-w-0 flex-1 rounded border px-3 py-2 uppercase"/><button className="rounded bg-blue-600 px-5 py-2 font-semibold text-white">Tambah</button></form><div className="max-h-[52vh] overflow-y-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-slate-600 text-white"><tr><th className="p-3 text-left">Kode</th><th className="text-left">Merek Kendaraan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{vehicleBrands.map(row=><tr key={row.id} className="border-b"><td className="p-3 font-mono">{row.itemCode||'--'}</td><td>{row.name}</td><td className="text-center"><button type="button" onClick={()=>void toggleVehicleBrand(row)} className={`rounded-full px-2 py-0.5 text-xs ${row.isActive?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-600'}`}>{row.isActive?'Aktif':'Nonaktif'}</button></td><td className="text-center"><button type="button" onClick={()=>void editVehicleBrand(row)} title="Edit merek kendaraan" className="p-2 text-blue-600"><Edit className="h-4 w-4"/></button></td></tr>)}</tbody></table></div><footer className="flex justify-end border-t p-4"><button type="button" onClick={()=>setShowVehicleBrandModal(false)} className="rounded border px-5 py-2">Tutup</button></footer></div></div>}
+      {showVehicleBrandModal&&<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="text-lg font-bold">Master Merek Kendaraan</h3><p className="text-sm text-slate-500">Kode digunakan sebagai bagian kode barang otomatis.</p></div><button type="button" onClick={()=>setShowVehicleBrandModal(false)}><X/></button></header><form onSubmit={addVehicleBrand} className="flex gap-2 border-b bg-slate-50 p-4"><input value={newVehicleBrand} onChange={e=>setNewVehicleBrand(e.target.value)} placeholder="Nama merek kendaraan baru" className="min-w-0 flex-1 rounded border px-3 py-2 uppercase"/><button className="rounded bg-blue-600 px-5 py-2 font-semibold text-white">Tambah</button></form><div className="app-table-scroll max-h-[52vh] overflow-y-auto"><table className="w-full text-sm"><thead className="sticky top-0 bg-slate-600 text-white"><tr><th className="p-3 text-left">Kode</th><th className="text-left">Merek Kendaraan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{vehicleBrands.map(row=><tr key={row.id} className="border-b"><td className="p-3 font-mono">{row.itemCode||'--'}</td><td>{row.name}</td><td className="text-center"><button type="button" onClick={()=>void toggleVehicleBrand(row)} className={`rounded-full px-2 py-0.5 text-xs ${row.isActive?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-600'}`}>{row.isActive?'Aktif':'Nonaktif'}</button></td><td className="text-center"><button type="button" onClick={()=>void editVehicleBrand(row)} title="Edit merek kendaraan" className="p-2 text-blue-600"><Edit className="h-4 w-4"/></button></td></tr>)}</tbody></table></div><footer className="flex justify-end border-t p-4"><button type="button" onClick={()=>setShowVehicleBrandModal(false)} className="rounded border px-5 py-2">Tutup</button></footer></div></div>}
 
       {showBrandModal && (
         <div data-item-brand-master-modal className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="item-brand-master-title">
@@ -1911,7 +1912,7 @@ export default function ItemsAndServices() {
                 <button type="submit" className="rounded bg-blue-600 px-5 py-2 font-semibold text-white hover:bg-blue-700">{brandForm.id ? 'Perbarui' : 'Tambah'}</button>
               </form>
             ) : <p className="border-b bg-slate-50 px-5 py-3 text-sm text-slate-600">Anda dapat melihat daftar merek, tetapi tidak memiliki izin untuk menambah atau mengubahnya.</p>}
-            <div className="max-h-[50vh] overflow-y-auto">
+            <div className="app-table-scroll max-h-[50vh] overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-slate-600 text-white"><tr><th className="p-3 text-left">Kode</th><th className="text-left">Nama Merek</th><th>Barang</th><th>Status</th><th>Aksi</th></tr></thead>
                 <tbody>{itemBrands.map(row => <tr key={row.id} className="border-b"><td className="p-3 font-mono">{row.code}</td><td>{row.name}</td><td className="text-center font-semibold">{row.usageCount || 0}</td><td className="text-center">{row.isActive ? 'Aktif' : 'Nonaktif'}</td><td className="text-center">{hasPermission('item:edit') && <button type="button" onClick={() => setBrandForm({id:row.id,code:row.code,name:row.name,description:row.description || '',isActive:row.isActive})} aria-label={`Edit merek ${row.name}`} className="p-2 text-blue-600"><Edit className="h-4 w-4" /></button>}{hasPermission('item:delete') && <button type="button" onClick={() => void removeItemBrand(row)} aria-label={`Hapus merek ${row.name}`} className="p-2 text-red-600"><Trash2 className="h-4 w-4" /></button>}{!hasPermission('item:edit') && !hasPermission('item:delete') && <span className="text-slate-400">—</span>}</td></tr>)}</tbody>
@@ -2073,7 +2074,7 @@ export default function ItemsAndServices() {
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
                     Preview: {importPreview.length} baris siap diimport
                   </h4>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200 max-h-96">
+                  <div className="app-table-scroll overflow-x-auto rounded-lg border border-gray-200 max-h-96">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-100 text-xs text-gray-600 sticky top-0">
                         <tr>
@@ -2132,6 +2133,7 @@ export default function ItemsAndServices() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

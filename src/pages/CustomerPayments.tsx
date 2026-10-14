@@ -506,7 +506,7 @@ export default function CustomerPayments() {
   };
 
   return (
-    <div className="space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0">
+    <div className="app-module-page">
       {/* Subtab Pembayaran Pelanggan: daftar, data baru/edit, dan detail pembayaran. */}
       <div className={`${ui.childBar} hidden lg:flex`}>
         <button
@@ -534,6 +534,7 @@ export default function CustomerPayments() {
           )}
         </div>
       </div>
+      <div className="app-module-panel app-fill-stack">
 
       <div className={`${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -587,7 +588,7 @@ export default function CustomerPayments() {
         </div>
       </div>
 
-      <div className={`${ui.tableShell} mx-1 hidden overflow-x-auto shadow-sm md:block lg:mx-3 lg:mt-0.5`}>
+      <div className={"app-table-scroll app-table-scroll--fill " + (`${ui.tableShell} mx-1 hidden overflow-x-auto shadow-sm md:block lg:mx-3 lg:mt-0.5`)}>
         <table className="w-full text-sm">
           <thead className="bg-blue-800 text-white">
             <tr>
@@ -957,6 +958,7 @@ export default function CustomerPayments() {
           </form>
         </div>
       )}
+    </div>
     </div>
   );
 }

@@ -36,6 +36,7 @@ const formatBusinessDate = (value?: string) => {
 export default function VehicleRegister() {
   const { data, addVehicle, updateVehicle, deleteVehicle, resolveBranchId, hasPermission, currentUser, refreshData } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [detailVehicle, setDetailVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -226,6 +227,7 @@ export default function VehicleRegister() {
       notes: '',
     });
     setEditingVehicle(null);
+    setShowTechnicalDetails(false);
   };
 
   const handleOpenModal = (vehicle?: Vehicle) => {
@@ -256,6 +258,7 @@ export default function VehicleRegister() {
         address: owner?.address || vehicle.address,
         notes: vehicle.notes,
       });
+      setShowTechnicalDetails(Boolean(vehicle.generationId || vehicle.generationName || vehicle.engineCc || vehicle.engineType || vehicle.engineCode || vehicle.variant || vehicle.transmission || vehicle.hvacType || vehicle.year));
     } else {
       resetForm();
     }
@@ -286,7 +289,7 @@ export default function VehicleRegister() {
     }
     const selectedBrand = catalog.brands.find(brand => brand.isActive && brand.name === formData.brand);
     const selectedModel = selectedBrand?.models.find(model => model.isActive && model.name === formData.model);
-    if (catalog.brands.length && (!selectedBrand || !selectedModel)) {
+    if (catalog.brands.length && (!selectedBrand || !selectedModel) && !editingVehicle) {
       window.alert('Pilih merek dan tipe dari Master Kendaraan. Jika belum tersedia, tambahkan melalui tombol Master Kendaraan.');
       return;
     }
@@ -379,7 +382,7 @@ export default function VehicleRegister() {
   ].sort((left, right) => left.at.localeCompare(right.at)) : [];
 
   return (
-    <div className="space-y-3">
+    <div className="app-fill-stack space-y-3">
       {/* Toolbar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex items-center gap-3 overflow-x-auto">
@@ -427,8 +430,8 @@ export default function VehicleRegister() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="max-h-[calc(100vh-225px)] overflow-auto">
+      <div className="app-fill-stack bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="app-table-scroll app-table-scroll--fill max-h-[calc(100vh-225px)] overflow-auto">
           <table className="w-full">
             <thead className="sticky top-0 z-10 bg-gradient-to-r from-blue-800 to-blue-900 text-white">
               <tr>
@@ -602,7 +605,7 @@ export default function VehicleRegister() {
                     </div>
                     <div className="mt-3 flex justify-end gap-2"><button onClick={()=>resetGenerationDraft()} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Batal</button><button onClick={()=>void saveGeneration()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"><Save className="h-4 w-4" /> Simpan</button></div>
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="w-full min-w-[760px] text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-600"><tr><th className="px-3 py-2">Merek / Model</th><th className="px-3 py-2">Generasi</th><th className="px-3 py-2">Alias</th><th className="px-3 py-2">Tahun</th><th className="px-3 py-2">Mesin</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Aksi</th></tr></thead><tbody className="divide-y divide-gray-100">{filteredGenerations.map(generation=><tr key={generation.id} className={!generation.isActive?'bg-gray-50 text-gray-400':''}><td className="px-3 py-2"><div className="font-medium">{generation.brandName}</div><div className="text-xs text-gray-500">{generation.modelName}</div></td><td className="px-3 py-2 font-semibold">{generation.name}</td><td className="max-w-[180px] truncate px-3 py-2 text-xs">{generation.aliases||'-'}</td><td className="whitespace-nowrap px-3 py-2">{generation.yearFrom||'?'}–{generation.yearTo||'sekarang'}</td><td className="whitespace-nowrap px-3 py-2">{generation.engineCcs.length?generation.engineCcs.map(cc=>`${(cc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})} L`).join(', '):'Belum diketahui'}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${generation.isActive?'bg-emerald-100 text-emerald-700':'bg-gray-200 text-gray-500'}`}>{generation.isActive?'Aktif':'Nonaktif'}</span></td><td className="px-3 py-2"><div className="flex justify-end gap-1"><button title="Edit generasi" onClick={()=>{ const model=catalogModels.find(item=>item.id===generation.modelId); if(model) openGenerationForm(model,generation); }} className="inline-flex items-center gap-1 rounded px-2 py-1 text-blue-700 hover:bg-blue-50"><Edit className="h-4 w-4" /> Edit</button>{canDeactivateCatalog&&<button title={generation.isActive?'Nonaktifkan':'Aktifkan'} onClick={()=>void toggleGeneration(generation)} className={`inline-flex items-center gap-1 rounded px-2 py-1 ${generation.isActive?'text-emerald-700':'text-gray-600'}`}><Power className="h-4 w-4" /> {generation.isActive?'Aktif':'Nonaktif'}</button>}</div></td></tr>)}</tbody></table>{filteredGenerations.length===0&&<p className="py-8 text-center text-sm text-gray-400">Belum ada generasi yang sesuai pencarian.</p>}</div>
+                  <div className="app-table-scroll overflow-x-auto rounded-xl border border-gray-200"><table className="w-full min-w-[760px] text-sm"><thead className="bg-gray-100 text-left text-xs uppercase text-gray-600"><tr><th className="px-3 py-2">Merek / Model</th><th className="px-3 py-2">Generasi</th><th className="px-3 py-2">Alias</th><th className="px-3 py-2">Tahun</th><th className="px-3 py-2">Mesin</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Aksi</th></tr></thead><tbody className="divide-y divide-gray-100">{filteredGenerations.map(generation=><tr key={generation.id} className={!generation.isActive?'bg-gray-50 text-gray-400':''}><td className="px-3 py-2"><div className="font-medium">{generation.brandName}</div><div className="text-xs text-gray-500">{generation.modelName}</div></td><td className="px-3 py-2 font-semibold">{generation.name}</td><td className="max-w-[180px] truncate px-3 py-2 text-xs">{generation.aliases||'-'}</td><td className="whitespace-nowrap px-3 py-2">{generation.yearFrom||'?'}–{generation.yearTo||'sekarang'}</td><td className="whitespace-nowrap px-3 py-2">{generation.engineCcs.length?generation.engineCcs.map(cc=>`${(cc/1000).toLocaleString('id-ID',{maximumFractionDigits:1})} L`).join(', '):'Belum diketahui'}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${generation.isActive?'bg-emerald-100 text-emerald-700':'bg-gray-200 text-gray-500'}`}>{generation.isActive?'Aktif':'Nonaktif'}</span></td><td className="px-3 py-2"><div className="flex justify-end gap-1"><button title="Edit generasi" onClick={()=>{ const model=catalogModels.find(item=>item.id===generation.modelId); if(model) openGenerationForm(model,generation); }} className="inline-flex items-center gap-1 rounded px-2 py-1 text-blue-700 hover:bg-blue-50"><Edit className="h-4 w-4" /> Edit</button>{canDeactivateCatalog&&<button title={generation.isActive?'Nonaktifkan':'Aktifkan'} onClick={()=>void toggleGeneration(generation)} className={`inline-flex items-center gap-1 rounded px-2 py-1 ${generation.isActive?'text-emerald-700':'text-gray-600'}`}><Power className="h-4 w-4" /> {generation.isActive?'Aktif':'Nonaktif'}</button>}</div></td></tr>)}</tbody></table>{filteredGenerations.length===0&&<p className="py-8 text-center text-sm text-gray-400">Belum ada generasi yang sesuai pencarian.</p>}</div>
                 </section>
               ) : masterTab === 'color' ? (
                 <section className="mx-auto max-w-xl">
@@ -613,7 +616,7 @@ export default function VehicleRegister() {
               ) : (
                 <section>
                   <div className="mb-3"><h4 className="font-semibold text-gray-900">Riwayat Perubahan Master</h4><p className="text-xs text-gray-500">Mencatat penambahan, perubahan nama, urutan, penggabungan, dan penonaktifan.</p></div>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <div className="app-table-scroll overflow-x-auto rounded-lg border border-gray-200">
                     <table className="w-full min-w-[680px] text-sm">
                       <thead className="bg-gray-100 text-left text-xs uppercase text-gray-600"><tr><th className="px-3 py-2">Waktu</th><th className="px-3 py-2">Pengguna</th><th className="px-3 py-2">Data</th><th className="px-3 py-2">Aksi</th><th className="px-3 py-2">Keterangan</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">{catalog.auditLogs.map(log => <tr key={log.id}><td className="whitespace-nowrap px-3 py-2 text-gray-500">{formatAuditTime(log.createdAt)}</td><td className="px-3 py-2 font-medium text-gray-800">{log.userName || '-'}</td><td className="px-3 py-2">{log.entityName || log.entity}</td><td className="px-3 py-2 font-semibold text-blue-700">{log.action}</td><td className="px-3 py-2 text-gray-600">{log.detail || '-'}</td></tr>)}</tbody>
@@ -636,7 +639,7 @@ export default function VehicleRegister() {
                 <h3 className="text-lg font-semibold text-gray-900">
                   {editingVehicle ? 'Edit Kendaraan' : 'Tambah Kendaraan Baru'}
                 </h3>
-                <p className="text-sm text-gray-500">Isi data kendaraan pelanggan</p>
+                <p className="text-sm text-gray-500">Registrasi cepat kendaraan pelanggan. Detail teknis dapat dilengkapi nanti.</p>
               </div>
               <button
                 onClick={handleCloseModal}
@@ -652,6 +655,9 @@ export default function VehicleRegister() {
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Car className="w-4 h-4" /> Informasi Kendaraan
                 </h4>
+                <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                  Isi nomor plat, pelanggan, merek, tipe/model, dan warna. Informasi generasi, tahun, serta mesin tidak menghambat penyimpanan.
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -677,7 +683,7 @@ export default function VehicleRegister() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     >
                       <option value="">Pilih merek</option>
-                      {formData.brand && !catalogBrandNames.includes(formData.brand) && <option value={formData.brand}>{formData.brand} — perlu verifikasi</option>}
+                      {formData.brand && !catalogBrandNames.includes(formData.brand) && editingVehicle && <option value={formData.brand}>{formData.brand} — data lama</option>}
                       {catalogBrandNames.map((brand) => (
                         <option key={brand} value={brand}>{brand}</option>
                       ))}
@@ -695,12 +701,41 @@ export default function VehicleRegister() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 bg-white"
                     >
                       <option value="">{formData.brand ? 'Pilih tipe/model' : 'Pilih merek dahulu'}</option>
-                      {formData.model && !catalogModelNames.includes(formData.model) && <option value={formData.model}>{formData.model} — perlu verifikasi</option>}
+                      {formData.model && !catalogModelNames.includes(formData.model) && editingVehicle && <option value={formData.model}>{formData.model} — data lama</option>}
                       {catalogModelNames.map(model => (
                         <option key={model} value={model}>{model}</option>
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Warna <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      list="vehicle-color-options"
+                      required
+                      value={formData.color}
+                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      placeholder="Pilih atau ketik warna"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    />
+                    <datalist id="vehicle-color-options">
+                      {catalogColorNames.map(color => <option key={color} value={color} />)}
+                    </datalist>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200">
+                <button type="button" onClick={() => setShowTechnicalDetails(current => !current)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50">
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-800">Detail Teknis <span className="font-normal text-gray-400">(opsional)</span></span>
+                    <span className="block text-xs text-gray-500">Generasi, tahun, kapasitas mesin, dan spesifikasi kendaraan</span>
+                  </span>
+                  <ChevronDown className={`h-5 w-5 text-gray-500 transition-transform ${showTechnicalDetails ? 'rotate-180' : ''}`} />
+                </button>
+                {showTechnicalDetails && <div className="border-t border-gray-200 p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Generasi / Nama Pasar <span className="text-xs font-normal text-gray-400">(opsional)</span></label>
                     <select value={formData.generationId} onChange={event => { const generation=availableGenerations.find(item=>item.id===event.target.value); setFormData({...formData,generationId:event.target.value,generationName:generation?.name||'',engineCc:0,engineType:'',engineCode:'',variant:'',transmission:'',hvacType:'',year: formData.year && generation && ((generation.yearFrom&&formData.year<generation.yearFrom)||(generation.yearTo&&formData.year>generation.yearTo)) ? 0 : formData.year}); }} disabled={!formData.model} className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 disabled:bg-gray-100">
@@ -752,23 +787,8 @@ export default function VehicleRegister() {
                       {vehicleYears.filter(year => !selectedGeneration || ((!selectedGeneration.yearFrom || year >= selectedGeneration.yearFrom) && (!selectedGeneration.yearTo || year <= selectedGeneration.yearTo))).map(year => <option key={year} value={year}>{year}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Warna <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      list="vehicle-color-options"
-                      required
-                      value={formData.color}
-                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                      placeholder="Pilih atau ketik warna"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                    />
-                    <datalist id="vehicle-color-options">
-                      {catalogColorNames.map(color => <option key={color} value={color} />)}
-                    </datalist>
-                  </div>
                 </div>
+                </div>}
               </div>
 
               {/* Info Pelanggan */}

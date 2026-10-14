@@ -341,8 +341,8 @@ export default function GoodsReceiptPage() {
   const openNewReceipt=()=>{if(currentBranchId==='ALL'){window.alert('Pilih satu cabang di bagian atas sebelum membuat penerimaan. Semua Cabang hanya untuk melihat data.');return}navigate('/receipts/new')};
 
   return (
-    <div className="space-y-5">
-      <section className="overflow-hidden rounded-none border-0 bg-[#f2f2f2] shadow-none [&_thead]:!bg-[#60778e]">
+    <div className="app-fill-stack space-y-5">
+      <section className="app-fill-stack overflow-hidden rounded-none border-0 bg-[#f2f2f2] shadow-none [&_thead]:!bg-[#60778e]">
         <div className="mt-0.5 flex items-end border-b border-[#b8b8b8] bg-[#fafafa] pl-1.5"><div className="flex h-11 w-14 items-center justify-center rounded-t-lg border border-b-0 border-[#b8b8b8] bg-[#f2f2f2] text-blue-700" title="Daftar Penerimaan"><List className="h-5 w-5"/></div></div>
         <div className="space-y-3 bg-[#ededed] p-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -370,8 +370,8 @@ export default function GoodsReceiptPage() {
           })}
           {!filtered.length&&<div className="rounded border border-slate-200 bg-white py-14 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-10 w-10"/>Belum ada penerimaan barang.</div>}
         </div>
-        <div className="hidden lg:block">
-        <div className="mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{receiptColumns.map(column=><th key={column} draggable onDragStart={()=>setDraggedReceiptColumn(column)} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedReceiptColumn)moveReceiptColumn(draggedReceiptColumn,column);setDraggedReceiptColumn(null)}} onDragEnd={()=>setDraggedReceiptColumn(null)} onClick={()=>setReceiptSort(current=>({column,direction:current.column===column&&current.direction==='asc'?'desc':'asc'}))} title="Klik untuk mengurutkan. Tarik untuk memindahkan kolom." className={`cursor-grab select-none whitespace-nowrap border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0 ${draggedReceiptColumn===column?'opacity-50':''}`}>{receiptColumnLabels[column]} {receiptSort.column===column&&<span className="text-[10px]">{receiptSort.direction==='asc'?'▲':'▼'}</span>}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{receiptColumns.map(column=>{
+        <div className="app-fill-stack hidden lg:block">
+        <div className="app-table-scroll app-table-scroll--fill mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{receiptColumns.map(column=><th key={column} draggable onDragStart={()=>setDraggedReceiptColumn(column)} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedReceiptColumn)moveReceiptColumn(draggedReceiptColumn,column);setDraggedReceiptColumn(null)}} onDragEnd={()=>setDraggedReceiptColumn(null)} onClick={()=>setReceiptSort(current=>({column,direction:current.column===column&&current.direction==='asc'?'desc':'asc'}))} title="Klik untuk mengurutkan. Tarik untuk memindahkan kolom." className={`cursor-grab select-none whitespace-nowrap border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0 ${draggedReceiptColumn===column?'opacity-50':''}`}>{receiptColumnLabels[column]} {receiptSort.column===column&&<span className="text-[10px]">{receiptSort.direction==='asc'?'▲':'▼'}</span>}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{receiptColumns.map(column=>{
           const base='border-r border-[#d8d8d8] p-3 last:border-r-0';
           if(column==='number')return <td key={column} className={`${base} font-normal text-blue-700 underline-offset-2 hover:underline`}>{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td>;
           if(column==='date')return <td key={column} className={`${base} whitespace-nowrap`}>{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td>;
@@ -476,7 +476,7 @@ export default function GoodsReceiptPage() {
 
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="app-table-scroll overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gradient-to-r from-blue-800 to-blue-900 text-white">
               <tr>
@@ -716,7 +716,7 @@ export default function GoodsReceiptPage() {
                     Belum ada barang. Klik "Tambah Barang".
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border border-blue-200 bg-white">
+                  <div className="app-table-scroll overflow-x-auto rounded-lg border border-blue-200 bg-white">
                     <table className="w-full text-sm">
                       <thead className="bg-blue-100/70">
                         <tr>
@@ -800,7 +800,7 @@ export default function GoodsReceiptPage() {
                 <div><p className="text-gray-500">Gudang</p><p className="font-medium">{data.warehouses.find(w=>w.id===viewing.warehouseId)?.name||'-'}</p></div>
                 {viewing.shippingNotes&&<div className="col-span-2"><p className="text-gray-500">Keterangan Pengiriman</p><p className="font-medium">{viewing.shippingNotes}</p></div>}
               </div>
-              <div className="rounded-lg border border-gray-200 overflow-hidden">
+              <div className="app-table-scroll rounded-lg border border-gray-200 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
@@ -910,7 +910,7 @@ export default function GoodsReceiptPage() {
               </div>
 
               {/* Items Table - editable price */}
-              <div className="overflow-x-auto rounded-lg border border-blue-200 bg-white">
+              <div className="app-table-scroll overflow-x-auto rounded-lg border border-blue-200 bg-white">
                 <table className="w-full text-sm">
                   <thead className="bg-blue-100/70">
                     <tr>

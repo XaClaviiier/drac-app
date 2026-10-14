@@ -307,7 +307,7 @@ export default function PurchaseInvoicesPage() {
   const totalPaid = reportInvoices.reduce((s, p) => s + p.paidAmount, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="app-fill-stack space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -407,8 +407,8 @@ export default function PurchaseInvoicesPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+      <div className="app-fill-stack overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="app-table-scroll app-table-scroll--fill overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gradient-to-r from-blue-800 to-blue-900 text-white">
               <tr>
@@ -615,7 +615,7 @@ export default function PurchaseInvoicesPage() {
                       Pilih penerimaan barang di atas untuk dimasukkan ke faktur.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-blue-200 bg-white">
+                    <div className="app-table-scroll overflow-x-auto rounded-lg border border-blue-200 bg-white">
                       <table className="w-full text-sm">
                         <thead className="bg-blue-100/70">
                           <tr>
@@ -784,7 +784,7 @@ export default function PurchaseInvoicesPage() {
                   <div><p className="text-gray-500">No. Penerimaan</p><p className="font-medium text-xs">{current.receiptIds.map(rid => data.goodsReceipts.find(r => r.id === rid)?.receiptNumber).join(', ')}</p></div>
                 </div>
 
-                <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="app-table-scroll rounded-lg border border-gray-200 overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>

@@ -928,7 +928,7 @@ export default function SalesInvoice() {
   };
 
   return (
-    <div className="space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0">
+    <div className="app-module-page">
       {/* Subtab Faktur Penjualan: daftar, data baru/edit, dan detail faktur. */}
       <div className={`${ui.childBar} hidden lg:flex`}>
         <button
@@ -960,6 +960,7 @@ export default function SalesInvoice() {
           </div>
         )}
       </div>
+      <div className="app-module-panel app-fill-stack">
       {/* Success Message */}
       {successMsg && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
@@ -1166,8 +1167,8 @@ export default function SalesInvoice() {
       </div>
 
       {/* Tabel desktop */}
-      <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : 'hidden lg:block'} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`}>
-        <div className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
+      <div className={"app-fill-stack " + (`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : 'hidden lg:block'} ${ui.tableShell} mx-1 shadow-sm lg:mx-3 lg:mt-0.5`)}>
+        <div className="app-table-scroll app-table-scroll--fill max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto">
           <table className="w-full min-w-[1040px] table-fixed border-collapse" style={{ minWidth: Math.max(1040, orderedVisibleInvoiceColumns.reduce((sum, key) => sum + (invoiceTable.isDesktop ? invoiceTable.widths[key] : SALES_INVOICE_COLUMN_WIDTHS[key]), 0)) }}>
             <colgroup>
               {orderedVisibleInvoiceColumns.map(key => <col key={key} style={{ width: invoiceTable.isDesktop ? invoiceTable.widths[key] : SALES_INVOICE_COLUMN_WIDTHS[key] }} />)}
@@ -1601,7 +1602,7 @@ export default function SalesInvoice() {
                     {!visibleInvoiceItems.length && <div className="rounded border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">Belum ada barang atau jasa.</div>}
                   </div>
 
-                  <div data-invoice-items-table className="hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
+                  <div data-invoice-items-table className="app-table-scroll hidden overflow-x-auto rounded border border-gray-400 bg-white shadow-[0_2px_7px_rgba(15,23,42,0.18)] sm:block lg:min-h-[calc(100dvh-520px)] [@media(min-width:1024px)_and_(min-height:820px)]:min-h-[calc(100dvh-400px)]">
                     <table className="min-w-[920px] w-full text-sm">
                       <thead className="bg-[var(--app-table-head)] text-xs uppercase text-white"><tr><th className="w-10 px-3 py-2.5 text-center font-medium">No</th><th className="px-3 py-2.5 text-left font-medium">Nama Barang/Jasa</th><th className="w-40 px-3 py-2.5 text-left font-medium">Barcode / Kode</th><th className="w-24 px-3 py-2.5 text-center font-medium">Qty</th><th className="w-40 px-3 py-2.5 text-right font-medium">Harga Satuan</th><th className="w-36 px-3 py-2.5 text-right font-medium">Subtotal</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
@@ -1911,6 +1912,7 @@ export default function SalesInvoice() {
           </div>
         </section>
       )}
+    </div>
     </div>
   );
 }

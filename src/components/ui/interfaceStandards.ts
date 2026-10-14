@@ -4,6 +4,11 @@
  * tidak memiliki versi berbeda di setiap modul.
  */
 export const ui = {
+  modulePage: 'app-module-page',
+  modulePanel: 'app-module-panel',
+  tableScroll: 'app-table-scroll',
+  tableScrollFill: 'app-table-scroll app-table-scroll--fill',
+  fillStack: 'app-fill-stack',
   workspaceBar: 'app-workspace-bar',
   workspaceTab: 'app-workspace-tab',
   workspaceTabActive: 'app-workspace-tab app-workspace-tab--active',

@@ -1,17 +1,15 @@
-.adjustment-workspace { background:#eee; color:#171717; font:14px Arial,sans-serif; min-height:calc(100vh - 165px); }
+.adjustment-workspace { color:#171717; font:14px var(--app-font-family); }
 .adjustment-workspace button { cursor:pointer; }
 .adjustment-workspace button:disabled { cursor:not-allowed; opacity:.55; }
 .adjustment-workspace button:focus-visible { outline:2px solid #278aca; outline-offset:2px; }
 .adjustment-workspace input,.adjustment-workspace select,.adjustment-workspace textarea { border:1px solid #bbb; border-radius:3px; background:white; font:inherit; padding:6px; min-width:0; }
 .adjustment-workspace input:focus,.adjustment-workspace textarea:focus,.adjustment-workspace select:focus { outline:1px solid #59b3e4; box-shadow:0 0 5px #8acbf1; }
 .adjustment-workspace input:disabled { background:#f5f5f5; color:#888; }
-.adjustment-workspace .app-child-bar { min-height:42px; }
-.adjustment-workspace .adjustment-list-active { background:#eee; color:#222; border:1px solid #aaa; }
 .adjustment-tab-tools { margin-left:auto; display:flex; align-items:center; gap:5px; padding:0 12px; position:relative; }
 .adjustment-icon,.adjustment-outline { display:inline-flex; align-items:center; justify-content:center; gap:3px; min-width:39px; height:35px; padding:0 10px; border:1px solid #6192b2; border-radius:3px; background:#fff; color:#266188; }
 .adjustment-outline { min-width:68px; }
 .adjustment-help { background:#ffb000; border:1px solid #ed9800; color:white; height:35px; width:40px; border-radius:3px; display:grid; place-items:center; }
-.adjustment-list { padding:10px 6px; min-height:calc(100vh - 210px); border:1px solid #aaa; border-top:0; }
+.adjustment-list { padding: 2px 0 0; }
 .adjustment-filter-row { display:flex; align-items:center; gap:10px; min-height:35px; margin-bottom:10px; flex-wrap:wrap; }
 .adjustment-date-filter { display:flex; align-items:center; border:1px solid #bbb; border-radius:3px; background:white; padding-left:9px; font-size:12px; }
 .adjustment-date-filter > span { width:132px; }
@@ -32,7 +30,7 @@
 .adjustment-menu button:hover { background:#e9f1f8; }
 .adjustment-table-scroll { overflow:auto; background:white; }
 .adjustment-table-scroll table { width:100%; border-collapse:collapse; table-layout:fixed; }
-.adjustment-table-scroll th { background:#5c7184; color:white; font-size:13px; font-weight:400; text-align:center; height:34px; position:sticky; top:0; z-index:1; border-right:1px solid #ffffff40; }
+.adjustment-table-scroll th { background:var(--app-table-header-background); color:white; font-size:13px; font-weight:400; text-align:center; height:34px; border-right:1px solid #ffffff40; }
 .adjustment-table-scroll th button { width:100%; height:34px; position:relative; }
 .adjustment-table-scroll th button svg { position:absolute; left:8px; top:10px; opacity:.7; }
 .adjustment-table-scroll td { padding:11px 9px; border:1px solid #f0f0f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; height:41px; }
@@ -41,7 +39,7 @@
 .adjustment-table-scroll td button { color:inherit; text-align:left; }
 .adjustment-clickable { cursor:pointer; }
 .adjustment-document-link { display:block; width:100%; }
-.adjustment-list-table { min-height:calc(100vh - 332px); border-radius:5px 5px 0 0; }
+.adjustment-list-table { border-radius:5px 5px 0 0; }
 .adjustment-empty { text-align:center; padding:12px; border-bottom:1px solid #f3f3f3; }
 .adjustment-form { display:grid; grid-template-columns:minmax(0,1fr) 103px; gap:24px; padding:5px 15px 14px 6px; }
 .adjustment-form-main { min-width:0; }

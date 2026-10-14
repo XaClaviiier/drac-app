@@ -93,7 +93,7 @@ export default function BranchDeposits() {
     await load();
   };
   return (
-    <div className="space-y-4">
+    <div className="app-fill-stack space-y-4">
       <div className="flex justify-end">
         <button
           onClick={() => void load()}
@@ -133,7 +133,7 @@ export default function BranchDeposits() {
           </div>
         ))}
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-white">
+      <div className="app-table-scroll app-table-scroll--fill overflow-x-auto rounded-xl border bg-white">
         <table className="w-full text-sm">
           <thead className="bg-blue-900 text-white">
             <tr>

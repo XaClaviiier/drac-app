@@ -228,7 +228,7 @@ export default function Customers() {
   };
 
   return (
-    <div className="space-y-6 lg:-mx-5 lg:-mt-5 lg:space-y-1">
+    <div className="app-module-page">
       {/* Subtab modul Pelanggan (desktop) */}
       <div className={`${ui.childBar} hidden lg:flex`}>
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={ui.childListTab}><List className="h-5 w-5" /></button>
@@ -239,8 +239,9 @@ export default function Customers() {
           </div>
         )}
       </div>
+      <div className="app-module-panel app-fill-stack">
 
-      <div className={`${showModal ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5`}>
+      <div className={"app-fill-stack " + (`${showModal ? 'lg:hidden' : ''} space-y-6 lg:space-y-0.5`)}>
       {/* Search */}
       <div className="space-y-2">
         <div className={`${ui.toolbar} flex flex-wrap items-center gap-2`}>
@@ -289,8 +290,8 @@ export default function Customers() {
 
       {/* Desktop Customer Table */}
       {filteredCustomers.length > 0 && (
-        <div className={`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`}>
-          <div className="max-h-[calc(100vh-245px)] overflow-auto">
+        <div className={"app-fill-stack " + (`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`)}>
+          <div className="app-table-scroll app-table-scroll--fill max-h-[calc(100vh-245px)] overflow-auto">
             <table className="w-full min-w-[1050px] text-left">
               <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
                 <tr>
@@ -609,6 +610,7 @@ export default function Customers() {
       </div></div>}
       {contactCustomer && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between bg-emerald-600 px-5 py-4 text-white"><div><h3 className="font-bold">WhatsApp Pelanggan</h3><p className="text-xs text-emerald-100">{contactCustomer.name} · {contactCustomer.phone}</p></div><button onClick={()=>setContactCustomer(null)}><X className="h-5 w-5"/></button></header><div className="space-y-4 p-5"><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{(['Hubungi Kembali','Terima Kasih','Minta Ulasan','Pengingat Servis','Pesan Bebas'] as ContactTemplate[]).map(template=><button key={template} onClick={()=>changeTemplate(template)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${contactTemplate===template?'border-emerald-600 bg-emerald-50 text-emerald-700':'border-gray-200 text-gray-600'}`}>{template}</button>)}</div><label className="block text-sm font-medium text-gray-700">Pesan<textarea rows={7} value={contactMessage} onChange={event=>setContactMessage(event.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 p-3 text-sm outline-none focus:border-emerald-500"/></label><p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Saat dilanjutkan, sistem mencatat status “WhatsApp Dibuka”. Pengiriman dan pembacaan pesan tidak dapat dipastikan tanpa WhatsApp Business API.</p></div><footer className="flex justify-end gap-2 border-t p-4"><button onClick={()=>setContactCustomer(null)} className="rounded-lg border px-4 py-2">Batal</button><button onClick={()=>void sendContact()} disabled={!contactMessage.trim()} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white disabled:bg-gray-300"><MessageCircle className="h-4 w-4"/>Buka WhatsApp</button></footer></div></div>}
       {historyCustomer && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-5 py-4"><div><h3 className="font-bold">Riwayat Kontak</h3><p className="text-sm text-gray-500">{historyCustomer.name}</p></div><button onClick={()=>setHistoryCustomer(null)}><X className="h-5 w-5"/></button></header><div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">{historyLoading?<p className="py-10 text-center text-gray-400">Memuat histori...</p>:contactHistory.length?contactHistory.map(log=><article key={log.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{log.templateType}</span><p className="mt-2 text-xs text-gray-500">{[log.vehicleInfo,log.workOrderNumber,log.invoiceNumber].filter(Boolean).join(' · ')||'Kontak pelanggan'}</p></div><div className="text-right text-xs text-gray-500"><p className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5"/>{new Date(log.createdAt).toLocaleString('id-ID')}</p><p>{log.createdByName||'-'} · {log.status}</p></div></div><p className="mt-3 whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm text-gray-700">{log.messageText}</p></article>):<p className="py-10 text-center text-gray-400">Belum ada riwayat kontak.</p>}</div><footer className="flex justify-end border-t p-4"><button onClick={()=>setHistoryCustomer(null)} className="rounded-lg border px-4 py-2">Tutup</button></footer></div></div>}
+    </div>
     </div>
   );
 }

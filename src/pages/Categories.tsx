@@ -85,7 +85,7 @@ export default function Categories() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="app-fill-stack space-y-5">
       {/* Action */}
       <div className="flex justify-end">
         {hasPermission('item:create') && (
@@ -116,7 +116,7 @@ export default function Categories() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="app-table-scroll app-table-scroll--fill overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <table className="w-full">
           <thead className="bg-blue-900 text-white">
             <tr>

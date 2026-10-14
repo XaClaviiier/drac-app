@@ -1,0 +1,275 @@
+/*
+ * Standar seluruh workspace: bingkai, sub-tab, panel, dan tabel.
+ * Warna/geometri bersama hanya di sini. CSS modul mengatur isi dan kolom.
+ */
+:root {
+  --app-page-surround: #fafafa;
+  --app-panel-background: #efefef;
+  --app-panel-border: #aeb4bc;
+  --app-panel-gutter: 6px;
+  --app-subtab-height: 41px;
+  --app-table-header-background: #5c7287;
+  --app-table-header-color: #fff;
+}
+
+.app-workspace-bar {
+  position: relative;
+  display: none !important;
+  height: 34px;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overflow-anchor: none;
+  background: #f3f4f6;
+  border: 1px solid #aeb8c4;
+  border-bottom: 1px solid #c7cdd5;
+  border-radius: 3px 3px 0 0;
+  padding: 0 8px;
+}
+@media (min-width: 1024px) {
+  .app-workspace-bar {
+    display: flex !important;
+    margin-top: 4px;
+  }
+}
+.app-workspace-bar::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  height: 1px;
+  content: "";
+  background: var(--app-blue);
+}
+.app-workspace-bar > div:first-child { gap: 6px; }
+.app-workspace-tab {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  height: 34px;
+  min-width: 128px;
+  flex: 0 0 auto;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 1px solid #9aa6b5;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: #cfd5dd;
+  color: #334155;
+  font-family: "Segoe UI", "Open Sans", Verdana, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  box-sizing: border-box;
+}
+.app-workspace-tab:hover { background: #cfd5dd; color: #334155; }
+.app-workspace-tab--active {
+  border-color: #1e4fa3;
+  background: #1e4fa3;
+  color: #fff;
+  font-weight: 500;
+}
+.app-workspace-tab--active:hover { background: #1e4fa3; color: #fff; }
+.app-workspace-bar > select { font-family: "Segoe UI", "Open Sans", Verdana, Arial, sans-serif; font-size: 16px; }
+
+
+.app-page-scroll--module-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 3px var(--app-panel-gutter) var(--app-panel-gutter);
+  border: 1px solid var(--app-panel-border);
+  border-top: 0;
+  background: var(--app-page-surround);
+  overflow: hidden;
+}
+.app-page-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.app-page-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.app-module-content {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--app-panel-border);
+  border-radius: 3px;
+  background: var(--app-panel-background);
+  overflow: auto;
+}
+.app-module-content:has(> .app-module-page) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+.app-module-content:has(> .fixed) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+.app-module-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: var(--app-page-surround);
+  overflow: hidden;
+}
+.app-module-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 5px 5px;
+  border: 1px solid var(--app-panel-border);
+  border-radius: 0 3px 3px 3px;
+  background: var(--app-panel-background);
+  box-shadow: 0 1px 2px #0000000d;
+  overflow: auto;
+}
+.app-child-bar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex: 0 0 var(--app-subtab-height);
+  min-height: var(--app-subtab-height);
+  align-items: stretch;
+  gap: 4px;
+  background: var(--app-page-surround);
+}
+.app-child-tab, .app-child-list-tab {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--app-subtab-height);
+  border: 1px solid var(--app-panel-border);
+  border-radius: 4px 4px 0 0;
+  background: var(--app-tab-idle);
+  color: #4b5563;
+  white-space: nowrap;
+}
+.app-child-tab { min-width: 176px; max-width: 320px; }
+.app-child-tab > button, .app-child-tab > span { overflow: hidden; text-overflow: ellipsis; }
+.app-child-list-tab { width: 55px; min-width: 55px; justify-content: center; }
+.app-child-tab--active, .app-child-list-tab--active {
+  z-index: 1;
+  height: calc(var(--app-subtab-height) + 1px);
+  margin-bottom: -1px;
+  border-bottom-color: var(--app-panel-background);
+  background: var(--app-panel-background);
+  color: #172033;
+}
+.app-child-bar:not(:has(.app-child-tab--active)) > .app-child-list-tab {
+  z-index: 1;
+  height: calc(var(--app-subtab-height) + 1px);
+  margin-bottom: -1px;
+  border-bottom-color: var(--app-panel-background);
+  background: var(--app-panel-background);
+  color: #172033;
+}
+.app-page-scroll--document-locked > .app-module-content { overflow: hidden; }
+.app-module-pad { padding: 12px; }
+.app-table-shell {
+  min-width: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+/* The wrapper is the scroll owner; one sticky THEAD also supports multi-row headers. */
+@media screen {
+  .app-table-scroll {
+    min-width: 0;
+    overflow: auto !important;
+    max-height: var(--app-table-max-height, 65dvh);
+    overscroll-behavior: contain;
+    background: #fff;
+  }
+  .app-table-scroll > table > thead {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10;
+    background: var(--app-table-header-background) !important;
+    background-image: none !important;
+    color: var(--app-table-header-color) !important;
+    box-shadow: inset 0 -1px #8c9ba9;
+  }
+  .app-table-scroll > table > thead th {
+    position: static !important;
+    background: var(--app-table-header-background) !important;
+    background-image: none !important;
+    color: var(--app-table-header-color) !important;
+    white-space: nowrap;
+  }
+}
+.app-fill-stack { min-width: 0; }
+@media (min-width: 1024px) {
+  /* Utilities still control hidden list/editor variants. */
+  .app-fill-stack:not(.hidden):not(.lg\:hidden),
+  .app-fill-stack.lg\:block {
+    display: flex;
+    flex-direction: column;
+  }
+  .app-fill-stack {
+    min-height: 0 !important;
+    flex: 1 1 0;
+  }
+  .app-module-content > .app-fill-stack { height: 100%; }
+  .app-fill-stack > :not(.app-fill-stack):not(.app-table-scroll--fill) { flex-shrink: 0; }
+  .app-fill-stack > .app-table-scroll--fill,
+  .app-table-scroll--fill {
+    flex: 1 1 0;
+    min-height: 80px !important;
+    max-height: none !important;
+  }
+  .app-module-panel.app-fill-stack:has(.app-table-scroll--fill) { overflow: hidden; }
+  .app-editor-panel { overflow: auto; }
+}
+@media (max-width: 1023px) {
+  .app-page-scroll--module-frame {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+  .app-module-panel { overflow: auto; }
+  .app-child-bar { flex-shrink: 0; }
+  .app-table-scroll { max-height: 60dvh; }
+  .app-workorder-mobile-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+  }
+}
+@media print {
+  .app-page-scroll--module-frame, .app-module-content, .app-module-page,
+  .app-module-panel, .app-fill-stack, .app-table-shell, .app-table-scroll {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none;
+  }
+  .app-table-scroll > table > thead, .app-table-scroll > table > thead th {
+    position: static !important;
+  }
+  .app-workspace-bar, .app-child-bar { display: none !important; }
+}
+
