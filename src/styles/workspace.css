@@ -388,7 +388,7 @@
   z-index: 1;
   height: calc(var(--app-subtab-height) + 1px);
   margin-bottom: -1px;
-  border-bottom-color: var(--app-panel-background);
+  border-bottom: 0;
   background: var(--app-panel-background);
   color: #172033;
 }
@@ -396,7 +396,7 @@
   z-index: 1;
   height: calc(var(--app-subtab-height) + 1px);
   margin-bottom: -1px;
-  border-bottom-color: var(--app-panel-background);
+  border-bottom: 0;
   background: var(--app-panel-background);
   color: #172033;
 }
