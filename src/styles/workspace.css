@@ -599,12 +599,20 @@
 .app-entry-document-shell { flex-shrink: 0; }
 .app-entry-lines-panel { min-height: 318px; padding: 12px; }
 .app-entry-lines-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.app-entry-account-search { position: relative; min-width: 0; flex: 1; }
-.app-entry-account-search input { display: block; width: 100%; min-width: 0; padding-left: 36px; padding-right: 40px; background: #fff; }
-.app-entry-search-icon { position: absolute; left: 12px; top: 50%; z-index: 1; transform: translateY(-50%); color: #9ca3af; pointer-events: none; }
-.app-entry-account-search button { position: absolute; inset: 0 0 0 auto; display: grid; width: 40px; place-items: center; border: 0; background: transparent; color: #075da8; }
-.app-entry-account-search button:disabled { color: #9ca3af; }
-.app-entry-lines-count { flex-shrink: 0; color: #1f2937; font-size: 14px; white-space: nowrap; }
+/* Compact account picker shared by document forms; metadata mirrors the account master. */
+.app-account-search { position: relative; flex: 0 1 360px; width: 360px; max-width: 100%; min-width: 0; }
+.app-account-search > input { display: block; width: 100%; min-width: 0; padding-left: 10px; padding-right: 40px; background: #fff; }
+.app-account-search-toggle { position: absolute; inset: 0 0 0 auto; display: grid; width: 40px; place-items: center; border: 0; background: transparent; color: #075da8; }
+.app-account-search-toggle:disabled { color: #9ca3af; }
+.app-account-search-options { position: fixed; z-index: 1000; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; border: 1px solid #c7c7c7; background: #fff; box-shadow: 0 4px 10px #0003; color: #172033; font-family: var(--app-font-family); text-align: left; }
+.app-account-search-option { padding: 9px 10px; border-bottom: 1px solid #ddd; cursor: pointer; }
+.app-account-search-option:last-child { border-bottom: 0; }
+.app-account-search-option[aria-selected='true'] { background: #eaf4fc; }
+.app-account-search-name { display: block; overflow-wrap: anywhere; font-size: 16px; line-height: 1.4; }
+.app-account-search-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; margin-top: 5px; overflow-wrap: anywhere; font-size: 13px; line-height: 1.4; }
+.app-account-search-meta em { margin-left: auto; text-align: right; }
+.app-account-search-empty { padding: 16px 10px; color: #667085; font-size: 13px; }
+.app-entry-lines-count { margin-left: auto; flex-shrink: 0; color: #1f2937; font-size: 14px; white-space: nowrap; }
 .app-entry-lines-panel .app-table-shell { min-height: 250px; border: 1px solid #9ca8b4; border-radius: 4px; box-shadow: 0 2px 4px #0f172a1a; }
 .app-journal-lines { width: 100%; min-width: 760px; }
 .app-accounting-page .app-journal-lines th { height: 36px; font-size: 12px !important; font-weight: 600; text-transform: uppercase; }

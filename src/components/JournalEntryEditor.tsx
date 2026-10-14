@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Search, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import { localDate, sourceLabel, type JournalRow } from '../lib/journalList';
 import type { JournalBranch } from './JournalListFilters';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from './AccurateDocumentSideTabs';
 import AccurateFormActionRail from './AccurateFormActionRail';
+import AccountSearch, { type AccountSearchOption } from './AccountSearch';
 
 export type JournalDetail = JournalRow & { lines: Array<{ account_code?: string; account_name?: string; debit: number; credit: number; memo?: string }> };
-export type JournalAccount = { id: string; code: string; name: string; isActive: boolean };
+export type JournalAccount = AccountSearchOption;
 type EntryLine = { accountId: string; debit: string; credit: string; memo: string };
 const blank = (): EntryLine => ({ accountId: '', debit: '', credit: '', memo: '' });
 export const journalMoney = (value: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value);
@@ -33,7 +34,6 @@ export default function JournalEntryEditor({ detail, accounts, branches, initial
   const [autoNumber, setAutoNumber] = useState(true);
   const [entryNumber, setEntryNumber] = useState('');
   const [lines, setLines] = useState<EntryLine[]>([]);
-  const [accountSearch, setAccountSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const dirty = !detail && (date !== initialDate || !!description || branchId !== initialBranchId || !autoNumber || !!entryNumber || lines.length > 0 || lines.some(line => !!line.accountId || !!line.debit || !!line.credit || !!line.memo));
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
@@ -42,13 +42,9 @@ export default function JournalEntryEditor({ detail, accounts, branches, initial
   const credit = detail ? detail.lines.reduce((sum, line) => sum + Number(line.credit), 0) : lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
   const balanced = debit > 0 && Math.round(debit * 100) === Math.round(credit * 100);
   const update = (index: number, patch: Partial<EntryLine>) => setLines(values => values.map((value, i) => i === index ? { ...value, ...patch } : value));
-  const addAccountLine = () => {
-    const query = accountSearch.trim().toLowerCase();
-    if (!query || detail || busy || !canCreate) return;
-    const account = accounts.find(value => `${value.code} · ${value.name}`.toLowerCase() === query || value.code.toLowerCase() === query || value.name.toLowerCase() === query);
-    if (!account) return;
+  const addAccountLine = (account: JournalAccount) => {
+    if (detail || busy || !canCreate || !account.isActive) return;
     setLines(values => [...values, { ...blank(), accountId: account.id }]);
-    setAccountSearch('');
   };
   const sourcePath = detail?.sourceId && detail.sourceType === 'sales_invoice' ? '/invoices?view=' + encodeURIComponent(detail.sourceId)
     : detail?.sourceId && detail.sourceType === 'customer_payment' ? '/customer-payments?viewInvoiceId=' + encodeURIComponent(detail.sourceId)
@@ -87,12 +83,7 @@ export default function JournalEntryEditor({ detail, accounts, branches, initial
         {tab === 'details' ? <>
         <section className="app-entry-lines-panel">
           <div className="app-entry-lines-toolbar">
-            <div className="app-entry-account-search">
-              <Search className="app-entry-search-icon" size={16} />
-              <input aria-label="Cari akun perkiraan" list="journal-account-options" placeholder="Cari/Pilih Akun Perkiraan..." value={accountSearch} disabled={busy || !canCreate || !!detail} onChange={event => setAccountSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addAccountLine(); } }} />
-              <button type="button" aria-label="Tambah akun ke rincian jurnal" disabled={busy || !canCreate || !!detail} onClick={addAccountLine}><Search size={20} /></button>
-              <datalist id="journal-account-options">{accounts.map(account => <option key={account.id} value={`${account.code} · ${account.name}`} />)}</datalist>
-            </div>
+            <AccountSearch accounts={accounts} disabled={busy || !canCreate || !!detail} onSelect={addAccountLine} />
             <strong className="app-entry-lines-count">{detail ? detail.lines.length : lines.length} Akun</strong>
           </div>
           <div className="app-table-scroll app-table-shell">
