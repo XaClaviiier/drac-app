@@ -343,6 +343,44 @@ body {
   border-top: 0;
   background: #f3f4f6;
   box-shadow: inset 0 0 0 1px #ffffff80;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+.app-page-scroll--module-frame > * {
+  min-height: 0;
+}
+.app-page-scroll--chart-of-accounts > .coa-preview,
+.app-page-scroll--general-journal > .app-journal-page {
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.app-page-scroll--general-journal:has(.app-journal-detail) {
+  overflow-y: auto !important;
+}
+.app-page-scroll--general-journal:has(input[aria-label="Dari tanggal"]) > div:first-child,
+.app-page-scroll--general-journal:has(input[aria-label="Tanggal jurnal"]) > div:first-child {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 24px;
+}
+.app-page-scroll--general-journal:has(input[aria-label="Dari tanggal"]) > div:first-child > section:last-child,
+.app-page-scroll--general-journal:has(input[aria-label="Tanggal jurnal"]) > div:first-child > section {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.app-page-scroll--general-journal:has(input[aria-label="Dari tanggal"]) > div:first-child > section:last-child > div,
+.app-page-scroll--general-journal:has(input[aria-label="Tanggal jurnal"]) > div:first-child > section > div.overflow-x-auto {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
 }
 .app-page-scroll--document-locked {
   overflow-y: hidden !important;
