@@ -131,6 +131,36 @@
   background: var(--app-page-surround);
   overflow: hidden;
 }
+.app-module-header {
+  flex: 0 0 auto;
+  margin: 0 0 6px;
+  padding: 8px 6px 7px;
+  border-bottom: 1px solid var(--app-panel-border);
+  background: var(--app-page-surround);
+}
+.app-module-header h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.25;
+}
+.app-module-header p { margin-top: 2px; color: #667085; font-size: 12px; }
+.app-module-header button {
+  min-height: 35px;
+  border: 1px solid #1766b1;
+  border-radius: 3px;
+  background: #194c9e;
+  padding: 6px 12px;
+  color: #fff;
+}
+.app-module-filters {
+  flex: 0 0 auto;
+  margin-bottom: 6px !important;
+  border: 1px solid var(--app-panel-border) !important;
+  border-radius: 3px !important;
+  background: var(--app-panel-background) !important;
+  padding: 8px !important;
+}
 .app-module-panel {
   display: flex;
   flex-direction: column;
