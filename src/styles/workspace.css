@@ -4,7 +4,7 @@
  */
 :root {
   --app-page-surround: #fafafa;
-  --app-panel-background: #efefef;
+  --app-panel-background: var(--app-canvas);
   --app-panel-border: #aeb4bc;
   --app-panel-gutter: 6px;
   --app-subtab-height: 41px;
