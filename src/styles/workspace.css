@@ -402,8 +402,8 @@
   margin-bottom: -1px;
   border-bottom: 0;
   border-color: var(--app-panel-border);
-  background: var(--app-tab-idle);
-  color: #334155;
+  background: var(--app-panel-background);
+  color: #172033;
 }
 .app-child-bar:has(.app-child-tab--active) > .app-child-list-tab {
   border-color: #4caf1f;
@@ -412,7 +412,7 @@
 }
 .app-child-tab--active {
   border-top: 1px solid var(--app-panel-border);
-  background: var(--app-tab-idle);
+  background: var(--app-panel-background);
 }
 .app-child-bar:not(:has(.app-child-tab--active)) > .app-child-list-tab {
   z-index: 1;
