@@ -112,6 +112,7 @@ case 'POST':
         $paidStmt=$pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE invoice_id=?');
         $paidStmt->execute([$invoiceId]);
         $outstanding=max(0,(float)$invoice['total']-(float)$paidStmt->fetchColumn());
+        $amount=(float)($d['amount']??0);
         if($amount<=0)throw new Exception('Nominal pembayaran harus lebih dari Rp0');
         if($amount>$outstanding)throw new Exception('Nominal pembayaran melebihi sisa tagihan');
         $date=(string)($d['date']??date('Y-m-d'));

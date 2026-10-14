@@ -51,8 +51,10 @@ test('faktur dari WO memilih gudang per barang dan memperingatkan stok negatif',
 test('pembayaran mengunci faktur dan menolak nilai melebihi sisa tagihan', () => {
   const php = source('api/endpoints/customer-payments.php');
   assert.match(php, /sales_invoices WHERE id=\? FOR UPDATE/);
+  assert.match(php, /\$amount=\(float\)\(\$d\['amount'\]\?\?0\);[\s\S]*?if\(\$amount<=0\)/);
   assert.match(php, /Nominal pembayaran melebihi sisa tagihan/);
   assert.match(php, /recalculateCustomerInvoice\s*\(/);
+  assert.match(php, /postCustomerPaymentJournal\(\$pdo,[\s\S]*'amount'=>\$amount/);
   assert.match(php, /beginTransaction\s*\(/);
   assert.match(php, /->rollBack\s*\(/);
 });
