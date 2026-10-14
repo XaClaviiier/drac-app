@@ -87,6 +87,41 @@ function seedChartOfAccounts(PDO $pdo): array {
     return $ids;
 }
 
+function alignChartOfAccountsWithAccurate(PDO $pdo): void {
+    $migrationKey = 'coa_accurate_alignment_v1';
+    $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
+    $check->execute([$migrationKey]);
+    if ((int)$check->fetchColumn() > 0) return;
+
+    $rows = require __DIR__ . '/coa-seed.php';
+    $detailMap = [
+        'BANK'=>'Kas & Bank', 'AREC'=>'Piutang Usaha', 'INTR'=>'Persediaan',
+        'OCAS'=>'Aset Lancar Lainnya', 'FASS'=>'Aset Tetap', 'DEPR'=>'Akumulasi Penyusutan',
+        'APAY'=>'Utang Usaha', 'OCLY'=>'Liabilitas Jangka Pendek', 'LTLY'=>'Liabilitas Jangka Panjang',
+        'EQTY'=>'Modal', 'REVE'=>'Pendapatan', 'COGS'=>'Beban Pokok Penjualan',
+        'EXPS'=>'Beban', 'OEXP'=>'Beban Lainnya', 'OINC'=>'Pendapatan Lainnya',
+    ];
+    $codes = [];
+    $update = $pdo->prepare('UPDATE chart_of_accounts SET name=?,account_type=?,normal_balance=?,is_active=1,detail_type=?,revision=revision+1 WHERE code=?');
+    $creditTypes = ['DEPR','LTLY','OCLY','APAY','EQTY','REVE','OINC'];
+    foreach ($rows as [$code,$sourceType,$name]) {
+        $detailType = $detailMap[$sourceType] ?? null;
+        if ($detailType === null) continue;
+        $accountType = in_array($sourceType, ['LTLY','OCLY','APAY'], true) ? 'Liability'
+            : (in_array($sourceType, ['EQTY'], true) ? 'Equity'
+            : (in_array($sourceType, ['REVE','OINC'], true) ? 'Revenue'
+            : (in_array($sourceType, ['EXPS','OEXP','COGS'], true) ? 'Expense' : 'Asset')));
+        $normal = in_array($sourceType, $creditTypes, true) ? 'Credit' : 'Debit';
+        $update->execute([$name,$accountType,$normal,$detailType,$code]);
+        $codes[] = $code;
+    }
+    if ($codes) {
+        $marks = implode(',', array_fill(0, count($codes), '?'));
+        $pdo->prepare("UPDATE chart_of_accounts SET is_active=0 WHERE code NOT IN ($marks)")->execute($codes);
+    }
+    $pdo->prepare('INSERT INTO app_schema_migrations(migration_key) VALUES(?)')->execute([$migrationKey]);
+}
+
 function findVehicleByNormalizedPlate(PDO $pdo, string $plate, ?string $excludeId = null): ?array {
     $rows = $pdo->query("SELECT id, plate_number, customer_name FROM vehicles")->fetchAll();
     foreach ($rows as $row) {
@@ -995,7 +1030,7 @@ function ensureApiSupportTables(PDO $pdo): void {
         $pdo->exec("UPDATE purchase_payments SET account_id=bank_account WHERE (account_id IS NULL OR account_id='') AND bank_account IS NOT NULL AND bank_account<>''");
     }
     $coaIds = seedChartOfAccounts($pdo);
-    $pdo->exec("UPDATE chart_of_accounts SET is_active=0 WHERE code IN ('1000','1300','4101','4102')");
+    alignChartOfAccountsWithAccurate($pdo);
     $pdo->exec("CREATE TABLE IF NOT EXISTS customer_payments (
         id VARCHAR(64) PRIMARY KEY, payment_number VARCHAR(40) NOT NULL UNIQUE, invoice_id VARCHAR(64) NOT NULL,
         date DATE NOT NULL, amount DECIMAL(15,2) NOT NULL DEFAULT 0, payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai',

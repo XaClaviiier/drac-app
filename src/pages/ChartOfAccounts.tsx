@@ -17,7 +17,7 @@ export default function ChartOfAccounts(){
  const [accounts,setAccounts]=useState<Account[]>([]);
  const [form,setForm]=useState<Account>(empty),[opened,setOpened]=useState(false),[list,setList]=useState(true),[tab,setTab]=useState('Informasi Umum'),[dirty,setDirty]=useState(false);
  const [sub,setSub]=useState(false),[auto,setAuto]=useState(true),[parentOpen,setParentOpen]=useState(false),[parentSearch,setParentSearch]=useState('');
- const [query,setQuery]=useState(''),[search,setSearch]=useState(''),[active,setActive]=useState('Semua'),[selectedTypes,setSelectedTypes]=useState<string[]>([]),[activeMenuOpen,setActiveMenuOpen]=useState(false),[typeMenuOpen,setTypeMenuOpen]=useState(false),[typeFilterSearch,setTypeFilterSearch]=useState(''),[menu,setMenu]=useState(''),[notice,setNotice]=useState(''),[sort,setSort]=useState({key:'code',asc:true}),[allUsers,setAllUsers]=useState(true);
+ const [query,setQuery]=useState(''),[search,setSearch]=useState(''),[active,setActive]=useState('Tidak'),[selectedTypes,setSelectedTypes]=useState<string[]>([]),[activeMenuOpen,setActiveMenuOpen]=useState(false),[typeMenuOpen,setTypeMenuOpen]=useState(false),[typeFilterSearch,setTypeFilterSearch]=useState(''),[menu,setMenu]=useState(''),[notice,setNotice]=useState(''),[sort,setSort]=useState({key:'code',asc:true}),[allUsers,setAllUsers]=useState(true);
  const [columns,setColumns]=useState(['Kode Perkiraan','Nama','Tipe Akun','Saldo']);
  const [from,setFrom]=useState('2026-09-01'),[to,setTo]=useState('2026-09-10');
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue=''}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty]);
