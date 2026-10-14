@@ -88,7 +88,10 @@ function seedChartOfAccounts(PDO $pdo): array {
 }
 
 function alignChartOfAccountsWithAccurate(PDO $pdo): void {
-    $migrationKey = 'coa_accurate_alignment_v1';
+    // v2 mengulang alignment untuk database yang sudah pernah menjalankan v1
+    // tetapi masih memiliki detail_type kosong. Nilai saldo dan jurnal tidak
+    // disentuh; yang diperbaiki hanya metadata akun agar sama dengan Accurate.
+    $migrationKey = 'coa_accurate_alignment_v2';
     $check = $pdo->prepare('SELECT COUNT(*) FROM app_schema_migrations WHERE migration_key=?');
     $check->execute([$migrationKey]);
     if ((int)$check->fetchColumn() > 0) return;

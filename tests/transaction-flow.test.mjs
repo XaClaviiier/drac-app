@@ -59,6 +59,19 @@ test('pembayaran mengunci faktur dan menolak nilai melebihi sisa tagihan', () =>
   assert.match(php, /->rollBack\s*\(/);
 });
 
+test('alignment tipe akun Accurate memperbaiki metadata detail tanpa mengganti kelompok buku besar', () => {
+  const helpers = source('api/helpers.php');
+  assert.match(helpers, /coa_accurate_alignment_v2/);
+  assert.match(helpers, /'BANK'=>'Kas & Bank'/);
+  assert.match(helpers, /'AREC'=>'Piutang Usaha'/);
+  assert.match(helpers, /'COGS'=>'Beban Pokok Penjualan'/);
+  assert.match(helpers, /'OEXP'=>'Beban Lainnya'/);
+  assert.match(helpers, /'OINC'=>'Pendapatan Lainnya'/);
+  assert.match(helpers, /'OCLY'=>'Liabilitas Jangka Pendek'/);
+  assert.match(helpers, /detail_type=\?,revision=revision\+1/);
+  assert.match(helpers, /Nilai saldo dan jurnal tidak/);
+});
+
 test('penghapusan faktur mengembalikan stok dan melepas relasi WO', () => {
   const php = source('api/endpoints/sales-invoices.php');
   assert.match(php, /adjustWarehouseStockAllowNegative\([^;]+\(int\)\$detail\['qty'\]/s);
