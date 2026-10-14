@@ -531,23 +531,25 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   const layout = source('src/components/Layout.tsx');
   const page = source('src/pages/WorkOrders.tsx');
   const styles = source('src/index.css');
+  const workspace = source('src/styles/workspace.css');
   assert.match(layout, /lg:h-12 lg:py-1/);
   assert.match(layout, /h-\[34px\]/);
   assert.match(layout, /items-start gap-0\.5 overflow-x-auto/);
   assert.match(layout, /className=\{`\$\{ui\.workspaceBar\} hidden lg:flex`\}/);
-  assert.match(styles, /\.app-workspace-bar[\s\S]*height: 34px/);
-  assert.match(styles, /\.app-child-tab[\s\S]*height: 40px/);
-  assert.match(styles, /\.app-child-bar[\s\S]*gap: 2px/);
+  assert.match(source('src/main.tsx'), /import "\.\/styles\/workspace\.css"/);
+  assert.match(workspace, /\.app-workspace-bar\s*\{[^}]*height: 34px/);
+  assert.match(workspace, /--app-subtab-height: 41px/);
+  assert.match(workspace, /\.app-child-tab, \.app-child-list-tab\s*\{[^}]*height: var\(--app-subtab-height\)/);
+  assert.match(workspace, /\.app-child-bar\s*\{[^}]*gap: 4px/);
   assert.match(styles, /\.app-control,[\s\S]*height: 36px/);
-  assert.match(styles, /\.app-table-shell table thead th[\s\S]*height: 32px/);
+  assert.match(workspace, /\.app-table-scroll > table > thead\s*\{[^}]*position: sticky !important;[^}]*top: 0 !important;/);
   assert.match(page, /className=\{`\$\{ui\.search\} w-full pl-9 pr-3`\}/);
   assert.match(page, /className="h-9 min-w-0 w-full text-xs sm:text-sm lg:w-40"/);
-  assert.match(page, /className=\{`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\}/);
-  assert.match(page, /space-y-0 lg:-mx-6 lg:-mt-6/);
+  assert.match(page, /className=\{"app-fill-stack " \+ \(`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\)\}/);
+  assert.match(page, /className="app-module-page"/);
   assert.match(page, /app-workorder-mobile-toolbar border-y/);
   assert.match(page, /space-y-2 px-2 pb-3 pt-2 lg:hidden/);
-  assert.match(styles, /\.app-workorder-mobile-toolbar[\s\S]*?position: sticky;[\s\S]*?top: calc\(var\(--app-child-sticky-top, 0px\) \+ 42px\);[\s\S]*?z-index: 50;/);
-  assert.match(styles, /@media \(min-width: 1024px\)[\s\S]*?\.app-workorder-mobile-toolbar[\s\S]*?position: static;/);
+  assert.match(workspace, /@media \(max-width: 1023px\)[\s\S]*?\.app-workorder-mobile-toolbar\s*\{[^}]*position: sticky;[^}]*top: 0;[^}]*z-index: 15;/);
   assert.match(layout, /app-brand-header/);
   assert.doesNotMatch(layout, /app-brand-header absolute left-0 top-0 flex h-12 w-\[320px\]/);
   assert.match(layout, /bg-\[#061a3a\] pt-12/);
@@ -624,7 +626,8 @@ test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
   assert.match(items, /title="Cetak \/ Simpan PDF sesuai filter" className="flex h-9 w-9/);
   assert.match(items, /title="Pengaturan Kolom" className="flex h-9 w-9/);
   assert.match(items, /className="relative w-\[360px\]"/);
-  assert.match(items, /className=\{`\$\{ui\.tableShell\} mx-1 lg:mx-3 lg:mt-0\.5`\}/);
+  assert.match(items, /className=\{"app-fill-stack " \+ \(`\$\{ui\.tableShell\} mx-1 lg:mx-3 lg:mt-0\.5`\)\}/);
+  assert.match(items, /app-table-scroll app-table-scroll--fill hidden/);
   assert.match(items, /<th colSpan=\{9\} className="!h-8 !p-0">/);
   assert.match(items, /className="flex h-8 items-center text-xs font-semibold uppercase"/);
 });
@@ -652,7 +655,9 @@ test('Master Merek Barang tersedia dari menu Barang dan Jasa serta menerima kode
 
 test('daftar Faktur Penjualan mengikuti kepadatan dan perataan Order Kerja', () => {
   const page = source('src/pages/SalesInvoice.tsx');
-  assert.match(page, /space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
+  assert.match(page, /className="app-module-page"/);
+  assert.match(page, /className="app-module-panel app-fill-stack"/);
+  assert.match(page, /app-table-scroll app-table-scroll--fill/);
   assert.match(page, /\$\{ui\.toolbar\} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2/);
   assert.match(page, /className="flex flex-wrap items-center gap-x-2 gap-y-1\.5"/);
   assert.match(page, /title="Filter daftar faktur"/);
@@ -709,7 +714,9 @@ test('kolom desktop WO dan Faktur dapat diurutkan dipindah dan diubah lebarnya',
 
 test('daftar Pembayaran Pelanggan mengikuti kepadatan dan perataan Order Kerja', () => {
   const page = source('src/pages/CustomerPayments.tsx');
-  assert.match(page, /space-y-3 lg:-mx-6 lg:-mt-6 lg:space-y-0/);
+  assert.match(page, /className="app-module-page"/);
+  assert.match(page, /className="app-module-panel app-fill-stack"/);
+  assert.match(page, /app-table-scroll app-table-scroll--fill/);
   assert.match(page, /className=\{`\$\{ui\.childBar\} hidden lg:flex`\}/);
   assert.match(page, /\$\{ui\.toolbar\} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2/);
   assert.match(page, /title="Pembayaran Baru" aria-label="Pembayaran Baru" className="flex h-9 w-14/);
@@ -860,17 +867,17 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(styles, /box-shadow: 0 0 0 1px rgba\(22, 131, 255, \.28\) !important/);
   assert.match(styles, /\.app-locked-field:disabled[\s\S]*?background-color: #ffffff !important;[\s\S]*?color: #111827 !important;/);
   assert.match(styles, /\.app-combobox-field:focus-within/);
-  assert.match(styles, /\.app-workspace-tab[\s\S]*?flex: 0 0 auto;/);
-  assert.match(styles, /\.app-workspace-bar[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
-  assert.match(styles, /\.app-child-bar[\s\S]*?position: sticky;[\s\S]*?top: var\(--app-child-sticky-top, 0px\);[\s\S]*?z-index: 60;[\s\S]*?gap: 2px;[\s\S]*?overflow-anchor: none;/);
-  assert.match(styles, /\.app-page-scroll--padded[\s\S]*?--app-child-sticky-top: -0\.75rem;[\s\S]*?@media \(min-width: 640px\)[\s\S]*?--app-child-sticky-top: -1\.5rem;/);
-  assert.match(styles, /\.app-child-tab[\s\S]*?flex: 0 0 auto;/);
-  assert.match(styles, /\.app-child-list-tab[\s\S]*?flex: 0 0 60px;/);
-  assert.match(source('src/components/Layout.tsx'), /app-page-scroll min-h-0 flex-1/);
-  assert.match(source('src/components/Layout.tsx'), /app-page-scroll--padded overflow-y-auto p-3 pb-24 sm:p-6 lg:pb-6/);
-  assert.match(styles, /\.app-page-scroll[\s\S]*?scrollbar-width: none;/);
-  assert.match(styles, /\.app-page-scroll--document-locked[\s\S]*?overflow-y: hidden !important;/);
-  assert.match(styles, /\.app-page-scroll::\-webkit-scrollbar[\s\S]*?display: none;/);
+  const workspace = source('src/styles/workspace.css');
+  assert.match(workspace, /\.app-workspace-tab\s*\{[^}]*flex: 0 0 auto;/);
+  assert.match(workspace, /\.app-workspace-bar\s*\{[^}]*gap: 2px;[^}]*overflow-anchor: none;/);
+  assert.match(workspace, /\.app-child-bar\s*\{[^}]*flex: 0 0 var\(--app-subtab-height\);/);
+  assert.match(workspace, /\.app-child-tab, \.app-child-list-tab\s*\{[^}]*flex-shrink: 0;/);
+  assert.match(workspace, /\.app-child-list-tab\s*\{[^}]*width: 55px;[^}]*min-width: 55px;/);
+  assert.match(source('src/components/Layout.tsx'), /app-page-scroll app-page-scroll--module-frame min-h-0 flex-1/);
+  assert.match(workspace, /\.app-page-scroll--module-frame\s*\{[^}]*overflow: hidden;/);
+  assert.match(workspace, /\.app-page-scroll\s*\{[^}]*scrollbar-width: none;/);
+  assert.match(workspace, /\.app-page-scroll--document-locked > \.app-module-content\s*\{[^}]*overflow: hidden;/);
+  assert.match(workspace, /\.app-page-scroll::\-webkit-scrollbar\s*\{[^}]*display: none;/);
   const documentCanvas = source('src/lib/useAccurateDocumentCanvas.ts');
   assert.match(documentCanvas, /page\.classList\.toggle\('app-page-scroll--document-locked', shouldLock\)/);
   assert.match(documentCanvas, /if \(shouldLock\) page\.scrollTop = 0/);
