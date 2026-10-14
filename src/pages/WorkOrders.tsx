@@ -3951,7 +3951,7 @@ export default function WorkOrders() {
               </div>
             </div>
 
-            <form id="work-order-entry-form" data-wo-ui-standard={WORK_ORDER_UI_STANDARD_VERSION} onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-5 sm:space-y-6 sm:p-6 lg:space-y-3 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
+            <form id="work-order-entry-form" data-wo-ui-standard={WORK_ORDER_UI_STANDARD_VERSION} onSubmit={handleSubmit} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-5 sm:space-y-6 sm:p-6 lg:max-h-[calc(100dvh-150px)] lg:space-y-3 lg:overflow-y-auto lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
               <AccurateFormActionRail
                 ariaLabel="Aksi Work Order"
                 className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"

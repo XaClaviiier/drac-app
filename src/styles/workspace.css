@@ -493,6 +493,7 @@
   }
   .app-module-panel.app-fill-stack:has(.app-table-scroll--fill) { overflow: hidden; }
   .app-editor-panel { overflow: auto; }
+  [data-wo-items-table] { min-height: min(425px, calc(100dvh - 555px)) !important; }
 }
 @media (max-width: 1023px) {
   .app-page-scroll--module-frame {
