@@ -1,81 +1,151 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, BarChart3, BookOpen, Calculator, Eye, Landmark, Package, Plus, Printer, Save, Search, Settings, ShoppingCart, X } from 'lucide-react';
+import { ArrowUpDown, X } from 'lucide-react';
 import { api } from '../lib/apiClient';
-import AccurateFormActionRail from '../components/AccurateFormActionRail';
+import { useApp } from '../context/AppContext';
+import { AccountingListToolbar, AccountingModuleTabs } from '../components/AccountingListHeader';
+import JournalListFilters, { type JournalBranch } from '../components/JournalListFilters';
+import JournalEntryEditor, { journalMoney, type JournalAccount, type JournalDetail } from '../components/JournalEntryEditor';
+import { DEFAULT_JOURNAL_COLUMNS, JOURNAL_COLUMNS, journalCell, journalCsv, journalDateBounds, journalSourceType, visibleJournals, type DateSelection, type JournalRow } from '../lib/journalList';
 
-type Account = { id: string; code: string; name: string; isActive: boolean };
-type Line = { accountId: string; debit: string; credit: string; memo: string };
-type JournalRow = { id: string; date: string; number: string; description: string; sourceType?: string; sourceId?: string; transactionNumber?: string; partyType?: string | null; partyId?: string | null; partyName?: string | null; total: number };
-type JournalDetail = JournalRow & { sourceId?: string; lines: Array<{ account_code?: string; account_name?: string; debit: number; credit: number; memo?: string }> };
-
-const blank = (): Line => ({ accountId: '', debit: '', credit: '', memo: '' });
-const amount = (v: string) => Number(v || 0);
-const money = (v: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v);
-const sourceLabel = (type?: string) => ({ sales_invoice: 'Faktur Penjualan', customer_payment: 'Penerimaan Penjualan', purchase_invoice: 'Faktur Pembelian', supplier_payment: 'Pembayaran Pembelian', manual: 'Jurnal Umum' }[type || ''] || 'Jurnal Umum');
-
-function AccurateJournalDetail({ detail, onBack, onNavigate }: { detail: JournalDetail; onBack: () => void; onNavigate: (path: string) => void }) {
-  const total = Number(detail.total || 0);
-  const dateLabel = detail.date ? new Intl.DateTimeFormat('id-ID').format(new Date(`${detail.date}T00:00:00`)) : '';
-  const [railMenu, setRailMenu] = useState<'print' | 'more' | ''>('');
-  const sideItems: Array<{ icon: typeof Settings; path: string; label: string }> = [
-    { icon: Settings, path: '/settings', label: 'Pengaturan' },
-    { icon: Landmark, path: '/chart-of-accounts', label: 'Daftar akun' },
-    { icon: Calculator, path: '/general-ledger', label: 'Buku besar' },
-    { icon: ShoppingCart, path: '/invoices', label: 'Faktur penjualan' },
-    { icon: Package, path: '/items', label: 'Barang dan jasa' },
-    { icon: BarChart3, path: '/reports', label: 'Laporan' },
-    { icon: Printer, path: '/general-journal', label: 'Jurnal umum' },
-  ];
-  const sourcePath = detail.sourceType === 'sales_invoice' && detail.sourceId
-    ? `/invoices?view=${encodeURIComponent(detail.sourceId)}`
-    : detail.sourceType === 'customer_payment' && detail.sourceId
-      ? `/customer-payments?viewInvoiceId=${encodeURIComponent(detail.sourceId)}`
-      : detail.sourceType === 'purchase_invoice'
-        ? '/purchase-invoices'
-        : '';
-  const openSource = () => {
-    if (sourcePath) onNavigate(sourcePath);
-    else setRailMenu('more');
-  };
-  return <div className="fixed inset-0 z-[100] overflow-auto bg-[#eeeeee] font-['Arial',sans-serif] text-[#222]">
-    <div className="h-[18px] bg-[#102c4e] px-3 text-[12px] leading-[18px] text-white">v1.0.1#4970-2063258 [6PYY8L21E]</div>
-    <aside className="fixed bottom-0 left-0 top-[18px] w-[84px] bg-[#102d50] text-white"><div className="flex h-[52px] items-center justify-center border-b border-white/10 text-[#fff]"><BookOpen size={28} /></div>{sideItems.map(({ icon: Icon, path, label }, i) => <button type="button" key={path} title={label} aria-label={label} onClick={() => onNavigate(path)} className={`flex h-[57px] w-full items-center justify-center border-b border-white/5 ${i === 6 ? 'bg-[#23476d]' : 'hover:bg-[#1b3c63]'}`}><Icon size={27} strokeWidth={1.7} /></button>)}</aside>
-    <div className="ml-[84px] min-w-[980px]">
-      <div className="flex h-[50px] items-end border-b border-[#e73578] bg-white"><button type="button" onClick={() => onNavigate('/')} className="h-[50px] border-r border-[#c6cbd1] bg-[#d8dce2] px-6 pt-3 text-[21px] text-[#555] hover:bg-[#eef1f4]">Dashboard <span className="ml-8 text-[24px]">×</span></button><button type="button" onClick={() => onNavigate('/help')} className="h-[50px] border-r border-[#c6cbd1] bg-[#d8dce2] px-6 pt-3 text-[21px] text-[#555] hover:bg-[#eef1f4]">Berita <span className="ml-9 text-[24px]">×</span></button><div className="flex h-[50px] min-w-[230px] items-center bg-[#ed3479] px-6 text-[22px] font-bold text-white">Jurnal Umum <button type="button" onClick={onBack} className="ml-auto text-[26px] leading-none hover:text-pink-100" aria-label="Tutup jurnal">×</button></div><div className="flex-1" /><div className="px-4 pb-3 text-[18px] text-[#555]">3⌄</div></div>
-      <div className="flex h-[61px] border-b border-[#c6cbd1] bg-[#f5f5f5]"><button type="button" onClick={onBack} title="Daftar jurnal" className="flex w-[85px] items-center justify-center border-r border-[#c6cbd1] bg-[#51bf22] text-white hover:bg-[#46a91d]"><BookOpen size={29} /></button><div className="flex min-w-[275px] items-center border-r border-[#c6cbd1] bg-[#d8dce2] px-4 text-[20px] text-[#444]">{detail.number}<button type="button" onClick={onBack} className="ml-auto text-[25px] leading-none hover:text-[#111]" aria-label="Tutup detail jurnal">×</button></div><div className="flex-1" /></div>
-      <main className="relative min-h-[calc(100vh-129px)] bg-[#eeeeee] px-[14px] pb-8 pr-[100px] pt-0">
-        <div className="relative -top-[26px] grid grid-cols-[1fr_1fr] gap-x-[230px] border-b border-[#c7cdd5] bg-[#eeeeee] px-[45px] pb-[26px] pt-[8px]"><div className="space-y-[18px]"><div className="grid grid-cols-[180px_1fr] items-center"><label className="text-[21px]">Tanggal <span className="text-red-600">*</span></label><div className="flex h-[36px] items-center border border-[#a6a6a6] bg-white px-3 text-[17px]">{dateLabel}<span className="ml-auto text-[#333]">▣</span></div></div><div className="grid grid-cols-[180px_1fr] items-center"><label className="text-[21px]">Tipe Transaksi</label><div className="flex h-[36px] items-center border border-[#a6a6a6] bg-[#f4f4f4] px-3 text-[17px] text-[#666]">{sourceLabel(detail.sourceType)}</div></div></div><div className="space-y-[18px]"><div className="grid grid-cols-[118px_1fr] items-center"><label className="text-[21px]">Nomor # <span className="text-red-600">*</span></label><div className="flex h-[36px] items-center border border-[#a6a6a6] bg-white px-3 text-[17px]">{detail.number}<span className="ml-auto text-[22px]">×</span></div></div><div className="grid grid-cols-[118px_1fr] items-center"><label className="text-[21px]">No. Trans #</label><div className="flex h-[36px] items-center border border-[#8cce9d] bg-[#e9f8ec] px-3 text-[17px] text-[#16803c]">{detail.transactionNumber || detail.sourceId || '—'}</div></div></div></div>
-<section className="relative mx-0 border border-[#c7cdd5] bg-white px-4 pb-5 pt-3 shadow-sm"><div className="mb-5 flex items-center justify-between gap-4"><div className="flex h-[38px] w-[510px] items-center border border-[#a6a6a6] bg-white"><input readOnly placeholder="Cari/Pilih Akun Perkiraan..." className="h-full min-w-0 flex-1 border-0 px-3 text-[18px] outline-none" /><Search size={25} className="mr-3 text-[#075da8]" /></div><div className="flex items-center gap-4 text-[27px]"><button type="button" disabled title="Jurnal otomatis hanya untuk melihat rincian" className="cursor-not-allowed border border-[#c5c5c5] bg-[#eeeeee] p-2 text-[#9aa4ae]"><Search size={24} /></button><span>{detail.lines.length} Rincian Jurnal <span className="text-red-600">*</span></span></div></div><div className="app-table-scroll overflow-hidden border border-[#c7cdd5]"><table className="w-full border-collapse text-[17px]"><thead className="bg-[#637c93] text-left text-white"><tr><th className="w-[18%] border-r border-[#8799a9] px-4 py-3 font-normal">Kode #</th><th className="border-r border-[#8799a9] px-4 py-3 font-normal">Nama Perkiraan</th><th className="w-[17%] border-r border-[#8799a9] px-4 py-3 text-right font-normal">Debit</th><th className="w-[17%] px-4 py-3 text-right font-normal">Kredit</th></tr></thead><tbody>{detail.lines.map((line, i) => <tr className={i % 2 ? 'bg-[#f5f5f5]' : 'bg-white'} key={i}><td className="border-r border-dotted border-[#cbd0d5] px-4 py-4">{line.account_code || '—'}</td><td className="border-r border-dotted border-[#cbd0d5] px-4 py-4">{line.account_name || '—'}{line.memo && <div className="text-[13px] text-[#666]">{line.memo}</div>}</td><td className="border-r border-dotted border-[#cbd0d5] px-4 py-4 text-right">{line.debit ? money(Number(line.debit)) : '0'}</td><td className="px-4 py-4 text-right">{line.credit ? money(Number(line.credit)) : '0'}</td></tr>)}</tbody></table></div><div className="mt-4 ml-auto grid max-w-[520px] grid-cols-2 border border-[#c7cdd5] bg-white text-[18px]"><div className="border-r border-[#c7cdd5] p-5 text-center"><div>Total Debit</div><strong className="mt-2 block text-[21px]">{money(total)}</strong></div><div className="p-5 text-center"><div>Total Credit</div><strong className="mt-2 block text-[21px]">{money(total)}</strong></div></div></section>
-        <div className="fixed right-[58px] top-[138px] z-50"><AccurateFormActionRail ariaLabel="Aksi Jurnal Umum" className="gap-3" save={{ disabled: true, title: 'Jurnal otomatis dari transaksi tidak dapat diedit' }} print={{ onClick: () => setRailMenu(railMenu === 'print' ? '' : 'print'), title: 'Cetak / simpan sebagai' }} attachment={{ disabled: true, title: 'Lampiran belum tersedia untuk Jurnal Umum' }} more={{ onClick: () => setRailMenu(railMenu === 'more' ? '' : 'more'), title: 'Lain-lain' }} remove={{ disabled: true, title: 'Jurnal otomatis tidak dapat dihapus langsung' }} />{railMenu && <button type="button" aria-label="Tutup menu aksi jurnal" onClick={() => setRailMenu('')} className="fixed inset-0 z-[55] cursor-default" />}{railMenu === 'print' && <div className="absolute right-[84px] top-0 z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl"><button type="button" onClick={() => { setRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Cetak Jurnal Umum</button><button type="button" onClick={() => { setRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Simpan sebagai PDF</button></div>}{railMenu === 'more' && <div className="absolute right-[84px] top-[168px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl">{sourcePath ? <button type="button" onClick={() => { setRailMenu(''); openSource(); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Buka transaksi sumber</button> : <div className="px-3 py-2 text-xs text-slate-500">Jurnal manual tidak memiliki transaksi sumber.</div>}<button type="button" onClick={() => { setRailMenu(''); onBack(); }} className="block w-full px-3 py-2 text-left hover:bg-slate-50">Kembali ke daftar jurnal</button></div>}</div>
-      </main>
-    </div>
-  </div>;
+const COLUMN_STORAGE = 'cerdik-journal-columns-v1';
+function initialColumns(): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLUMN_STORAGE) || 'null');
+    if (Array.isArray(saved)) {
+      const valid = JOURNAL_COLUMNS.filter(column => saved.includes(column));
+      if (valid.length) return valid;
+    }
+  } catch { /* Use defaults when browser storage is unavailable. */ }
+  return [...DEFAULT_JOURNAL_COLUMNS];
 }
 
 export default function GeneralJournal() {
   const navigate = useNavigate();
-  const [accounts, setAccounts] = useState<Account[]>([]); const [branches, setBranches] = useState<{ id: string; name: string }[]>([]); const [rows, setRows] = useState<JournalRow[]>([]); const [detail, setDetail] = useState<JournalDetail | null>(null); const [search, setSearch] = useState('');
-  const [from, setFrom] = useState(`${new Date().toISOString().slice(0, 8)}01`); const [to, setTo] = useState(new Date().toISOString().slice(0, 10)); const [mode, setMode] = useState<'list' | 'new'>('list'); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const [description, setDescription] = useState(''); const [branchId, setBranchId] = useState('');
-  const [lines, setLines] = useState<Line[]>([blank(), blank()]); const [notice, setNotice] = useState(''); const [busy, setBusy] = useState(false);
-  const load = async () => { setBusy(true); try { const r = await api.get<JournalRow[]>(`journal-entries?from=${from}&to=${to}&search=${encodeURIComponent(search)}&limit=200`); if (!r.success) throw new Error(r.message || 'Jurnal gagal dimuat'); setRows(r.data || []); } catch (e) { setNotice(e instanceof Error ? e.message : 'Jurnal gagal dimuat'); } finally { setBusy(false); } };
-  useEffect(() => { void Promise.all([api.get<Account[]>('chart-of-accounts'), api.get<any[]>('branches')]).then(([a, b]) => { if (a.success) setAccounts((a.data || []).filter(x => x.isActive)); if (b.success) setBranches((b.data || []).map(x => ({ id: x.id, name: x.name }))); }).catch(e => setNotice(e.message)); void load(); const initialJournalId = new URLSearchParams(window.location.search).get('journalId'); if (initialJournalId) void open(initialJournalId); }, []);
-  const open = async (id: string) => { setBusy(true); try { const r = await api.get<JournalDetail>(`journal-entries/${id}`); if (!r.success) throw new Error(r.message || 'Detail jurnal gagal dimuat'); setDetail(r.data || null); window.history.replaceState({}, '', `/general-journal?journalId=${encodeURIComponent(id)}`); } catch (e) { setNotice(e instanceof Error ? e.message : 'Detail jurnal gagal dimuat'); } finally { setBusy(false); } };
-  const closeDetail = () => { setDetail(null); window.history.replaceState({}, '', '/general-journal'); };
-  const update = (i: number, patch: Partial<Line>) => setLines(x => x.map((r, n) => n === i ? { ...r, ...patch } : r));
-  const debit = lines.reduce((s, r) => s + amount(r.debit), 0); const credit = lines.reduce((s, r) => s + amount(r.credit), 0); const balanced = Math.round(debit * 100) === Math.round(credit * 100) && debit > 0;
-  const save = async () => { setNotice(''); if (!description.trim()) return setNotice('Keterangan jurnal wajib diisi.'); if (lines.some(r => !r.accountId || (amount(r.debit) > 0 && amount(r.credit) > 0) || (amount(r.debit) === 0 && amount(r.credit) === 0))) return setNotice('Setiap baris harus memilih akun dan memiliki debit atau kredit saja.'); if (!balanced) return setNotice('Total debit dan kredit harus sama dan lebih dari Rp0.'); setBusy(true); try { const r = await api.create('general-ledger', { date, description, branchId: branchId || null, lines: lines.map(x => ({ ...x, debit: amount(x.debit), credit: amount(x.credit) })) }); if (!r.success) throw new Error(r.message || 'Jurnal gagal disimpan'); setNotice(`Jurnal ${r.data?.number || ''} berhasil disimpan.`); setLines([blank(), blank()]); setDescription(''); setMode('list'); await load(); } catch (e) { setNotice(e instanceof Error ? e.message : 'Jurnal gagal disimpan'); } finally { setBusy(false); } };
+  const { hasPermission, currentBranchId } = useApp();
+  const [accounts, setAccounts] = useState<JournalAccount[]>([]);
+  const [branches, setBranches] = useState<JournalBranch[]>([]);
+  const [rows, setRows] = useState<JournalRow[]>([]);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [view, setView] = useState<'list' | 'draft' | 'detail'>('list');
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [editorBusy, setEditorBusy] = useState(false);
+  const [detail, setDetail] = useState<JournalDetail | null>(null);
+  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateSelection | null>(null);
+  const [typeFilters, setTypeFilters] = useState<string[]>([]);
+  const [branchFilters, setBranchFilters] = useState<string[]>([]);
+  const [columns, setColumns] = useState(initialColumns);
+  const [sort, setSort] = useState({ column: 'Tanggal', asc: false });
+  const requestSequence = useRef(0);
+  const detailSequence = useRef(0);
+  const canCreate = hasPermission('report:view');
+  const branchNames = useMemo(() => new Map(branches.map(branch => [branch.id, branch.name])), [branches]);
 
-  const empty = useMemo(() => !rows.length && !busy, [rows, busy]);
-  const accurateDetail = detail;
-  if (accurateDetail) return <AccurateJournalDetail detail={accurateDetail} onBack={closeDetail} onNavigate={path => navigate(path)} />;
-  /* legacy detail renderer retained below for reference; AccurateJournalDetail is the active renderer.
-  if (detail) {
-    const detailTotal = Number(detail.total || 0);
-    return <div className="min-h-full bg-[var(--app-canvas)] p-3 font-['Arial',sans-serif] text-[15px] text-[#222] md:p-5"><div className="mb-3 flex items-center justify-between"><button className="border border-[var(--app-field-border)] bg-white px-3 py-2 text-[14px] text-[#333] hover:bg-[#f5f5f5]" onClick={() => setDetail(null)}><ArrowLeft size={16} className="mr-1 inline" />Kembali ke daftar</button><div className="text-[13px] text-[#666]">Buku Besar / Jurnal Umum</div></div><div className="relative pr-0 xl:pr-[72px]"><div className="border border-[#c5cbd2] bg-white shadow-sm"><div className="border-b border-[#c5cbd2] bg-[#f7f7f7] px-5 py-3 text-[18px] font-semibold text-[#333]">Jurnal Umum</div><div className="grid gap-x-12 gap-y-4 p-5 md:grid-cols-2"><div className="grid grid-cols-[125px_1fr] items-center gap-3"><label className="text-[17px]">Tanggal <span className="text-red-600">*</span></label><input readOnly value={detail.date || ''} className="h-9 w-full bg-white px-2 text-[16px]" /></div><div className="grid grid-cols-[125px_1fr] items-center gap-3"><label className="text-[17px]">Nomor # <span className="text-red-600">*</span></label><input readOnly value={detail.number || ''} className="h-9 w-full bg-white px-2 text-[16px]" /></div><div className="grid grid-cols-[125px_1fr] items-center gap-3"><label className="text-[17px]">Tipe Transaksi</label><input readOnly value={sourceLabel(detail.sourceType)} className="h-9 w-full bg-[#f4f4f4] px-2 text-[16px] text-[#666]" /></div><div className="grid grid-cols-[125px_1fr] items-center gap-3"><label className="text-[17px]">No. Trans #</label><input readOnly value={detail.transactionNumber || detail.sourceId || '—'} className="h-9 w-full border-[#8cce9d] bg-[#e9f8ec] px-2 text-[16px] text-[#16803c]" /></div></div><div className="border-t border-[#c5cbd2] p-3 md:p-4"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex w-full max-w-[520px] items-center border border-[var(--app-field-border)] bg-white"><input readOnly placeholder="Cari/Pilih Akun Perkiraan..." className="h-9 min-w-0 flex-1 border-0 px-3 text-[15px] outline-none" /><Search size={20} className="mr-3 text-[#075da8]" /></div><div className="flex items-center gap-3 text-[20px] font-normal text-[#222]"><button className="border border-[var(--app-field-border)] bg-white p-2 text-[#075da8]"><Search size={20} /></button><span>{detail.lines.length} Rincian Jurnal <span className="text-red-600">*</span></span></div></div><div className="overflow-x-auto border border-[#c5cbd2]"><table className="w-full min-w-[680px] border-collapse text-[16px]"><thead className="bg-[var(--app-table-head)] text-left text-white"><tr><th className="w-[18%] border-r border-[#8799a9] px-3 py-3 font-normal">Kode #</th><th className="border-r border-[#8799a9] px-3 py-3 font-normal">Nama Perkiraan</th><th className="w-[16%] border-r border-[#8799a9] px-3 py-3 text-right font-normal">Debit</th><th className="w-[16%] px-3 py-3 text-right font-normal">Kredit</th></tr></thead><tbody>{detail.lines.map((line, i) => <tr className={i % 2 ? 'bg-[var(--app-row-alt)]' : 'bg-white'} key={i}><td className="border-r border-dotted border-[#cbd0d5] px-3 py-3">{line.account_code || '—'}</td><td className="border-r border-dotted border-[#cbd0d5] px-3 py-3">{line.account_name || '—'}{line.memo && <div className="text-[13px] text-[#666]">{line.memo}</div>}</td><td className="border-r border-dotted border-[#cbd0d5] px-3 py-3 text-right">{line.debit ? money(Number(line.debit)) : '0'}</td><td className="px-3 py-3 text-right">{line.credit ? money(Number(line.credit)) : '0'}</td></tr>)}</tbody></table></div><div className="mt-4 ml-auto grid max-w-[510px] grid-cols-2 border border-[#c5cbd2] bg-white text-[17px]"><div className="border-r border-[#c5cbd2] p-4 text-center"><div>Total Debit</div><strong className="mt-2 block text-[21px]">{money(detailTotal)}</strong></div><div className="p-4 text-center"><div>Total Credit</div><strong className="mt-2 block text-[21px]">{money(detailTotal)}</strong></div></div></div></div></div><div className="mt-3 flex gap-2 xl:absolute xl:right-0 xl:top-0 xl:mt-0 xl:flex-col"><button disabled aria-label="Simpan jurnal" className="flex h-[64px] w-[64px] items-center justify-center border border-[#c5c5c5] bg-[#e5e5e5] text-[#999]"><Save size={30} /></button><button aria-label="Dokumen jurnal" className="flex h-[64px] w-[64px] items-center justify-center border border-[#4c9bea] bg-[#a9d5ff] text-[#075da8]"><FileText size={30} /></button><button aria-label="Lampiran jurnal" className="flex h-[64px] w-[64px] items-center justify-center border border-[#4c9bea] bg-[#a9d5ff] text-[#075da8]"><Paperclip size={30} /></button><button aria-label="Menu jurnal" className="flex h-[64px] w-[64px] items-center justify-center border border-[#44b563] bg-[#a8efb6] text-[#087c2b]"><MoreHorizontal size={30} /></button><button disabled aria-label="Hapus jurnal" className="flex h-[64px] w-[64px] items-center justify-center border border-[#ef7592] bg-[#ffbdca] text-[#e92d5d]"><Trash2 size={30} /></button></div></div>;
-  }
-  */
+  const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
+    setBusy(true);
+    try {
+      const bounds = journalDateBounds(dateFilter);
+      const params = new URLSearchParams({ from: bounds.from, to: bounds.to, limit: '200' });
+      typeFilters.forEach(type => params.append('sourceType[]', journalSourceType(type)));
+      branchFilters.forEach(id => params.append('branchId[]', id));
+      const response = await api.get<JournalRow[]>('journal-entries?' + params.toString());
+      if (!response.success) throw new Error(response.message || 'Jurnal gagal dimuat.');
+      if (sequence === requestSequence.current) setRows(response.data || []);
+    } catch (error) {
+      if (sequence === requestSequence.current) { setRows([]); setNotice(error instanceof Error ? error.message : 'Jurnal gagal dimuat.'); }
+    } finally { if (sequence === requestSequence.current) setBusy(false); }
+  }, [dateFilter, typeFilters, branchFilters]);
 
-  return <div className="app-module-page gj-preview"><header className="app-module-header mb-5 flex flex-wrap items-center justify-between gap-3"><div><div className="text-sm font-semibold text-green-700">BUKU BESAR</div><h1 className="text-2xl font-bold">Jurnal Umum</h1><p className="text-sm text-gray-500">Daftar jurnal otomatis dan jurnal manual dengan pola Accurate.</p></div><button className="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white" onClick={() => { setMode('new'); setNotice(''); }}><Plus size={16} className="mr-1 inline" />Jurnal Baru</button></header>{notice && <div role="status" className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">{notice}</div>}{mode === 'new' ? <section className="app-module-panel app-fill-stack app-editor-panel rounded-xl border bg-white p-4 space-y-4"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => setMode('list')}><ArrowLeft size={16} className="mr-1 inline" />Kembali</button><div className="grid gap-3 md:grid-cols-3"><label className="text-sm">Tanggal<input aria-label="Tanggal jurnal" type="date" className="mt-1 w-full rounded-lg border p-2.5" value={date} onChange={e => setDate(e.target.value)} /></label><label className="text-sm md:col-span-2">Keterangan<input aria-label="Keterangan jurnal" className="mt-1 w-full rounded-lg border p-2.5" value={description} onChange={e => setDescription(e.target.value)} placeholder="Contoh: Pembelian perlengkapan kantor" /></label><label className="text-sm">Cabang<select aria-label="Cabang jurnal" className="mt-1 w-full rounded-lg border p-2.5" value={branchId} onChange={e => setBranchId(e.target.value)}><option value="">Tanpa cabang / umum</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label></div><div className="app-table-scroll app-table-scroll--fill overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr><th className="p-2">Akun</th><th className="p-2">Debit</th><th className="p-2">Kredit</th><th className="p-2">Catatan</th><th /></tr></thead><tbody>{lines.map((r, i) => <tr className="border-t" key={i}><td className="p-2"><select aria-label={`Akun baris ${i + 1}`} className="w-full rounded-lg border p-2" value={r.accountId} onChange={e => update(i, { accountId: e.target.value })}><option value="">Pilih akun</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></td><td className="p-2"><input aria-label={`Debit baris ${i + 1}`} type="number" min="0" className="w-full rounded-lg border p-2 text-right" value={r.debit} onChange={e => update(i, { debit: e.target.value, credit: '' })} /></td><td className="p-2"><input aria-label={`Kredit baris ${i + 1}`} type="number" min="0" className="w-full rounded-lg border p-2 text-right" value={r.credit} onChange={e => update(i, { credit: e.target.value, debit: '' })} /></td><td className="p-2"><input aria-label={`Catatan baris ${i + 1}`} className="w-full rounded-lg border p-2" value={r.memo} onChange={e => update(i, { memo: e.target.value })} /></td><td className="p-2"><button aria-label={`Hapus baris ${i + 1}`} disabled={lines.length <= 2} onClick={() => setLines(x => x.filter((_, n) => n !== i))}><X size={16} /></button></td></tr>)}</tbody><tfoot><tr className="font-semibold"><td className="p-2">Total</td><td className="p-2 text-right">{money(debit)}</td><td className="p-2 text-right">{money(credit)}</td><td colSpan={2} className={balanced ? 'p-2 text-green-700' : 'p-2 text-red-700'}>{balanced ? 'Seimbang' : 'Belum seimbang'}</td></tr></tfoot></table></div><div><button className="mr-2 rounded-lg border px-3 py-2" onClick={() => setLines(x => [...x, blank()])}><Plus size={16} className="mr-1 inline" />Tambah baris</button><button className="rounded-lg bg-green-700 px-4 py-2 font-semibold text-white disabled:opacity-50" disabled={busy || !balanced} onClick={() => void save()}><Save size={16} className="mr-1 inline" />Simpan Jurnal</button></div></section> : <><section className="app-module-filters mb-5 grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-5"><label className="text-sm">Dari<input aria-label="Dari tanggal" type="date" className="mt-1 w-full rounded-lg border p-2.5" value={from} onChange={e => setFrom(e.target.value)} /></label><label className="text-sm">Sampai<input aria-label="Sampai tanggal" type="date" className="mt-1 w-full rounded-lg border p-2.5" value={to} onChange={e => setTo(e.target.value)} /></label><label className="text-sm md:col-span-2">Cari nomor, transaksi, atau pihak<div className="mt-1 flex"><input aria-label="Cari jurnal" className="w-full rounded-l-lg border p-2.5" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void load(); }} /><button className="rounded-r-lg border border-l-0 px-3" onClick={() => void load()}><Search size={17} /></button></div></label><button className="self-end rounded-lg bg-slate-700 px-4 py-2.5 font-semibold text-white" onClick={() => void load()} disabled={busy}>Tampilkan</button></section><section className="app-module-panel app-fill-stack app-module-table-panel overflow-hidden rounded-xl border bg-white"><div className="app-table-scroll app-table-scroll--fill overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-600 text-left text-white"><tr><th className="p-3">Nomor #</th><th className="p-3">No. Trans #</th><th className="p-3">Tanggal</th><th className="p-3">Tipe Transaksi</th><th className="p-3">Keterangan</th><th className="p-3 text-right">Total</th><th className="p-3" /></tr></thead><tbody>{rows.map(row => <tr className="border-t hover:bg-blue-50" key={row.id}><td className="p-3 font-semibold">{row.number}</td><td className="p-3">{row.transactionNumber || row.sourceId || '—'}</td><td className="p-3">{row.date}</td><td className="p-3">{sourceLabel(row.sourceType)}</td><td className="p-3">{row.description}{row.partyName && <div className="text-xs text-gray-500">{row.partyName}</div>}</td><td className="p-3 text-right">{money(Number(row.total))}</td><td className="p-3 text-right"><button aria-label={`Lihat jurnal ${row.number}`} className="rounded-lg border p-2" onClick={() => void open(row.id)}><Eye size={16} /></button></td></tr>)}{empty && <tr><td colSpan={7} className="p-10 text-center text-gray-500">Belum ada jurnal pada periode ini.</td></tr>}</tbody></table></div></section></>}
+  useEffect(() => { void load(); return () => { requestSequence.current++; }; }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([api.get<JournalAccount[]>('chart-of-accounts'), api.get<JournalBranch[]>('branches')]).then(([a, b]) => {
+      if (cancelled) return;
+      if (a.success) setAccounts((a.data || []).filter(account => account.isActive));
+      if (b.success) setBranches(b.data || []);
+    }).catch(error => { if (!cancelled) setNotice(error instanceof Error ? error.message : 'Daftar akun/cabang gagal dimuat.'); });
+    return () => { cancelled = true; detailSequence.current++; };
+  }, []);
+  useEffect(() => {
+    if (!draftDirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [draftDirty]);
+  const discardDraft = () => !draftDirty || window.confirm('Perubahan jurnal belum disimpan. Batalkan perubahan dan lanjutkan?');
+  const openDetail = async (id: string) => {
+    if (editorBusy) return;
+    if (draftOpen && !discardDraft()) return;
+    const sequence = ++detailSequence.current;
+    setDetailBusy(true);
+    try {
+      const response = await api.get<JournalDetail>('journal-entries/' + encodeURIComponent(id));
+      if (!response.success || !response.data) throw new Error(response.message || 'Detail jurnal gagal dimuat.');
+      if (sequence !== detailSequence.current) return;
+      setDraftOpen(false); setDraftDirty(false); setDetail(response.data); setView('detail'); setNotice('');
+      window.history.replaceState({}, '', '/general-journal?journalId=' + encodeURIComponent(id));
+    } catch (error) {
+      if (sequence === detailSequence.current) setNotice(error instanceof Error ? error.message : 'Detail jurnal gagal dimuat.');
+    } finally { if (sequence === detailSequence.current) setDetailBusy(false); }
+  };
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('journalId');
+    if (id) void openDetail(id);
+  }, []);
+  const closeEditor = () => {
+    if (editorBusy) return;
+    if (draftOpen && !discardDraft()) return;
+    setDraftOpen(false); setDraftDirty(false); setDetail(null); setView('list');
+    window.history.replaceState({}, '', '/general-journal');
+  };
+  const create = () => {
+    setDetail(null); setDraftOpen(true); setView('draft'); setNotice('');
+    window.history.replaceState({}, '', '/general-journal');
+  };
+  const shown = useMemo(() => visibleJournals(rows, { types: typeFilters, branches: branchFilters, search }, sort, branchNames), [rows, typeFilters, branchFilters, search, sort, branchNames]);
+  const changeColumns = (values: string[]) => {
+    setColumns(values);
+    try { localStorage.setItem(COLUMN_STORAGE, JSON.stringify(values)); } catch { /* Keep current choices for this session. */ }
+  };
+  const exportCsv = () => {
+    const url = URL.createObjectURL(new Blob([journalCsv(shown, columns, branchNames)], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'jurnal-umum.csv'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const editor = detail ? { label: detail.number, active: view === 'detail', onSelect: () => setView('detail'), onClose: closeEditor, closeDisabled: detailBusy }
+    : draftOpen ? { label: (draftDirty ? '* ' : '') + 'Data Baru', active: view === 'draft', onSelect: () => setView('draft'), onClose: closeEditor, closeDisabled: editorBusy } : undefined;
+
+  return <div className="app-module-page app-accounting-page gj-preview">
+    <AccountingModuleTabs listActive={view === 'list'} listLabel="Daftar jurnal" onList={() => setView('list')} editor={editor} onHelp={() => setNotice('Gunakan + untuk menambah jurnal. Filter tanggal dan tipe transaksi berada di atas; Cabang dapat ditambahkan lewat tombol filter. Klik baris untuk melihat rincian.')} />
+    <div className="app-module-panel app-fill-stack">
+      {notice && <div role="status" className="app-module-notice">{notice}<button type="button" aria-label="Tutup pesan" onClick={() => setNotice('')}><X size={14} /></button></div>}
+      <div className={view === 'list' ? 'app-fill-stack' : 'hidden'}>
+        <JournalListFilters dateFilter={dateFilter} onDateChange={value => { setNotice(''); setDateFilter(value); }} types={typeFilters} onTypesChange={setTypeFilters} branches={branches} selectedBranches={branchFilters} onBranchesChange={setBranchFilters} onError={setNotice} />
+        <AccountingListToolbar noun="jurnal" busy={busy || detailBusy || editorBusy} createDisabled={!canCreate} onCreate={create} onRefresh={() => { setNotice(''); void load(); }} onExport={exportCsv} columns={columns} columnOptions={JOURNAL_COLUMNS} onColumnsChange={changeColumns} query={query} onQueryChange={value => { setQuery(value); if (!value) setSearch(''); }} onSearch={() => setSearch(query)} count={shown.length} />
+        {rows.length === 200 && <div className="app-list-limit" role="status">Maksimal 200 jurnal per pemuatan. Persempit tanggal, tipe transaksi, atau cabang untuk menampilkan jurnal lainnya.</div>}
+        <div className="app-table-shell app-table-scroll app-table-scroll--fill" data-accounting-list aria-busy={busy || detailBusy}>
+          <h1 className="app-print-title">Jurnal Umum</h1>
+          <table className="app-data-table app-accounting-table app-journal-table">
+            <thead><tr>{columns.map(column => <th key={column} data-column={column} className={column === 'Total' ? 'amount' : ''} aria-sort={sort.column === column ? sort.asc ? 'ascending' : 'descending' : 'none'}>
+              <button type="button" onClick={() => setSort(value => ({ column, asc: value.column === column ? !value.asc : true }))}>{column}<ArrowUpDown size={11} /></button>
+            </th>)}</tr></thead>
+            <tbody>
+              {shown.map(row => <tr key={row.id} tabIndex={0} onClick={() => { if (!detailBusy) void openDetail(row.id); }} onKeyDown={event => { if (event.key === 'Enter' && !detailBusy) void openDetail(row.id); }}>
+                {columns.map(column => <td key={column} className={column === 'Total' ? 'amount' : ''} title={String(journalCell(row, column, branchNames))}>{column === 'Total' ? journalMoney(Number(row.total)) : journalCell(row, column, branchNames) || '—'}</td>)}
+              </tr>)}
+              {!shown.length && <tr><td className="app-data-empty" colSpan={columns.length}>{busy ? 'Memuat jurnal...' : 'Belum ada jurnal sesuai filter.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {draftOpen && <div className={view === 'draft' ? 'app-fill-stack' : 'hidden'}><JournalEntryEditor accounts={accounts} branches={branches} initialBranchId={currentBranchId === 'ALL' ? '' : currentBranchId} canCreate={canCreate} onDirtyChange={setDraftDirty} onBusyChange={setEditorBusy} onNotice={setNotice} onNavigate={navigate} onSaved={message => { setDraftDirty(false); setDraftOpen(false); setView('list'); setNotice(message); void load(); }} /></div>}
+      {detail && view === 'detail' && <JournalEntryEditor key={detail.id} detail={detail} accounts={accounts} branches={branches} initialBranchId="" canCreate={false} onDirtyChange={setDraftDirty} onBusyChange={setEditorBusy} onNotice={setNotice} onNavigate={navigate} onSaved={() => {}} />}
+    </div>
   </div>;
 }

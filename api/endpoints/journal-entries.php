@@ -25,6 +25,36 @@ $search = trim((string)($_GET['search'] ?? ''));
 $limit = min(200, max(1, (int)($_GET['limit'] ?? 50)));
 $where = ['j.posted=1','j.entry_date BETWEEN ? AND ?'];
 $params = [$from, $to];
+// Filter before LIMIT so a selected type/branch can find journals beyond the
+// first 200 rows. Values remain bound parameters, including branch identity 0.
+$readFilter = static function (string $key): array {
+    $input = $_GET[$key] ?? [];
+    if (!is_array($input)) $input = [$input];
+    if (count($input) > 32) respondError('Terlalu banyak pilihan filter jurnal', 422);
+    $values = [];
+    foreach ($input as $value) {
+        if (!is_string($value) || strlen($value) > 64) respondError('Pilihan filter jurnal tidak valid', 422);
+        $values[] = trim($value);
+    }
+    return array_values(array_unique($values));
+};
+$sourceTypes = $readFilter('sourceType');
+if ($sourceTypes !== []) {
+    $where[] = 'j.source_type IN ('.implode(',', array_fill(0, count($sourceTypes), '?')).')';
+    array_push($params, ...$sourceTypes);
+}
+$branchIds = $readFilter('branchId');
+if ($branchIds !== []) {
+    $branchConditions = [];
+    $namedBranchIds = array_values(array_filter($branchIds, static fn(string $value): bool => $value !== ''));
+    foreach ($namedBranchIds as $branchId) requireAccessibleBranch($pdo, $requestUser, $branchId);
+    if ($namedBranchIds !== []) {
+        $branchConditions[] = 'j.branch_id IN ('.implode(',', array_fill(0, count($namedBranchIds), '?')).')';
+        array_push($params, ...$namedBranchIds);
+    }
+    if (in_array('', $branchIds, true)) $branchConditions[] = "(j.branch_id IS NULL OR j.branch_id='')";
+    $where[] = '('.implode(' OR ', $branchConditions).')';
+}
 if ($search !== '') {
     $where[] = '(j.entry_number LIKE ? OR j.description LIKE ? OR j.source_id LIKE ? OR j.party_id LIKE ? OR c.name LIKE ? OR s.name LIKE ?)';
     array_push($params, ...array_fill(0, 6, '%'.$search.'%'));
