@@ -719,6 +719,18 @@ export default function Layout() {
     setDesktopMenuOpen(null);
   }, [location.pathname]);
   useEffect(() => {
+    const openFilterFromContainer = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || target.closest('.app-date-filter-menu, .app-transaction-filter-menu, .app-optional-filter-menu, .coa-filter-menu, .coa-parent-menu')) return;
+      const container = target.closest('.app-filter-picker, .coa-filter-picker');
+      if (!container || target.closest('button, input, select, textarea, a')) return;
+      const trigger = container.querySelector('button[aria-expanded], .app-filter-picker-button, .coa-filter-button') as HTMLButtonElement | null;
+      trigger?.click();
+    };
+    document.addEventListener('click', openFilterFromContainer);
+    return () => document.removeEventListener('click', openFilterFromContainer);
+  }, []);
+  useEffect(() => {
     const path = workspacePathFor(location.pathname);
     const label = path === "/receipts" ? "Penerimaan Barang" : getPageTitle();
     setWorkspaceTabs((current) => {
