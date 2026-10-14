@@ -401,8 +401,9 @@
   height: calc(var(--app-subtab-height) + 1px);
   margin-bottom: -1px;
   border-bottom: 0;
-  background: var(--app-panel-background);
-  color: #172033;
+  border-color: var(--app-panel-border);
+  background: var(--app-tab-idle);
+  color: #334155;
 }
 .app-child-bar:has(.app-child-tab--active) > .app-child-list-tab {
   border-color: #4caf1f;
@@ -410,8 +411,8 @@
   color: #fff;
 }
 .app-child-tab--active {
-  border-top: 2px solid #ed387b;
-  background: #fff;
+  border-top: 1px solid var(--app-panel-border);
+  background: var(--app-tab-idle);
 }
 .app-child-bar:not(:has(.app-child-tab--active)) > .app-child-list-tab {
   z-index: 1;
