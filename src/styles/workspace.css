@@ -430,6 +430,7 @@
     overflow: auto !important;
     max-height: var(--app-table-max-height, 65dvh);
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     background: #fff;
   }
   .app-table-scroll > table > thead {
@@ -511,4 +512,5 @@
   }
   .app-workspace-bar, .app-child-bar { display: none !important; }
 }
+.app-data-table th { font-size: 14px; text-align: center; }
 
