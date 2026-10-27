@@ -1,0 +1,351 @@
+﻿status,alasan,matchCustomer,invoiceNumber,date,branch,customerName,customerPhone,vehicleSource,lineCount,itemCount,invoiceTotal
+Perlu diperbaiki,customer tidak cocok,,C-N0206 [C.0443],2026-05-15,Cakalang,TEGUH,089528625199,DD1442UO S. ERTIGA /PASANG EVAP,2,2,750000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0190 [C.0426],2026-04-14,Cakalang,RASAK,0882020188228,DD1794ST KIJANG/CC,4,4,400000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0097,2026-01-02,Cakalang,INSAN,085299909087,DD1198TV CALYA /G.EVAP+G.FIL CAB,6,6,1725000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0130,2026-02-20,Cakalang,MURSALIM,081241499972,KT8149AP /TAMBAH FREON,1,1,300000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0119,2026-01-27,Cakalang,BRILLIAN ARMANDO [08194180244],,DW1247CK INNOVA HITAM/CC,2,2,400000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0107,2026-01-12,Cakalang,KADIR,081342907117,DD1033UB TERIOS SILVER /PRESS G. SELANG,4,4,750000.0
+Perlu diperbaiki,customer tidak cocok,,C-N00103,2026-01-06,Cakalang,YUSUF,081355179460,DD1679XAK XENIA PUTIH /G.EVAP,6,6,1750000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0118,2026-01-26,Cakalang,RIAN,082258181450,DT1885VE H. BRIO /IF,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0099,2026-01-03,Cakalang,Iwan,0895320829917,DD290ON INNOVA /CC,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0113,2026-01-20,Cakalang,HANS/DONI,,DD1875XGL INNOVA SILVER /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0111,2026-01-16,Cakalang,OM NYA BOS ALI,08124224635,DD1803XEG INNOVA PUTIH /G.EVAP,6,6,1300000.0
+Perlu diperbaiki,customer tidak cocok,,C-N00100,2026-01-03,Cakalang,Umair,082193684555,DD1429VJ H. JAZZ RS MERAH /TB G. EVAP,6,6,1500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N00101,2026-01-03,Cakalang,PAK HARDI,087840580218,DD1277XAK RAIZE PUTIH /CC,3,3,300000.0
+Perlu diperbaiki,customer tidak cocok,,C-N00102,2026-01-04,Cakalang,RONNY,082188660123,DD1852XN XENIA COKLAT /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N00104,2026-01-07,Cakalang,USMAN,085394440505,DD1295MS N. EVALIA ST PUTIH /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0106,2026-01-09,Cakalang,UDIN,082353274933,DD1903XGR S. GRAND VITARA ABU ABU/ISI FREON,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0125,2026-02-11,Cakalang,Sukirman,085399493854,KIJANG PUTIH DD1131OD,2,2,475000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0112,2026-01-18,Cakalang,IRWAN,081342702383,DD1305SF H. MOBILIO PUTIH/CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0115,2026-01-24,Cakalang,AHONG[DD1674RR],,DD1674RR BRIO RS /G.EVAP CC BONGKAR,5,5,1450000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0124,2026-02-10,Cakalang,IYAN[DD1053SE],,MOBILIO PUTIH DD1053SE,2,2,1500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0117,2026-01-25,Cakalang,REZA,081284068405,DP1890LO H.BRIO,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0116,2026-01-24,Cakalang,ASRIMAN [DD1673XV],,DD1673XV INNOVA /CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0122,2026-02-02,Cakalang,RIZAL [A1060RF],,A1060RF H. BRO SATYA /G.EVAP,6,6,1650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0123,2026-02-07,Cakalang,Riki,081342776405,B1368CFW CALYA PUTIH /G.FANG CC,6,6,700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0126,2026-02-13,Cakalang,IRVAN,085244251452,DW1081JZ XENIA HITAM /CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0128,2026-02-15,Cakalang,LUKMAN,081242956410,DD1086KD H. JAZ NEW ABU ABU/ TES BOCOR G. EVAP,5,5,1850000.0
+Perlu diperbaiki,customer ambigu,,C-N0121,2026-01-31,Cakalang,ARI,,B2423JUK WULING CONFERO SILVER /CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0132,2026-02-20,Cakalang,SAJID,081314615477,DD1517XAI S. APV /CC,5,5,720000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0133,2026-02-21,Cakalang,KO ERIK,,DD1090OW INNOVA /G.COMP FLUSHING,7,7,3000000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0134,2026-02-21,Cakalang,REZA BI,082252621986,DD1035QK /ISI FREON,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0135,2026-02-23,Cakalang,Uding,082247821948,DD1322KZ VELOZ PUTIH /CC,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0140,2026-03-03,Cakalang,TANDI,08124264041,DD1790UV N. JUKE PUTIH /CC,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0136,2026-02-23,Cakalang,Wanna,085333671518,DP1045UF SIGRA MERAH /CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0137,2026-02-23,Cakalang,Rando,081297457778,DD1093QR H. ODYSSEY /G.EVAP TES BOCOR CC,5,5,1700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0142,2026-03-03,Cakalang,TAHUDING,082381819755,DD1649TQ XENIA SILVER /G.MGC,4,4,1500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0147,2026-03-06,Cakalang,Wawan,082140097015,DD1606LY SIGRA HITAM /CC,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0146,2026-03-05,Cakalang,SUDIRMAN,082346678731,DP1063EZ AVANZA PUTIH /TES BOCOR G. EVAP,5,5,1700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0151,2026-03-09,Cakalang,REZA,087846704870,DD1434HU XENIA /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0149,2026-03-07,Cakalang,SUBANDRI,081906303527,DP1789AP H. JAZZ /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0217 [C.0654],2026-05-30,Cakalang,M. HARISA,,DD1764XDU /G.DRIER TABUNG FLUSHING CC,5,5,1400000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0226[C.0663],2026-06-13,Cakalang,TASMIN,088234644315,DD1141JHO AVANZA/TES BOCOR,4,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0161,2026-03-16,Cakalang,SUKRI,081342763676,DD1479RG AVANZA /TES BOCOR G. COND,5,5,1500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0156,2026-03-14,Cakalang,RIZAL,082252621986,"DD1767QW AVANZA/G.BLOWER,CC",5,5,1200000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0220 [C.0657],2026-06-02,Cakalang,SYARIF [082195476354],,"TERIOS PUTIH DD1045BV #GANTI COMP, MGC, EVAP, FILTER DRIER",9,9,5050000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0173 [C.0410],2026-04-01,Cakalang,SUTOMO,082349908483,DD1957QT RUSH /CC,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0162,2026-03-16,Cakalang,RIZAL,082252621986,DD1261XAU H. BRIO MERAH / CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0152,2026-03-11,Cakalang,Setiawan,085399770665,"DD1445XR/CC+FREON, FILTER DRIER, SELANG AC",6,6,1100000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0165,2026-03-17,Cakalang,SUKRI,081342763676,DD1693XXW AVANZA /CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0163,2026-03-16,Cakalang,PAUL [DP1911YZ],,DD1911YZ S. ERTIGA /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0171 [C.0408],2026-03-31,Cakalang,H.RAHIM[L1477JG],,L1477JG XPANDER /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0157,2026-03-15,Cakalang,REZA,08114445227,DD1943RK H. BRIO /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0178 [C.0414],2026-04-08,Cakalang,PAK RIZAL BI,082252621986,DD8745ST ISUZU BANK BI #CC,4,4,1200000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0160,2026-03-15,Cakalang,RUDI,085256394603,DP1652CP H. JAZZ/CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0168 [C.0405],2026-03-30,Cakalang,NATAN,085256666039,DD1295JBM H. BRIO RS / CUCI BONGKAR +G.EVAP,5,5,1650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0176 [C.0413],2026-04-02,Cakalang,JOJO,085340203399,D1091UM BALENO/TES BOCOR,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0179 [C.0415],2026-04-08,Cakalang,PAK RIZAL BI,082252621986,DD8227RV ISUZU BI/CC,4,4,1200000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0219 [C.0656],2026-06-02,Cakalang,NASRUL [085242007547],,CALYA MERAH DD1963VB #CUCI AC MOBIL,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0180 [C.0416],2026-04-08,Cakalang,RAHMAT,085342041983,DD1887XEM H. FREED /TES BOCOR,4,4,750000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0204 [C.0441],2026-05-11,Cakalang,ADI[DD1843SB],,DD1843SB DATSUN GO / ISI FREON,1,1,300000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0181 [C.0417],2026-04-08,Cakalang,TIWI,082393367779,DD1308KJ H. BRIO /CC,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0209 [C.0446],2026-05-23,Cakalang,UDIN,085399933333,DD1985DIN H. CR-V /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0196 [C.0431],2026-04-25,Cakalang,MIFKA,087842060475,DD1415VT FORTUNER /CC,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0184 [C.0420],2026-04-10,Cakalang,PAK RIZAL BI,082252621986,DD8749ST ISUZU BI/CC,4,4,1200000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0199 [C.0436],2026-04-30,Cakalang,PAK IPUL,085299352006,DD1060BU S. SWITH /CC,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0187 [C.0423],2026-04-10,Cakalang,PAK RIZAL BI,082252621986,DD8225RV ISUZU TRUK /CC,4,4,1200000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0196 [C.0433],2026-04-29,Cakalang,WANDI,085299509517,DD1086UZ NISSAN GRAND LIVINA /G.EVAP ,6,6,1500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0174 [C.0411],2026-04-01,Cakalang,MULIADI,08519549193,DD1239RC AYLA PUTIH /G.EVAP G. FILTER ,7,7,1700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0185 [C.0421],2026-04-10,Cakalang,PAK RIZAL BI,08225262198,DD8744ST BUS BI/CC,4,4,1200000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0197 [C.0432],2026-04-26,Cakalang,ISKANDAR,082152200219,DD1406VK AVANZA /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0188 [C.0424],2026-04-13,Cakalang,RANS,08112440830,DD1554VG CHEVROLET CAPTIVA /TES BOCOR G. EVAP,5,5,1550000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0195 [C.0430],2026-04-23,Cakalang,YUSUP,081235370725,DD1718VG XPANDER /CC,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0189 [C.0425],2026-04-13,Cakalang,RICKY,0811412043,DD1941MV INNOVA/CC BONGKAR +G.EVAP,5,5,1800000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0192 [C.0427],2026-04-14,Cakalang,IRMA,082192290972,"DD1835XFB H. BRIO /G.COMP, G. DRIER",7,7,4500000.0
+Perlu diperbaiki,customer tidak cocok,,C-NO197 [C.0434],2026-04-30,Cakalang,SAID,082348582616,DD1815XFA  AVANZA / CCC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0200 [C.0437],2026-05-04,Cakalang,STIF,082343457204,DD1080EW N. LIVINA /TES BOCOR CC LAS PIPA,7,6,1150000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0198 [C.0435],2026-04-30,Cakalang,SUPRI,,DD1386RW XENIA /CC PASANG RUMAH FILTER +FILTER CABIN,6,6,925000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0201 [C.0438],2026-05-07,Cakalang,WINDO,085299498800,DD1678XEZ AVANZA /CC G. MGC,6,6,1500000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0203 [C.0440],2026-05-09,Cakalang,PAK HASAN,082290575567,DD178MH INNOVA /CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0214 [C.0651],2026-05-26,Cakalang,MARSEL,082148411374,5-VI S. ERTIGA/CC,5,5,700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0213 [C.0450],2026-05-25,Cakalang,SUPRI,,DD1386RW XENIA /G.EVAP,6,6,1300000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0216 [C.0653],2026-05-30,Cakalang,OKI,08194140580,DD1784QO H. MOBILIO / G.MGC,4,4,1400000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0227 [C.0664],2026-06-17,Cakalang,VALGA,0895384947449,DD1056RO H. MOBILIO GREY /G.MGC+CC,5,5,1000000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0224 [C.0661],2026-06-09,Cakalang,ABDILA [082189188191],,"DD1947RH HRV PUTIH
+#GANTI EVAP & TES BOCOR LANJUTAN",8,8,1800000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0223 [C.0660],2026-06-09,Cakalang,FAISAL SAMAILAH [082191893529],,"DD1311UK TERIOS PUTIH
+#GANTI COMP",7,7,4650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0228 [C.0665],2026-06-17,Cakalang,UTU,085242645234,DD1416UD XENIA /G.EVAP,6,6,1700000.0
+Perlu diperbaiki,customer ambigu; keterangan kendaraan kosong,,C-N0239 [C.0676],2026-07-04,Cakalang,DEDI,,,2,2,1050000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0232 [C.0669],2026-06-24,Cakalang,PAK ERA,081342907650,DD1879QF S. ERTIGA MERAH /CC,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0235 [C.0672],2026-06-29,Cakalang,PACCOLI,085299113359,DD1018VM MITSUBISHI XPANDER SIVER/TES BOCOR G.MGC SEVIS KELISTRIKAN,6,6,2450000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0237 [C.0674],2026-07-02,Cakalang,IQBAL [085255922295],,"DD1662XBR HONDA BRIO
+#ISI FREON",1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0240 [C.0677],2026-07-06,Cakalang,Pelanggan Umum,,"DD1002JJ EXPANDER HITAM
+#GANTI MGC + CUCI AC",8,7,2200000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0238 [C.0675],2026-07-03,Cakalang,WAWAN [0895384949533],,"DD1207MUS HONDA JAZZ PUTIH
+#ISI FREON",1,1,300000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0241 [C.0678],2026-07-06,Cakalang,BRILLIAN ARMANDO [08194180244],,DW1247CK HITAM /G. EVAP BELAKANG G. SEAL 3/8 5/8,8,8,1500000.0
+Perlu diperbaiki,keterangan kendaraan kosong,phone,C-N0247 [C.0685],2026-07-22,Cakalang,IKBAL,08124229797,,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0248 [C.0686],2026-07-26,Cakalang,SARIPUDIN,082292744355,DD1649XEF AVANZA SILVER /CC G. EXPANSI G. DRIER ISI,6,6,1050000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0249 [C.0687],2026-07-26,Cakalang,MUNAWAR,081342607357,DD1543YV SIGRA  PUTIH /G.BLOWER,1,1,850000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0251 [C.0689],2026-07-29,Cakalang,HASYIM 081342449066 [DD1403MZ],,"DD1403MZ AVANZA HITAM
+#CUCI AC MOBIL",4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,C-N0250 [C.0688],2026-07-28,Cakalang,RESKI [085299018577],,"DD1462CP SIGRA ABU-ABU
+#CUCI BONGKAR+FILTER CABIN",5,5,500000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0130 [H.1780],2026-01-04,Hertasning,YUDI,085255200848,DATSUN GO DD1631YU / G.SELANG,2,2,850000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0131 [H.1781],2026-01-04,Hertasning,MUH ARS,085248762072,AVANZA DD1695XBZ / G.MGC + ISI FREON,2,2,1500000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0138 [H.1788],2026-01-12,Hertasning,TATI,081343936946,CR-V DD1111EM / CC + TES BOCOR + G.SELANG HIG,5,5,1500000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0135 [H.1785],2026-01-10,Hertasning,YUDI,081243163482,HYUNDAI 20-XIV / CC,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0127 [H.1777],2026-01-03,Hertasning,KHAERUSSALEH,082188442222,NISSAN MARCH DD1162UQ / + FREON,1,1,250000.0
+Perlu diperbaiki,customer tidak cocok,,H-N012911 [H.1779],2026-01-04,Hertasning,ISMAIL,081289601489,CHEVROLET SPINT DD1690TC / + FREON,1,1,250000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0141 [H.1791],2026-01-17,Hertasning,RINA,0821923367919,TERIOS Z1559AN / CC,4,4,600000.0
+Perlu diperbaiki,customer ambigu,,H-N0142 [H.1792],2026-01-17,Hertasning,ARMAN,081995881661,H.BRIO DD1485QF / CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0133 [H.1783],2026-01-07,Hertasning,IWAN,08114614356,CR-V DD1836XHC / CC+G.MOTOR FAN,5,5,1500000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0132 [H.1782],2026-01-07,Hertasning,RUSLAN,082345932450,CARRY DN8702KM / G.XP,2,2,700000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0145 [H.1795],2026-03-05,Hertasning,JUNAIT,,JUNAIT DD1240XG/+FREON,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0149 [H.1799],2026-03-06,Hertasning,Nas,085394442883,NAS DD1947XAN/CC+FREON,2,2,600000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0148 [H.1798],2026-03-06,Hertasning,Mega,082293286824,MEGA DD1924NS/GANTI SELANG LOW & +FREON,2,2,800000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0152 [H.1782],2026-03-08,Hertasning,TAUFIK,085247139660,DD1742Q0/ISI FREON,1,1,250000.0
+Perlu diperbaiki,customer tidak cocok,,H-N0156 [H.1786],2026-03-11,Hertasning,Opu,081271222888,DD18MT/PAKET CC,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0559,2026-04-09,Perintis,IPPONG,081342645589,AGYA/MERAH DD1094HJ,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0569,2026-04-13,Perintis,ZULKIFLI,082396633456,TRAGA / DD9240KK,2,2,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-0545,2026-04-04,Perintis,MUHTI SALEH,081216185767,CALYA HITAM DD1362EY,3,3,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0530,2026-03-31,Perintis,YULI,082187626889,NISSAN JUKE DD 1497 QL / ISI FREON,2,2,550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0532,2026-04-01,Perintis,SAIFUDDIN,082291296259,FORTUNER ABU² DD1317RU,1,1,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-1896,2026-05-30,Perintis,RISMA,085266667638,RUSH PUTIH M1920AC,1,1,125000.0
+Perlu diperbaiki,customer tidak cocok,,D-1879,2026-05-22,Perintis,MUSTAFA,082193164025,FORD EFEREST DW1540GZ,7,7,4500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0502,2026-03-27,Perintis,MURSYID,081347480359,AVANZA DD 1589 M,2,2,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1898,2026-05-30,Perintis,Pelanggan Umum,,"ERTIGA PUTIH DW1902EB
+G.EVP",5,5,1950000.0
+Perlu diperbaiki,customer tidak cocok,,D-1876,2026-05-20,Perintis,SYARIFUDDIN,085705015818,PAJERO HITAM DD1002FS,5,5,1900000.0
+Perlu diperbaiki,customer tidak cocok,,D-1906,2026-06-01,Perintis,SUANDI,085299430041,JAZZ MERAH DW1682CZ,5,5,1550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0533,2026-04-01,Perintis,MARSEL,082245467869,INNOVA PUTIH DD1294QY,5,5,875000.0
+Perlu diperbaiki,customer tidak cocok,,D-1857,2026-05-12,Perintis,YOYO,081257967618,INNOVA GOLD DD1629KI,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0492,2026-03-18,Perintis,WITA,08114101244,AVANZA DW 2623 EB,5,5,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0560,2026-04-09,Perintis,RICAR,085771754697,RUSH SILVER DD1131UF,2,2,395000.0
+Perlu diperbaiki,customer tidak cocok,,D-0495,2026-03-18,Perintis,JUAN,081342424194,ETIOS DN 1833 EE,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0525,2026-03-30,Perintis,PAK ARIS,081348791574,DD1546XR XTRAIL/CC,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0527,2026-03-30,Perintis,SHADIQAH,081907490552,DC1214BM AGYA,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0541,2026-04-03,Perintis,INDRA,082217162035,INNOVA HITAM DD1382SM,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0557,2026-04-07,Perintis,Pelanggan Umum,,KIJANG SILVER DD1604MS,2,2,1400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0521,2026-03-29,Perintis,SORAYA,082182982331,DD1514QH AYLA /G.EVAP,6,6,1550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0524,2026-03-29,Perintis,RIFKI,082395600228,DD1423QK H. BRIO /CC,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0493,2026-03-18,Perintis,ONI,082291277445,KIJANG B 2296 QL,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1881,2026-05-24,Perintis,UMAR,085298323177,H.CITY / DD1601XCI #pres selang,3,3,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0491,2026-03-18,Perintis,SUTAJI,085241998654,H.BRIO DD 1702 AQ,5,5,850000.0
+Perlu diperbaiki,customer tidak cocok,,D-0508,2026-03-27,Perintis,OM ANTO,085235234909,PAJERO SPORT KT 1840 ZZ,5,5,1200000.0
+Perlu diperbaiki,customer tidak cocok,,D-0522,2026-03-29,Perintis,MUHTI SALEH,081216185767,DD1362EY SIGRA /CC BONKAR,4,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0645,2026-05-07,Perintis,MUJADDID,085228458445,STRADA MERAH DP8793TC,5,5,1200000.0
+Perlu diperbaiki,customer tidak cocok,,D-1908,2026-06-03,Perintis,KHALIK,085299453691,"AVANZA ABU² DD1270LZ
+CC
+G.BLW CNTR",5,5,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0507,2026-03-27,Perintis,LANI,081242933939,AGYA DD 1906 RW,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0503,2026-03-27,Perintis,PAK RAHMAT,0811417575,PAJERO DD 237 RM,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-0540,2026-04-03,Perintis,KAFRAWI,081342125497,ERTIGA ABU² DD1367VQ,5,5,725000.0
+Perlu diperbaiki,customer tidak cocok,,D-0500,2026-03-26,Perintis,TRI,082188990811,H.BRIO DC 1162 AT,6,6,1350000.0
+Perlu diperbaiki,customer tidak cocok,,D-0451,2026-03-01,Perintis,SUKRIADI,081355688830,DD1311RF H. MOBILIO #CC,2,2,350000.0
+Perlu diperbaiki,customer tidak cocok,,D-0518,2026-03-29,Perintis,SAINUDDIN,081318113938,KIJANG HIJAU DD1422RE,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,D-0498,2026-03-26,Perintis,RAHMAN APRIADI,082311460270,RUSH DD 1215 UA,5,5,1100000.0
+Perlu diperbaiki,customer tidak cocok,,D-0516,2026-03-28,Perintis,RAHMAWATI,085399507787,BRV PUTIH DD1776XAR,4,4,830000.0
+Perlu diperbaiki,customer tidak cocok,,D-0513,2026-03-28,Perintis,MUTIA,08222894436,ALTIS HITAM BL1634PW,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0490,2026-03-17,Perintis,SATRIA,0882019669627,HYUNDAI AVEGA DD 1799 QE,5,5,1300000.0
+Perlu diperbaiki,customer tidak cocok,,D-0547,2026-04-05,Perintis,RAIS,085173184411,SV KELISTRIKAN,1,1,250000.0
+Perlu diperbaiki,customer tidak cocok,,D-0452,2026-03-02,Perintis,Samsul,085396768582,DD1885KE S. ERTIGA,5,5,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0511,2026-03-28,Perintis,KAMARUDDIN,081342053479,SIGRA SILVER B2753BKU,2,2,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0496,2026-03-25,Perintis,PAK ADI,085255145375,AVANZA DD 1904 XAZ,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1882,2026-05-24,Perintis,OM JONNY,085246464645,AVANZA / W1474CL,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0535,2026-04-02,Perintis,SURIADI,082299346645,AGYA MERAH DD1509KK,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0567,2026-04-13,Perintis,SYAHRUL,085399905559,C200 HITAM DK1122AX,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0570,2026-04-14,Perintis,RAIS AMIN,081241674349,H.JAZZ / DN1634AM,2,2,1400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0453,2026-03-02,Perintis,Niko,085399049000,DD1128RQ S. ERTIGA,5,5,425000.0
+Perlu diperbaiki,customer tidak cocok,,D-0457,2026-03-08,Perintis,gemi,0811428634,DD1636QY AYLA /CC,4,4,490000.0
+Perlu diperbaiki,customer ambigu,,D-0454,2026-03-02,Perintis,Ahmad,,DD1362MZ RUSH,5,5,1690000.0
+Perlu diperbaiki,customer tidak cocok,,D-0509,2026-02-27,Perintis,KO DIKI,,WULONG ABU² DD1792VI,2,2,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0487,2026-03-17,Perintis,IRWAN,081524155020,AVANZA DD 1135 KG,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0485,2026-03-17,Perintis,RAIS AMIN,081241674349,H.JAZZ DN 1634 AM,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0564,2026-04-11,Perintis,TEO,082187949446,#G.COMP - XENIA / DD1852MC,4,4,3500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0568,2026-04-13,Perintis,RAIS,089654651935,L300 HITAM DD8731XP,4,4,900000.0
+Perlu diperbaiki,customer tidak cocok,,D-0580,2026-04-17,Perintis,SUPARMAN,081342016618,AGYA / MERAH DD1356RB,5,5,1150000.0
+Perlu diperbaiki,customer tidak cocok,,D-0482,2026-03-16,Perintis,RAHMA,081341533335,H.JAZZ DD 1730 XB,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0553,2026-04-05,Perintis,USWA,085340498405,JAZZ ABU² DD1653TR,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0481,2026-03-16,Perintis,JEEFREY,081242444845,AVANZA DD 1069 SA,2,2,1800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0480,2026-03-16,Perintis,MUCHTAR,081355148189,H.BRV DD 1739 XDM,2,2,1800000.0
+Perlu diperbaiki,keterangan kendaraan kosong,phone,D-0551,2026-04-05,Perintis,HUSAIN,085342525441,,5,5,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-0554,2026-04-05,Perintis,LERI,082229150009,RAIZE HITA DD1051NW,1,1,250000.0
+Perlu diperbaiki,customer tidak cocok,,D-0473,2026-03-14,Perintis,LINUS,081341960669,FORTUNER DD 1749 RA,2,2,1900000.0
+Perlu diperbaiki,customer tidak cocok,,D-0477,2026-03-15,Perintis,KANDE,085255803448,CALYA DP 1435 KP,4,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0472,2026-03-13,Perintis,LADJO,081342196778,SWIFT DD 1121 VC,2,2,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0471,2026-03-13,Perintis,WAWAN,08114157898,G.LIVINA DD 1862 XBA,4,4,1400000.0
+Perlu diperbaiki,customer tidak cocok,,D-1888,2026-05-28,Perintis,RIKI,081343656770,"G.LIVINA SILVER DD1326SH
+G.oring",2,2,550000.0
+Perlu diperbaiki,customer tidak cocok,,D-1859,2026-05-14,Perintis,Muhaimin,085241171321,MARCH MERAH DD1903MH,4,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0582,2026-04-17,Perintis,YEFTA,0895324785236,KIJANG / GOLD DP1083ND,5,5,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0469,2026-03-13,Perintis,SIMON,085340024783,VITARA DD 1702 MV,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,D-0459,2026-03-08,Perintis,ISMAIL,081343770454,H.CITY DD 1830 XGA,6,6,1600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0574,2026-04-15,Perintis,SAMSUL ALAM,085342548854,AYLA / SILVER DD1546SN #G.EVAP,3,3,1625000.0
+Perlu diperbaiki,customer tidak cocok,,D-0464,2026-03-10,Perintis,SALEH,082311184179,DATSUN DD 1269 LE,4,4,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0463,2026-03-10,Perintis,RAHMAT,082345444494,H.FREED DP 1134 RI,5,5,1000000.0
+Perlu diperbaiki,customer tidak cocok,,D-0460,2026-03-09,Perintis,PRASTUTI,0811427491,AYLA DD 1259 FD,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0578,2026-04-15,Perintis,SORAYA,082182982331,AYLA / PUTIH DD1514QH #G MC,2,2,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0467,2026-03-11,Perintis,SETIAWAN,085399770665,RUSH DD 1445 XR,6,6,1100000.0
+Perlu diperbaiki,keterangan kendaraan kosong,phone,D-1854,2026-05-10,Perintis,ELLI,082288670777,,6,6,2700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1852,2026-05-09,Perintis,MUSTARI,082188406819,X-OVER HITAM DD1164IB,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0647,2026-05-08,Perintis,RUSTANG,08114214578,G.LIVINA HITAM DD1712KZ,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0649,2026-05-09,Perintis,MERI,081242261198,INNOVA HITAM DP1669KH,4,4,900000.0
+Perlu diperbaiki,customer tidak cocok,,D-0638,2026-05-05,Perintis,WAWAN,081245819272,CONFERO ABU² DD1168XAF,1,1,250000.0
+Perlu diperbaiki,customer tidak cocok,,D-0625,2026-05-01,Perintis,IYO,081242366474,CR-V GREY DD1965SU #FR+O,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0622,2026-04-30,Perintis,SUHARDI,085298752192,AGYA PUTIH DP1508CH,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0639,2026-05-06,Perintis,JUNAIDI,082192180088,ERTIGA PUTIH DD1639KD,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-0642,2026-05-06,Perintis,IRMA,085240997825,G.LIVINA PUTIH DD1185LD,6,6,1600000.0
+Perlu diperbaiki,customer tidak cocok,,D-2007,2026-07-11,Perintis,RUSMAN,,ERTIGA / SILVER DD1561KW #G.EVAP+DR,6,6,2250000.0
+Perlu diperbaiki,customer tidak cocok,,D-0620,2026-04-28,Perintis,RICK,081341928820,HRV PUTIH B1056SSV,6,6,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0613,2026-04-27,Perintis,REZA,085838260484,PAJERO PUTIH DD1045FI,4,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-1868,2026-05-17,Perintis,NOVAL,082386665510,SWIFT ABU² DD1370MT,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-0611,2026-04-27,Perintis,POLIMEDIA,085399781078,INNOVA BIRU DD1482XAA,4,4,750000.0
+Perlu diperbaiki,customer tidak cocok,,D-0505,2026-03-27,Perintis,WINDA,081343704888,H.FREED DD 1518 VP,1,1,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-0630,2026-05-03,Perintis,WILI,082189147367,AVANZA HITAM DD1648XCH,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0606,2026-04-24,Perintis,RONI,0853447711,XENIA SILVER DD1814XJ,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-0605,2026-04-24,Perintis,NATANAIL,,JAZZ SILVER R1591VA,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0632,2026-05-03,Perintis,M ANRIANAS,082232050316,INNOVA HITAM DD1876SC,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-0626,2026-05-02,Perintis,JOKO,08991583495,RUSH HITAM DD1591UF,1,1,850000.0
+Perlu diperbaiki,customer tidak cocok,,D-0633,2026-05-04,Perintis,JIO,082164680291,AVANZA PUTIH DD1479UE,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-0621,2026-04-30,Perintis,IRIL,0895423468822,JAZZ MERAH DD112IL,4,4,1300000.0
+Perlu diperbaiki,customer tidak cocok,,D-0604,2026-04-22,Perintis,WANDI,081356143179,TAFT PUTIH DD849BW,7,7,3800000.0
+Perlu diperbaiki,customer tidak cocok,,D-0619,2026-04-28,Perintis,JOPIE,08124222516,DATSUN GO ABU² DN1352NM,4,4,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-0603,2026-04-22,Perintis,JAYA,082210964745,INNOVA HITAM DD1191XBM,4,4,750000.0
+Perlu diperbaiki,customer tidak cocok,,D-1864,2026-05-16,Perintis,RAHMAN,085241739666,MOBILIO PUTIH DD1142KP,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0601,2026-04-21,Perintis,MAKBUL,082396130175,GRANDMAX PUTIH DD1340RY,5,5,800000.0
+Perlu diperbaiki,customer ambigu,,D-0585,2026-04-18,Perintis,IKSAN,082127321533,COROLLA HITAM DD1507TON,7,7,2000000.0
+Perlu diperbaiki,customer tidak cocok,,D-0610,2026-04-26,Perintis,SANDI,08129694231,INNOVA SILVER DD1695VZ,5,5,1600000.0
+Perlu diperbaiki,customer tidak cocok,,D-0593,2026-04-19,Perintis,RAMLAN,085255961248,AVANZA PUTIH DW1419BW,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-1863,2026-05-16,Perintis,LUTFI,085343796548,DD1504TQ,6,6,1750000.0
+Perlu diperbaiki,customer tidak cocok,,D-0595,2026-04-19,Perintis,WANDI,082192568263,AVANZA HITAM DD1769SZ,4,4,550000.0
+Perlu diperbaiki,customer tidak cocok,,D-0597,2026-04-19,Perintis,M SUKYAN,081280946277,AVANZA HITAM DD1968RL,5,5,725000.0
+Perlu diperbaiki,customer tidak cocok,,D-1907,2026-06-02,Perintis,RIZAL,082259695286,"KIJANG BIRU DD1949VU
+T.BCR LJT
+G.DYR",2,2,1150000.0
+Perlu diperbaiki,customer tidak cocok,,D-1870,2026-05-17,Perintis,SAFRI,082154258024,MOBILIO PUTIH DD1181HI,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-1872,2026-05-18,Perintis,SAHARUDDIN,089647196840,AVANZA MERAH DD1013XA,4,4,1150000.0
+Perlu diperbaiki,customer tidak cocok,,D-1903,2026-05-31,Perintis,NURHADI,085238840700,CALYA HITAM DD1749XCB,4,4,600000.0
+Perlu diperbaiki,customer tidak cocok,,D-1873,2026-05-18,Perintis,WARDI,085242164827,AVANZA HITAM DN2455SD,3,3,550000.0
+Perlu diperbaiki,customer ambigu,,D-1966,2026-06-25,Perintis,HERMAN,,PAJERO / HITAM DD777ATS,1,1,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1913,2026-06-04,Perintis,SAHABUDDIN,081340467734,"APV HITAM DD1438VY
+CC.IF",4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1941,2026-06-18,Perintis,ZULKIFLI,,ERTIGA / PUTIH DD1924XU,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1869,2026-05-17,Perintis,ZUL,082346284982,AVANZA SILVER DD1925XV,8,8,4500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1895,2026-05-29,Perintis,RISKI M,085399908135,"AVANZA SILVER DD1336RF
+#G.MGC",4,4,1600000.0
+Perlu diperbaiki,customer tidak cocok; keterangan kendaraan kosong,,D-1900,2026-05-31,Perintis,RISAL,082347742450,,5,5,1200000.0
+Perlu diperbaiki,customer tidak cocok,,D-1973,2026-06-29,Perintis,PAK HAJI RASAD,,BLAZER / SILVER DD1468KK,1,1,450000.0
+Perlu diperbaiki,customer tidak cocok,,D-1894,2026-05-29,Perintis,SAFRI,082154258024,MOBILIO PUTIH DD1181HI #G.EVAP,5,5,1700000.0
+Perlu diperbaiki,customer tidak cocok,,D-0566,2026-04-12,Perintis,PAK AGUS SALIM,08114340803,#GANTI COMP - H.CITY / PUTIH DD71A,6,6,5500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1914,2026-06-04,Perintis,PUTRI,085868471953,"CALYA PUTIH DD1434TM
+CC.IF",4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-1912,2026-06-04,Perintis,MUL,081241347022,"KARIMUN MERAH DD1093AH
+CC.IF",4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-1925,2026-06-09,Perintis,PACCIO,,H.CRV / SILVER KU1805N,5,5,1000000.0
+Perlu diperbaiki,customer ambigu,,D-1957,2026-06-23,Perintis,FADLI,,AVANZA / MERAH DD1885CP,4,4,750000.0
+Perlu diperbaiki,customer ambigu,,D-1942,2026-06-18,Perintis,ERWIN,,CALYA / HITAM DP1325DR,4,4,900000.0
+Perlu diperbaiki,customer tidak cocok,,D-1909,2026-06-04,Perintis,YEFTA,0895324785236,"AVANZA SILVER DD1068ML
+MGC",4,4,1800000.0
+Perlu diperbaiki,customer tidak cocok,,D-1955,2026-06-22,Perintis,SONI,,SUPER CAB / HITAM DD8698SZ,4,4,800000.0
+Perlu diperbaiki,customer ambigu,,D-1965,2026-06-25,Perintis,ILHAM,,PAJERO / HITAM DD1155XAS,1,1,450000.0
+Perlu diperbaiki,customer tidak cocok,,D-2015,2026-07-15,Perintis,WALDA,,G.VITARA / HITAM DD137US #J.BNGKR+PASANG,1,1,500000.0
+Perlu diperbaiki,customer ambigu,,D-1926,2026-06-11,Perintis,ILHAM BENGKEL,,INNOVA / HITAM DD1726XER,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,D-1916,2026-06-05,Perintis,SAFRI,082154258024,"MOBILIO PUTIH DD1181HI
+MGC",4,4,1300000.0
+Perlu diperbaiki,customer tidak cocok,,D-1928,2026-06-12,Perintis,JAMAL,,"H.MOBILIO / ABU"" DD1232EL",4,4,1050000.0
+Perlu diperbaiki,customer ambigu,,D-1935,2026-06-14,Perintis,AGUS,,XENIA / SILVER DG1040C,6,6,1750000.0
+Perlu diperbaiki,customer ambigu,,D-1946,2026-06-19,Perintis,BUDI,,"MOBILIO SILVER DD1045QT
+G.SELANG",4,4,800000.0
+Perlu diperbaiki,customer ambigu,,D-1943,2026-06-18,Perintis,DEDI,,ESCUDO / SILVER DD1665XCY,5,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-1971,2026-06-28,Perintis,JUH,,DATSUN GO / PUTIH DD1024GD,2,2,1600000.0
+Perlu diperbaiki,customer ambigu,,D-1956,2026-06-22,Perintis,HERMAN,,AVANZA / PUTIH DD1453UR,2,2,1700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1968,2026-06-27,Perintis,INTAN,,AVANZA / MERAH DD1915KB,5,5,875000.0
+Perlu diperbaiki,customer tidak cocok,,D-1930,2026-06-12,Perintis,INDAH TALILA,,H.JAZZ / PUTIH DD1979AIT,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1931,2026-06-12,Perintis,JASMAN,,AGYA / HITAM DD1518KM,2,2,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1922,2026-06-07,Perintis,RENDI,085757017832,"CR-V COKLAT DD1560MI
+CC.IF",4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1929,2026-06-12,Perintis,REPAN,,"H.JAZZ / ABU"" DD1789RW",3,3,850000.0
+Perlu diperbaiki,customer ambigu,,D-1932,2026-06-13,Perintis,BUDI,,H.MOBILIO / SILVER DD1045QT,4,4,700000.0
+Perlu diperbaiki,customer ambigu,,D-1927,2026-06-11,Perintis,HERMAN,,BALENO / BIRU DD1754MC,4,4,200000.0
+Perlu diperbaiki,customer tidak cocok,,D-1947,2026-06-19,Perintis,MARTEN,081288903030,"INNOVA SILVER DP1177XA
+I.F",1,1,500000.0
+Perlu diperbaiki,customer tidak cocok,,D-2013,2026-07-13,Perintis,MARTEN,,NAVARA / HIJAU B9444PSD #CCF,4,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-1934,2026-06-14,Perintis,PAK ICAL,,AGYA / MERAH DD1413QE,5,5,1900000.0
+Perlu diperbaiki,customer ambigu,,D-1937,2026-06-15,Perintis,FIRMAN,,AVANZA / PUTIH DP1342FL,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-1936,2026-06-15,Perintis,SAINAL,,AVANZA / MERAH DD1336RO,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-1938,2026-06-15,Perintis,MUHLIS,,APV / HITAM DD1214VG,4,4,800000.0
+Perlu diperbaiki,customer ambigu,,D-1945,2026-06-18,Perintis,FADEL,,INNOVA / PUTIH DT1896LE,6,5,1800000.0
+Perlu diperbaiki,customer ambigu,,D-2014,2026-07-14,Perintis,AGUNG,,RUSH / MERAH DD1399AE #G.COMP+EVAP,4,4,5850000.0
+Perlu diperbaiki,customer ambigu,,D-1960,2026-06-24,Perintis,ADE,,SIGRA / PUTIH DD1623RW,5,5,775000.0
+Perlu diperbaiki,customer ambigu,,D-2012,2026-07-13,Perintis,ILHAM BENGKEL,,HRV / HITAM DD1974ASE #IF,1,1,350000.0
+Perlu diperbaiki,customer tidak cocok,,D-1967,2026-06-25,Perintis,MUSTAKIM,,RUSH / PUTIH DD1269QB,5,5,1900000.0
+Perlu diperbaiki,customer tidak cocok,,D-1949,2026-06-21,Perintis,WAWAN,,AVANZA / PUTIH DP1076AM,2,2,1600000.0
+Perlu diperbaiki,customer tidak cocok,,D-1974,2026-06-29,Perintis,TIRTA,,SPLASH / MERAH DW1835CK,2,2,1500000.0
+Perlu diperbaiki,customer ambigu,,D-1961,2026-06-24,Perintis,DIMAS,,AVANZA / PUTIH DW1131CK,3,3,1650000.0
+Perlu diperbaiki,customer tidak cocok,,D-1988,2026-07-04,Perintis,YAYA,,CRV / HITAM DD1173AS # Cancel,1,1,200000.0
+Perlu diperbaiki,customer tidak cocok,,D-1970,2026-06-27,Perintis,TATO,,CRV / ABU² DN1435BY,3,3,2050000.0
+Perlu diperbaiki,customer tidak cocok,,D-2001,2026-07-07,Perintis,TOM,,ECOSPORT / MERAH DN1502AW #CC,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-1976,2026-06-30,Perintis,ISMAIL,,BRV / MERAH DD1707SMA,6,6,1950000.0
+Perlu diperbaiki,customer tidak cocok,,D-2049,2026-08-01,Perintis,JUMARIS,,DATSUN / PUTIH DD1140RA #G.MGC,2,2,1600000.0
+Perlu diperbaiki,customer tidak cocok,,D-1972,2026-06-28,Perintis,KEMMANG,,HRV / PUTIH DW1474AJ,4,4,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-1978,2026-07-01,Perintis,ISKANDAR,,BRIO / ABU² DD1759Q,6,6,1650000.0
+Perlu diperbaiki,customer ambigu,,D-1977,2026-06-30,Perintis,ILHAM BENGKEL,,INNOVA / HITAM DD77,6,6,1600000.0
+Perlu diperbaiki,customer tidak cocok,,D-1984,2026-07-03,Perintis,SULAIMAN,,VELLFIRE / PUTIH DD1713XAJ #FR.O,1,1,450000.0
+Perlu diperbaiki,customer tidak cocok,,D-1979,2026-07-01,Perintis,INDAH,,AVANZA / HITAM E1698IE,5,5,825000.0
+Perlu diperbaiki,customer tidak cocok,,D-2020,2026-07-18,Perintis,SULFARDI,,SIGRA / HITAM DD1808QB #CCB,4,4,850000.0
+Perlu diperbaiki,customer tidak cocok,,D-1985,2026-07-03,Perintis,SAMSUL,,JAZZ / PUTIH DD1897XU #CC,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-1981,2026-07-02,Perintis,INTAN,,AVANZA / MERAH DD1915KB #G. Evap,6,6,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1983,2026-07-03,Perintis,NANDA,,INNOVA / HITAM DD1898KZ #CC + G.BL,5,5,1700000.0
+Perlu diperbaiki,customer ambigu,,D-1991,2026-07-04,Perintis,ACO,,FORTUNER / PUTIH B411DDE #FR.O,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-1989,2026-07-04,Perintis,TONO,,G.VITARA / HITAM DD1928XAE #G. BL,1,1,950000.0
+Perlu diperbaiki,customer ambigu,,D-1992,2026-07-05,Perintis,FARID,,BRIO / MERAH DD1938QG,4,4,600000.0
+Perlu diperbaiki,customer ambigu,,D-1995,2026-07-06,Perintis,HENDRA,,MOBILIO / PUTIH DD1905UR #CC.FC,5,5,825000.0
+Perlu diperbaiki,customer tidak cocok,,D-1997,2026-07-07,Perintis,MENTARI,,XENIA / SILVER DD1795XAN #CC.FC,5,5,825000.0
+Perlu diperbaiki,customer tidak cocok,,D-1996,2026-07-06,Perintis,INDAH TALILA,,JAZZ / PUTIH DD1979AIT #BL,1,1,950000.0
+Perlu diperbaiki,customer tidak cocok,,D-2003,2026-07-08,Perintis,RIJAL,,RIO / PUTIH DD1273XDZ #TB.L/ SLG,5,5,1200000.0
+Perlu diperbaiki,customer tidak cocok,,D-1924,2026-06-09,Perintis,SIDIQ,085299697171,AGYA / MERAH DD1597QU,9,9,5850000.0
+Perlu diperbaiki,customer tidak cocok,,D-1987,2026-07-03,Perintis,KAMARUDDIN,,KIJANG / MERAH DP1260JG #FR.O,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-1998,2026-07-07,Perintis,SURYA,,AVANZA / PUTIH DD1657XDE #L.P / FR,3,3,950000.0
+Perlu diperbaiki,customer tidak cocok,,D-1986,2026-07-03,Perintis,Pelanggan Umum,,JAZZ / MERAH DD1921KS #M.FAN + FR.O,2,2,1200000.0
+Perlu diperbaiki,customer tidak cocok,,D-2002,2026-07-08,Perintis,SAHAR,,CARRY / HITAM DP8777BR #CC.B -EXP-DRI,6,6,1450000.0
+Perlu diperbaiki,customer ambigu,,D-1959,2026-06-23,Perintis,IBNU,,H.JAZZ / ORANGE DP1056PO,2,2,1500000.0
+Perlu diperbaiki,customer tidak cocok,,D-1999,2026-07-07,Perintis,MULIADI,,MAZDA2 / PUTIH DD1251XR #G.SLG/FR,3,3,950000.0
+Perlu diperbaiki,customer tidak cocok,,D-2004,2026-07-08,Perintis,MEYSHA,,BRIO / PUTIH D1684ADE #G.EVAP,6,6,1750000.0
+Perlu diperbaiki,customer tidak cocok,,D-2009,2026-07-13,Perintis,WILIAM,,KARIMUN / MERAH DD1902XIG #S.KL,1,1,250000.0
+Perlu diperbaiki,customer tidak cocok,,D-2029,2026-07-25,Perintis,SUARDI,,INNOVA / PUTIH DD1774XAV #G.MGC,2,2,1800000.0
+Perlu diperbaiki,customer ambigu,,D-2021,2026-07-18,Perintis,FADLI,,DATSUN GO / MERAH DD1804SL #IF,1,1,400000.0
+Perlu diperbaiki,customer ambigu,,D-2022,2026-07-19,Perintis,ADI,,X-TRAIL / HITAM DD630AB #CCF+FILCAB,5,5,925000.0
+Perlu diperbaiki,customer tidak cocok,,D-2018,2026-07-17,Perintis,SYAMSIR,,"AVANZA / ABU"" DP1016FF #G.MGC+CC",5,5,1700000.0
+Perlu diperbaiki,customer tidak cocok,,D-2026,2026-07-24,Perintis,NURSAL,,GRAND MAX / BIRU DD1812RN #CCF,4,4,700000.0
+Perlu diperbaiki,customer tidak cocok,,D-2024,2026-07-21,Perintis,MUJABBAR,,XL 7 / ORANGE DP1080UUH #CCF+G.XP,5,5,1000000.0
+Perlu diperbaiki,customer ambigu,,D-2025,2026-07-22,Perintis,AIDIL,,HRV / MERAH DC1328AV #CCF+G.MTR FAN,6,6,2500000.0
+Perlu diperbaiki,customer ambigu,,D-2027,2026-07-24,Perintis,DONI,,APV / BIRU DW1584EC #G.MC+CC,5,5,1900000.0
+Perlu diperbaiki,customer tidak cocok,,D-2028,2026-07-25,Perintis,MUKTI,,AVANZA / HITAM DD1069UK #G.MGC+CC,5,5,2150000.0
+Perlu diperbaiki,customer ambigu,,D-2035,2026-07-27,Perintis,DEDE,,KIJANG / SILVER B121BSJ #CC+G.DR,5,5,1200000.0
+Perlu diperbaiki,customer ambigu,,D-2037,2026-07-28,Perintis,AMIN,,BRIO / PUTIH DD1352QB #CCF,4,4,650000.0
+Perlu diperbaiki,customer tidak cocok,,D-2048,2026-08-01,Perintis,PAK MARTEN,,EVEREST / BIRU DD1680XBQ #IF,1,1,450000.0
+Perlu diperbaiki,customer ambigu,,D-2041,2026-07-30,Perintis,ICA,,GRAND MAX / HITAM DD8621KW #G.EVAP,6,6,1600000.0
+Perlu diperbaiki,customer ambigu,,D-2033,2026-07-26,Perintis,HERI,,XENIA / SILVER DP1029AK #IF,1,1,400000.0
+Perlu diperbaiki,customer tidak cocok,,D-2034,2026-07-27,Perintis,KAROL,,RUSH / MERAH DD1893VO #CCB+G.MGC+G.PIK,7,7,3100000.0
+Perlu diperbaiki,customer tidak cocok,,D-2040,2026-07-28,Perintis,JIMMY,,FORTUNER / HITAM PA1049KA #CCF,5,5,900000.0
+Perlu diperbaiki,customer tidak cocok,,D-2052,2026-08-04,Perintis,MURSIDIN,,AVANZA / HITAM DD1935XAA #G.MGC+CC,5,5,2200000.0
+Perlu diperbaiki,customer tidak cocok,,D-2047,2026-08-01,Perintis,JAMAL,,"MOBILIO / ABU""DP1232EL #G.COMP+G.EVP",9,9,5450000.0
+Perlu diperbaiki,customer tidak cocok,,D-2046,2026-08-01,Perintis,RISMAN,,AVANZA / HITAM DD1380UV #G.MGC+DRI,3,3,1950000.0
+Perlu diperbaiki,customer tidak cocok,,D-2045,2026-07-31,Perintis,PAK BAHAR,,RUSH / SILVER DD1552QL #G.MT.F,1,1,825000.0
+Perlu diperbaiki,customer ambigu,,D-2050,2026-08-01,Perintis,ILHAM BENGKEL,,"DATSUN / ABU"" DP1152CM #G.SLNG",3,3,800000.0
+Perlu diperbaiki,customer tidak cocok,,D-2054,2026-08-04,Perintis,NATA,,BRIO / PUTIH KT1904YN #S.KL,1,1,250000.0
+Perlu diperbaiki,customer ambigu,,D-2053,2026-08-04,Perintis,FAHMI,,RUSH / HITAM DD1346FE #G.MGC,2,2,1600000.0
+Perlu diperbaiki,customer ambigu,,D-2051,2026-08-02,Perintis,ARIS,,"INNOVA / ABU"" DD1840MI #G.EVAP",7,7,1925000.0

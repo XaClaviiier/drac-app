@@ -1,0 +1,19 @@
+{
+  "scope": "all_customer_and_vehicle_records",
+  "include_hertasning": true,
+  "customer_model": "global_master",
+  "customer_key": "normalized_phone",
+  "customer_category_field": "customer_category",
+  "category_is_branch": false,
+  "first_input_branch": "metadata_only",
+  "vehicle_key": "normalized_plate",
+  "duplicate_policy": "skip_existing_and_audit",
+  "source_files": [
+    "daftar-pelanggan drac.xlsx",
+    "rincian_faktur_penjualan_dokteracmobil_260914210103 ver2.xlsx"
+  ],
+  "candidate_customer_file": "customer-import-candidate-all.csv",
+  "vehicle_comparison_file": "vehicle-compare.csv",
+  "writes_to_production": 0,
+  "status": "READY_FOR_VALIDATED_IMPORT"
+}

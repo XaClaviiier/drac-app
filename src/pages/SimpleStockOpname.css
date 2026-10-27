@@ -137,3 +137,17 @@
 .opname-category .opname-category-hint { background:#eff6ff; border:1px solid #bfdbfe; border-radius:4px; padding:10px 12px; }
 .opname-category-hint p { margin:0 0 8px; color:#264766; }
 .opname-category .opname-category-hint button { width:auto; padding:6px 10px; border:1px solid #0767ad; font-size:12px; color:#0767ad; }
+
+.opname-items .opname-detail-row { cursor:pointer; }
+.opname-items .opname-detail-row:hover td { background:#edf5fc; }
+.opname-items .opname-detail-row:focus-visible { outline:2px solid #0767ad; outline-offset:-2px; }
+.opname-detail-dialog { margin:auto; padding:0; border:0; border-radius:6px; width:min(540px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; background:white; color:#222; box-shadow:0 12px 40px #0004; }
+.opname-detail-dialog::backdrop { background:#0007; }
+.opname-detail-dialog header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:#173f70; color:white; }
+.opname-detail-dialog h2 { font-size:18px; font-weight:600; }
+.opname-detail-dialog header button { padding:4px; border-radius:3px; }
+.opname-detail-dialog dl { display:grid; grid-template-columns:120px minmax(0,1fr); gap:14px 16px; padding:22px; font-size:14px; }
+.opname-detail-dialog dt { color:#64748b; }
+.opname-detail-dialog dd { margin:0; overflow-wrap:anywhere; }
+.opname-detail-dialog footer { display:flex; justify-content:flex-end; border-top:1px solid #ddd; padding:12px 18px; }
+@media(max-width:480px){.opname-detail-dialog dl{grid-template-columns:95px minmax(0,1fr);padding:16px;gap:12px;}}

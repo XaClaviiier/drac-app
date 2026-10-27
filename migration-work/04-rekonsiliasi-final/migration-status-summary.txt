@@ -1,0 +1,21 @@
+HASIL REKONSILIASI TRANSAKSI ACCURATE -> CERDIK
+Tanggal pemeriksaan: 2026-09-21
+
+Sumber: sales-invoice-import-ready-v2.csv
+Total baris item: 2193
+Total faktur unik: 580
+
+SIAP TAHAP PREVIEW
+- Faktur: 252
+- Baris item: 927
+- Syarat: customer cocok unik via telepon atau nama; keterangan kendaraan dan item tersedia.
+
+PERLU DIPERBAIKI
+- Faktur: 328
+- Baris item: 1266
+- Penyebab baris: customer tidak cocok / customer ambigu / keterangan kendaraan kosong.
+
+Catatan:
+- Ini daftar evaluasi lokal; belum menulis data ke database produksi.
+- Semua transaksi di file diberi status Lunas dan metode Transfer sesuai keputusan bisnis.
+- Stok transaksi diset Potong stok; penyesuaian stok awal masih berupa kandidat terpisah.

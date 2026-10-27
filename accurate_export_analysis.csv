@@ -1,0 +1,9 @@
+﻿metric,value
+sheet,Rincian Faktur Penjualan
+physical_rows,2264
+unique_invoice_numbers,606
+first_invoice,C-N0194 [C.0429]
+last_invoice,D-2051
+nonblank_keterangan_rows,2233
+blank_keterangan_rows,31
+unique_customers,560

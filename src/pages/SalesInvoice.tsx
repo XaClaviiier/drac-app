@@ -54,7 +54,7 @@ const SALES_INVOICE_COLUMN_WIDTHS: Record<InvoiceColumnKey, number> = {
 
 export default function SalesInvoice() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, currentBranchId, hasPermission, currentUser, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
+  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, hasPermission, currentUser, resolveBranchId, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
   const [showModal, setShowModal] = useState(false);
   useAccurateDocumentCanvas(showModal);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
@@ -104,6 +104,7 @@ export default function SalesInvoice() {
   const [selectedFormItemId, setSelectedFormItemId] = useState('');
   const [invoiceDocumentTab, setInvoiceDocumentTab] = useState<AccurateDocumentTab>('details');
   const [invoiceRailMenu, setInvoiceRailMenu] = useState<'print' | 'more' | ''>('');
+  const [transactionBranchId, setTransactionBranchId] = useState('');
   const activeFilterCount = [filterCustomer, filterStatus, filterDate || filterDateFrom || filterDateTo, filterMinAge].filter(Boolean).length;
   const resetInvoiceFilters = () => {
     setFilterCustomer('');
@@ -291,7 +292,7 @@ export default function SalesInvoice() {
   const formItemsTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
   const formGrandTotal = Math.max(0, formItemsTotal - formDiscount);
   const manualInvoiceReady = Boolean(
-    currentBranchId !== 'ALL'
+    transactionBranchId
     &&
     (editingInvoice || (formData.customerRefId && formData.vehicleRefId))
     && formItems.length > 0
@@ -306,7 +307,7 @@ export default function SalesInvoice() {
   // membantu TypeScript mempertahankan narrowing di callback JSX yang bersarang.
   const detailItem = data.items.find(item => item.id === detailItemId)!;
   const availableWarehouses = data.warehouses.filter(warehouse => warehouse.isActive && warehouse.isSellable && (
-    currentBranchId === 'ALL' || warehouse.branchId === currentBranchId
+    !transactionBranchId || warehouse.branchId === transactionBranchId
   ));
   const detailWarehouseStock = detailItem && detailWarehouseId
     ? data.warehouseStocks.find(stock => stock.warehouseId === detailWarehouseId && stock.itemId === detailItem.id)?.quantity || 0
@@ -353,9 +354,6 @@ export default function SalesInvoice() {
   const filteredInvoices = useMemo(() => {
     return data.invoices
       .filter((inv) => {
-        const branchMatch = currentBranchId === 'ALL' || inv.branchId === currentBranchId;
-        if (!branchMatch) return false;
-
         const matchesSearch =
           inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (inv.manualReceiptNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -377,7 +375,7 @@ export default function SalesInvoice() {
         if (dateCompare !== 0) return dateCompare;
         return b.invoiceNumber.localeCompare(a.invoiceNumber);
       });
-  }, [data.invoices, searchTerm, filterStatus, filterDate, filterDateFrom, filterDateTo, filterMinAge, filterCustomer, currentBranchId]);
+  }, [data.invoices, searchTerm, filterStatus, filterDate, filterDateFrom, filterDateTo, filterMinAge, filterCustomer]);
 
   const desktopInvoices = useMemo(() => {
     if (!invoiceTable.sort) return filteredInvoices;
@@ -398,10 +396,9 @@ export default function SalesInvoice() {
 
   const invoiceCustomers = useMemo(() => Array.from(new Set(
     data.invoices
-      .filter(invoice => currentBranchId === 'ALL' || invoice.branchId === currentBranchId)
       .map(invoice => invoice.customerName)
       .filter(Boolean)
-  )).sort((a, b) => a.localeCompare(b)), [data.invoices, currentBranchId]);
+  )).sort((a, b) => a.localeCompare(b)), [data.invoices]);
 
   const formatShareDate = (date: string) => {
     const [year, month, day] = date.split('-');
@@ -479,6 +476,7 @@ export default function SalesInvoice() {
     setInvoiceDocumentTab('details');
     setInvoiceRailMenu('');
     setFormFromWOId('');
+    setTransactionBranchId(resolveBranchId());
   };
 
   const handleOpenModal = (invoice?: SalesInvoice) => {
@@ -488,6 +486,7 @@ export default function SalesInvoice() {
     setFormFromWOId('');
     if (invoice) {
       setEditingInvoice(invoice);
+      setTransactionBranchId(invoice.branchId);
       const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
       const editableItems = invoice.items?.length ? invoice.items : linkedWO?.services || [];
       const matchedVehicle = data.vehicles.find(
@@ -602,7 +601,11 @@ export default function SalesInvoice() {
       status: computedStatus,
       items: formItems,
     };
-    const targetBranchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
+    const targetBranchId = editingInvoice?.branchId || transactionBranchId || resolveBranchId();
+    if (!targetBranchId || targetBranchId === 'ALL') {
+      window.alert('Pilih cabang transaksi terlebih dahulu.');
+      return;
+    }
     const invoiceNumber = generateDocumentNumber('invoice', targetBranchId, new Date(`${formData.date}T12:00:00`));
 
     if (editingInvoice) {
@@ -667,7 +670,6 @@ export default function SalesInvoice() {
   // Hanya WO Selesai yang boleh difakturkan.
   const unbilledWOs = data.workOrders.filter(
     (wo) => !wo.invoiceId && !wo.continuedToWoId && wo.status === 'Selesai'
-      && (currentBranchId === 'ALL' || wo.branchId === currentBranchId)
   );
   const visibleUnbilledWOs = unbilledWOs.filter((wo) => {
     const term = woSearchTerm.trim().toLowerCase();
@@ -701,6 +703,7 @@ export default function SalesInvoice() {
     setSelectedWOId(woId);
     const wo = data.workOrders.find((w) => w.id === woId);
     if (wo) {
+      setTransactionBranchId(wo.branchId);
       const copiedItems = wo.services.map((item, index) => ({ ...item, id: `invoice-${Date.now()}-${index}` }));
       setWoDraftItems(copiedItems);
       const total = copiedItems.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -728,7 +731,7 @@ export default function SalesInvoice() {
       setShowModal(true);
     }
   };
-  const orderedVisibleInvoiceColumns = (invoiceTable.isDesktop ? invoiceTable.order : DEFAULT_SALES_INVOICE_COLUMNS).filter(column => isInvoiceColumnVisible(column) && (column !== 'branch' || currentBranchId === 'ALL'));
+  const orderedVisibleInvoiceColumns = (invoiceTable.isDesktop ? invoiceTable.order : DEFAULT_SALES_INVOICE_COLUMNS).filter(column => isInvoiceColumnVisible(column));
 
   useEffect(() => {
     const woId = searchParams.get('woId');
@@ -970,7 +973,7 @@ export default function SalesInvoice() {
       )}
 
       {/* Filters */}
-      <div className={`${showWOPicker ? 'hidden' : showModal || viewingInvoice ? 'lg:hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
+      <div className={`${showWOPicker || showModal || viewingInvoice ? '!hidden' : ''} ${ui.toolbar} border border-gray-300 p-3 shadow-sm lg:border-x-0 lg:border-y lg:px-3 lg:py-2`}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <div className="order-1 flex flex-shrink-0 items-center gap-1">
               <IndonesianDateInput value={filterDate} onChange={updateFilterDate} ariaLabel="Filter satu tanggal faktur" title="Pilih satu tanggal faktur" className="h-9 w-40 text-sm" />
@@ -1555,6 +1558,29 @@ export default function SalesInvoice() {
                     <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'ambil' ? null : 'ambil')} className={ui.documentAction}>Ambil <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'ambil' && <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded border bg-white p-1 shadow-xl"><button type="button" onClick={() => { setFormActionMenu(null); setShowModal(false); handleOpenWOPicker(); }} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Wrench className="h-4 w-4 text-emerald-600"/>Ambil dari Order Kerja</button></div>}</div>
                     {editingInvoice || formFromWO ? <div className="relative"><button type="button" onClick={() => setFormActionMenu(menu => menu === 'proses' ? null : 'proses')} className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>{formActionMenu === 'proses' && <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded border bg-white p-1 shadow-xl">{editingInvoice ? <><button type="button" onClick={() => window.location.assign(`/customer-payments?viewInvoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Eye className="h-4 w-4"/>Lihat Riwayat Pembayaran</button><button type="button" disabled={formGrandTotal <= editingInvoice.payment} onClick={() => formGrandTotal > editingInvoice.payment && window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(editingInvoice.id)}`)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-400"><Receipt className="h-4 w-4"/>Tambah Pembayaran</button></> : <button type="button" onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent, { openPaymentAfterSave: true })} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-blue-50"><Receipt className="h-4 w-4"/>Simpan &amp; lanjut Pembayaran</button>}</div>}</div> : <button type="button" disabled title="Simpan faktur terlebih dahulu" className={ui.documentAction}>Proses <ChevronDown className="h-4 w-4"/></button>}
                   </div>
+                </div>
+                <div className="mt-2 grid grid-cols-1 items-center gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
+                  <label className="flex h-10 items-center text-sm font-medium text-gray-700">Cabang transaksi <span className="ml-1 text-red-500">*</span></label>
+                  {editingInvoice || formFromWO ? (
+                    <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">
+                      {data.branches.find(branch => branch.id === transactionBranchId)?.name || transactionBranchId || '-'}
+                    </div>
+                  ) : (
+                    <select
+                      value={transactionBranchId}
+                      onChange={event => {
+                        const nextBranchId = event.target.value;
+                        setTransactionBranchId(nextBranchId);
+                        setFormItems(items => items.map(item => item.itemId ? { ...item, warehouseId: undefined } : item));
+                      }}
+                      className="h-10 w-full rounded border border-gray-400 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">Pilih cabang transaksi...</option>
+                      {data.branches.filter(branch => branch.isActive).map(branch => (
+                        <option key={branch.id} value={branch.id}>{branch.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 {editingInvoice && <div className="mt-2 text-xs text-gray-500">Nomor Faktur: <strong className="text-gray-800">{editingInvoice.invoiceNumber}</strong>{editingInvoice.woNumber && <> · Referensi WO: <strong className="text-gray-800">{editingInvoice.woNumber}</strong></>}</div>}
                 {editingInvoice && (

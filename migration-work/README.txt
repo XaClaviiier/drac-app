@@ -1,0 +1,10 @@
+cutover=2026-08-01
+opname=2026-07-31
+branches=Cakalang,Perintis
+exclude=Hertasning
+customer_model=global_master
+customer_duplicate_rule=one_customer_all_branches
+customer_first_input_branch=metadata_only
+accurate_category=customer_category_only
+accurate_category_not_branch=true
+operational_customer_branches=Cakalang,Perintis,Mamuju

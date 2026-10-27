@@ -1,0 +1,14 @@
+{
+  "mode": "DRY_RUN",
+  "writes_to_cerdikapp": 0,
+  "customer_matches_by_phone": 11,
+  "name_corrections": 11,
+  "customer_candidates_new": 902,
+  "duplicate_phone_groups": 0,
+  "duplicate_phone_rows": 0,
+  "files_checked": [
+    "D:\\PROJECT\\DRAC-APP\\migration-work\\04-rekonsiliasi-final\\customer-compare-final.csv",
+    "D:\\PROJECT\\DRAC-APP\\migration-work\\04-rekonsiliasi-final\\customer-name-correction.csv",
+    "D:\\PROJECT\\DRAC-APP\\migration-work\\04-rekonsiliasi-final\\customer-perlu-dibuat.csv"
+  ]
+}
