@@ -367,7 +367,8 @@ export default function SalesInvoice() {
           && (!filterDateTo || invoiceDate <= filterDateTo);
         const matchesAge = !filterMinAge || (remaining > 0 && Number(inv.age) >= Number(filterMinAge));
         const matchesCustomer = !filterCustomer || inv.customerName === filterCustomer;
-        return matchesSearch && matchesStatus && matchesDate && matchesCustomer && matchesAge;
+        const matchesBranch = currentBranchId === 'ALL' || inv.branchId === currentBranchId;
+        return matchesSearch && matchesStatus && matchesDate && matchesCustomer && matchesAge && matchesBranch;
       })
       .sort((a, b) => {
         // Newest first: compare by date desc, then by invoice number desc
@@ -375,7 +376,7 @@ export default function SalesInvoice() {
         if (dateCompare !== 0) return dateCompare;
         return b.invoiceNumber.localeCompare(a.invoiceNumber);
       });
-  }, [data.invoices, searchTerm, filterStatus, filterDate, filterDateFrom, filterDateTo, filterMinAge, filterCustomer]);
+  }, [data.invoices, currentBranchId, searchTerm, filterStatus, filterDate, filterDateFrom, filterDateTo, filterMinAge, filterCustomer]);
 
   const desktopInvoices = useMemo(() => {
     if (!invoiceTable.sort) return filteredInvoices;

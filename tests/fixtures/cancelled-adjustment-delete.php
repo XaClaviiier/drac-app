@@ -40,8 +40,10 @@ function lockInventoryWarehousesForAuthorization(PDO $pdo,array $authorization,a
 function adjustWarehouseStock(PDO $pdo,string $warehouseId,string $branchId,string $itemId,int $delta): void {
     $stmt=$pdo->prepare('SELECT quantity FROM warehouse_stocks WHERE warehouse_id=? AND item_id=?');
     $stmt->execute([$warehouseId,$itemId]);
-    if($delta<0&&(int)$stmt->fetchColumn()+$delta<0)throw new DomainException('Stok tidak mencukupi');
     $pdo->prepare('UPDATE warehouse_stocks SET quantity=quantity+? WHERE warehouse_id=? AND item_id=?')->execute([$delta,$warehouseId,$itemId]);
+}
+function adjustWarehouseStockAllowNegative(PDO $pdo,string $warehouseId,string $branchId,string $itemId,int $delta): void {
+    adjustWarehouseStock($pdo,$warehouseId,$branchId,$itemId,$delta);
 }
 function lockStockOpnameResultForAdjustment(PDO $pdo,string $id): ?array { global $input; return !empty($input['linked'])?['id'=>'RESULT1']:null; }
 function transactionExceptionStatus(Throwable $e,int $fallback): int { return $e->getCode()?:$fallback; }

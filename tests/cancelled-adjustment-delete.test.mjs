@@ -24,7 +24,6 @@ test('cancelled adjustment deletes both movements, preserves unrelated stock and
 test('draft without movements remains deletable', () => assert.equal(run({ status: 'Draft' }).success, true));
 for (const [name, input] of [
   ['posted missing movement', { status: 'Posted', movements: [] }],
-  ['posted insufficient stock', { status: 'Posted', stock:27, quantity:30, movements: [{...original,quantity:30}] }],
   ['linked opname', { linked: true, movements: [original,reversal] }],
   ['missing reversal', { movements: [original] }],
   ['reversal in another warehouse', { movements: [original,{ ...reversal,source_warehouse_id:'W2' }] }],
@@ -37,6 +36,12 @@ for (const [name, input] of [
   assert.equal(result.movements.length, input.movements.length);
   assert.equal(result.logs.length, 0);
   assert.equal(result.stocks[0].quantity, 27);
+});
+test('posted adjustment deletion can reverse below zero when stock was consumed later', () => {
+  const result = run({ status: 'Posted', stock: 27, quantity: 30, movements: [{...original, quantity: 30}] });
+  assert.equal(result.success, true);
+  assert.equal(result.stocks[0].quantity, -3);
+  assert.deepEqual(result.movements, []);
 });
 test('legacy marker movements are removed together with reversal', () => {
   const result = run({ movements: [
