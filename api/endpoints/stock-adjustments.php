@@ -196,7 +196,10 @@ if ($method === 'DELETE' && $id) {
         if($doc['status']==='Posted') {
             foreach($lines as $line) {
                 $warehouseId=(string)$line['warehouse_id'];
-                adjustWarehouseStock($pdo,$warehouseId,(string)$deleteWarehouseMap[$warehouseId]['branch_id'],(string)$line['item_id'],-(int)$line['quantity']);
+                // Menghapus penyesuaian harus selalu membalik mutasi aslinya.
+                // Jika stok sudah dipakai transaksi lain, saldo boleh menjadi negatif
+                // agar penghapusan tidak terblokir oleh saldo saat ini.
+                adjustWarehouseStockAllowNegative($pdo,$warehouseId,(string)$deleteWarehouseMap[$warehouseId]['branch_id'],(string)$line['item_id'],-(int)$line['quantity']);
             }
         }
         $deleteMovement=$pdo->prepare("DELETE FROM stock_movements WHERE id=?");
