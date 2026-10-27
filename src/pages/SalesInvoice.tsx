@@ -54,7 +54,7 @@ const SALES_INVOICE_COLUMN_WIDTHS: Record<InvoiceColumnKey, number> = {
 
 export default function SalesInvoice() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, hasPermission, currentUser, resolveBranchId, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
+  const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, hasPermission, currentUser, currentBranchId, resolveBranchId, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
   const [showModal, setShowModal] = useState(false);
   useAccurateDocumentCanvas(showModal);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
