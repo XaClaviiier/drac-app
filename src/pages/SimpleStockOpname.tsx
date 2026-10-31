@@ -13,6 +13,10 @@ type Row = { itemId:string;code:string;name:string;unit:string;categoryName:stri
 type Document = {id:string;orderNumber:string;endDate:string;warehouseId:string;warehouseName:string;assignedUserName:string;notes:string;revision:number;entryMode:string;createdAt:string;lastUpdatedAt?:string;rows?:Row[];result?:{status?:string;adjustmentId?:string;adjustmentNumber?:string;notes?:string}};
 type Adjustment = {adjustmentNumber:string;rows:{itemCode:string;itemName:string;quantity:number;unit:string}[]};
 type Column='name'|'code'|'systemQuantity'|'count'|'variance'|'unit';
+type WorkspaceSnapshot = {
+  tab:boolean; list:boolean; info:boolean; document:Document|null; rows:Row[]; catalog:Row[];
+  date:string; warehouse:string; notes:string; requestKey:string; dirty:boolean;
+};
 const columns:Column[]=['name','code','systemQuantity','count','variance','unit'];
 const labels:Record<Column,string>={name:'Nama Barang',code:'Kode Barang',systemQuantity:'Stok Sistem',count:'Hitung Fisik',variance:'Selisih',unit:'Satuan'};
 const widths:Record<Column,number>={name:360,code:180,systemQuantity:130,count:140,variance:120,unit:85};
@@ -20,22 +24,32 @@ const key = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), n=>n.to
 const countValue = (text:string):number|null => text===''?null:/^\d+$/.test(text)&&Number(text)<=2147483647?Number(text):NaN;
 const normalize = (rows:Row[]) => rows.map(row=>({...row,count:row.finalQuantity===null||row.finalQuantity===undefined?'':String(row.finalQuantity)}));
 const html = (value:unknown) => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+const readWorkspaceSnapshot = (storageKey:string):WorkspaceSnapshot|null => {
+  try {
+    const value=JSON.parse(sessionStorage.getItem(storageKey)||'null');
+    return value&&typeof value==='object'&&Array.isArray(value.rows)&&Array.isArray(value.catalog)?value:null;
+  } catch { return null; }
+};
 
 export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   const {data,currentUser,currentBranchId,hasPermission,refreshData}=useApp();
   const navigate=useNavigate();
+  const workspaceKey=`drac-stock-opname-workspace-v1:${currentUser?.id||currentUser?.username||'guest'}:${currentBranchId||'ALL'}`;
+  const restored=useRef<WorkspaceSnapshot|null|undefined>(undefined);
+  if(restored.current===undefined)restored.current=readWorkspaceSnapshot(workspaceKey);
+  const snapshot=restored.current;
   const canSave=hasPermission('stock_opname:count');
   const canApply=canSave&&hasPermission('stock_opname:post');
   const canCreate=canSave&&hasPermission('stock_opname:create');
   const [legacyOpen,setLegacyOpen]=useState(false);
   const [documents,setDocuments]=useState<Document[]>([]);
-  const [document,setDocument]=useState<Document|null>(null);
-  const [tab,setTab]=useState(false),[list,setList]=useState(true),[info,setInfo]=useState(false);
-  const [rows,setRows]=useState<Row[]>([]),[date,setDate]=useState(localDateKey()),[warehouse,setWarehouse]=useState(''),[notes,setNotes]=useState('');
-  const [requestKey,setRequestKey]=useState(key),[dirty,setDirty]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+  const [document,setDocument]=useState<Document|null>(snapshot?.document||null);
+  const [tab,setTab]=useState(snapshot?.tab||false),[list,setList]=useState(snapshot?.list??true),[info,setInfo]=useState(snapshot?.info||false);
+  const [rows,setRows]=useState<Row[]>(snapshot?.rows||[]),[date,setDate]=useState(snapshot?.date||localDateKey()),[warehouse,setWarehouse]=useState(snapshot?.warehouse||''),[notes,setNotes]=useState(snapshot?.notes||'');
+  const [requestKey,setRequestKey]=useState(snapshot?.requestKey||key),[dirty,setDirty]=useState(snapshot?.dirty||false),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   const [search,setSearch]=useState(''),[filter,setFilter]=useState('all'),[listSearch,setListSearch]=useState(''),[listDate,setListDate]=useState('');
   const [importOpen,setImportOpen]=useState(false),[linked,setLinked]=useState<Adjustment|null>(null);
-  const [catalog,setCatalog]=useState<Row[]>([]),[addSearch,setAddSearch]=useState(''),[addOpen,setAddOpen]=useState(false),[tableSearchOpen,setTableSearchOpen]=useState(false);
+  const [catalog,setCatalog]=useState<Row[]>(snapshot?.catalog||[]),[addSearch,setAddSearch]=useState(''),[addOpen,setAddOpen]=useState(false),[tableSearchOpen,setTableSearchOpen]=useState(false);
   const [detailItemId,setDetailItemId]=useState('');
   const detailRow=rows.find(row=>row.itemId===detailItemId);
   const detailDialog=useRef<HTMLDialogElement>(null);
@@ -48,6 +62,9 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   const [saveMenuOpen,setSaveMenuOpen]=useState(false);
   const saveMenuRef=useRef<HTMLDivElement>(null);
   useEffect(()=>{if(!saveMenuOpen)return;const close=(event:PointerEvent)=>{if(!saveMenuRef.current?.contains(event.target as Node))setSaveMenuOpen(false);};const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')setSaveMenuOpen(false);};window.addEventListener('pointerdown',close);window.addEventListener('keydown',escape);return()=>{window.removeEventListener('pointerdown',close);window.removeEventListener('keydown',escape);};},[saveMenuOpen]);
+  const clearWorkspaceSnapshot=()=>{try{sessionStorage.removeItem(workspaceKey);}catch{ /* storage tidak tersedia */ }};
+  useEffect(()=>{const closeTab=(event:Event)=>{const path=(event as CustomEvent<{path?:string}>).detail?.path;if(path==='/reports/stock-count-sheet')clearWorkspaceSnapshot();};window.addEventListener('drac:workspace-tab-closing',closeTab);return()=>window.removeEventListener('drac:workspace-tab-closing',closeTab);},[workspaceKey]);
+  useEffect(()=>{try{sessionStorage.setItem(workspaceKey,JSON.stringify({tab,list,info,document,rows,catalog,date,warehouse,notes,requestKey,dirty} satisfies WorkspaceSnapshot));}catch{ /* storage tidak tersedia */ }},[workspaceKey,tab,list,info,document,rows,catalog,date,warehouse,notes,requestKey,dirty]);
   const lock=useRef(false),file=useRef<HTMLInputElement>(null);
   const warehouses=data.warehouses.filter(w=>w.isActive&&!w.isSystem&&(currentBranchId==='ALL'||w.branchId===currentBranchId));
   const loadList=async()=>{const result=await api.get<Document[]>('stock-opnames');if(!result.success)throw new Error(result.message);setDocuments(result.data||[]);};
@@ -55,7 +72,7 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
   const run=async(work:()=>Promise<void>)=>{if(lock.current)return;lock.current=true;setBusy(true);setMessage('');try{await work();}catch(e){setMessage(e instanceof Error?e.message:'Proses gagal.');}finally{lock.current=false;setBusy(false);}};
   const discard=()=>!dirty||window.confirm('Perubahan belum disimpan. Tutup tanpa menyimpan?');
-  const clear=()=>{setDetailItemId('');setDocument(null);setRows([]);setCatalog([]);setAddSearch('');setAddOpen(false);setTableSearchOpen(false);setDate(localDateKey());setWarehouse('');setNotes('');setDirty(false);setSearch('');setFilter('all');setRequestKey(key());setInfo(false);setImportOpen(false);setMessage('');setCategoryOpen(false);setSaveMenuOpen(false);};
+  const clear=()=>{clearWorkspaceSnapshot();setDetailItemId('');setDocument(null);setRows([]);setCatalog([]);setAddSearch('');setAddOpen(false);setTableSearchOpen(false);setDate(localDateKey());setWarehouse('');setNotes('');setDirty(false);setSearch('');setFilter('all');setRequestKey(key());setInfo(false);setImportOpen(false);setMessage('');setCategoryOpen(false);setSaveMenuOpen(false);};
   const newDocument=()=>{if(!discard())return;clear();setTab(true);setList(false);};
   const close=()=>{if(!discard())return;clear();setTab(false);setList(true);};
   const open=async(id:string)=>{
