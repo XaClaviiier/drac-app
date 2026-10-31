@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, CircleEllipsis, FileText, Info, List, Paperclip, Plus, Printer, RefreshCw, Save, Search, Trash2, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
@@ -22,6 +23,7 @@ const html = (value:unknown) => String(value??'').replace(/[&<>"']/g,c=>({'&':'&
 
 export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   const {data,currentUser,currentBranchId,hasPermission,refreshData}=useApp();
+  const navigate=useNavigate();
   const canSave=hasPermission('stock_opname:count');
   const canApply=canSave&&hasPermission('stock_opname:post');
   const canCreate=canSave&&hasPermission('stock_opname:create');
@@ -199,7 +201,7 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
     {detailRow&&<dialog ref={detailDialog} className="opname-detail-dialog" aria-labelledby="opname-detail-title" onClose={()=>setDetailItemId('')} onClick={event=>{if(event.target===event.currentTarget){const rect=event.currentTarget.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)event.currentTarget.close();}}}>
       <header><h2 id="opname-detail-title">Rincian Barang</h2><button type="button" autoFocus aria-label="Tutup rincian barang" onClick={()=>detailDialog.current?.close()}><X size={20}/></button></header>
       <dl>
-        <dt>Kode Barang</dt><dd>{detailRow.code}</dd>
+        <dt>Kode Barang</dt><dd><button type="button" className="opname-link" onClick={()=>navigate(`/items?view=${encodeURIComponent(detailRow.itemId)}`)}>{detailRow.code}</button></dd>
         <dt>Nama Barang</dt><dd>{detailRow.name}</dd>
         <dt>Kategori</dt><dd>{detailRow.categoryName||'-'}</dd>
         <dt>Gudang</dt><dd>{data.warehouses.find(item=>item.id===warehouse)?.name||document?.warehouseName||warehouse}</dd>
