@@ -1,6 +1,6 @@
 import { useEffect,useMemo,useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check,List,Package,Plus,RefreshCw,Search,X } from 'lucide-react';
+import { Check,List,Plus,RefreshCw,Search,X } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import { useApp } from '../context/AppContext';
 import { localDateKey } from '../lib/date';
