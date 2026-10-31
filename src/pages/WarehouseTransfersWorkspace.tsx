@@ -9,7 +9,7 @@ import './WarehouseTransfersWorkspace.css';
 
 type Process='Kirim Barang'|'Terima Barang';
 type TransferItem={itemId:string;itemCode:string;itemName:string;categoryName:string;unit:string;qtySent:number;qtyReceived:number};
-type Transfer={id:string;transferNumber:string;date:string;sourceWarehouseName:string;sourceBranchId:string;sourceBranchName:string;destinationWarehouseName:string;destinationBranchName:string;status:string;cancellationReason?:string|null;items:TransferItem[]};
+type Transfer={id:string;transferNumber:string;date:string;sourceWarehouseName:string;sourceBranchId:string;sourceBranchName:string;destinationWarehouseId:string;destinationBranchId:string;destinationWarehouseName:string;destinationBranchName:string;status:string;cancellationReason?:string|null;items:TransferItem[]};
 type WarehouseOption={id:string;name:string;branchName:string};
 type SendItem={itemId:string;itemCode:string;itemName:string;categoryName:string;unit:string;qty:number};
 
