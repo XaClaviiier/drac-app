@@ -20,7 +20,7 @@ import AIAssistant from './pages/AIAssistant';
 import Categories from './pages/Categories';
 import SettingsPage from './pages/SettingsPage';
 import Warehouses from './pages/Warehouses';
-import WarehouseTransfers from './pages/WarehouseTransfers';
+import WarehouseTransfers from './pages/WarehouseTransfersWorkspace';
 import WorkOrderReport from './pages/WorkOrderReport';
 import ReportsIndex from './pages/ReportsIndex';
 import CustomerPayments from './pages/CustomerPayments';
