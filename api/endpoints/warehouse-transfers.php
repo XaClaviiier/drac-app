@@ -20,6 +20,8 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS warehouse_transfer_items(
  UNIQUE KEY uq_transfer_item(transfer_id,item_id),INDEX idx_transfer_item(transfer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 ensureInventoryLedgerReady($pdo);
+ensureTableColumn($pdo,'warehouse_transfers','revision','INT UNSIGNED NOT NULL DEFAULT 0');
+require_once __DIR__.'/../warehouse-transfer-correction.php';
 $validatePersistedTransferLine=static function(array $item):array{
  $sent=parseBoundedDecimalInteger($item['qty_sent']??null,'1','2147483647','Kuantitas kirim tersimpan');
  $received=parseBoundedDecimalInteger($item['qty_received']??null,'0',(string)$sent,'Kuantitas terima tersimpan');
@@ -31,7 +33,8 @@ $accessibleBranchIds=getAccessibleBranchIds($pdo,$actor);
 $allowed=array_fill_keys($accessibleBranchIds,true);
 $mapTransfer=function(array $row)use($pdo){
  $stmt=$pdo->prepare("SELECT id,item_id AS itemId,item_code AS itemCode,item_name AS itemName,category_name AS categoryName,unit,qty_sent AS qtySent,qty_received AS qtyReceived FROM warehouse_transfer_items WHERE transfer_id=? ORDER BY id");$stmt->execute([$row['id']]);
- return ['id'=>$row['id'],'transferNumber'=>$row['transfer_number'],'date'=>$row['transfer_date'],'sourceWarehouseId'=>$row['source_warehouse_id'],'sourceWarehouseName'=>$row['source_name'],'sourceBranchId'=>$row['source_branch_id'],'sourceBranchName'=>$row['source_branch_name'],'destinationWarehouseId'=>$row['destination_warehouse_id'],'destinationWarehouseName'=>$row['destination_name'],'destinationBranchId'=>$row['destination_branch_id'],'destinationBranchName'=>$row['destination_branch_name'],'status'=>$row['status'],'deliveryMethod'=>$row['delivery_method']??'','notes'=>$row['notes']??'','sentById'=>$row['sent_by_id'],'sentByName'=>$row['sent_by_name'],'sentAt'=>$row['sent_at'],'receivedById'=>$row['received_by_id'],'receivedByName'=>$row['received_by_name'],'receivedAt'=>$row['received_at'],'cancelledByName'=>$row['cancelled_by_name']??null,'cancelledAt'=>$row['cancelled_at']??null,'cancellationReason'=>$row['cancellation_reason']??null,'items'=>$stmt->fetchAll()];
+ $history=$pdo->prepare("SELECT reason,snapshot_json,user_name AS userName,created_at AS createdAt FROM transaction_activity_logs WHERE entity_type='warehouse_transfer' AND entity_id=? AND action_type='correct' ORDER BY id DESC");$history->execute([$row['id']]);$corrections=$history->fetchAll();foreach($corrections as &$correction){$correction['snapshot']=json_decode($correction['snapshot_json'],true);unset($correction['snapshot_json']);}unset($correction);
+ return ['revision'=>(int)$row['revision'],'corrections'=>$corrections,'id'=>$row['id'],'transferNumber'=>$row['transfer_number'],'date'=>$row['transfer_date'],'sourceWarehouseId'=>$row['source_warehouse_id'],'sourceWarehouseName'=>$row['source_name'],'sourceBranchId'=>$row['source_branch_id'],'sourceBranchName'=>$row['source_branch_name'],'destinationWarehouseId'=>$row['destination_warehouse_id'],'destinationWarehouseName'=>$row['destination_name'],'destinationBranchId'=>$row['destination_branch_id'],'destinationBranchName'=>$row['destination_branch_name'],'status'=>$row['status'],'deliveryMethod'=>$row['delivery_method']??'','notes'=>$row['notes']??'','sentById'=>$row['sent_by_id'],'sentByName'=>$row['sent_by_name'],'sentAt'=>$row['sent_at'],'receivedById'=>$row['received_by_id'],'receivedByName'=>$row['received_by_name'],'receivedAt'=>$row['received_at'],'cancelledByName'=>$row['cancelled_by_name']??null,'cancelledAt'=>$row['cancelled_at']??null,'cancellationReason'=>$row['cancellation_reason']??null,'items'=>$stmt->fetchAll()];
 };
 if($method==='GET'){
  $rows=$pdo->query("SELECT t.*,sw.name source_name,sw.branch_id source_branch_id,sb.name source_branch_name,dw.name destination_name,dw.branch_id destination_branch_id,db.name destination_branch_name FROM warehouse_transfers t JOIN warehouses sw ON sw.id=t.source_warehouse_id JOIN branches sb ON sb.id=sw.branch_id JOIN warehouses dw ON dw.id=t.destination_warehouse_id JOIN branches db ON db.id=dw.branch_id ORDER BY t.transfer_date DESC,t.created_at DESC")->fetchAll();
@@ -65,6 +68,9 @@ if($method==='POST'){
 }
 if($method==='PUT'&&$id){
  $d=getInput();$requestedAction=(string)($d['action']??'');
+ if($requestedAction==='correct'){
+  $pdo->beginTransaction();try{lockInventoryMutation($pdo);correctReceivedWarehouseTransfer($pdo,$actor,(string)$id,$d);$pdo->commit();respondSuccess(null,'Koreksi transfer disimpan');}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),transactionExceptionStatus($e,422));}
+ }
  if($requestedAction==='send'){
   $delegatedUserIds=[(string)($d['sentById']??$actor['id'])];
   $pdo->beginTransaction();try{lockInventoryMutation($pdo);
