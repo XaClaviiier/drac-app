@@ -52,13 +52,7 @@ function correctReceivedWarehouseTransfer(PDO $pdo, array $actor, string $id, ar
     // Existing inactive items may be reduced/removed; added or increased items must be active.
     $increased = array_keys(array_filter($deltas, static fn($delta) => $delta > 0));
     $masters = $increased ? lockActiveInventoryItems($pdo, $increased) : [];
-    $stock = $pdo->prepare('SELECT quantity FROM warehouse_stocks WHERE warehouse_id=? AND item_id=? FOR UPDATE');
-    foreach ($deltas as $itemId => $delta) {
-        $warehouseId = $delta > 0 ? $source : $destination;
-        $stock->execute([$warehouseId, $itemId]);
-        $available = (int)($stock->fetchColumn() ?: 0);
-        if ($available < abs($delta)) throw new DomainException('Koreksi ditolak: stok barang '.$itemId.' di '.$warehouses[$warehouseId]['name'].' tinggal '.$available.', diperlukan '.abs($delta));
-    }
+    // Quantities stay positive; warehouse balances may become negative.
     foreach ($deltas as $itemId => $delta) {
         adjustWarehouseStockAllowNegative($pdo, $source, (string)$warehouses[$source]['branch_id'], (string)$itemId, -$delta);
         adjustWarehouseStockAllowNegative($pdo, $destination, (string)$warehouses[$destination]['branch_id'], (string)$itemId, $delta);

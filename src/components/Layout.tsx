@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { clearTransferWorkspaces } from '../lib/transferWorkspaceSession';
 import { ui, workspaceTabClass } from "./ui/interfaceStandards";
 import {
   LayoutDashboard,
@@ -705,6 +706,7 @@ export default function Layout() {
       const guard = (window as WorkOrderEditorGuardWindow).__dracRequestCloseWorkOrderEditor;
       if (guard && !await guard()) return;
       window.dispatchEvent(new CustomEvent("drac:workspace-tab-closing", { detail: { path } }));
+      if (path === '/warehouse-transfers') clearTransferWorkspaces();
       const fallback =
         remaining[Math.min(index, remaining.length - 1)]?.path || (hasPermission("wo:view") ? "/workorders/timeline" : "/help");
       setWorkspaceTabs(remaining);
@@ -712,6 +714,7 @@ export default function Layout() {
       return;
     }
     window.dispatchEvent(new CustomEvent("drac:workspace-tab-closing", { detail: { path } }));
+    if (path === '/warehouse-transfers') clearTransferWorkspaces();
     setWorkspaceTabs(remaining);
   };
 

@@ -27,8 +27,8 @@ for(const [label,input] of [
  ['non-admin',{role:'STAFF'}],
  ['destination branch inaccessible',{branches:['BS']}],
  ['not fully received',{status:'Dalam Perjalanan'}],
- ['insufficient destination stock',{destinationStock:1,requests:[request([['A',2]])]}],
- ['insufficient origin stock',{requests:[request([['A',16]])]}],
+ ['zero quantity',{requests:[request([['A',0]])]}],
+ ['negative quantity',{requests:[request([['A',-2]])]}],
  ['empty reason',{requests:[{...request([['A',7]]),reason:' '}]}],
  ['empty lines',{requests:[request([])]}],
  ['fractional quantity',{requests:[request([['A',2.5]])]}],
@@ -47,3 +47,18 @@ test('subsequent correction uses new revision and cumulative delta',()=>{
 test('inactive existing item can be reduced',()=>{
  const r=run({inactive:['A'],requests:[request([['A',2]])]});assert.equal(r.results[0].success,true);
 });
+
+
+for (const [label,input,expected] of [
+ ['origin stock becomes negative',{requests:[request([['A',16]])]},{'S:A':-1,'D:A':16}],
+ ['destination stock becomes negative',{destinationStock:1,requests:[request([['A',2]])]},{'S:A':13,'D:A':-2}],
+ ['origin stock is already negative',{sourceStock:-4,requests:[request([['A',7]])]},{'S:A':-6,'D:A':7}],
+ ['remove item despite destination shortage',{destinationStock:0,requests:[request([['B',3]])]},{'S:A':15,'D:A':-5,'S:B':7,'D:B':3}],
+]) {
+ test(label+' still records positive quantities and audit',()=>{
+  const r=run(input);assert.equal(r.results[0].success,true,JSON.stringify(r.results));
+  for(const [key,value] of Object.entries(expected))assert.equal(r.state.stock[key],value);
+  assert.ok(r.state.lines.every(line=>line.qty_sent>0&&line.qty_received===line.qty_sent));
+  assert.ok(r.state.movements.every(m=>m[4]>0));assert.equal(r.state.logs.length,1);
+ });
+}

@@ -33,7 +33,7 @@ test('warehouse transfer revalidates every persisted line after lock before send
   ]){
     const block=source.slice(source.indexOf(startMarker),source.indexOf(endMarker));
     const validation=block.indexOf('$validatePersistedTransferLine($item)');
-    const arithmetic=Math.min(...['$available<$sent','$remaining=$sent-$received','$qty>$remaining'].map(token=>{const index=block.indexOf(token);return index<0?Number.POSITIVE_INFINITY:index;}));
+    const arithmetic=Math.min(...['adjustWarehouseStockAllowNegative(','$remaining=$sent-$received','$qty>$remaining'].map(token=>{const index=block.indexOf(token);return index<0?Number.POSITIVE_INFINITY:index;}));
     assert.ok(validation>=0&&validation<arithmetic);
   }
 });

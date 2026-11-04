@@ -18,7 +18,7 @@ class CorrectionDB extends PDO{
   $this->actor=['id'=>'admin','name'=>'Admin','is_active'=>1,'is_owner'=>0,'role_id'=>'role','branch_id'=>'BS'];
   $this->warehouses=['S'=>['id'=>'S','name'=>'Cakalang','branch_id'=>'BS','is_active'=>1,'is_system'=>0],'D'=>['id'=>'D','name'=>'Perintis','branch_id'=>'BD','is_active'=>1,'is_system'=>0]];
   $line=['item_id'=>'A','item_name'=>'Barang A','qty_sent'=>5,'qty_received'=>5];
-  $this->state=['header'=>['id'=>'T','transfer_number'=>'TRF-1','status'=>$input['status']??'Diterima','revision'=>0,'source_warehouse_id'=>'S','destination_warehouse_id'=>'D'],'lines'=>[$line],'stock'=>['S:A'=>10,'D:A'=>$input['destinationStock']??5,'S:B'=>10,'D:B'=>0],'branch'=>['BS:A'=>10,'BD:A'=>$input['destinationStock']??5,'BS:B'=>10,'BD:B'=>0],'movements'=>[],'logs'=>[]];
+  $this->state=['header'=>['id'=>'T','transfer_number'=>'TRF-1','status'=>$input['status']??'Diterima','revision'=>0,'source_warehouse_id'=>'S','destination_warehouse_id'=>'D'],'lines'=>[$line],'stock'=>['S:A'=>$input['sourceStock']??10,'D:A'=>$input['destinationStock']??5,'S:B'=>10,'D:B'=>0],'branch'=>['BS:A'=>$input['sourceStock']??10,'BD:A'=>$input['destinationStock']??5,'BS:B'=>10,'BD:B'=>0],'movements'=>[],'logs'=>[]];
   $this->initial=$this->state;
  }
  public function prepare(string $query,array $options=[]):PDOStatement|false{return new CorrectionStatement($this,$query);}
