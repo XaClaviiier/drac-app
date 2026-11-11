@@ -6,7 +6,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
-import type { WorkOrder, WorkOrderService } from '../types';
+import type { GoodsReceipt, WorkOrder, WorkOrderService } from '../types';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 
 const GROQ_URL = `${window.location.origin}/api/ai-chat`;
@@ -21,7 +21,7 @@ interface ChatMsg {
   error?: boolean;
   time: string;
   action?: { type: string; payload: any };
-  actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'create_wo_vehicle' | 'open_workorders' | 'open_workorder' | 'open_invoice'; value?: string }>;
+  actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'select_receipt_item' | 'create_wo_vehicle' | 'open_workorders' | 'open_workorder' | 'open_invoice'; value?: string }>;
   shareText?: string;
   vehicleSummary?: VehicleHistorySummary;
 }
@@ -50,6 +50,7 @@ interface AISessionSnapshot {
   input: string;
   pendingAction: any;
   pendingBranchId: string;
+  pendingWarehouseId?: string;
   registrationDraft: RegistrationDraft | null;
   showBranchChooser: boolean;
 }
@@ -114,6 +115,7 @@ const readAISession = (key: string): AISessionSnapshot | null => {
       input: typeof parsed.input === 'string' ? parsed.input : '',
       pendingAction: parsed.pendingAction || null,
       pendingBranchId: typeof parsed.pendingBranchId === 'string' ? parsed.pendingBranchId : '',
+      pendingWarehouseId: typeof parsed.pendingWarehouseId === 'string' ? parsed.pendingWarehouseId : '',
       registrationDraft: parsed.registrationDraft || null,
       showBranchChooser: Boolean(parsed.showBranchChooser),
     };
@@ -213,7 +215,7 @@ export default function AIAssistant() {
   const {
     data, currentUser, currentBranchId, setCurrentBranchId,
     addWorkOrder, addCustomer, updateCustomer, generateCustomerCode, addVehicle, updateVehicle, generateDocumentNumber,
-    hasPermission, refreshData,
+    addGoodsReceipt, generateReceiptNumber, hasPermission, refreshData,
   } = useApp();
 
   const aiSessionUserId = currentUser?.id || currentUser?.username || 'anonymous';
@@ -234,6 +236,7 @@ export default function AIAssistant() {
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<any>(() => restoredAISession?.pendingAction || null);
   const [pendingBranchId, setPendingBranchId] = useState(() => restoredAISession?.pendingBranchId || '');
+  const [pendingWarehouseId, setPendingWarehouseId] = useState(() => restoredAISession?.pendingWarehouseId || '');
   const [registrationDraft, setRegistrationDraft] = useState<RegistrationDraft | null>(() => restoredAISession?.registrationDraft || null);
   const commandHistoryKey = `dokterac_ai_history_${currentUser?.id || currentUser?.username || 'default'}`;
   const [commandHistory, setCommandHistory] = useState<string[]>(() => {
@@ -470,6 +473,7 @@ export default function AIAssistant() {
       input,
       pendingAction,
       pendingBranchId,
+      pendingWarehouseId,
       registrationDraft,
       showBranchChooser,
     };
@@ -484,7 +488,7 @@ export default function AIAssistant() {
         }));
       } catch { /* Browser menolak penyimpanan sesi; chat tetap berjalan di memori. */ }
     }
-  }, [aiSessionKey, messages, input, pendingAction, pendingBranchId, registrationDraft, showBranchChooser]);
+  }, [aiSessionKey, messages, input, pendingAction, pendingBranchId, pendingWarehouseId, registrationDraft, showBranchChooser]);
 
   useEffect(() => {
     const field = inputRef.current;
@@ -792,6 +796,7 @@ export default function AIAssistant() {
     setInput('');
     setPendingAction(null);
     setPendingBranchId('');
+    setPendingWarehouseId('');
     setRegistrationDraft(null);
     setShowStarterMenu(false);
     setShowCommandHistory(false);
@@ -1644,6 +1649,86 @@ ${buildSmartContext(userMsgText)}`;
     }
   };
 
+  const receiptItemMatches = (query: string) => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('id-ID');
+    const queryWords = normalizedQuery.split(/[^a-z0-9]+/).filter(Boolean);
+    return data.items
+      .filter(item => item.isActive && item.type === 'Persediaan')
+      .map(item => {
+        const code = item.code.toLocaleLowerCase('id-ID');
+        const name = item.name.toLocaleLowerCase('id-ID');
+        const exact = code === normalizedQuery || name === normalizedQuery;
+        const allWordsMatch = queryWords.length > 0 && queryWords.every(word => name.includes(word) || code.includes(word));
+        const partial = name.includes(normalizedQuery) || code.includes(normalizedQuery);
+        const score = exact ? 0 : allWordsMatch ? 1 : partial ? 2 : 99;
+        return { item, score };
+      })
+      .filter(candidate => candidate.score < 99)
+      .sort((left, right) => left.score - right.score || left.item.name.localeCompare(right.item.name, 'id'))
+      .slice(0, 8)
+      .map(candidate => candidate.item);
+  };
+
+  const defaultReceiptWarehouse = (branchId: string) =>
+    data.warehouses.find(warehouse => warehouse.branchId === branchId && warehouse.isActive && warehouse.isDefault)
+      || data.warehouses.find(warehouse => warehouse.branchId === branchId && warehouse.isActive);
+
+  const prepareReceiptAction = (itemId: string) => {
+    const item = data.items.find(candidate => candidate.id === itemId && candidate.isActive && candidate.type === 'Persediaan');
+    if (!item) return;
+    const branchId = currentBranchId === 'ALL' ? '' : currentBranchId;
+    const warehouse = branchId ? defaultReceiptWarehouse(branchId) : undefined;
+    setPendingAction({
+      action: 'create_goods_receipt',
+      itemId: item.id,
+      itemCode: item.code,
+      itemName: item.name,
+      unit: item.unit,
+      qty: 1,
+    });
+    setPendingBranchId(branchId);
+    setPendingWarehouseId(warehouse?.id || '');
+  };
+
+  const createGoodsReceiptFromAI = async (action: any, branchId: string, warehouseId: string) => {
+    const item = data.items.find(candidate => candidate.id === action.itemId && candidate.isActive && candidate.type === 'Persediaan');
+    const warehouse = data.warehouses.find(candidate => candidate.id === warehouseId && candidate.branchId === branchId && candidate.isActive);
+    if (!item) throw new Error('Barang tidak lagi tersedia di Master Barang. Cari ulang barang tersebut.');
+    if (!warehouse) throw new Error('Gudang tujuan tidak valid untuk cabang yang dipilih.');
+    if (!hasPermission('receipt:create')) throw new Error('Akun ini tidak memiliki hak membuat Penerimaan Barang.');
+
+    const date = localDateISO();
+    const receipt: GoodsReceipt = {
+      id: Date.now().toString(),
+      receiptNumber: generateReceiptNumber(branchId, date),
+      date,
+      supplierId: '',
+      supplierName: '',
+      doNumber: '',
+      deliveryMethod: 'Diantar Supplier',
+      sourceType: 'Supplier',
+      items: [{
+        id: `${Date.now()}-${item.id}`,
+        itemId: item.id,
+        itemCode: item.code,
+        itemName: item.name,
+        qty: 1,
+        unit: item.unit,
+        qtyInvoiced: 0,
+      }],
+      status: 'Diterima',
+      notes: `Dibuat via Asisten AI oleh ${currentUser?.name || 'System'}`,
+      branchId,
+      warehouseId: warehouse.id,
+      receivedBy: currentUser?.name || 'System',
+      receivedById: currentUser?.id,
+      createdAt: date,
+    };
+    const saved = await addGoodsReceipt(receipt);
+    await refreshData();
+    return { receiptNumber: saved.receiptNumber || receipt.receiptNumber, item, branchName: cabangName(branchId), warehouseName: warehouse.name };
+  };
+
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || busy) return;
@@ -1651,6 +1736,34 @@ ${buildSmartContext(userMsgText)}`;
 
     if (lowerContent === 'clear') {
       startNewChat();
+      return;
+    }
+
+    const receiptCommand = content.match(/^terima(?:\s+barang)?\s+(.+?)\s*$/i);
+    if (receiptCommand) {
+      const reply = (message: string, actions?: ChatMsg['actions'], error = false) => {
+        setInput('');
+        setMessages(history => [...history, { role: 'user', content, time: now() }, { role: 'assistant', content: message, actions, error, time: now() }]);
+      };
+      if (!hasPermission('receipt:create')) {
+        reply('Anda tidak memiliki hak membuat **Penerimaan Barang**.', undefined, true);
+        return;
+      }
+      const matches = receiptItemMatches(receiptCommand[1]);
+      if (matches.length === 0) {
+        reply(`Barang persediaan **${receiptCommand[1].trim()}** tidak ditemukan di Master Barang. Kode tidak dibuat atau ditebak.`, undefined, true);
+        return;
+      }
+      if (matches.length > 1) {
+        reply([
+          `Ditemukan **${matches.length} barang persediaan**. Pilih barang dari Master Barang:`,
+          '',
+          ...matches.map((item, index) => `${index + 1}. **${item.code}** — ${item.name}`),
+        ].join('\n'), matches.map(item => ({ label: `${item.code} — ${item.name}`, type: 'select_receipt_item' as const, value: item.id })));
+        return;
+      }
+      prepareReceiptAction(matches[0].id);
+      reply(`Barang ditemukan di Master Barang: **${matches[0].code} — ${matches[0].name}**. Periksa cabang dan gudang pada konfirmasi sebelum menyimpan.`);
       return;
     }
 
@@ -1901,6 +2014,7 @@ ${buildSmartContext(userMsgText)}`;
     if (lowerContent === 'batal' && pendingAction) {
       setPendingAction(null);
       setPendingBranchId('');
+      setPendingWarehouseId('');
       setInput('');
       setMessages(history => [
         ...history,
@@ -2104,6 +2218,15 @@ ${buildSmartContext(userMsgText)}`;
   };
 
   const handleMessageAction = (action: NonNullable<ChatMsg['actions']>[number]) => {
+    if (action.type === 'select_receipt_item' && action.value) {
+      prepareReceiptAction(action.value);
+      setMessages(history => [...history, {
+        role: 'assistant',
+        content: 'Barang dipilih dari Master Barang. Periksa cabang dan gudang pada konfirmasi sebelum menyimpan.',
+        time: now(),
+      }]);
+      return;
+    }
     if (action.type === 'select_vehicle' && action.value) {
       void send(`cek ${action.value}`);
       return;
@@ -2151,6 +2274,15 @@ ${buildSmartContext(userMsgText)}`;
     setBusy(true);
     let completed = false;
     try {
+      if (pendingAction.action === 'create_goods_receipt') {
+        const r = await createGoodsReceiptFromAI(pendingAction, pendingBranchId, pendingWarehouseId);
+        setMessages(h => [...h, {
+          role: 'assistant',
+          time: now(),
+          content: `✅ **Barang berhasil diterima**\n\n- Kode: **${r.item.code}**\n- Nama: **${r.item.name}**\n- Qty: **1 ${r.item.unit}**\n- Cabang: **${r.branchName}**\n- Gudang: **${r.warehouseName}**\n- Nomor: **${r.receiptNumber}**\n- Status: **Diterima**\n\nStok sudah bertambah dan transaksi tercatat di Riwayat Penerimaan, Kartu Stok, serta Laporan Persediaan.`,
+        }]);
+        completed = true;
+      } else {
       const r = await executeCreateWO(pendingAction, pendingBranchId);
       const plateForShare = r.plateNumber.replace(/\s+/g, '').toUpperCase().replace(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/, (_all: string, prefix: string, number: string, suffix: string) => `${prefix} ${number}${suffix ? ` ${suffix}` : ''}`);
       const vehicleForShare = (r.vehicleInfo || '-').replace(/\s*-\s*([^-]+)$/, ' ($1)');
@@ -2164,12 +2296,14 @@ ${buildSmartContext(userMsgText)}`;
         content: `✅ **Order Kerja berhasil dibuat!**\n\n- Nomor: **${r.woNumber}**\n- Pelanggan: **${r.customerName}**\n- Kendaraan: **${r.plateNumber}**\n- Layanan: **${r.servicesCount} item**\n- Estimasi: **${fmt(r.total)}**\n- Cabang: **${r.branchName}**\n- Status: **Register**${r.customerUpdateSkipped ? '\n- Catatan: **Data master pelanggan tidak diubah karena akun tidak memiliki izin edit pelanggan.**' : ''}\n\nBuka menu Servis Job untuk menambah layanan atau mulai dikerjakan.`,
       }]);
       completed = true;
+      }
     } catch (e: any) {
-      setMessages(h => [...h, { role: 'assistant', content: `⚠️ Gagal membuat WO: ${e.message}`, error: true, time: now() }]);
+      setMessages(h => [...h, { role: 'assistant', content: `⚠️ ${pendingAction.action === 'create_goods_receipt' ? 'Gagal menyimpan Penerimaan Barang' : 'Gagal membuat WO'}: ${e.message}`, error: true, time: now() }]);
     } finally {
       if (completed) {
         setPendingAction(null);
         setPendingBranchId('');
+        setPendingWarehouseId('');
       }
       setBusy(false);
       confirmActionLockRef.current = false;
@@ -2591,9 +2725,15 @@ ${buildSmartContext(userMsgText)}`;
                 {pendingAction && !busy && (
               <div className="animate-msg-in rounded-xl border-2 border-cyan-500 bg-cyan-950/40 p-4">
                 <p className="mb-2 flex items-center gap-2 text-sm font-bold text-cyan-300">
-                  <Wrench className="h-4 w-4" /> Konfirmasi Buat Order Kerja
+                  {pendingAction.action === 'create_goods_receipt' ? <Package className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
+                  {pendingAction.action === 'create_goods_receipt' ? 'Konfirmasi Penerimaan Barang' : 'Konfirmasi Buat Order Kerja'}
                 </p>
                 <div className="mb-3 space-y-1 text-xs text-slate-300">
+                  {pendingAction.action === 'create_goods_receipt' ? <>
+                    <p>Barang diterima: <b className="text-white">{pendingAction.itemName}</b></p>
+                    <p>Kode: <b className="font-mono text-white">{pendingAction.itemCode}</b></p>
+                    <p>Qty: <b className="text-white">1 {pendingAction.unit}</b></p>
+                  </> : <>
                   <p>Pelanggan: <b className="text-white">{pendingAction.customerName}</b> {pendingAction.phone && `(${pendingAction.phone})`}</p>
                   {pendingAction.address && <p>Alamat: <b className="text-white">{pendingAction.address}</b></p>}
                   {pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved && (
@@ -2654,6 +2794,7 @@ ${buildSmartContext(userMsgText)}`;
                       </div>
                     </div>
                   )}
+                  </>}
                   
                   <div className="mt-3">
                     {pendingBranchId && !showBranchChooser ? (
@@ -2670,6 +2811,7 @@ ${buildSmartContext(userMsgText)}`;
                           type="button"
                           onClick={() => {
                             setPendingBranchId(branch.id);
+                            if (pendingAction.action === 'create_goods_receipt') setPendingWarehouseId(defaultReceiptWarehouse(branch.id)?.id || '');
                             // Cabang tujuan transaksi harus sama dengan cabang aktif.
                             setCurrentBranchId(branch.id);
                             setShowBranchChooser(false);
@@ -2686,6 +2828,15 @@ ${buildSmartContext(userMsgText)}`;
                     </div>
                     </>}
                   </div>
+                  {pendingAction.action === 'create_goods_receipt' && pendingBranchId && (
+                    <label className="mt-3 block">
+                      <span className="mb-1 block font-semibold text-white">Gudang:</span>
+                      <select value={pendingWarehouseId} onChange={event => setPendingWarehouseId(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100">
+                        <option value="">Pilih gudang...</option>
+                        {data.warehouses.filter(warehouse => warehouse.branchId === pendingBranchId && warehouse.isActive).map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+                      </select>
+                    </label>
+                  )}
                   {(pendingAction.services || []).length > 0 && <div className="mt-2 rounded bg-slate-800 p-2">
                     {(pendingAction.services || []).map((s: any, i: number) => (
                       <div key={i} className="flex justify-between"><span>{s.name} ×{s.qty}</span><span className="font-medium text-white">{fmt((s.price || 0) * (s.qty || 1))}</span></div>
@@ -2697,9 +2848,9 @@ ${buildSmartContext(userMsgText)}`;
                   </div>}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => { setPendingAction(null); setPendingBranchId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
-                    <button disabled={busy || !pendingBranchId || !pendingAction.description?.trim() || pendingAction.vehicleCatalogResolution?.status !== 'ready' || (pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved)} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
-                    <CheckCircle2 className="h-4 w-4" /> {pendingBranchId ? `Buat WO di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang'}
+                  <button onClick={() => { setPendingAction(null); setPendingBranchId(''); setPendingWarehouseId(''); }} className="flex-1 rounded-lg border border-slate-600 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Batal</button>
+                  <button disabled={busy || !pendingBranchId || (pendingAction.action === 'create_goods_receipt' ? !pendingWarehouseId : (!pendingAction.description?.trim() || pendingAction.vehicleCatalogResolution?.status !== 'ready' || (pendingAction.customerCandidates?.length > 0 && !pendingAction.customerMatchResolved)))} onClick={confirmAction} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-bold text-slate-900 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-400">
+                    <CheckCircle2 className="h-4 w-4" /> {pendingAction.action === 'create_goods_receipt' ? (pendingBranchId && pendingWarehouseId ? 'Konfirmasi & Simpan' : 'Pilih Cabang dan Gudang') : (pendingBranchId ? `Buat WO di ${cabangName(pendingBranchId).replace('CABANG ', '')}` : 'Pilih Cabang')}
                   </button>
                 </div>
               </div>
