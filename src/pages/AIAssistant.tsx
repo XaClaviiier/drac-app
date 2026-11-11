@@ -1649,6 +1649,17 @@ ${buildSmartContext(userMsgText)}`;
     }
   };
 
+  const parseReceiptItemQuery = (rawQuery: string) => {
+    const source = rawQuery.trim();
+    const suffix = source.match(/(?:^|\s)(?:x\s*(\d+)|(?:qty\s*)?(\d+)\s*(?:bh|buah|unit|units|pcs|pc))\s*$/i);
+    if (!suffix) return { query: source, qty: 1 };
+    const qty = Number(suffix[1] || suffix[2]);
+    return {
+      query: source.slice(0, suffix.index).trim(),
+      qty: Number.isInteger(qty) && qty > 0 ? qty : 1,
+    };
+  };
+
   const receiptItemMatches = (query: string) => {
     const normalizedQuery = query.trim().toLocaleLowerCase('id-ID');
     const queryWords = normalizedQuery.split(/[^a-z0-9]+/).filter(Boolean);
@@ -1673,7 +1684,7 @@ ${buildSmartContext(userMsgText)}`;
     data.warehouses.find(warehouse => warehouse.branchId === branchId && warehouse.isActive && warehouse.isDefault)
       || data.warehouses.find(warehouse => warehouse.branchId === branchId && warehouse.isActive);
 
-  const prepareReceiptAction = (itemId: string) => {
+  const prepareReceiptAction = (itemId: string, qty = 1) => {
     const item = data.items.find(candidate => candidate.id === itemId && candidate.isActive && candidate.type === 'Persediaan');
     if (!item) return;
     const branchId = currentBranchId === 'ALL' ? '' : currentBranchId;
@@ -1684,7 +1695,7 @@ ${buildSmartContext(userMsgText)}`;
       itemCode: item.code,
       itemName: item.name,
       unit: item.unit,
-      qty: 1,
+      qty,
     });
     setPendingBranchId(branchId);
     setPendingWarehouseId(warehouse?.id || '');
@@ -1712,7 +1723,7 @@ ${buildSmartContext(userMsgText)}`;
         itemId: item.id,
         itemCode: item.code,
         itemName: item.name,
-        qty: 1,
+        qty: Number(action.qty) || 1,
         unit: item.unit,
         qtyInvoiced: 0,
       }],
@@ -1726,7 +1737,7 @@ ${buildSmartContext(userMsgText)}`;
     };
     const saved = await addGoodsReceipt(receipt);
     await refreshData();
-    return { receiptNumber: saved.receiptNumber || receipt.receiptNumber, item, branchName: cabangName(branchId), warehouseName: warehouse.name };
+    return { receiptNumber: saved.receiptNumber || receipt.receiptNumber, item, qty: receipt.items[0].qty, branchName: cabangName(branchId), warehouseName: warehouse.name };
   };
 
   const send = async (text?: string) => {
@@ -1749,9 +1760,10 @@ ${buildSmartContext(userMsgText)}`;
         reply('Anda tidak memiliki hak membuat **Penerimaan Barang**.', undefined, true);
         return;
       }
-      const matches = receiptItemMatches(receiptCommand[1]);
+      const parsedReceipt = parseReceiptItemQuery(receiptCommand[1]);
+      const matches = receiptItemMatches(parsedReceipt.query);
       if (matches.length === 0) {
-        reply(`Barang persediaan **${receiptCommand[1].trim()}** tidak ditemukan di Master Barang. Kode tidak dibuat atau ditebak.`, undefined, true);
+        reply(`Barang persediaan **${parsedReceipt.query}** tidak ditemukan di Master Barang. Kode tidak dibuat atau ditebak.`, undefined, true);
         return;
       }
       if (matches.length > 1) {
@@ -1762,8 +1774,8 @@ ${buildSmartContext(userMsgText)}`;
         ].join('\n'), matches.map(item => ({ label: `${item.code} — ${item.name}`, type: 'select_receipt_item' as const, value: item.id })));
         return;
       }
-      prepareReceiptAction(matches[0].id);
-      reply(`Barang ditemukan di Master Barang: **${matches[0].code} — ${matches[0].name}**. Periksa cabang dan gudang pada konfirmasi sebelum menyimpan.`);
+      prepareReceiptAction(matches[0].id, parsedReceipt.qty);
+      reply(`Barang ditemukan di Master Barang: **${matches[0].code} — ${matches[0].name}** dengan qty **${parsedReceipt.qty} ${matches[0].unit}**. Periksa cabang dan gudang pada konfirmasi sebelum menyimpan.`);
       return;
     }
 
@@ -2279,7 +2291,7 @@ ${buildSmartContext(userMsgText)}`;
         setMessages(h => [...h, {
           role: 'assistant',
           time: now(),
-          content: `✅ **Barang berhasil diterima**\n\n- Kode: **${r.item.code}**\n- Nama: **${r.item.name}**\n- Qty: **1 ${r.item.unit}**\n- Cabang: **${r.branchName}**\n- Gudang: **${r.warehouseName}**\n- Nomor: **${r.receiptNumber}**\n- Status: **Diterima**\n\nStok sudah bertambah dan transaksi tercatat di Riwayat Penerimaan, Kartu Stok, serta Laporan Persediaan.`,
+        content: `✅ **Barang berhasil diterima**\n\n- Kode: **${r.item.code}**\n- Nama: **${r.item.name}**\n- Qty: **${r.qty} ${r.item.unit}**\n- Cabang: **${r.branchName}**\n- Gudang: **${r.warehouseName}**\n- Nomor: **${r.receiptNumber}**\n- Status: **Diterima**\n\nStok sudah bertambah dan transaksi tercatat di Riwayat Penerimaan, Kartu Stok, serta Laporan Persediaan.`,
         }]);
         completed = true;
       } else {
@@ -2732,7 +2744,7 @@ ${buildSmartContext(userMsgText)}`;
                   {pendingAction.action === 'create_goods_receipt' ? <>
                     <p>Barang diterima: <b className="text-white">{pendingAction.itemName}</b></p>
                     <p>Kode: <b className="font-mono text-white">{pendingAction.itemCode}</b></p>
-                    <p>Qty: <b className="text-white">1 {pendingAction.unit}</b></p>
+                    <p>Qty: <b className="text-white">{pendingAction.qty || 1} {pendingAction.unit}</b></p>
                   </> : <>
                   <p>Pelanggan: <b className="text-white">{pendingAction.customerName}</b> {pendingAction.phone && `(${pendingAction.phone})`}</p>
                   {pendingAction.address && <p>Alamat: <b className="text-white">{pendingAction.address}</b></p>}

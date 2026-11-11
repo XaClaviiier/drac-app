@@ -11,6 +11,9 @@ test('AI Terima Barang hanya mencari persediaan aktif dari Master Barang', () =>
   assert.match(assistant, /itemCode: item\.code/);
   assert.match(assistant, /itemName: item\.name/);
   assert.match(assistant, /type: 'select_receipt_item'/);
+  assert.match(assistant, /parseReceiptItemQuery/);
+  assert.match(assistant, /const qty = Number\(suffix\[1\] \|\| suffix\[2\]\)/);
+  assert.match(assistant, /qty: Number\(action\.qty\) \|\| 1/);
 });
 
 test('AI receipt memakai endpoint penerimaan yang sama untuk status Diterima dan stok', () => {
