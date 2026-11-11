@@ -342,7 +342,7 @@ export default function WorkOrderTimeline() {
     const left = Math.max(0, Math.min(100, rawLeft));
     const right = Math.max(0, Math.min(100, rawRight));
     const width = Math.max(0.8, right - left);
-    return <span key={`${segment.key}-${index}`} title={`${STAGES[segment.key].label}: ${durationLabel(segment.duration)} (${formatClock(segment.start)}–${formatClock(segment.end)})`} className="absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center justify-center overflow-hidden px-1 text-[9px] font-bold text-white shadow-sm first:rounded-l-md last:rounded-r-md" style={{ left: `${left}%`, width: `${width}%`, backgroundColor: STAGES[segment.key].color }}>
+    return <span key={`${segment.key}-${index}`} title={`${STAGES[segment.key].label}: ${durationLabel(segment.duration)} (${formatClock(segment.start)}–${formatClock(segment.end)})`} className={`absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center justify-center overflow-hidden px-1 text-[9px] font-bold shadow-sm first:rounded-l-md last:rounded-r-md ${segment.key === 'lost' ? 'text-gray-500' : 'text-white'}`} style={{ left: `${left}%`, width: `${width}%`, backgroundColor: STAGES[segment.key].color }}>
       {width >= minimumLabelWidth ? durationLabel(segment.duration) : ''}{segment.active && <i className="absolute right-0 h-2 w-2 animate-pulse rounded-full border border-white bg-white/90"/>}
     </span>;
   });
@@ -374,9 +374,9 @@ export default function WorkOrderTimeline() {
           const attention = attentionByWorkOrder.get(wo.id);
           const stickyBackground = isSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-slate-50';
           return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`group grid w-full border-b text-left last:border-b-0 ${isSelected ? 'bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-slate-50/80'}`} style={{ gridTemplateColumns: gridColumns }}>
-            <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
-              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 truncate text-gray-950 ${mobile ? 'text-xs' : 'text-sm'}`}>{wo.plateNumber}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : '!'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
-              <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'} · {wo.customerName}</p>
+            <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.plateNumber}${wo.customerName ? ` - ${wo.customerName}` : ''} · ${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
+              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 text-gray-950 ${mobile ? 'break-words text-xs' : 'truncate text-sm'}`}>{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : '!'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
+              <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'}</p>
             </div>
             <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
               {renderSegments(segments, mobile ? 2.8 : 4.2)}
@@ -402,8 +402,8 @@ export default function WorkOrderTimeline() {
       return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`w-full px-3 py-3 text-left ${isSelected ? 'bg-blue-50 shadow-[inset_3px_0_0_#2563eb]' : 'bg-white'}`}>
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5"><b className="truncate text-sm text-gray-950">{wo.plateNumber}</b>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : 'Periksa'}</span> : warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
-            <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'} · {wo.customerName}</p>
+            <div className="flex items-center gap-1.5"><b className="min-w-0 break-words text-sm text-gray-950">{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : 'Periksa'}</span> : warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
+            <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'}</p>
           </div>
           <span className={`rounded-md border px-1.5 py-1 text-[8px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>
           {renderFinancialSummary(row, true)}
@@ -432,7 +432,7 @@ export default function WorkOrderTimeline() {
           <p className="mt-0.5 text-xs text-gray-500">{branchName} · {selectedDateLabel(date)}</p>
         </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-          <span className="w-full rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-gray-600 sm:w-auto"><b className="text-blue-700">{activeCount}</b> Aktif · <b className="text-emerald-700">{counts.done || 0}</b> Selesai · <b className="text-red-700">{counts.lost || 0}</b> Lost Sales</span>
+          <span className="w-full rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-gray-600 sm:w-auto"><b className="text-blue-700">{activeCount}</b> Aktif · <b className="text-emerald-700">{counts.done || 0}</b> Selesai · <b className="text-gray-500">{counts.lost || 0}</b> <span className="text-red-600">Lost Sales</span></span>
           <IndonesianDateInput value={date} max={localDateKey()} onChange={value => { setDate(value); setSelectedId(''); }} className="h-10 min-w-[10rem] flex-1 text-xs sm:h-9 sm:w-40 sm:flex-none"/>
           <button type="button" aria-label="Refresh" onClick={() => void refreshData()} className="inline-flex h-10 w-10 items-center justify-center gap-1.5 rounded-lg border bg-white text-xs font-bold text-gray-600 hover:bg-gray-50 sm:h-9 sm:w-auto sm:px-3"><RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}/><span className="hidden sm:inline">Refresh</span></button>
           <div className="relative">
@@ -464,8 +464,8 @@ export default function WorkOrderTimeline() {
             {selectedStage === 'done' ? <CheckCircle2 className="h-5 w-5"/> : (() => { const Icon = STAGES[selectedStage as TimelineStageKey].icon; return <Icon className="h-5 w-5"/>; })()}
           </span>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><b className="truncate text-sm text-gray-950">{selected.plateNumber}</b><span className="text-xs text-gray-400">{selected.woNumber}</span></div>
-            <p className="truncate text-xs text-gray-500">{selected.vehicleInfo || '-'} · {selected.customerName} · {selected.technicianName || 'Teknisi belum dipilih'}</p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><b className="min-w-0 break-words text-sm text-gray-950">{selected.plateNumber}{selected.customerName ? ` - ${selected.customerName}` : ''}</b><span className="text-xs text-gray-400">{selected.woNumber}</span></div>
+            <p className="truncate text-xs text-gray-500">{selected.vehicleInfo || '-'} · {selected.technicianName || 'Teknisi belum dipilih'}</p>
           </div>
           <span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold uppercase sm:text-[10px] ${selectedStage === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : STAGES[selectedStage as TimelineStageKey].soft + ' ' + STAGES[selectedStage as TimelineStageKey].text}`}>{selectedStage === 'done' ? 'Selesai' : STAGES[selectedStage as TimelineStageKey].label}</span>
         </div>
@@ -514,7 +514,7 @@ export default function WorkOrderTimeline() {
             <button type="button" onClick={() => setMobileView('full')} className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2 text-[10px] font-bold ${mobileView === 'full' ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600'}`}><Activity className="h-3.5 w-3.5"/>Hari Penuh</button>
           </div>
           <div className="ml-auto hidden flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500 md:flex">
-            {(Object.keys(STAGES) as TimelineStageKey[]).map(key => <span key={key} className="inline-flex items-center gap-1"><i className={`h-2 w-2 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}</span>)}
+            {(Object.keys(STAGES) as TimelineStageKey[]).map(key => <span key={key} className={`inline-flex items-center gap-1 ${key === 'lost' ? 'text-red-600' : ''}`}><i className={`h-2 w-2 rounded-sm ${STAGES[key].bar}`}/>{STAGES[key].label}</span>)}
           </div>
         </div>
         <div className="md:hidden">{mobileView === 'full' ? renderMobileFullDay() : renderFocusBoard(true)}</div>

@@ -203,6 +203,14 @@ test('Control Board menempatkan badge status di identitas dan ringkasan finansia
   assert.doesNotMatch(page, /const renderIndicators =/);
 });
 
+test('Lost Sales tampil merah dengan angka ringkasan dan durasi berwarna abu-abu', () => {
+  const page = source('src/pages/WorkOrderTimeline.tsx');
+
+  assert.match(page, /counts\.lost \|\| 0\}<\/b> <span className="text-red-600">Lost Sales<\/span>/);
+  assert.match(page, /key === 'lost' \? 'text-red-600' : ''/);
+  assert.match(page, /segment\.key === 'lost' \? 'text-gray-500' : 'text-white'/);
+});
+
 test('lebar kolom mobile dipakai konsisten oleh grid dan centering Sekarang', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
