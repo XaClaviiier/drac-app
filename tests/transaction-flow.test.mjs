@@ -1163,7 +1163,7 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.match(workOrders, /const WorkOrderEstimateAmount/);
   assert.match(workOrders, /line-through decoration-gray-400 decoration-1/);
   assert.match(workOrders, />Estimasi Lost Sales</);
-  assert.match(workOrders, /<WorkOrderEstimateAmount amount=\{wo\.total\} isLostSales=\{statusLabel\(wo\.status\) === 'Lost Sales'\}/);
+  assert.match(workOrders, /<WorkOrderEstimateAmount amount=\{wo\.total\} isLostSales=\{!wo\.continuedToWoId && statusLabel\(wo\.status\) === 'Lost Sales'\}/);
   assert.doesNotMatch(workOrders, /listMode === 'attention'/);
   assert.match(help, /Register hanya antrean sementara pada hari transaksi/);
 });

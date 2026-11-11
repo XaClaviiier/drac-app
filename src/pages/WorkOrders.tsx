@@ -1925,7 +1925,7 @@ export default function WorkOrders() {
     if (!['Register', 'Selesai'].includes(wo.status)) {
       setDeleteNotice({
         title: 'WO Tidak Dapat Dihapus',
-        message: `WO ${wo.woNumber} berstatus ${statusLabel(wo.status)} dan tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`,
+        message: `WO ${wo.woNumber} berstatus ${wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)} dan tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`,
       });
       return;
     }
@@ -2195,7 +2195,7 @@ export default function WorkOrders() {
         setFormData(current => ({ ...current, status: wo.status }));
         editorBaselineFingerprint.current = workOrderEditorFingerprint(wo);
       }
-      showAccurateNotice(`Status ${wo.woNumber} telah berubah menjadi ${statusLabel(wo.status)}. Periksa status terbaru lalu ulangi aksi.`);
+      showAccurateNotice(`Status ${wo.woNumber} telah berubah menjadi ${wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}. Periksa status terbaru lalu ulangi aksi.`);
       return;
     }
     setIsChangingStatus(true);
@@ -2309,7 +2309,7 @@ export default function WorkOrders() {
       return;
     }
     if (wo.status !== 'Selesai') {
-      showAccurateNotice(`WO ${wo.woNumber} masih berstatus ${statusLabel(wo.status)}. Ubah status menjadi Selesai sebelum membuat faktur.`);
+      showAccurateNotice(`WO ${wo.woNumber} masih berstatus ${wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}. Ubah status menjadi Selesai sebelum membuat faktur.`);
       return;
     }
     // Pembuatan faktur memakai satu alur baku di modul Faktur Penjualan.
@@ -3177,7 +3177,7 @@ export default function WorkOrders() {
                     {orderedVisibleWorkOrderColumns.map(key => {
                       if (key === 'number') return <td key={key} className="overflow-hidden px-4 py-3">
                       <button type="button" onClick={() => openWorkOrderStandard(wo)} className="text-left">
-                        <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className="inline-flex flex-col items-center"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span><WorkOrderPaidStamp wo={wo} invoices={data.invoices} /></span></span>
+                        <span className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-blue-700 hover:underline">{wo.woNumber}</span><span className="inline-flex flex-col items-center"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${wo.continuedToWoId ? 'bg-violet-100 text-violet-800' : statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}</span><WorkOrderPaidStamp wo={wo} invoices={data.invoices} /></span></span>
                         <span className="mt-0.5 block text-xs font-semibold text-gray-500">{data.branches.find(b => b.id === wo.branchId)?.name.replace('CABANG ', '') || wo.branchId}</span>
                         {wo.invoiceId && <span className="mt-0.5 block text-[10px] font-semibold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                       </button>
@@ -3230,7 +3230,7 @@ export default function WorkOrders() {
                       <span className="block text-xs text-gray-500">{wo.services.length} item layanan</span>
                     </td>;
                       if (key === 'total') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3 text-right text-sm">
-                      <WorkOrderEstimateAmount amount={wo.total} isLostSales={statusLabel(wo.status) === 'Lost Sales'} />
+                      <WorkOrderEstimateAmount amount={wo.total} isLostSales={!wo.continuedToWoId && statusLabel(wo.status) === 'Lost Sales'} />
                     </td>;
                       if (key === 'createdBy') return <td key={key} className="overflow-hidden px-4 py-3">
                       <span className="block w-full truncate text-sm font-semibold text-gray-800" title={wo.createdByName || 'Data lama belum memiliki pencatat pembuat'}>
@@ -3308,7 +3308,7 @@ export default function WorkOrders() {
                     <p className="mt-0.5 whitespace-nowrap text-[11px] text-gray-500">{formatBusinessDate(wo.date)}{wo.transactionTime ? ` · ${wo.transactionTime.slice(0, 5)}` : ''}</p>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-1.5">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(wo.status)}</span>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${wo.continuedToWoId ? 'bg-violet-100 text-violet-800' : statusColors[wo.status] || 'bg-gray-100 text-gray-700'}`}>{wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}</span>
                     <WorkOrderPaidStamp wo={wo} invoices={data.invoices} />
                   </div>
                 </div>
@@ -3337,7 +3337,7 @@ export default function WorkOrders() {
                       {['register', 'process'].includes(attentionByWorkOrderId.get(wo.id)?.kind || '') ? <CircleAlert className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
                       {attentionByWorkOrderId.get(wo.id)?.label}
                     </span>
-                  ) : <span className="text-gray-400">Status: {statusLabel(wo.status)}</span>}
+                  ) : <span className="text-gray-400">Status: {wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}</span>}
                 </div>
               </button>
               <div className="flex items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
@@ -3346,7 +3346,7 @@ export default function WorkOrders() {
                 {wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Faktur {wo.invoiceNumber || 'tersedia'}</span>}
                 </div>
                 <span className="shrink-0 text-xs">
-                  <WorkOrderEstimateAmount amount={wo.total} isLostSales={statusLabel(wo.status) === 'Lost Sales'} />
+                  <WorkOrderEstimateAmount amount={wo.total} isLostSales={!wo.continuedToWoId && statusLabel(wo.status) === 'Lost Sales'} />
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
                 <button type="button" onClick={() => openWorkOrderStandard(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600" aria-label={`Buka ${wo.woNumber}`}><Eye className="h-4 w-4" /></button>
@@ -3414,14 +3414,14 @@ export default function WorkOrders() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${statusColors[wo.status]}`}
-                      title={`Status saat ini: ${statusLabel(wo.status)}`}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${wo.continuedToWoId ? 'bg-violet-100 text-violet-800' : statusColors[wo.status]}`}
+                      title={`Status saat ini: ${wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}`}
                     >
                       {wo.status === 'Register' && '0.'}
                       {wo.status === 'Proses' && '1.'}
                       {wo.status === 'Selesai' && '2.'}
-                      {wo.status === 'Closed' && '✕'}
-                      <span>{statusLabel(wo.status)}</span>
+                      {wo.status === 'Closed' && !wo.continuedToWoId && '✕'}
+                      <span>{wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}</span>
                     </span>
 
                     {/* Tombol aksi status berurutan */}
@@ -3625,7 +3625,7 @@ export default function WorkOrders() {
               <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1">
                 <span className="text-xs text-gray-500">Nomor: <strong className="font-mono text-gray-900">{detailWO.woNumber}</strong></span>
                 <span className="text-xs text-gray-500">Cabang: <strong className="text-gray-900">{data.branches.find(b => b.id === detailWO.branchId)?.name}</strong></span>
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel(detailWO.status)}</span>
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${detailWO.continuedToWoId ? 'bg-violet-100 text-violet-800' : statusColors[detailWO.status] || 'bg-gray-100 text-gray-700'}`}>{detailWO.continuedToWoId ? 'Dilanjutkan' : statusLabel(detailWO.status)}</span>
                 {(detailWO.invoiceId || detailWO.invoiceNumber) && hasPermission('invoice:view') && (
                   <button type="button" onClick={() => openLinkedInvoice(detailWO)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:underline" title="Buka faktur terkait">
                     <FileText className="h-3.5 w-3.5" /> Faktur: {detailWO.invoiceNumber || 'Buka Faktur'}
@@ -3922,7 +3922,7 @@ export default function WorkOrders() {
                   <h3 className="break-words text-base font-bold leading-tight text-gray-900 sm:text-lg">
                     {diagnosisMode && editingWO ? `DIAGNOSA ${editingWO.woNumber}` : editingWO ? editingWO.woNumber : 'Register Baru'}
                   </h3>
-                  {editingWO && <span data-wo-mobile-status-lamp className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusLabel(editingWO.status) === 'Lost Sales' ? 'bg-rose-100 text-rose-700' : editingWO.status === 'Selesai' ? 'bg-emerald-100 text-emerald-700' : editingWO.status === 'Proses' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}><span aria-hidden="true" className={`h-2 w-2 rounded-full ${statusLampColors[editingWO.status] || 'bg-slate-400'}`} />{statusLabel(editingWO.status)}</span>}
+                  {editingWO && <span data-wo-mobile-status-lamp className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${editingWO.continuedToWoId ? 'bg-violet-100 text-violet-700' : statusLabel(editingWO.status) === 'Lost Sales' ? 'bg-rose-100 text-rose-700' : editingWO.status === 'Selesai' ? 'bg-emerald-100 text-emerald-700' : editingWO.status === 'Proses' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}><span aria-hidden="true" className={`h-2 w-2 rounded-full ${statusLampColors[editingWO.status] || 'bg-slate-400'}`} />{editingWO.continuedToWoId ? 'Dilanjutkan' : statusLabel(editingWO.status)}</span>}
                 </div>
                 <p data-wo-mobile-context className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[11px] leading-tight text-gray-500 sm:text-sm">
                   <span>{data.branches.find(branch => branch.id === (editingWO?.branchId || resolveBranchId()))?.name || selectedBranchLabel}</span>
@@ -3987,7 +3987,7 @@ export default function WorkOrders() {
                     : editingWO.invoiceId
                       ? 'Hapus faktur terlebih dahulu'
                       : !['Register', 'Selesai'].includes(editingWO.status)
-                        ? `WO berstatus ${statusLabel(editingWO.status)} tidak dapat dihapus`
+                        ? `WO berstatus ${editingWO.continuedToWoId ? 'Dilanjutkan' : statusLabel(editingWO.status)} tidak dapat dihapus`
                         : 'Hapus Work Order',
                 } : undefined}
               />
@@ -4132,7 +4132,7 @@ export default function WorkOrders() {
                           {editingWO.status === 'Closed' && !editingWO.continuedToWoId && <button type="button" onClick={() => setLostSalesFollowUp(editingWO)} className="block w-full px-3 py-2 text-left text-sm font-medium text-blue-700 hover:bg-blue-50">Tindak Lanjut Lost Sales</button>}
                         </div>
                       </details> : !editingWO ? <button type="button" disabled title="Register WO terlebih dahulu" className={ui.documentAction}>Proses <span className="text-xs">⌄</span></button> : null}
-                      {editingWO && <span data-wo-status-lamp title={`Status WO: ${statusLabel(editingWO.status)}`} className={`inline-flex h-9 min-w-[104px] items-center justify-center gap-2 rounded-md border px-3 text-xs font-semibold ${statusColors[editingWO.status] || statusColors.Register}`}><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.8)] ${statusLampColors[editingWO.status] || 'bg-slate-400'}`} />{statusLabel(editingWO.status)}</span>}
+                      {editingWO && <span data-wo-status-lamp title={`Status WO: ${editingWO.continuedToWoId ? 'Dilanjutkan' : statusLabel(editingWO.status)}`} className={`inline-flex h-9 min-w-[104px] items-center justify-center gap-2 rounded-md border px-3 text-xs font-semibold ${editingWO.continuedToWoId ? 'border-violet-200 bg-violet-100 text-violet-800' : statusColors[editingWO.status] || statusColors.Register}`}><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.8)] ${statusLampColors[editingWO.status] || 'bg-slate-400'}`} />{editingWO.continuedToWoId ? 'Dilanjutkan' : statusLabel(editingWO.status)}</span>}
                     </div>
                   </>
                 )}
@@ -4655,7 +4655,7 @@ export default function WorkOrders() {
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cabang</p>
                       <p className="truncate font-semibold text-slate-700">{data.branches.find(branch => branch.id === infoBranchId)?.name || '-'}</p>
                     </div>
-                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">{editingWO ? statusLabel(editingWO.status) : 'Draft'}</span>
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">{editingWO ? (editingWO.continuedToWoId ? 'Dilanjutkan' : statusLabel(editingWO.status)) : 'Draft'}</span>
                     <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600">{(formData.technicianId ? 1 : 0) + formData.assistantTechnicianIds.length} teknisi</span>
                     {infoPanelLocked && <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700"><LockKeyhole className="h-3 w-3" />{infoPanelInvoiceLocked ? 'Terkunci setelah faktur' : 'Mode lihat'}</span>}
                   </header>
@@ -5154,7 +5154,7 @@ export default function WorkOrders() {
               <div className="space-y-4 p-6 text-sm">
                 <p className="text-gray-700">
                   Ubah status <strong className="font-mono">{wo.woNumber}</strong> dari{' '}
-                  <span className={`rounded px-2 py-0.5 text-xs font-semibold ${statusColors[wo.status]}`}>{statusLabel(wo.status)}</span>
+                  <span className={`rounded px-2 py-0.5 text-xs font-semibold ${wo.continuedToWoId ? 'bg-violet-100 text-violet-800' : statusColors[wo.status]}`}>{wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)}</span>
                   {' → '}
                   <span className={`rounded px-2 py-0.5 text-xs font-semibold ${statusColors[next]}`}>{statusLabel(next)}</span>?
                 </p>

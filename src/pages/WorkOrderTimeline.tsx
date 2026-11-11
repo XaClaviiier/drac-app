@@ -148,7 +148,7 @@ export default function WorkOrderTimeline() {
     data.invoices.filter(invoice => invoice.woId).map(invoice => [invoice.woId!, invoice]),
   ), [data.invoices]);
   const rows = useMemo<TimelineRow[]>(() => data.workOrders
-    .filter(wo => wo.date === date && (currentBranchId === 'ALL' || wo.branchId === currentBranchId))
+    .filter(wo => !wo.continuedToWoId && wo.date === date && (currentBranchId === 'ALL' || wo.branchId === currentBranchId))
     .map<TimelineRow>(wo => ({
       wo,
       invoice: invoicesByWo.get(wo.id),
@@ -322,7 +322,7 @@ export default function WorkOrderTimeline() {
 
   const renderFinancialSummary = (row: TimelineRow, compact = false) => {
     const financial = timelineFinancialSummary(row.wo, row.invoice);
-    return <div className={`flex min-w-0 flex-col justify-center ${compact ? 'px-1 py-1' : 'px-2 py-1.5'}`}>
+    return <div className={`flex min-w-0 flex-col items-end justify-center text-right ${compact ? 'px-1 py-1' : 'px-2 py-1.5'}`}>
       <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">{financial.amountLabel}</span>
       <b className={`truncate text-slate-900 ${compact ? 'text-[10px]' : 'text-xs'}`}>{formatRupiah(financial.amount)}</b>
       {financial.isPaid
@@ -334,6 +334,10 @@ export default function WorkOrderTimeline() {
           : <span className="mt-0.5 text-[8px] text-slate-400">Belum ditagih</span>}
     </div>;
   };
+
+  const workDescription = (wo: WorkOrder) => wo.description?.trim()
+    || wo.services.map(service => service.name.trim()).filter(Boolean).join(', ')
+    || 'Keterangan pekerjaan belum diisi';
 
   const renderSegments = (segments: Segment[], minimumLabelWidth = 4.2) => segments.map((segment, index) => {
     const rawLeft = position(segment.start);
@@ -360,7 +364,7 @@ export default function WorkOrderTimeline() {
       <div style={{ minWidth: `${identityWidth + boardTimelineWidth + indicatorWidth}px` }}>
         <div className="grid border-b bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns: gridColumns }}>
           <div className={`flex items-end bg-slate-50 px-3 py-2.5 ${stickyIdentity}`}>{mobile ? 'Kendaraan' : 'Kendaraan / Customer'}</div>
-          {!mobile && <div className={`flex items-end justify-center bg-slate-50 px-1 py-2.5 ${stickyIndicator}`}>Total · Invoice</div>}
+          {!mobile && <div className={`flex items-end justify-end bg-slate-50 px-2 py-2.5 text-right ${stickyIndicator}`}>Total · Invoice</div>}
           <div className="relative h-11 border-x border-slate-200">
             {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
             {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
@@ -380,6 +384,7 @@ export default function WorkOrderTimeline() {
             <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.plateNumber}${wo.customerName ? ` - ${wo.customerName}` : ''} · ${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
               <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 text-gray-950 ${mobile ? 'break-words text-xs' : 'truncate text-sm'}`}>{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : '!'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
               <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'}</p>
+              <p className={`truncate text-gray-400 ${mobile ? 'text-[9px]' : 'text-[10px]'}`} title={workDescription(wo)}>Pekerjaan: {workDescription(wo)}</p>
             </div>
             {!mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
             <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
@@ -408,6 +413,7 @@ export default function WorkOrderTimeline() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5"><b className="min-w-0 break-words text-sm text-gray-950">{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : 'Periksa'}</span> : warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
             <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'}</p>
+            <p className="truncate text-[9px] text-gray-400" title={workDescription(wo)}>Pekerjaan: {workDescription(wo)}</p>
           </div>
           <span className={`rounded-md border px-1.5 py-1 text-[8px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>
           {renderFinancialSummary(row, true)}
