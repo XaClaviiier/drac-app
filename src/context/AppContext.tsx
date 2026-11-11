@@ -1079,11 +1079,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addGoodsReceipt = async (receipt: GoodsReceipt): Promise<GoodsReceipt> => {
+    let saved = receipt;
     await executeCRUD(
-      () => api.create('goods-receipts', receipt),
+      async () => {
+        const result = await api.create('goods-receipts', receipt);
+        if (result.success && result.data) saved = { ...receipt, ...result.data };
+        return result;
+      },
       () => setData(prev => ({ ...prev, goodsReceipts: [...prev.goodsReceipts, receipt] }))
     );
-    return receipt;
+    return saved;
   };
   const updateGoodsReceipt = async (id: string, receipt: GoodsReceipt) => {
     await executeCRUD(
