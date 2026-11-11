@@ -1669,14 +1669,17 @@ ${buildSmartContext(userMsgText)}`;
       kondens: 'condenser',
       komp: 'compressor',
     };
-    const queryWords = normalizedQuery.split(/[^a-z0-9]+/).filter(Boolean).map(word => receiptAliases[word] || word);
+    const queryWords = normalizedQuery.split(/[^a-z0-9]+/).filter(Boolean);
     return data.items
       .filter(item => item.isActive && item.type === 'Persediaan')
       .map(item => {
         const code = item.code.toLocaleLowerCase('id-ID');
         const name = item.name.toLocaleLowerCase('id-ID');
         const exact = code === normalizedQuery || name === normalizedQuery;
-        const allWordsMatch = queryWords.length > 0 && queryWords.every(word => name.includes(word) || code.includes(word));
+        const allWordsMatch = queryWords.length > 0 && queryWords.every(word => {
+          const terms = [word, receiptAliases[word]].filter(Boolean) as string[];
+          return terms.some(term => name.includes(term) || code.includes(term));
+        });
         const partial = name.includes(normalizedQuery) || code.includes(normalizedQuery);
         const score = exact ? 0 : allWordsMatch ? 1 : partial ? 2 : 99;
         return { item, score };
