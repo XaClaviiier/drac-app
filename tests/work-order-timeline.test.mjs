@@ -222,3 +222,11 @@ test('lebar kolom mobile dipakai konsisten oleh grid dan centering Sekarang', ()
   assert.match(page, /indicatorWidth = mobile \? MOBILE_FINANCIAL_WIDTH : 168/);
   assert.doesNotMatch(page, /mobileIndicatorWidth = 84/);
 });
+
+test('desktop menempatkan Total Invoice di samping identitas dan merapatkan timeline', () => {
+  const page = source('src/pages/WorkOrderTimeline.tsx');
+
+  assert.match(page, /const timelineWidth = Math\.max\(620, Math\.round\(axisSpan \* 1\.05\)\)/);
+  assert.match(page, /const gridColumns = mobile[\s\S]*?\$\{identityWidth\}px \$\{boardTimelineWidth\}px \$\{indicatorWidth\}px`[\s\S]*?\$\{identityWidth\}px \$\{indicatorWidth\}px \$\{boardTimelineWidth\}px`/);
+  assert.match(page, /!mobile && <div className=\{`flex items-end justify-center bg-slate-50 px-1 py-2\.5 \$\{stickyIndicator\}`\}>Total · Invoice/);
+});
