@@ -1662,7 +1662,14 @@ ${buildSmartContext(userMsgText)}`;
 
   const receiptItemMatches = (query: string) => {
     const normalizedQuery = query.trim().toLocaleLowerCase('id-ID');
-    const queryWords = normalizedQuery.split(/[^a-z0-9]+/).filter(Boolean);
+    const receiptAliases: Record<string, string> = {
+      evp: 'evaporator',
+      evap: 'evaporator',
+      kondensor: 'condenser',
+      kondens: 'condenser',
+      komp: 'compressor',
+    };
+    const queryWords = normalizedQuery.split(/[^a-z0-9]+/).filter(Boolean).map(word => receiptAliases[word] || word);
     return data.items
       .filter(item => item.isActive && item.type === 'Persediaan')
       .map(item => {

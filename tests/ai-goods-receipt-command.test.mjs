@@ -13,6 +13,8 @@ test('AI Terima Barang hanya mencari persediaan aktif dari Master Barang', () =>
   assert.match(assistant, /type: 'select_receipt_item'/);
   assert.match(assistant, /parseReceiptItemQuery/);
   assert.match(assistant, /const qty = Number\(suffix\[1\] \|\| suffix\[2\]\)/);
+  assert.match(assistant, /evp: 'evaporator'/);
+  assert.match(assistant, /evap: 'evaporator'/);
   assert.match(assistant, /qty: Number\(action\.qty\) \|\| 1/);
 });
 
