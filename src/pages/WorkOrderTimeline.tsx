@@ -395,7 +395,7 @@ export default function WorkOrderTimeline() {
               <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
             </div>
             {mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
-            <div className={`flex min-w-0 items-start gap-1 border-t border-slate-100 px-3 py-1.5 text-gray-500 ${isSelected ? 'bg-blue-50/70' : 'bg-white group-hover:bg-slate-50'}`} style={{ gridColumn: '1 / -1' }} title={`Item pekerjaan: ${workItemSummary(wo)}`}><Wrench className="mt-0.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" /><span className="min-w-0 whitespace-normal break-words text-[10px] leading-4">{workItemSummary(wo)}</span></div>
+            <div className={`sticky left-0 z-20 flex min-w-0 items-start justify-start gap-1 overflow-x-auto border-t border-slate-100 px-3 py-1.5 text-left text-gray-500 ${isSelected ? 'bg-blue-50/70' : 'bg-white group-hover:bg-slate-50'}`} style={{ gridColumn: '1 / -1', width: 'min(100%, calc(100vw - 24px))', maxWidth: 'calc(100vw - 24px)' }} title={`Item pekerjaan: ${workItemSummary(wo)}`}><Wrench className="mt-0.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" /><span className="block w-max whitespace-nowrap text-left text-[10px] leading-4">{workItemSummary(wo)}</span></div>
           </button>;
         })}
         {!visibleRows.length && <div className="p-14 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}{stageFilter ? ' untuk status yang dipilih' : ''}.</div>}
@@ -429,7 +429,7 @@ export default function WorkOrderTimeline() {
           {renderSegments(segments, 12)}
           <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
         </div>
-        <div className="flex min-w-0 items-start gap-1 border-t border-slate-100 px-3 py-1.5 text-gray-500" title={`Item pekerjaan: ${workItemSummary(wo)}`}><Wrench className="mt-0.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" /><span className="min-w-0 whitespace-normal break-words text-[10px] leading-4">{workItemSummary(wo)}</span></div>
+        <div className="flex min-w-0 items-start justify-start gap-1 overflow-x-auto border-t border-slate-100 px-3 py-1.5 text-left text-gray-500" title={`Item pekerjaan: ${workItemSummary(wo)}`}><Wrench className="mt-0.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" /><span className="block w-max whitespace-nowrap text-left text-[10px] leading-4">{workItemSummary(wo)}</span></div>
       </button>;
     })}
     {!visibleRows.length && <div className="p-10 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}.</div>}

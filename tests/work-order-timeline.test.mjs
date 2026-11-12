@@ -242,8 +242,10 @@ test('item pekerjaan membentang di bawah timeline pada desktop dan mobile', () =
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
   assert.match(page, /const workDescription = \(wo: WorkOrder\) => wo\.description\?\.trim\(\)/);
-  assert.match(page, /style=\{\{ gridColumn: '1 \/ -1' \}\}/);
-  assert.match(page, /whitespace-normal break-words text-\[10px\] leading-4/);
+  assert.match(page, /style=\{\{ gridColumn: '1 \/ -1', width: 'min\(100%, calc\(100vw - 24px\)\)'/);
+  assert.match(page, /items-start justify-start gap-1 overflow-x-auto border-t border-slate-100[\s\S]*?text-left text-gray-500/);
+  assert.match(page, /sticky left-0 z-20[\s\S]*?overflow-x-auto/);
+  assert.match(page, /whitespace-nowrap text-left text-\[10px\] leading-4/);
   assert.match(page, /<Wrench className="mt-0\.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" \/>/);
   assert.match(page, /wo\.services\.map\(service => service\.name\.trim\(\)\)/);
 });
