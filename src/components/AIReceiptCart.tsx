@@ -4,16 +4,12 @@ import { buildReceiptLines, type AIReceiptDraft } from '../lib/aiGoodsReceipt';
 interface Props {
   draft: AIReceiptDraft;
   master: Item[];
-  branches: Branch[];
-  warehouses: Warehouse[];
-  branchId: string;
-  warehouseId: string;
+  branch?: Branch;
+  warehouse?: Warehouse;
   busy: boolean;
   canCreate: boolean;
   error: string;
   onChange: (draft: AIReceiptDraft) => void;
-  onBranch: (id: string) => void;
-  onWarehouse: (id: string) => void;
   onSelect: (id: string) => void;
   onAdd: () => void;
   onCancel: () => void;
@@ -21,12 +17,10 @@ interface Props {
 }
 
 export default function AIReceiptCart(props: Props) {
-  const { draft, master, branches, warehouses, branchId, warehouseId, busy, canCreate, error } = props;
+  const { draft, master, branch, warehouse, busy, canCreate, error } = props;
   const reviewing = draft.stage === 'confirm';
   let validation = '';
   try { buildReceiptLines(draft, master); } catch (e) { validation = (e as Error).message; }
-  const branch = branches.find(item => item.id === branchId);
-  const warehouse = warehouses.find(item => item.id === warehouseId && item.branchId === branchId);
   const ready = !validation && Boolean(branch && warehouse) && canCreate;
   const choices = draft.selection?.itemIds.map(id => master.find(item => item.id === id && item.isActive && item.type === 'Persediaan')).filter((item): item is Item => Boolean(item)) || [];
   const change = (next: AIReceiptDraft) => props.onChange({ ...next, stage: 'items' });
@@ -63,16 +57,10 @@ export default function AIReceiptCart(props: Props) {
         <p>Ketik nama atau kode barang berikutnya beserta qty di chat. Contoh: kompresor Avanza 2bh.</p>
         <button type="button" className="mt-2 text-xs underline" onClick={() => change({ ...draft, awaitingItem: false, selection: undefined })}>Batal tambah barang</button>
       </div>}
-      {reviewing ? <div className="space-y-1"><p>Cabang: <b>{branch?.name || 'Belum dipilih'}</b></p><p>Gudang: <b>{warehouse?.name || 'Belum dipilih'}</b></p></div> : <div className="grid gap-3 sm:grid-cols-2">
-        <label>Cabang<select aria-label="Cabang penerimaan AI" value={branchId} onChange={event => props.onBranch(event.target.value)} className="mt-1 block w-full rounded border border-slate-500 bg-slate-900 p-2">
-          <option value="">Pilih cabang...</option>{branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-        </select></label>
-        <label>Gudang<select aria-label="Gudang penerimaan AI" value={warehouseId} onChange={event => props.onWarehouse(event.target.value)} className="mt-1 block w-full rounded border border-slate-500 bg-slate-900 p-2">
-          <option value="">Pilih gudang...</option>{warehouses.filter(warehouse => warehouse.branchId === branchId).map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
-        </select></label>
-      </div>}
+      {reviewing && <div className="space-y-1"><p>Cabang: <b>{branch?.name || 'Belum tersedia'}</b></p><p>Gudang: <b>{warehouse?.name || 'Belum tersedia'}</b></p></div>}
       {validation && !draft.awaitingItem && <p role="status" className="text-amber-300">{validation}</p>}
-      {!branch || !warehouse ? <p className="text-amber-300">Pilih cabang dan gudang tujuan.</p> : null}
+      {!branch ? <p className="text-amber-300">Pilih cabang aktif melalui pilihan cabang di bagian atas.</p>
+        : !warehouse ? <p className="text-amber-300">Gudang default untuk cabang aktif belum tersedia. Atur gudang default di Master Gudang.</p> : null}
       {!canCreate && <p className="text-amber-300">Anda tidak memiliki izin membuat Penerimaan Barang.</p>}
       {error && <p role="alert" className="text-rose-300">{error}</p>}
       <div className="flex flex-wrap gap-2">
