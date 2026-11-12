@@ -218,8 +218,8 @@ test('Lost Sales tampil merah dengan angka ringkasan dan durasi berwarna abu-abu
 test('lebar kolom mobile dipakai konsisten oleh grid dan centering Sekarang', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
-  assert.match(page, /const MOBILE_IDENTITY_WIDTH = 144/);
-  assert.match(page, /const MOBILE_FINANCIAL_WIDTH = 124/);
+  assert.match(page, /const MOBILE_IDENTITY_WIDTH = 192/);
+  assert.match(page, /const MOBILE_FINANCIAL_WIDTH = 76/);
   assert.match(page, /mobileIdentityWidth = MOBILE_IDENTITY_WIDTH/);
   assert.match(page, /mobileFinancialWidth = MOBILE_FINANCIAL_WIDTH/);
   assert.match(page, /identityWidth = mobile \? MOBILE_IDENTITY_WIDTH : 260/);

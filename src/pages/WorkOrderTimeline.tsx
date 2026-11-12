@@ -32,8 +32,8 @@ const STAGES: Record<TimelineStageKey, {
 const AXIS_START_MINUTE = 8 * 60;
 const DEFAULT_AXIS_END_MINUTE = 17 * 60 + 30;
 const HALF_HOUR = 30;
-const MOBILE_IDENTITY_WIDTH = 144;
-const MOBILE_FINANCIAL_WIDTH = 124;
+const MOBILE_IDENTITY_WIDTH = 192;
+const MOBILE_FINANCIAL_WIDTH = 76;
 
 function parseDateTime(value: string | undefined, fallbackDate: string, fallbackTime = '08:00') {
   const fallback = new Date(`${fallbackDate}T${fallbackTime}:00`);
