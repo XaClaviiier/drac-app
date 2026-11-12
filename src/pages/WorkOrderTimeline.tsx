@@ -322,16 +322,17 @@ export default function WorkOrderTimeline() {
 
   const renderFinancialSummary = (row: TimelineRow, compact = false) => {
     const financial = timelineFinancialSummary(row.wo, row.invoice);
+    const isLostSales = workOrderStatusLabel(row.wo.status) === 'Lost Sales';
     return <div className={`flex min-w-0 flex-col items-end justify-center text-right ${compact ? 'px-1 py-1' : 'px-2 py-1.5'}`}>
-      <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">{financial.amountLabel}</span>
-      <b className={`truncate text-slate-900 ${compact ? 'text-[10px]' : 'text-xs'}`}>{formatRupiah(financial.amount)}</b>
+      <span className={`text-[8px] font-bold uppercase tracking-wide ${isLostSales ? 'text-gray-400' : 'text-slate-400'}`}>{isLostSales ? 'Estimasi Lost Sales' : financial.amountLabel}</span>
+      <b className={`truncate ${isLostSales ? 'text-gray-400 line-through decoration-gray-400 decoration-1' : 'text-slate-900'} ${compact ? 'text-[10px]' : 'text-xs'}`}>{formatRupiah(financial.amount)}</b>
       {financial.isPaid
         ? <span className={`mt-0.5 w-fit -rotate-2 rounded border-2 border-emerald-600 bg-emerald-50 font-black tracking-[0.12em] text-emerald-700 ${compact ? 'px-1 py-0.5 text-[7px]' : 'px-1.5 py-0.5 text-[8px]'}`}>LUNAS</span>
         : financial.detailsRestricted
           ? <span className="mt-0.5 text-[8px] font-semibold text-slate-500">Sudah difakturkan · detail terbatas</span>
           : financial.invoiceNumber
           ? <span className="mt-0.5 truncate text-[8px] font-semibold text-blue-700" title={`Faktur ${financial.invoiceNumber}`}>{financial.invoiceNumber} · Sisa {formatRupiah(financial.outstanding || 0)}</span>
-          : <span className="mt-0.5 text-[8px] text-slate-400">Belum ditagih</span>}
+          : <span className={`mt-0.5 text-[8px] ${isLostSales ? 'text-gray-400' : 'text-slate-400'}`}>{isLostSales ? 'Tidak ada tagihan' : 'Belum ditagih'}</span>}
     </div>;
   };
 
