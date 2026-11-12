@@ -19,6 +19,7 @@ final class ReceiptZeroSourcePDO extends PDO {
         $source=$input['source']??'0';$received=($input['oldStatus']??'Draft')==='Diterima';$qty=$received?4:0;
         $this->warehouses=['src'=>['id'=>'src','branch_id'=>$source,'is_active'=>1,'is_system'=>0],'dst'=>['id'=>'dst','branch_id'=>'DEST','is_active'=>1,'is_system'=>0]];
         $row=['id'=>'receipt','receipt_number'=>'GR-TEST','date'=>'2026-09-08','status'=>$input['oldStatus']??'Draft','branch_id'=>'DEST','warehouse_id'=>'dst','source_type'=>'Transfer Gudang','source_warehouse_id'=>'src','source_branch_id'=>$source,'received_by_id'=>'receiver','received_by'=>'Receiver','supplier_id'=>null];
+        $row['shipping_cost']=$input['oldShippingCost']??null;
         $movement=['id'=>'old-movement','item_id'=>'item','source_warehouse_id'=>'src','destination_warehouse_id'=>'dst','quantity'=>4,'reference_type'=>'goods_receipt','reference_id'=>'receipt','is_voided'=>0];
         $supplier=($input['sourceType']??'Transfer Gudang')==='Supplier';
         if($supplier){$row['source_type']='Supplier';$row['source_warehouse_id']=null;$row['source_branch_id']=null;$movement['source_warehouse_id']=null;}
@@ -66,8 +67,8 @@ final class ReceiptZeroSourcePDO extends PDO {
         if(str_starts_with($q,'INSERT INTO warehouse_stocks(')) {$this->state['warehouse'][$p[0]]+=$p[2];$this->state['versions'][$p[0]]++;return [];}
         if(str_starts_with($q,'INSERT INTO branch_item_stocks(')) {$this->state['branch']['b:'.$p[0]][0]+=$p[2];$this->state['branch']['b:'.$p[0]][1]+=$p[3];return [];}
         if(str_starts_with($q,'UPDATE items i JOIN branch_item_stocks')) {if($p[1]===($this->input['source']??'0'))$this->state['itemStock']=$this->state['branch']['b:'.$p[1]][0];return [];}
-        if(str_starts_with($q,'INSERT INTO goods_receipts ')) {$cols=['id','receipt_number','date','supplier_id','supplier_name','do_number','delivery_method','delivery_other','shipping_notes','source_type','source_warehouse_id','source_branch_id','transfer_number','status','notes','branch_id','warehouse_id','received_by','received_by_id'];$this->state['receipt']=array_combine($cols,$p);return [];}
-        if(str_starts_with($q,'UPDATE goods_receipts SET')) {$cols=['receipt_number','date','supplier_id','supplier_name','do_number','delivery_method','delivery_other','shipping_notes','status','notes','branch_id','warehouse_id','received_by','received_by_id'];$this->state['receipt']=array_replace($this->state['receipt'],array_combine($cols,array_slice($p,0,14)));return [];}
+        if(str_starts_with($q,'INSERT INTO goods_receipts ')) {$cols=['id','receipt_number','date','supplier_id','supplier_name','do_number','delivery_method','delivery_other','shipping_notes','shipping_cost','source_type','source_warehouse_id','source_branch_id','transfer_number','status','notes','branch_id','warehouse_id','received_by','received_by_id'];$this->state['receipt']=array_combine($cols,$p);return [];}
+        if(str_starts_with($q,'UPDATE goods_receipts SET')) {$cols=['receipt_number','date','supplier_id','supplier_name','do_number','delivery_method','delivery_other','shipping_notes','shipping_cost','status','notes','branch_id','warehouse_id','received_by','received_by_id'];$this->state['receipt']=array_replace($this->state['receipt'],array_combine($cols,array_slice($p,0,15)));return [];}
         if(str_starts_with($q,'DELETE FROM goods_receipt_items')) {$this->state['lines']=[];return [];}
         if(str_starts_with($q,'INSERT INTO goods_receipt_items ')) {$this->state['lines'][]=['item_id'=>$p[1],'qty'=>$p[4],'qty_invoiced'=>$p[6]];return [];}
         if(str_starts_with($q,'DELETE FROM goods_receipts ')) {$this->state['receipt']=null;$this->state['lines']=[];return [];}

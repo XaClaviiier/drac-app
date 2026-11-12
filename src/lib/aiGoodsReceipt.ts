@@ -1,4 +1,5 @@
 import type { GoodsReceiptItem, Item } from '../types';
+import { receiptDeliveryOptions, validReceiptShippingCost } from './goodsReceiptSharing.ts';
 
 export interface AIReceiptDraft {
   action: 'create_goods_receipt';
@@ -6,6 +7,8 @@ export interface AIReceiptDraft {
   items: Array<{ itemId: string; qty: number }>;
   stage: 'items' | 'confirm';
   awaitingItem: boolean;
+  deliveryMethod: string;
+  shippingCost: number | null;
   selection?: { query: string; qty: number; itemIds: string[] };
 }
 
@@ -46,7 +49,7 @@ export function receiptItemMatches(items: Item[], query: string): Item[] {
 }
 
 export function newReceiptDraft(): AIReceiptDraft {
-  return { action: 'create_goods_receipt', id: `${Date.now()}${Math.random().toString(36).slice(2, 8)}`, items: [], stage: 'items', awaitingItem: true };
+  return { action: 'create_goods_receipt', id: `${Date.now()}${Math.random().toString(36).slice(2, 8)}`, items: [], stage: 'items', awaitingItem: true, deliveryMethod: '', shippingCost: 0 };
 }
 
 // Older sessions held one item. Restore it into the same basket without posting it.
@@ -64,7 +67,14 @@ export function restoreReceiptDraft(value: unknown): AIReceiptDraft | null {
   }
   const base = newReceiptDraft();
   return { ...base, id: typeof raw.id === 'string' && /^[a-z0-9]{1,20}$/i.test(raw.id) ? raw.id : base.id,
-    items: [...items].map(([itemId, qty]) => ({ itemId, qty })), awaitingItem: items.size === 0 };
+    items: [...items].map(([itemId, qty]) => ({ itemId, qty })), awaitingItem: items.size === 0,
+    deliveryMethod: receiptDeliveryOptions.some(method => method === raw.deliveryMethod) ? raw.deliveryMethod! : '',
+    shippingCost: raw.shippingCost === undefined ? 0 : validReceiptShippingCost(raw.shippingCost) ? raw.shippingCost : null };
+}
+
+export function validateReceiptShipping(draft: AIReceiptDraft): void {
+  if (!receiptDeliveryOptions.some(method => method === draft.deliveryMethod)) throw new Error('Pilih pengiriman via Grab, Maxim, Supplier, atau Karyawan.');
+  if (!validReceiptShippingCost(draft.shippingCost)) throw new Error('Biaya kirim harus berupa Rupiah bulat, minimal 0 dan maksimal 999.999.999.999.');
 }
 
 export function addReceiptItem(draft: AIReceiptDraft, item: Item, qty: number): AIReceiptDraft {

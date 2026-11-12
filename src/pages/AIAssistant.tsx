@@ -9,7 +9,9 @@ import { localDateKey } from '../lib/date';
 import type { GoodsReceipt, WorkOrder, WorkOrderService } from '../types';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import AIReceiptCart from '../components/AIReceiptCart';
-import { addReceiptItem, buildReceiptLines, newReceiptDraft, parseReceiptItemQuery, receiptItemMatches, restoreReceiptDraft, type AIReceiptDraft } from '../lib/aiGoodsReceipt';
+import ReceiptShareButton from '../components/ReceiptShareButton';
+import { buildGoodsReceiptShareText, receiptShippingCostLabel } from '../lib/goodsReceiptSharing';
+import { addReceiptItem, buildReceiptLines, newReceiptDraft, parseReceiptItemQuery, receiptItemMatches, restoreReceiptDraft, validateReceiptShipping, type AIReceiptDraft } from '../lib/aiGoodsReceipt';
 
 const GROQ_URL = `${window.location.origin}/api/ai-chat`;
 const GROQ_MODELS = [
@@ -25,6 +27,7 @@ interface ChatMsg {
   action?: { type: string; payload: any };
   actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'select_receipt_item' | 'create_wo_vehicle' | 'open_workorders' | 'open_workorder' | 'open_invoice'; value?: string }>;
   shareText?: string;
+  receiptShareText?: string;
   vehicleSummary?: VehicleHistorySummary;
 }
 
@@ -1691,6 +1694,7 @@ ${buildSmartContext(userMsgText)}`;
   const createGoodsReceiptFromAI = async (draft: AIReceiptDraft) => {
     if (draft.stage !== 'confirm') throw new Error('Periksa ringkasan penerimaan sebelum menyimpan.');
     const items = buildReceiptLines(draft, data.items);
+    validateReceiptShipping(draft);
     if (!receiptBranch) throw new Error('Pilih cabang aktif melalui pilihan cabang di bagian atas.');
     const branchId = receiptBranch.id;
     const warehouse = receiptWarehouse;
@@ -1705,7 +1709,8 @@ ${buildSmartContext(userMsgText)}`;
       supplierId: '',
       supplierName: '',
       doNumber: '',
-      deliveryMethod: 'Diantar Supplier',
+      deliveryMethod: draft.deliveryMethod,
+      shippingCost: draft.shippingCost,
       sourceType: 'Supplier',
       items,
       status: 'Diterima',
@@ -1749,6 +1754,7 @@ ${buildSmartContext(userMsgText)}`;
     if (receiptDraft && /^(?:simpan|selesai)$/i.test(content)) {
       try {
         buildReceiptLines(receiptDraft, data.items);
+        validateReceiptShipping(receiptDraft);
         changeReceiptDraft({ ...receiptDraft, stage: 'confirm' });
         receiptReply('Periksa ringkasan, cabang, dan gudang, lalu tekan Konfirmasi & Simpan.');
       } catch (error) { receiptReply((error as Error).message, true); }
@@ -2304,7 +2310,8 @@ ${buildSmartContext(userMsgText)}`;
         setMessages(h => [...h, {
           role: 'assistant',
           time: now(),
-          content: `✅ **Penerimaan ${r.receiptNumber} berhasil disimpan**\n\n${r.items.map(item => `- ${item.itemCode} — ${item.itemName}: **${item.qty} ${item.unit}**`).join('\n')}\n\nCabang: **${r.branchName}**\nGudang: **${r.warehouseName}**\nStatus: **Diterima**\n\nBuka menu Penerimaan Barang untuk melihat transaksi.`,
+          receiptShareText: buildGoodsReceiptShareText(r, r),
+          content: `✅ **Penerimaan ${r.receiptNumber} berhasil disimpan**\n\n${r.items.map(item => `- ${item.itemCode} — ${item.itemName}: **${item.qty} ${item.unit}**`).join('\n')}\n\nCabang: **${r.branchName}**\nGudang: **${r.warehouseName}**\nPengiriman via: **${r.deliveryMethod}**\nBiaya kirim: **${receiptShippingCostLabel(r.shippingCost)}**\nStatus: **Diterima**\n\nBuka menu Penerimaan Barang untuk melihat transaksi.`,
         }]);
         completed = true;
       } else {
@@ -2737,6 +2744,7 @@ ${buildSmartContext(userMsgText)}`;
                       })}
                     </div>
                   )}
+                  {msg.role === 'assistant' && msg.receiptShareText && <ReceiptShareButton text={msg.receiptShareText} className="mt-2 w-full" />}
                   {msg.role === 'assistant' && msg.shareText && (
                     <button type="button" onClick={() => void shareRegisterToWhatsApp(msg.shareText!)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-950/20 hover:bg-emerald-400 active:scale-[0.99]">
                       <Share2 className="h-5 w-5" /> Bagikan ke Grup WA

@@ -486,6 +486,7 @@ export interface GoodsReceipt {
   deliveryMethod?: string;
   deliveryOther?: string;
   shippingNotes?: string;
+  shippingCost?: number | null;
   sourceType?: 'Supplier' | 'Transfer Gudang';
   sourceWarehouseId?: string;
   sourceBranchId?: string;

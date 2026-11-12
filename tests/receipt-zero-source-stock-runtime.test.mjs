@@ -74,6 +74,29 @@ function parity(r,source='0') {
  assert.deepEqual(r.state.branch,{['b:'+source]:[r.state.warehouse.src,r.state.warehouse.src],'b:DEST':[r.state.warehouse.dst,r.state.warehouse.dst]});
  assert.equal(r.state.itemStock,r.state.warehouse.src);
 }
+
+for(const method of ['POST','PUT'])for(const shippingCost of [0,25000,999999999999])test(`${method} persists shipping cost ${shippingCost} with the receipt`,()=>{
+ const r=run({method,body:{...body(),deliveryMethod:'Maxim',shippingCost}});
+ assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.committed,true);
+ assert.equal(r.state.receipt.shipping_cost,shippingCost);assert.equal(r.state.receipt.delivery_method,'Maxim');parity(r);
+ if(method==='POST'){assert.equal(r.data.shippingCost,shippingCost);assert.equal(r.data.deliveryMethod,'Maxim');}
+});
+test('legacy update omitting shipping cost preserves the saved amount',()=>{
+ const r=run({oldShippingCost:25000});assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.state.receipt.shipping_cost,25000);parity(r);
+});
+test('receiving a legacy draft preserves its explicitly unknown shipping cost',()=>{
+ const r=run({oldStatus:'Draft',body:{...body(),shippingCost:null}});
+ assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.committed,true);
+ assert.equal(r.state.receipt.status,'Diterima');assert.equal(r.state.receipt.shipping_cost,null);parity(r);
+});
+test('an explicit zero shipping cost cannot be cleared to unknown',()=>{
+ const r=run({oldShippingCost:0,body:{...body(),shippingCost:null}});
+ assert.equal(r.status,422,JSON.stringify(r));assert.equal(r.rolledBack,true);assert.deepEqual(r.state,r.initial);
+});
+for(const method of ['POST','PUT'])for(const shippingCost of [-1,1.5,'1e3',true,null,1000000000000])test(`${method} rejects invalid shipping cost ${JSON.stringify(shippingCost)} without stock changes`,()=>{
+ const r=run({method,oldShippingCost:25000,body:{...body(),deliveryMethod:'Grab',shippingCost}});
+ assert.equal(r.status,422,JSON.stringify(r));assert.equal(r.committed,false);assert.equal(r.rolledBack,true);assert.deepEqual(r.state,r.initial);
+});
 test('PUT Draft to received debits exact zero source and balances journal',()=>{
  const r=run();assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.committed,true);
  assert.deepEqual(r.state.warehouse,{src:14,dst:6});parity(r);

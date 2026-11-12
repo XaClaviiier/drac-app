@@ -43,6 +43,7 @@ $inventoryColumns = [
     ['goods_receipts','delivery_method',"VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number"],
     ['goods_receipts','delivery_other','VARCHAR(100) NULL AFTER delivery_method'],
     ['goods_receipts','shipping_notes','VARCHAR(500) NULL AFTER delivery_other'],
+    ['goods_receipts','shipping_cost','DECIMAL(15,0) NULL AFTER shipping_notes'],
     ['goods_receipts','source_type',"VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER shipping_notes"],
     ['goods_receipts','source_warehouse_id','VARCHAR(20) NULL AFTER source_type'],
     ['goods_receipts','source_branch_id','VARCHAR(20) NULL AFTER source_warehouse_id'],
@@ -530,6 +531,7 @@ try {
         $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
         $r['deliveryOther'] = $r['delivery_other'] ?? '';
         $r['shippingNotes'] = $r['shipping_notes'] ?? '';
+        $r['shippingCost'] = isset($r['shipping_cost']) ? (int)$r['shipping_cost'] : null;
         $r['sourceType'] = $r['source_type'] ?? 'Supplier';
         $r['sourceWarehouseId'] = $r['source_warehouse_id'] ?? null;
         $r['sourceBranchId'] = $r['source_branch_id'] ?? null;

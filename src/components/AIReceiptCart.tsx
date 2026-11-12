@@ -1,5 +1,6 @@
 import type { Branch, Item, Warehouse } from '../types';
-import { buildReceiptLines, type AIReceiptDraft } from '../lib/aiGoodsReceipt';
+import { buildReceiptLines, validateReceiptShipping, type AIReceiptDraft } from '../lib/aiGoodsReceipt';
+import { MAX_RECEIPT_SHIPPING_COST, receiptDeliveryOptions, receiptShippingCostLabel } from '../lib/goodsReceiptSharing';
 
 interface Props {
   draft: AIReceiptDraft;
@@ -20,7 +21,7 @@ export default function AIReceiptCart(props: Props) {
   const { draft, master, branch, warehouse, busy, canCreate, error } = props;
   const reviewing = draft.stage === 'confirm';
   let validation = '';
-  try { buildReceiptLines(draft, master); } catch (e) { validation = (e as Error).message; }
+  try { buildReceiptLines(draft, master); validateReceiptShipping(draft); } catch (e) { validation = (e as Error).message; }
   const ready = !validation && Boolean(branch && warehouse) && canCreate;
   const choices = draft.selection?.itemIds.map(id => master.find(item => item.id === id && item.isActive && item.type === 'Persediaan')).filter((item): item is Item => Boolean(item)) || [];
   const change = (next: AIReceiptDraft) => props.onChange({ ...next, stage: 'items' });
@@ -57,7 +58,10 @@ export default function AIReceiptCart(props: Props) {
         <p>Ketik nama atau kode barang berikutnya beserta qty di chat. Contoh: kompresor Avanza 2bh.</p>
         <button type="button" className="mt-2 text-xs underline" onClick={() => change({ ...draft, awaitingItem: false, selection: undefined })}>Batal tambah barang</button>
       </div>}
-      {reviewing && <div className="space-y-1"><p>Cabang: <b>{branch?.name || 'Belum tersedia'}</b></p><p>Gudang: <b>{warehouse?.name || 'Belum tersedia'}</b></p></div>}
+      {reviewing ? <div className="space-y-1"><p>Cabang: <b>{branch?.name || 'Belum tersedia'}</b></p><p>Gudang: <b>{warehouse?.name || 'Belum tersedia'}</b></p><p>Pengiriman via: <b>{draft.deliveryMethod}</b></p><p>Biaya kirim: <b>{receiptShippingCostLabel(draft.shippingCost)}</b></p></div> : <div className="space-y-3">
+        <fieldset><legend className="mb-2">Pengiriman via *</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{receiptDeliveryOptions.map(method => <label key={method} className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-3 ${draft.deliveryMethod === method ? 'border-cyan-300 bg-cyan-950 text-cyan-100' : 'border-slate-500 bg-slate-900'}`}><input type="radio" name={`receipt-delivery-${draft.id}`} value={method} checked={draft.deliveryMethod === method} onChange={() => change({ ...draft, deliveryMethod: method })} className="accent-cyan-400" />{method}</label>)}</div></fieldset>
+        <label className="block max-w-xs">Biaya kirim (Rp)<input aria-label="Biaya kirim penerimaan" type="number" inputMode="numeric" min="0" max={MAX_RECEIPT_SHIPPING_COST} step="1" value={draft.shippingCost ?? ''} onChange={event => change({ ...draft, shippingCost: event.target.value === '' ? null : Number(event.target.value) })} className="mt-1 block w-full rounded border border-slate-500 bg-slate-900 px-3 py-2 text-right text-base" /><span className="mt-1 block text-xs text-slate-300">Isi 0 jika tanpa biaya.</span></label>
+      </div>}
       {validation && !draft.awaitingItem && <p role="status" className="text-amber-300">{validation}</p>}
       {!branch ? <p className="text-amber-300">Pilih cabang aktif melalui pilihan cabang di bagian atas.</p>
         : !warehouse ? <p className="text-amber-300">Gudang default untuk cabang aktif belum tersedia. Atur gudang default di Master Gudang.</p> : null}

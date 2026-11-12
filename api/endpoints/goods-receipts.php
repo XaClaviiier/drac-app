@@ -4,6 +4,7 @@ ensureTableColumn($pdo,'goods_receipts','received_by_id','VARCHAR(64) NULL AFTER
 ensureTableColumn($pdo,'goods_receipts','delivery_method',"VARCHAR(40) NOT NULL DEFAULT 'Diantar Supplier' AFTER do_number");
 ensureTableColumn($pdo,'goods_receipts','delivery_other','VARCHAR(100) NULL AFTER delivery_method');
 ensureTableColumn($pdo,'goods_receipts','shipping_notes','VARCHAR(500) NULL AFTER delivery_other');
+ensureTableColumn($pdo,'goods_receipts','shipping_cost','DECIMAL(15,0) NULL AFTER shipping_notes');
 ensureTableColumn($pdo,'goods_receipts','source_type',"VARCHAR(30) NOT NULL DEFAULT 'Supplier' AFTER shipping_notes");
 ensureTableColumn($pdo,'goods_receipts','source_warehouse_id','VARCHAR(20) NULL AFTER source_type');
 ensureTableColumn($pdo,'goods_receipts','source_branch_id','VARCHAR(20) NULL AFTER source_warehouse_id');
@@ -34,6 +35,12 @@ function normalizeGoodsReceiptDelivery(array $data,string $fallbackMethod='Diant
     if($method==='Lainnya'&&$other==='')throw new InvalidArgumentException('Tuliskan cara pengiriman lainnya');
     if(mb_strlen($other)>100)throw new InvalidArgumentException('Cara pengiriman lainnya maksimal 100 karakter');
     return[$method,$other];
+}
+function normalizeGoodsReceiptShippingCost(array $data,mixed $fallback=null,bool $existing=false):?int{
+    if(!array_key_exists('shippingCost',$data))return $fallback===null?null:(int)$fallback;
+    // Old receipts expose null on GET. Preserve that unknown amount on a full-record PUT.
+    if($existing&&$fallback===null&&$data['shippingCost']===null)return null;
+    return parseBoundedDecimalInteger($data['shippingCost'],'0','999999999999','Biaya kirim');
 }
 $journalReceipt = static function(PDO $pdo,array $row,string $itemId,int $qty,bool $reverse,array $actor,?string $correctionGroupId=null,?string $reversalOfId=null,?string $idempotencyKey=null,?float $unitCost=null):string{
     $warehouseId=(string)($row['warehouse_id']??'');
@@ -67,6 +74,7 @@ switch ($method) {
             $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
             $r['deliveryOther'] = $r['delivery_other'] ?? '';
             $r['shippingNotes'] = $r['shipping_notes'] ?? '';
+            $r['shippingCost'] = isset($r['shipping_cost']) ? (int)$r['shipping_cost'] : null;
             $r['sourceType'] = $r['source_type'] ?? 'Supplier';
             $r['sourceWarehouseId'] = $r['source_warehouse_id'] ?? null;
             $r['sourceBranchId'] = $r['source_branch_id'] ?? null;
@@ -149,16 +157,17 @@ switch ($method) {
             $receiver=lockedInventoryDelegatedUserForBranch($authorization,$receiverId,$branchId,'Petugas penerima');
             $lockedItems=lockActiveInventoryItems($pdo,array_column($d['items'],'itemId'));
             [$deliveryMethod,$deliveryOther]=normalizeGoodsReceiptDelivery($d);
+            $shippingCost=normalizeGoodsReceiptShippingCost($d);
             $rId = $d['id'] ?? generateId();
             // Nomor dari browser hanya pratinjau. Nomor final wajib diambil dari
             // antrian server supaya dua HP atau data yang belum tersinkron tidak
             // pernah membuat receipt_number yang sama.
             $receiptNumber = nextGoodsReceiptNumber($pdo, $branchId, (string)($d['date'] ?? ''));
             $transferNumber=$sourceType==='Transfer Gudang'?nextManualTransferNumber($pdo,$sourceBranchId,$branchId,(string)$d['date']):null;
-            $stmt = $pdo->prepare("INSERT INTO goods_receipts (id,receipt_number,date,supplier_id,supplier_name,do_number,delivery_method,delivery_other,shipping_notes,source_type,source_warehouse_id,source_branch_id,transfer_number,status,notes,branch_id,warehouse_id,received_by,received_by_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            $stmt = $pdo->prepare("INSERT INTO goods_receipts (id,receipt_number,date,supplier_id,supplier_name,do_number,delivery_method,delivery_other,shipping_notes,shipping_cost,source_type,source_warehouse_id,source_branch_id,transfer_number,status,notes,branch_id,warehouse_id,received_by,received_by_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
                 $rId, $receiptNumber, $d['date'],
-                $sourceType==='Supplier'?($supplier['id'] ?? null):null, $sourceType==='Supplier'?($supplier['name'] ?? ''):'', $d['doNumber'] ?? '', $deliveryMethod, $deliveryOther, $d['shippingNotes'] ?? '', $sourceType,$sourceWarehouseId,$sourceBranchId,$transferNumber,
+                $sourceType==='Supplier'?($supplier['id'] ?? null):null, $sourceType==='Supplier'?($supplier['name'] ?? ''):'', $d['doNumber'] ?? '', $deliveryMethod, $deliveryOther, $d['shippingNotes'] ?? '', $shippingCost, $sourceType,$sourceWarehouseId,$sourceBranchId,$transferNumber,
                 $newStatus, $d['notes'] ?? '',
                 $branchId,$warehouseId,$receiver['name'],$receiver['id']
             ]);
@@ -190,7 +199,7 @@ switch ($method) {
             }
 
             $pdo->commit();
-            respondSuccess(['id' => $rId, 'receiptNumber' => $receiptNumber], 'Penerimaan disimpan');
+            respondSuccess(['id' => $rId, 'receiptNumber' => $receiptNumber, 'deliveryMethod' => $deliveryMethod, 'deliveryOther' => $deliveryOther, 'shippingCost' => $shippingCost, 'receivedBy' => $receiver['name'], 'receivedById' => $receiver['id']], 'Penerimaan disimpan');
         } catch (InvalidArgumentException | DomainException $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             respondError($e->getMessage(), transactionExceptionStatus($e, 422));
@@ -236,6 +245,7 @@ switch ($method) {
             if (!$oldRow) throw new InvalidArgumentException('Penerimaan tidak ditemukan');
             if(!array_key_exists('receivedById',$d)&&(string)($oldRow['received_by_id']??'')!==(string)$receiverPreflightId)throw new DomainException('Petugas penerima berubah, silakan ulangi',409);
             [$deliveryMethod,$deliveryOther]=normalizeGoodsReceiptDelivery($d,(string)($oldRow['delivery_method']??'Diantar Supplier'),(string)($oldRow['delivery_other']??''));
+            $shippingCost=normalizeGoodsReceiptShippingCost($d,$oldRow['shipping_cost']??null,true);
             $oldStatus = $oldRow['status'] ?? '';
             $oldBranchId = $oldRow['branch_id'] ?? ($d['branchId'] ?? 'BR-001');
             $newBranchId = (string)($d['branchId'] ?? $oldBranchId);
@@ -263,10 +273,10 @@ switch ($method) {
             if(!canSeeReceiptSupplier($pdo,$actor)&&!empty($oldRow['supplier_id']))$supplier=['id'=>$oldRow['supplier_id'],'name'=>$oldRow['supplier_name']];
             $receiver=lockedInventoryDelegatedUserForBranch($authorization,$receiverId,$newBranchId,'Petugas penerima');
 
-            $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,delivery_method=?,delivery_other=?,shipping_notes=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");
+            $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,delivery_method=?,delivery_other=?,shipping_notes=?,shipping_cost=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");
             $stmt->execute([
                 $d['receiptNumber'], $d['date'],
-                $supplier['id']??null,$supplier['name']??'', $d['doNumber'] ?? '', $deliveryMethod, $deliveryOther, $d['shippingNotes'] ?? ($oldRow['shipping_notes']??''),
+                $supplier['id']??null,$supplier['name']??'', $d['doNumber'] ?? '', $deliveryMethod, $deliveryOther, $d['shippingNotes'] ?? ($oldRow['shipping_notes']??''), $shippingCost,
                 $newStatus, $d['notes'] ?? '',
                 $newBranchId,$newWarehouseId,$receiver['name'],$receiver['id'],
                 $id

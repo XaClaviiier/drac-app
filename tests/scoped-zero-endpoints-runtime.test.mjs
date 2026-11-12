@@ -85,8 +85,8 @@ test('receipt accepts active primary-only zero receiver and commits exact branch
   assert.equal(r.status, 200, r.message);
   assert.equal(r.committed, true);
   assert.equal(r.receipts.length, 1);
-  assert.equal(r.receipts[0][15], '0');
-  assert.equal(r.receipts[0][18], 'receiver');
+  assert.equal(r.receipts[0].branch_id, '0');
+  assert.equal(r.receipts[0].received_by_id, 'receiver');
   assert.equal(r.lines.length, 1);
   assert.ok(r.queries.some(q => q.sql === 'SELECT * FROM users WHERE id IN (?) ORDER BY id FOR UPDATE' && q.transaction));
 });
@@ -122,7 +122,7 @@ for (const [name, branch, extra] of [
     const r = run({ endpoint: 'goods-receipts', body: receipt(branch), memberships: [branch], ...extra });
     assert.equal(r.status, 200, r.message);
     assert.equal(r.committed, true);
-    assert.equal(r.receipts[0][15], branch);
+    assert.equal(r.receipts[0].branch_id, branch);
   });
 }
 for (const [name, lockedReceiver] of [

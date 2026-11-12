@@ -483,6 +483,7 @@ CREATE TABLE IF NOT EXISTS `goods_receipts` (
   `supplier_id` VARCHAR(20),
   `supplier_name` VARCHAR(100),
   `do_number` VARCHAR(50),
+  `shipping_cost` DECIMAL(15,0) NULL,
   `status` ENUM('Draft', 'Diterima', 'Difakturkan', 'Sebagian', 'Batal') DEFAULT 'Draft',
   `notes` TEXT,
   `branch_id` VARCHAR(20) NOT NULL,

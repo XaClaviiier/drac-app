@@ -62,7 +62,7 @@ final class ScopedZeroPDO extends PDO {
         if(str_starts_with($q,'INSERT IGNORE INTO goods_receipt_sequences')||str_starts_with($q,'UPDATE goods_receipt_sequences'))return [];
         if(str_starts_with($q,'SELECT last_number FROM goods_receipt_sequences')||str_starts_with($q,'SELECT COALESCE(MAX(CAST(SUBSTRING(receipt_number'))return [[0]];
         if($q==='SELECT 1 FROM goods_receipts WHERE receipt_number=? LIMIT 1')return [];
-        if(str_starts_with($q,'INSERT INTO goods_receipts ')) { $this->receipts[]=$p;return []; }
+        if(str_starts_with($q,'INSERT INTO goods_receipts ')) { preg_match('/INSERT INTO goods_receipts \(([^)]+)\)/',$q,$match);$this->receipts[]=array_combine(explode(',',$match[1]),$p);return []; }
         if(str_starts_with($q,'INSERT INTO goods_receipt_items ')) { $this->lines[]=$p;return []; }
         throw new LogicException('Unexpected SQL: '.$q);
     }
