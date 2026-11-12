@@ -242,7 +242,7 @@ test('identitas kendaraan menampilkan keterangan pekerjaan di bawah kendaraan', 
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
   assert.match(page, /const workDescription = \(wo: WorkOrder\) => wo\.description\?\.trim\(\)/);
-  assert.match(page, /Pekerjaan: \{workItemSummary\(wo\)\}/);
+  assert.match(page, /<LockKeyhole className="h-3 w-3 flex-none" aria-label="Item pekerjaan" \/>/);
   assert.match(page, /wo\.services\.map\(service => service\.name\.trim\(\)\)/);
 });
 
@@ -256,7 +256,7 @@ test('item pekerjaan tampil di bawah kendaraan dan tidak menjadi kolom timeline 
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
   assert.match(page, /const workItemSummary = \(wo: WorkOrder\) => wo\.services/);
-  assert.match(page, /Pekerjaan: \{workItemSummary\(wo\)\}/);
+  assert.match(page, /<LockKeyhole className="h-3 w-3 flex-none" aria-label="Item pekerjaan" \/>/);
   assert.doesNotMatch(page, /workItemWidth/);
   assert.doesNotMatch(page, /bg-slate-50 px-3 py-2\.5">Pekerjaan/);
 });
