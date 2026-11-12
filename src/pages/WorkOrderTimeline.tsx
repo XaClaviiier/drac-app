@@ -359,14 +359,13 @@ export default function WorkOrderTimeline() {
     const identityWidth = mobile ? MOBILE_IDENTITY_WIDTH : 260;
     const indicatorWidth = mobile ? MOBILE_FINANCIAL_WIDTH : 168;
     const boardTimelineWidth = mobile ? mobileTimelineWidth : timelineWidth;
-    const workItemWidth = mobile ? 0 : 190;
     const gridColumns = mobile
       ? `${identityWidth}px ${boardTimelineWidth}px ${indicatorWidth}px`
-      : `${identityWidth}px ${indicatorWidth}px ${boardTimelineWidth}px ${workItemWidth}px`;
+      : `${identityWidth}px ${indicatorWidth}px ${boardTimelineWidth}px`;
     const stickyIdentity = mobile ? 'sticky left-0 z-30 border-r border-slate-200' : '';
     const stickyIndicator = mobile ? 'sticky right-0 z-30 border-l border-slate-200' : '';
     return <div ref={mobile ? mobileTimelineRef : undefined} className="overflow-x-auto overscroll-x-contain">
-      <div style={{ minWidth: `${identityWidth + boardTimelineWidth + indicatorWidth + workItemWidth}px` }}>
+      <div style={{ minWidth: `${identityWidth + boardTimelineWidth + indicatorWidth}px` }}>
         <div className="grid border-b bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns: gridColumns }}>
           <div className={`flex items-end bg-slate-50 px-3 py-2.5 ${stickyIdentity}`}>{mobile ? 'Kendaraan' : 'Kendaraan / Customer'}</div>
           {!mobile && <div className={`flex items-end justify-end bg-slate-50 px-2 py-2.5 text-right ${stickyIndicator}`}>Total · Invoice</div>}
@@ -374,7 +373,6 @@ export default function WorkOrderTimeline() {
             {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
             {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
           </div>
-          {!mobile && <div className="flex items-end bg-slate-50 px-3 py-2.5">Pekerjaan</div>}
           {mobile && <div className={`flex items-end justify-center bg-slate-50 px-1 py-2.5 ${stickyIndicator}`}>Total</div>}
         </div>
         {visibleRows.map(row => {
@@ -390,14 +388,13 @@ export default function WorkOrderTimeline() {
             <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.plateNumber}${wo.customerName ? ` - ${wo.customerName}` : ''} · ${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
               <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 text-gray-950 ${mobile ? 'break-words text-xs' : 'truncate text-sm'}`}>{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : '!'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
               <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'}</p>
-              <p className={`truncate text-gray-400 ${mobile ? 'text-[9px]' : 'text-[10px]'}`} title={workDescription(wo)}>Pekerjaan: {workDescription(wo)}</p>
+              <p className={`truncate text-gray-400 ${mobile ? 'text-[9px]' : 'text-[10px]'}`} title={workItemSummary(wo)}>Pekerjaan: {workItemSummary(wo)}</p>
             </div>
             {!mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
             <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
               {renderSegments(segments, mobile ? 2.8 : 4.2)}
               <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
             </div>
-            {!mobile && <div className={`min-w-0 px-3 py-2.5 text-xs text-gray-600 ${stickyBackground}`} title={workItemSummary(wo)}><span className="block truncate font-semibold text-gray-800">{workItemSummary(wo)}</span></div>}
             {mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
           </button>;
         })}
