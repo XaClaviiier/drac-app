@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity, Banknote, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3,
-  FileText, LockKeyhole, Package, RefreshCw, Settings2, Stethoscope, UserRound, Wrench, XCircle,
+  FileText, Package, RefreshCw, Settings2, Stethoscope, UserRound, Wrench, XCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WorkOrder, WorkOrderTimelineStage } from '../types';
@@ -388,7 +388,6 @@ export default function WorkOrderTimeline() {
             <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.plateNumber}${wo.customerName ? ` - ${wo.customerName}` : ''} · ${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
               <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 text-gray-950 ${mobile ? 'break-words text-xs' : 'truncate text-sm'}`}>{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : '!'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
               <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'}</p>
-              <p className={`flex min-w-0 items-center gap-1 truncate text-gray-400 ${mobile ? 'text-[9px]' : 'text-[10px]'}`} title={`Item pekerjaan: ${workItemSummary(wo)}`}><LockKeyhole className="h-3 w-3 flex-none" aria-label="Item pekerjaan" /> <span className="truncate">{workItemSummary(wo)}</span></p>
             </div>
             {!mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
             <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
@@ -396,6 +395,7 @@ export default function WorkOrderTimeline() {
               <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
             </div>
             {mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
+            <div className={`flex min-w-0 items-start gap-1 border-t border-slate-100 px-3 py-1.5 text-gray-500 ${isSelected ? 'bg-blue-50/70' : 'bg-white group-hover:bg-slate-50'}`} style={{ gridColumn: '1 / -1' }} title={`Item pekerjaan: ${workItemSummary(wo)}`}><Wrench className="mt-0.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" /><span className="min-w-0 whitespace-normal break-words text-[10px] leading-4">{workItemSummary(wo)}</span></div>
           </button>;
         })}
         {!visibleRows.length && <div className="p-14 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}{stageFilter ? ' untuk status yang dipilih' : ''}.</div>}
@@ -417,7 +417,6 @@ export default function WorkOrderTimeline() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5"><b className="min-w-0 break-words text-sm text-gray-950">{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : 'Periksa'}</span> : warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
             <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'}</p>
-            <p className="flex min-w-0 items-center gap-1 truncate text-[9px] text-gray-400" title={`Item pekerjaan: ${workItemSummary(wo)}`}><LockKeyhole className="h-3 w-3 flex-none" aria-label="Item pekerjaan" /> <span className="truncate">{workItemSummary(wo)}</span></p>
           </div>
           <span className={`rounded-md border px-1.5 py-1 text-[8px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>
           {renderFinancialSummary(row, true)}
@@ -430,6 +429,7 @@ export default function WorkOrderTimeline() {
           {renderSegments(segments, 12)}
           <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
         </div>
+        <div className="flex min-w-0 items-start gap-1 border-t border-slate-100 px-3 py-1.5 text-gray-500" title={`Item pekerjaan: ${workItemSummary(wo)}`}><Wrench className="mt-0.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" /><span className="min-w-0 whitespace-normal break-words text-[10px] leading-4">{workItemSummary(wo)}</span></div>
       </button>;
     })}
     {!visibleRows.length && <div className="p-10 text-center text-sm text-gray-400">Tidak ada WO pada {selectedDateLabel(date)}.</div>}

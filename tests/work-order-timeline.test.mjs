@@ -238,11 +238,13 @@ test('kolom Total Invoice rata kanan', () => {
   assert.match(page, /items-end justify-end bg-slate-50 px-2 py-2\.5 text-right/);
 });
 
-test('identitas kendaraan menampilkan keterangan pekerjaan di bawah kendaraan', () => {
+test('item pekerjaan membentang di bawah timeline pada desktop dan mobile', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
   assert.match(page, /const workDescription = \(wo: WorkOrder\) => wo\.description\?\.trim\(\)/);
-  assert.match(page, /<LockKeyhole className="h-3 w-3 flex-none" aria-label="Item pekerjaan" \/>/);
+  assert.match(page, /style=\{\{ gridColumn: '1 \/ -1' \}\}/);
+  assert.match(page, /whitespace-normal break-words text-\[10px\] leading-4/);
+  assert.match(page, /<Wrench className="mt-0\.5 h-3 w-3 flex-none text-gray-400" aria-label="Item pekerjaan" \/>/);
   assert.match(page, /wo\.services\.map\(service => service\.name\.trim\(\)\)/);
 });
 
@@ -252,11 +254,11 @@ test('WO yang sudah dilanjutkan tidak masuk lagi ke papan Lost Sales', () => {
   assert.match(page, /\.filter\(wo => !wo\.continuedToWoId && wo\.date === date/);
 });
 
-test('item pekerjaan tampil di bawah kendaraan dan tidak menjadi kolom timeline baru', () => {
+test('item pekerjaan tidak menjadi kolom timeline baru', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
   assert.match(page, /const workItemSummary = \(wo: WorkOrder\) => wo\.services/);
-  assert.match(page, /<LockKeyhole className="h-3 w-3 flex-none" aria-label="Item pekerjaan" \/>/);
+  assert.match(page, /Item pekerjaan: \$\{workItemSummary\(wo\)\}/);
   assert.doesNotMatch(page, /workItemWidth/);
   assert.doesNotMatch(page, /bg-slate-50 px-3 py-2\.5">Pekerjaan/);
 });
