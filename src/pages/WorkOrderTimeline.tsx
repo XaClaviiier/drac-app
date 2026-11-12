@@ -338,6 +338,10 @@ export default function WorkOrderTimeline() {
   const workDescription = (wo: WorkOrder) => wo.description?.trim()
     || wo.services.map(service => service.name.trim()).filter(Boolean).join(', ')
     || 'Keterangan pekerjaan belum diisi';
+  const workItemSummary = (wo: WorkOrder) => wo.services
+    .map(service => `${service.name.trim()}${service.qty > 1 ? ` ×${service.qty}` : ''}`)
+    .filter(Boolean)
+    .join(', ') || workDescription(wo);
 
   const renderSegments = (segments: Segment[], minimumLabelWidth = 4.2) => segments.map((segment, index) => {
     const rawLeft = position(segment.start);
@@ -355,13 +359,14 @@ export default function WorkOrderTimeline() {
     const identityWidth = mobile ? MOBILE_IDENTITY_WIDTH : 260;
     const indicatorWidth = mobile ? MOBILE_FINANCIAL_WIDTH : 168;
     const boardTimelineWidth = mobile ? mobileTimelineWidth : timelineWidth;
+    const workItemWidth = mobile ? 0 : 190;
     const gridColumns = mobile
       ? `${identityWidth}px ${boardTimelineWidth}px ${indicatorWidth}px`
-      : `${identityWidth}px ${indicatorWidth}px ${boardTimelineWidth}px`;
+      : `${identityWidth}px ${indicatorWidth}px ${boardTimelineWidth}px ${workItemWidth}px`;
     const stickyIdentity = mobile ? 'sticky left-0 z-30 border-r border-slate-200' : '';
     const stickyIndicator = mobile ? 'sticky right-0 z-30 border-l border-slate-200' : '';
     return <div ref={mobile ? mobileTimelineRef : undefined} className="overflow-x-auto overscroll-x-contain">
-      <div style={{ minWidth: `${identityWidth + boardTimelineWidth + indicatorWidth}px` }}>
+      <div style={{ minWidth: `${identityWidth + boardTimelineWidth + indicatorWidth + workItemWidth}px` }}>
         <div className="grid border-b bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500" style={{ gridTemplateColumns: gridColumns }}>
           <div className={`flex items-end bg-slate-50 px-3 py-2.5 ${stickyIdentity}`}>{mobile ? 'Kendaraan' : 'Kendaraan / Customer'}</div>
           {!mobile && <div className={`flex items-end justify-end bg-slate-50 px-2 py-2.5 text-right ${stickyIndicator}`}>Total · Invoice</div>}
@@ -369,6 +374,7 @@ export default function WorkOrderTimeline() {
             {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
             {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
           </div>
+          {!mobile && <div className="flex items-end bg-slate-50 px-3 py-2.5">Pekerjaan</div>}
           {mobile && <div className={`flex items-end justify-center bg-slate-50 px-1 py-2.5 ${stickyIndicator}`}>Total</div>}
         </div>
         {visibleRows.map(row => {
@@ -391,6 +397,7 @@ export default function WorkOrderTimeline() {
               {renderSegments(segments, mobile ? 2.8 : 4.2)}
               <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
             </div>
+            {!mobile && <div className={`min-w-0 px-3 py-2.5 text-xs text-gray-600 ${stickyBackground}`} title={workItemSummary(wo)}><span className="block truncate font-semibold text-gray-800">{workItemSummary(wo)}</span></div>}
             {mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
           </button>;
         })}

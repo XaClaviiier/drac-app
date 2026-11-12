@@ -227,7 +227,7 @@ test('desktop menempatkan Total Invoice di samping identitas dan merapatkan time
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
   assert.match(page, /const timelineWidth = Math\.max\(620, Math\.round\(axisSpan \* 1\.05\)\)/);
-  assert.match(page, /const gridColumns = mobile[\s\S]*?\$\{identityWidth\}px \$\{boardTimelineWidth\}px \$\{indicatorWidth\}px`[\s\S]*?\$\{identityWidth\}px \$\{indicatorWidth\}px \$\{boardTimelineWidth\}px`/);
+  assert.match(page, /const gridColumns = mobile[\s\S]*?\$\{identityWidth\}px \$\{boardTimelineWidth\}px \$\{indicatorWidth\}px`[\s\S]*?\$\{identityWidth\}px \$\{indicatorWidth\}px \$\{boardTimelineWidth\}px \$\{workItemWidth\}px`/);
   assert.match(page, /!mobile && <div className=\{`flex items-end justify-end bg-slate-50 px-2 py-2\.5 text-right \$\{stickyIndicator\}`\}>Total · Invoice/);
 });
 
@@ -250,4 +250,13 @@ test('WO yang sudah dilanjutkan tidak masuk lagi ke papan Lost Sales', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
   assert.match(page, /\.filter\(wo => !wo\.continuedToWoId && wo\.date === date/);
+});
+
+test('desktop menampilkan item pekerjaan di ujung kanan timeline', () => {
+  const page = source('src/pages/WorkOrderTimeline.tsx');
+
+  assert.match(page, /const workItemWidth = mobile \? 0 : 190/);
+  assert.match(page, /\$\{identityWidth\}px \$\{indicatorWidth\}px \$\{boardTimelineWidth\}px \$\{workItemWidth\}px/);
+  assert.match(page, /!mobile && <div className="flex items-end bg-slate-50 px-3 py-2\.5">Pekerjaan<\/div>/);
+  assert.match(page, /const workItemSummary = \(wo: WorkOrder\) => wo\.services/);
 });
