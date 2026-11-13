@@ -22,6 +22,56 @@ function fixture(t){
 }
 const cashForm={code:'CASH',name:'Kas Cabang Satu',accountType:'cash',branchId:'B1',ledgerAccountId:'LC',isActive:true};
 
+run('changing branch cash defaults preserves historical payments, journals and unrelated mappings',t=>{
+  const f=fixture(t);
+  assert.equal(f.api('customer-payments','POST',{invoiceId:'SI',date:f.today,amount:300,paymentMethod:'Tunai',accountId:'CASH'}).success,true);
+  f.sql("INSERT INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id) VALUES('NEW','NEW','Kas Baru','cash','B1','FREE')");
+  const payments=f.sql('SELECT * FROM customer_payments ORDER BY id');
+  const lines=f.sql('SELECT * FROM journal_lines ORDER BY id');
+  const accounts=f.sql('SELECT * FROM cash_accounts ORDER BY id');
+  const updated=f.api('branch-account-settings','PUT',{cashAccountId:'NEW'},{id:'B1'});
+  assert.equal(updated.success,true,JSON.stringify(updated));
+  const mapping=f.api('branch-account-settings').data.find(row=>row.branchId==='B1');
+  assert.equal(mapping.cashAccountId,'NEW');assert.equal(mapping.bankAccountId,'BANK');
+  assert.equal(mapping.depositDestinationAccountId,'BANK');assert.equal(mapping.receivableCoaId,'AR');
+  assert.deepEqual(f.sql('SELECT * FROM customer_payments ORDER BY id'),payments);
+  assert.deepEqual(f.sql('SELECT * FROM journal_lines ORDER BY id'),lines);
+  assert.deepEqual(f.sql('SELECT * FROM cash_accounts ORDER BY id'),accounts);
+  assert.equal(f.balance('CASH'),300);assert.equal(f.balance('NEW'),0);
+  assert.equal(f.api('branch-account-settings','PUT',{receivableCoaId:'AR',goodsRevenueCoaId:null},{id:'B1'}).success,true);
+  assert.equal(f.api('branch-account-settings').data.find(row=>row.branchId==='B1').cashAccountId,'NEW');
+  assert.equal(f.api('customer-payments','POST',{invoiceId:'SI',date:f.today,amount:100,paymentMethod:'Tunai',accountId:'NEW'}).success,true);
+  assert.equal(f.balance('CASH'),300);assert.equal(f.balance('NEW'),100);
+});
+
+run('branch defaults reject cross-branch, wrong-type and invalid ledger accounts without partial writes',t=>{
+  const f=fixture(t);
+  f.sql("INSERT INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id) VALUES('BAD','BAD','Kas belum sesuai','cash','B1','AR')");
+  const before=f.sql('SELECT * FROM branch_account_settings ORDER BY branch_id');
+  for(const payload of [{cashAccountId:'CASH2'}, {bankAccountId:'CASH'}, {cashAccountId:'BAD'}, {cashAccountId:'missing'}, {cashAccountId:null,bankAccountId:'CASH'}, {bankAccountId:['BANK']}]) {
+    const result=f.api('branch-account-settings','PUT',payload,{id:'B1'});
+    assert.equal(result.success,false,JSON.stringify(payload));assert.equal(result.status,422);
+    assert.deepEqual(f.sql('SELECT * FROM branch_account_settings ORDER BY branch_id'),before);
+  }
+  f.sql("UPDATE chart_of_accounts SET is_active=0 WHERE id='LB'");
+  assert.equal(f.api('branch-account-settings','PUT',{bankAccountId:'BANK'},{id:'B1'}).success,false);
+  assert.deepEqual(f.sql('SELECT * FROM branch_account_settings ORDER BY branch_id'),before);
+});
+
+run('partial branch defaults preserve legacy destinations and permit explicit clearing and shared banks',t=>{
+  const f=fixture(t);
+  f.sql("UPDATE branch_account_settings SET deposit_destination_account_id='unresolved-old-bank',qris_account_id='legacy-qris' WHERE branch_id='B1'");
+  assert.equal(f.api('branch-account-settings','PUT',{cashAccountId:null},{id:'B1'}).success,true);
+  const row=f.sql("SELECT * FROM branch_account_settings WHERE branch_id='B1'")[0];
+  assert.equal(row.cash_account_id,null);assert.equal(row.bank_account_id,'BANK');
+  assert.equal(row.deposit_destination_account_id,'unresolved-old-bank');assert.equal(row.qris_account_id,'legacy-qris');
+  assert.equal(row.receivable_coa_id,'AR');
+  assert.equal(f.api('branch-account-settings','PUT',{bankAccountId:'BANK',cashAccountId:'CASH2'},{id:'B2'}).success,true);
+  const second=f.api('branch-account-settings').data.find(item=>item.branchId==='B2');
+  assert.equal(second.bankAccountId,'BANK');assert.equal(second.cashAccountId,'CASH2');
+  assert.equal(second.receivableCoaId,null);
+});
+
 run('legacy default cash metadata is repaired after the old bootstrap and payments keep their original ledger',t=>{
   const f=fixture(t);
   f.sql("CREATE TABLE app_schema_migrations(migration_key VARCHAR(100) PRIMARY KEY)");

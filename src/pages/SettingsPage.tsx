@@ -9,6 +9,7 @@ import { useApp } from '../context/AppContext';
 import type { AppSettings } from '../types';
 import { api } from '../lib/apiClient';
 import IndonesianDateInput from '../components/IndonesianDateInput';
+import BranchCashMappingSettings from '../components/BranchCashMappingSettings';
 
 type Tab = 'company' | 'features' | 'tax' | 'sales' | 'purchases' | 'security' | 'approval' | 'attachments' | 'attributes' | 'defaultAccounts' | 'other' | 'branches' | 'cashBranches' | 'documents' | 'workflow' | 'inventory' | 'ai' | 'guide' | 'backup' | 'maintenance';
 
@@ -53,9 +54,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [aiKey, setAiKey] = useState('');
   const [aiConfigured, setAiConfigured] = useState(false);
-  const [cashAccounts, setCashAccounts] = useState<any[]>([]);
   const [ledgerAccounts, setLedgerAccounts] = useState<any[]>([]);
-  const [branchAccountSettings, setBranchAccountSettings] = useState<any[]>([]);
   const [defaultAccountSettings, setDefaultAccountSettings] = useState<Record<string, string | null>>({});
   const [maintenanceFrom, setMaintenanceFrom] = useState('2000-01-01');
   const [maintenanceTo, setMaintenanceTo] = useState('2026-07-31');
@@ -111,15 +110,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get('cash-accounts'),
       api.get('chart-of-accounts'),
       api.get('branch-account-settings'),
-    ]).then(([cashResult, ledgerResult, mappingResult]) => {
-      if (cashResult.success) setCashAccounts(cashResult.data || []);
+    ]).then(([ledgerResult, mappingResult]) => {
       if (ledgerResult.success) setLedgerAccounts(ledgerResult.data || []);
       if (mappingResult.success) {
         const mappings = mappingResult.data || [];
-        setBranchAccountSettings(mappings);
         const first = mappings.find((mapping: any) => mapping.receivableCoaId || mapping.serviceRevenueCoaId || mapping.goodsRevenueCoaId || mapping.inventoryCoaId) || mappings[0] || {};
         const configured = data.settings.defaultAccounts || {};
         setDefaultAccountSettings({
@@ -151,13 +147,12 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await updateSettings({ ...draft, defaultAccounts: defaultAccountSettings });
-      if (tab === 'cashBranches' || tab === 'defaultAccounts') {
-        const mappingsToSave = data.branches.map(branch => {
-          const current = branchAccountSettings.find(mapping => mapping.branchId === branch.id) || { branchId: branch.id };
-          return tab === 'defaultAccounts' ? { ...current, ...defaultAccountSettings } : current;
-        });
-        for (const mapping of mappingsToSave) {
-          const result = await api.update('branch-account-settings', mapping.branchId, mapping);
+      if (tab === 'defaultAccounts') {
+        // General account preferences must not overwrite cash defaults edited in their own tab.
+        const legacyDefaults = Object.fromEntries(['receivableCoaId', 'serviceRevenueCoaId', 'goodsRevenueCoaId', 'inventoryCoaId']
+          .map(key => [key, defaultAccountSettings[key] || null]));
+        for (const branch of data.branches) {
+          const result = await api.update('branch-account-settings', branch.id, legacyDefaults);
           if (!result.success) throw new Error(result.message || 'Gagal menyimpan pengaitan akun cabang');
         }
       }
@@ -181,13 +176,6 @@ export default function SettingsPage() {
   const selectTab = (nextTab: Tab) => {
     setTab(nextTab);
     localStorage.setItem('drac-settings-tab', nextTab);
-  };
-  const setBranchAccount = (branchId: string, key: string, value: string) => {
-    setBranchAccountSettings(prev => {
-      const existing = prev.find(item => item.branchId === branchId);
-      if (existing) return prev.map(item => item.branchId === branchId ? { ...item, [key]: value || null } : item);
-      return [...prev, { branchId, [key]: value || null }];
-    });
   };
   const setDefaultAccount = (key: string, value: string) => {
     setDefaultAccountSettings(prev => ({ ...prev, [key]: value || null }));
@@ -325,6 +313,7 @@ export default function SettingsPage() {
     }
   };
 
+  const cashMappingActive = tab === 'cashBranches' || (tab === 'defaultAccounts' && innerTab === 'kasCabang');
   if (!canEdit) {
     return (
       <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
@@ -345,14 +334,14 @@ export default function SettingsPage() {
 
       <div className="overflow-hidden rounded-md border border-gray-200 bg-[#edf1f4] shadow-sm">
         <div className="space-y-0">
-        <div className="flex items-start border-b border-gray-300 bg-[#edf1f4]">
-        <nav className="w-full flex-shrink-0 overflow-x-auto border-r border-gray-300 bg-[#e5e8eb] p-2 lg:w-[168px] lg:space-y-1">
-          {['company','features','tax','sales','purchases','security','approval','attachments','attributes','defaultAccounts','other'].map(id => { const item=tabs.find(candidate=>candidate.id===id); if(!item)return null; const Icon=item.icon; return <button key={item.id} onClick={()=>selectTab(item.id)} title={item.hint} className={`relative flex min-w-[145px] items-center justify-end gap-2 border px-3 py-2 text-right text-xs transition lg:w-full ${tab===item.id?'z-10 mr-[-1px] border-[#ff4081] border-r-white bg-white font-bold text-gray-800':'border-gray-300 bg-[#f1f2f3] text-gray-600 hover:bg-white'}`}><Icon className="hidden h-4 w-4 text-blue-600 lg:block" />{item.label}</button>; })}
+        <div className="flex flex-col items-start border-b border-gray-300 bg-[#edf1f4] lg:flex-row">
+        <nav className="flex w-full flex-shrink-0 overflow-x-auto border-r border-gray-300 bg-[#e5e8eb] p-2 lg:block lg:w-[168px] lg:space-y-1">
+          {['company','features','tax','sales','purchases','security','approval','attachments','attributes','defaultAccounts','documents','other'].map(id => { const item=tabs.find(candidate=>candidate.id===id); if(!item)return null; const Icon=item.icon; return <button key={item.id} onClick={()=>selectTab(item.id)} title={item.hint} className={`relative flex min-w-[145px] items-center justify-end gap-2 border px-3 py-2 text-right text-xs transition lg:w-full ${tab===item.id?'z-10 mr-[-1px] border-[#ff4081] border-r-white bg-white font-bold text-gray-800':'border-gray-300 bg-[#f1f2f3] text-gray-600 hover:bg-white'}`}><Icon className="hidden h-4 w-4 text-blue-600 lg:block" />{item.label}</button>; })}
         </nav>
-        <div className="min-w-0 flex-1 border-l border-gray-300 bg-white">
+        <div className="w-full min-w-0 flex-1 border-l border-gray-300 bg-white">
         <InnerTabs tab={tab} active={innerTab} onChange={id => { setInnerTab(id); if (tab === 'company') setCompanyTab(id === 'alamat' ? 'address' : 'info'); }} />
 
-        <section className={`grid items-start gap-3 pt-0.5 ${['guide', 'backup', 'maintenance'].includes(tab) ? '' : 'lg:grid-cols-[minmax(0,1fr)_120px]'}`}>
+        <section className={`grid items-start gap-3 pt-0.5 ${cashMappingActive || ['guide', 'backup', 'maintenance'].includes(tab) ? '' : 'lg:grid-cols-[minmax(0,1fr)_120px]'}`}>
           {tab === 'company' && <div className="rounded-md border border-gray-200 bg-white shadow-sm"><div className="p-5">{companyTab==='info' ? <div className="max-w-3xl space-y-3"><CompanyField label="Nama"><input className={inputClass} value={draft.company.name} onChange={e => setCompany('name', e.target.value)} /></CompanyField><CompanyField label="Kategori Usaha"><div className="flex items-center rounded-lg border border-gray-300 bg-white px-2 py-1"><span className="rounded border border-blue-300 px-2 py-1 text-sm text-blue-700">JASA / SERVICES ×</span><Search className="ml-auto h-4 w-4 text-gray-600" /></div></CompanyField><CompanyField label="Bidang Usaha"><div className="flex items-center rounded-lg border border-gray-300 bg-white px-2 py-1"><span className="rounded border border-blue-300 px-2 py-1 text-sm text-blue-700">Automotive (Otomotif) ×</span><Search className="ml-auto h-4 w-4 text-gray-600" /></div></CompanyField><CompanyField label="Telepon"><input className={inputClass} value={draft.company.phone} onChange={e => setCompany('phone', e.target.value)} /></CompanyField><CompanyField label="Faksimili"><input className={inputClass} /></CompanyField><CompanyField label="Email"><input className={inputClass} type="email" value={draft.company.email} onChange={e => setCompany('email', e.target.value)} /></CompanyField><CompanyField label="Tgl Mulai Data"><input className={inputClass} type="date" defaultValue="2025-01-01" /></CompanyField><CompanyField label="Periode Akuntansi"><select className={inputClass} defaultValue="Januari - Desember"><option>Januari - Desember</option></select></CompanyField><CompanyField label="Mata Uang"><div className="flex gap-2"><input className={`${inputClass} bg-gray-100`} value="Indonesian Rupiah" readOnly /><button type="button" className="rounded-lg border px-3">✎</button></div></CompanyField></div> : <div className="max-w-3xl space-y-3"><CompanyField label="Alamat" multiline><textarea className={`${inputClass} resize-y`} rows={4} value={draft.company.address} onChange={e => setCompany('address', e.target.value)} placeholder="Jalan" /></CompanyField><CompanyField label="Kota"><div className="flex items-center rounded-lg border border-gray-300 bg-white px-2 py-1"><span className="rounded border border-blue-300 px-2 py-1 text-sm text-blue-700">Kota Makassar ×</span></div></CompanyField><CompanyField label="Provinsi"><input className={inputClass} defaultValue="Sulawesi Selatan" /></CompanyField><CompanyField label="K.Pos"><input className={inputClass} /></CompanyField><CompanyField label="Negara"><input className={inputClass} defaultValue="Indonesia" /></CompanyField></div>}</div></div>}
 
           {tab === 'features' && <AccurateFeaturesPanel activeTab={innerTab} />}
@@ -387,40 +376,11 @@ export default function SettingsPage() {
                 <DefaultAccountSection title="Perintah Stok Opname" fields={[defaultAccountField('stockVarianceCoaId', 'Beban Selisih Stok', ['Expense'])]} />
                 <DefaultAccountSection title="Pekerjaan Pesanan" fields={[defaultAccountField('jobAccountCoaId', 'Akun Pekerjaan', ['Asset', 'Expense']), defaultAccountField('jobCostDifferenceCoaId', 'Selisih Biaya', ['Expense'])]} />
               </>}
-              <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun di halaman ini berlaku sama untuk semua cabang. Akun kas, bank, dan tujuan setoran tetap diatur pada tab <b>Kas Cabang</b>.</p>
+              <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun di halaman ini berlaku sama untuk semua cabang. Akun kas, bank, dan tujuan setoran tetap diatur pada tab <b>Pemetaan Kas Cabang</b>.</p>
             </div>
           )}
 
-          {(tab === 'cashBranches' || (tab === 'defaultAccounts' && innerTab === 'kasCabang')) && (
-            <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
-              <TabHeader title="Kas Cabang" description="Tentukan rekening penerimaan dan tujuan setoran untuk setiap cabang." />
-              <div className="space-y-3">
-                {data.branches.map(branch => {
-                  const mapping = branchAccountSettings.find(item => item.branchId === branch.id) || { branchId: branch.id };
-                  const branchCashAccounts = cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === branch.id));
-                  const journalCashAccounts = branchCashAccounts.map(account => ({ ...account, name: `${account.name} · Jurnal: ${account.ledgerAccountName || 'belum dikaitkan'}` }));
-                  return (
-                    <div key={branch.id} className="overflow-hidden rounded-md border border-gray-300 bg-white">
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-300 bg-white px-3 py-3">
-                        <div className="min-w-0"><p className="font-bold uppercase tracking-wide text-slate-800">{branch.name}</p><p className="mt-0.5 truncate text-xs text-slate-500">{branch.id} · {branch.address}</p></div>
-                        <div className="flex items-center gap-3">
-                          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">Kode dokumen<input className="h-8 w-12 rounded border border-slate-300 bg-white text-center font-bold uppercase" maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={e => setDraft(prev => ({ ...prev, branchDocumentCodes: { ...prev.branchDocumentCodes, [branch.id]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></label>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${branch.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{branch.isActive ? 'Aktif' : 'Nonaktif'}</span>
-                        </div>
-                      </div>
-                      <div className="p-3">
-                        <DefaultAccountSection title="Kas & Bank" fields={[
-                          <SettingSelect horizontal label="Kas tunai default" value={mapping.cashAccountId} options={journalCashAccounts.filter(account => account.accountType === 'cash')} onChange={value => setBranchAccount(branch.id, 'cashAccountId', value)} />,
-                          <SettingSelect horizontal label="Bank transfer default" value={mapping.bankAccountId} options={journalCashAccounts.filter(account => account.accountType === 'bank')} onChange={value => setBranchAccount(branch.id, 'bankAccountId', value)} />,
-                          <SettingSelect horizontal label="Tujuan setoran tunai" value={mapping.depositDestinationAccountId} options={journalCashAccounts.filter(account => account.accountType !== 'cash')} onChange={value => setBranchAccount(branch.id, 'depositDestinationAccountId', value)} />,
-                        ]} note="Kas tunai dan bank diatur per cabang agar penerimaan dan setoran tidak tercampur antar cabang." />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {cashMappingActive && <BranchCashMappingSettings branches={data.branches} />}
 
           {tab === 'documents' && (
             <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
@@ -429,6 +389,10 @@ export default function SettingsPage() {
                 <DocumentCard title="Work Order" value={draft.documents.workOrderPrefix} preview={previews.workOrder} onChange={value => setDraft(prev => ({ ...prev, documents: { ...prev.documents, workOrderPrefix: value.toUpperCase() } }))} />
                 <DocumentCard title="Invoice Penjualan" value={draft.documents.invoicePrefix} preview={previews.invoice} onChange={value => setDraft(prev => ({ ...prev, documents: { ...prev.documents, invoicePrefix: value.toUpperCase() } }))} />
                 <CompanyField label="Digit urutan"><select className={inputClass} value={draft.documents.sequenceDigits} onChange={e => setDraft(prev => ({ ...prev, documents: { ...prev.documents, sequenceDigits: Number(e.target.value) } }))}><option value={3}>3 digit</option><option value={4}>4 digit</option></select></CompanyField>
+              </div>
+              <div className="mt-5 space-y-3 border-t border-gray-200 pt-4">
+                <h3 className="font-semibold text-gray-800">Kode dokumen per cabang</h3>
+                {data.branches.map(branch => <CompanyField key={branch.id} label={branch.name}><input aria-label={`Kode dokumen ${branch.name}`} className={`${inputClass} max-w-24 uppercase`} maxLength={1} value={draft.branchDocumentCodes[branch.id] || ''} onChange={event => setDraft(previous => ({ ...previous, branchDocumentCodes: { ...previous.branchDocumentCodes, [branch.id]: event.target.value.toUpperCase().replace(/[^A-Z]/g, '') } }))} /></CompanyField>)}
               </div>
             </div>
           )}
@@ -597,11 +561,11 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {tab !== 'guide' && tab !== 'backup' && tab !== 'maintenance' && <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+          {!cashMappingActive && tab !== 'guide' && tab !== 'backup' && tab !== 'maintenance' && <button onClick={save} disabled={saving} title="Simpan Pengaturan" className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
             <Save className="h-12 w-12" />
           </button>}
 
-          {tab !== 'guide' && tab !== 'backup' && tab !== 'maintenance' && <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
+          {!cashMappingActive && tab !== 'guide' && tab !== 'backup' && tab !== 'maintenance' && <div className="mt-3 flex justify-end border-t border-gray-200 pt-3 lg:hidden">
             <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               <Save className="h-4 w-4" /> {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>
@@ -623,14 +587,14 @@ function InnerTabs({ tab, active, onChange }: { tab: Tab; active: string; onChan
     purchases: [['pembelian', 'Pembelian']],
     inventory: [['persediaan', 'Persediaan']],
     tax: [['pajak', 'Pajak']],
-    defaultAccounts: [['barang', 'Barang & Jasa'], ['perusahaan', 'Perusahaan'], ['penjualanPembelian', 'Penjualan/Pembelian'], ['persediaan', 'Persediaan'], ['kasCabang', 'Kas Cabang']],
+    defaultAccounts: [['barang', 'Barang & Jasa'], ['perusahaan', 'Perusahaan'], ['penjualanPembelian', 'Penjualan/Pembelian'], ['persediaan', 'Persediaan'], ['kasCabang', 'Pemetaan Kas Cabang']],
     workflow: [['operasional', 'Operasional Bengkel']],
     security: [['keamanan', 'Keamanan & Pembatasan']],
     ai: [['ai', 'Integrasi AI']],
     other: [['lainnya', 'Lain-lain']],
   };
   const items = tabSets[tab] || [[tab, tabs.find(item => item.id === tab)?.label || 'Preferensi']];
-  return <div className="flex h-10 items-center gap-1 overflow-x-auto border-b border-gray-300 bg-white px-2 text-xs">{items.map(([id, label]) => <button key={id} type="button" onClick={() => onChange(id)} className={`border border-b-0 px-3 py-2 ${active === id ? 'border-[#ff4081] bg-white font-bold text-gray-800' : 'border-gray-300 bg-gray-100 text-gray-600 hover:bg-white'}`}>{label}</button>)}</div>;
+  return <div className="flex h-10 items-center gap-1 overflow-x-auto border-b border-gray-300 bg-white px-2 text-xs">{items.map(([id, label]) => <button key={id} type="button" onClick={() => onChange(id)} className={`shrink-0 whitespace-nowrap border border-b-0 px-3 py-2 ${active === id ? 'border-[#ff4081] bg-white font-bold text-gray-800' : 'border-gray-300 bg-gray-100 text-gray-600 hover:bg-white'}`}>{label}</button>)}</div>;
 }
 
 function TabHeader({ title, description }: { title: string; description: string }) {
