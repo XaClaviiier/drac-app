@@ -159,3 +159,33 @@ run('mixed legacy database collations do not break balances or supplier repair',
   assert.equal(f.balance(),100);assert.equal(f.report().data.closingBalance,100);
   assert.equal(f.call({op:'repair'}).data.repaired,0);
 });
+
+run('COA balances and history include posted subaccounts with normal debit/credit and matching branch/date',t=>{
+  const f=fixture(t),previous=new Date(`${f.today}T00:00:00Z`);previous.setUTCDate(previous.getUTCDate()-1);const before=previous.toISOString().slice(0,10);
+  f.sql("INSERT INTO chart_of_accounts(id,code,name,account_type,detail_type,normal_balance) VALUES('ROOT','1000','Aset','Asset','Aset Lancar Lainnya','Debit'),('CONTRA','1900','Akumulasi','Asset','Akumulasi Penyusutan','Credit')");
+  f.sql("UPDATE chart_of_accounts SET parent_id='ROOT' WHERE id IN ('LC','LB','CONTRA')");
+  f.journal([['LC',1000,0],['EQ',0,1000]],{sourceType:'opening_balance',date:before});
+  f.journal([['EXP',200,0],['LC',0,200]]);
+  f.journal([['LB',100,0],['EQ',0,100]]);
+  f.journal([['EXP',50,0],['CONTRA',0,50]]);
+  f.journal([['LC',999,0],['EQ',0,999]],{posted:0,status:'Draft'});
+  f.journal([['LB',300,0],['EQ',0,300]],{date:'2099-01-01'});
+  f.journal([['LB',500,0],['EQ',0,500]],{branchId:'B2'});
+  const query={includeBalances:'1',asOf:f.today,branchId:'B1'};
+  const response=f.api('chart-of-accounts','GET',{}, {query});assert.equal(response.success,true,JSON.stringify(response));const accounts=Object.fromEntries(response.data.map(a=>[a.id,a]));
+  assert.equal(accounts.LC.balance,800);assert.equal(accounts.LB.balance,100);assert.equal(accounts.CONTRA.balance,50);assert.equal(accounts.EQ.balance,1100);assert.equal(accounts.ROOT.balance,850);assert.equal(accounts.ROOT.openingBalance,1000);assert.equal(accounts.ROOT.openingBalanceDate,before);assert.equal(accounts.ROOT.includesSubaccounts,true);assert.equal(accounts.FREE.balance,0);
+  const history=f.api('general-ledger','GET',{}, {query:{accountId:'ROOT',includeSubaccounts:'1',branchId:'B1',from:f.today,to:f.today}}).data;
+  assert.equal(history.openingBalance,1000);assert.equal(history.closingBalance,accounts.ROOT.balance);assert.equal(history.rows.length,3);assert.equal(history.includesSubaccounts,true);
+  const old=f.api('chart-of-accounts','GET',{}, {query:{...query,asOf:before}}).data;assert.equal(old.find(a=>a.id==='ROOT').balance,1000);
+  const plain=f.api('chart-of-accounts').data;assert.equal(Object.hasOwn(plain[0],'balance'),false);assert.equal(plain.length,response.data.length);
+});
+
+run('COA read balances reject invalid dates and inaccessible branches and retain exact line identities',t=>{
+  const f=fixture(t);f.journal([['LC',30,0],['LC',20,0],['EQ',0,50]],{sourceType:'manual'});f.journal([['LB',500,0],['EQ',0,500]],{branchId:'B2'});
+  const response=f.api('chart-of-accounts','GET',{}, {restricted:true,query:{includeBalances:'1',asOf:f.today}});assert.equal(response.success,true);assert.equal(response.data.find(a=>a.id==='LC').balance,50);assert.equal(response.data.find(a=>a.id==='LB').balance,0);
+  assert.equal(f.api('chart-of-accounts','GET',{}, {restricted:true,query:{includeBalances:'1',asOf:f.today,branchId:'B2'}}).status,403);
+  assert.equal(f.api('chart-of-accounts','GET',{}, {query:{includeBalances:'1',asOf:'2026-02-30'}}).status,422);
+  const history=f.api('general-ledger','GET',{}, {query:{accountId:'LC',includeSubaccounts:'1',from:f.today,to:f.today,branchId:'ALL'}}).data;
+  assert.equal(history.rows.length,2);assert.equal(new Set(history.rows.map(r=>r.lineId)).size,2);assert.equal(history.closingBalance,50);assert.equal(history.rows[0].sourceType,'manual');
+  assert.equal(f.api('general-ledger','GET',{}, {query:{accountId:'missing',includeSubaccounts:'1',from:f.today,to:f.today}}).status,422);
+});

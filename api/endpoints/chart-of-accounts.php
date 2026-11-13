@@ -6,8 +6,16 @@ function mapLedgerAccount(array $r): array {
         'revision'=>(int)($r['revision']??0)];
 }
 if ($method === 'GET') {
-    $rows=$pdo->query('SELECT a.*,p.name parent_name FROM chart_of_accounts a LEFT JOIN chart_of_accounts p ON p.id=a.parent_id ORDER BY a.code')->fetchAll();
-    respondSuccess(array_map('mapLedgerAccount',$rows));
+    $withBalances=($_GET['includeBalances']??'')==='1';
+    if($withBalances)$pdo->beginTransaction();
+    try {
+        $rows=$pdo->query('SELECT a.*,p.name parent_name FROM chart_of_accounts a LEFT JOIN chart_of_accounts p ON p.id=a.parent_id ORDER BY a.code')->fetchAll();
+        $balances=$withBalances?accountLedgerBalances($pdo,$rows,$requestUser,trim((string)($_GET['asOf']??date('Y-m-d'))),trim((string)($_GET['branchId']??''))):[];
+        $result=array_map(static fn(array $row):array=>array_merge(mapLedgerAccount($row),$balances[(string)$row['id']]??[]),$rows);
+        if($withBalances)$pdo->commit();
+        respondSuccess($result);
+    }catch(InvalidArgumentException $e){if($pdo->inTransaction())$pdo->rollBack();respondError($e->getMessage(),422);}
+    catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 if (!in_array($method,['POST','PUT','DELETE'],true)) respondError('Method not allowed',405);
 $types=['Kas & Bank'=>'Asset','Piutang Usaha'=>'Asset','Persediaan'=>'Asset','Aset Lancar Lainnya'=>'Asset','Aset Tetap'=>'Asset','Akumulasi Penyusutan'=>'Asset','Aset Lainnya'=>'Asset','Utang Usaha'=>'Liability','Liabilitas Jangka Pendek'=>'Liability','Liabilitas Jangka Panjang'=>'Liability','Modal'=>'Equity','Pendapatan'=>'Revenue','Beban Pokok Penjualan'=>'Expense','Beban'=>'Expense','Beban Lainnya'=>'Expense','Pendapatan Lainnya'=>'Revenue'];

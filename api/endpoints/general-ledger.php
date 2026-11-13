@@ -98,23 +98,35 @@ $to = trim((string)($_GET['to'] ?? date('Y-m-d')));
 $branchId = trim((string)($_GET['branchId'] ?? ''));
 if ($accountId === '') respondError('Akun wajib dipilih', 422);
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/D', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $to) || $from > $to) respondError('Rentang tanggal tidak valid', 422);
-if ($branchId !== '') requireAccessibleBranch($pdo, $requestUser, $branchId);
+foreach([$from,$to] as $date){$parsed=DateTimeImmutable::createFromFormat('!Y-m-d',$date);if(!$parsed||$parsed->format('Y-m-d')!==$date)respondError('Tanggal buku besar tidak valid',422);}
+if ($branchId !== '' && $branchId !== 'ALL') requireAccessibleBranch($pdo, $requestUser, $branchId);
+$accountIds=[$accountId];
+if(($_GET['includeSubaccounts']??'')==='1') {
+    try{$accountIds=accountLedgerDescendants($pdo->query('SELECT id,parent_id FROM chart_of_accounts')->fetchAll(),$accountId);}
+    catch(InvalidArgumentException $e){respondError($e->getMessage(),422);}
+}
+$accountMarks=implode(',',array_fill(0,count($accountIds),'?'));
+$pdo->beginTransaction();
+try {
 
 $beforeSql = 'SELECT COALESCE(SUM(l.debit-l.credit),0) FROM journal_lines l JOIN journal_entries j ON j.id COLLATE utf8mb4_unicode_ci=l.journal_id COLLATE utf8mb4_unicode_ci WHERE l.account_id=? AND j.posted=1 AND j.entry_date < ?';
-$params = [$accountId, $from];
+$beforeSql=str_replace('l.account_id=?',"l.account_id IN ($accountMarks)",$beforeSql);
+$params = array_merge($accountIds,[$from]);
 [$branchScope,$branchParams]=cashJournalScope($pdo,$requestUser,$branchId);
 $beforeSql.=' AND '.$branchScope;$params=array_merge($params,$branchParams);
 $stmt = $pdo->prepare($beforeSql); $stmt->execute($params);
 $opening = (float)$stmt->fetchColumn();
 
-$sql = 'SELECT j.id journalId,j.entry_date entryDate,j.entry_number entryNumber,j.description,j.party_type partyType,j.party_id partyId,l.debit,l.credit,l.memo,j.branch_id branchId,b.name branchName FROM journal_lines l JOIN journal_entries j ON j.id COLLATE utf8mb4_unicode_ci=l.journal_id COLLATE utf8mb4_unicode_ci LEFT JOIN branches b ON b.id COLLATE utf8mb4_unicode_ci=j.branch_id COLLATE utf8mb4_unicode_ci WHERE l.account_id=? AND j.posted=1 AND j.entry_date BETWEEN ? AND ?';
-$params = [$accountId, $from, $to];
+$sql = 'SELECT l.id lineId,l.account_id accountId,j.id journalId,j.entry_date entryDate,j.entry_number entryNumber,j.description,j.source_type sourceType,j.party_type partyType,j.party_id partyId,l.debit,l.credit,l.memo,j.branch_id branchId,b.name branchName FROM journal_lines l JOIN journal_entries j ON j.id COLLATE utf8mb4_unicode_ci=l.journal_id COLLATE utf8mb4_unicode_ci LEFT JOIN branches b ON b.id COLLATE utf8mb4_unicode_ci=j.branch_id COLLATE utf8mb4_unicode_ci WHERE l.account_id IN ('.$accountMarks.') AND j.posted=1 AND j.entry_date BETWEEN ? AND ?';
+$params = array_merge($accountIds,[$from,$to]);
 $sql.=' AND '.$branchScope;$params=array_merge($params,$branchParams);
 $sql .= ' ORDER BY j.entry_date,j.entry_number,l.id';
 $stmt = $pdo->prepare($sql); $stmt->execute($params);
 $balance = $opening; $rows = [];
 foreach ($stmt->fetchAll() as $row) {
     $debit = (float)$row['debit']; $credit = (float)$row['credit']; $balance += $debit - $credit;
-    $rows[] = ['journalId'=>$row['journalId'],'date'=>$row['entryDate'],'number'=>$row['entryNumber'],'description'=>$row['description'],'memo'=>$row['memo'],'branchId'=>$row['branchId'],'branchName'=>$row['branchName'],'debit'=>$debit,'credit'=>$credit,'balance'=>$balance];
+    $rows[] = ['lineId'=>$row['lineId'],'accountId'=>$row['accountId'],'sourceType'=>$row['sourceType'],'journalId'=>$row['journalId'],'date'=>$row['entryDate'],'number'=>$row['entryNumber'],'description'=>$row['description'],'memo'=>$row['memo'],'branchId'=>$row['branchId'],'branchName'=>$row['branchName'],'debit'=>$debit,'credit'=>$credit,'balance'=>round($balance,2)];
 }
-respondSuccess(['accountId'=>$accountId,'from'=>$from,'to'=>$to,'openingBalance'=>$opening,'rows'=>$rows,'closingBalance'=>$balance]);
+$pdo->commit();
+respondSuccess(['accountId'=>$accountId,'from'=>$from,'to'=>$to,'openingBalance'=>$opening,'rows'=>$rows,'closingBalance'=>round($balance,2),'includesSubaccounts'=>count($accountIds)>1]);
+}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}

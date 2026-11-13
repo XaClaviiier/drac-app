@@ -63,5 +63,5 @@ if(($input['op']??'')==='journal'){
 if(($input['op']??'')==='repair'){$pdo->beginTransaction();try{$count=repairSupplierPaymentJournals($pdo);if(!empty($input['rollback']))$pdo->rollBack();else $pdo->commit();respondSuccess(['repaired'=>$count]);}catch(Throwable $e){$pdo->rollBack();throw $e;}}
 if(($input['op']??'')==='summary')respondSuccess(branchCashSummary($pdo,$requestUser));
 $endpoint=$input['endpoint']??'';
-if(!in_array($endpoint,['cash-accounts','cash-bank-report','purchase-invoices','customer-payments','branch-deposits','general-ledger','opening-balances'],true))throw new RuntimeException('Unknown fixture endpoint');
+if(!in_array($endpoint,['chart-of-accounts','cash-accounts','cash-bank-report','purchase-invoices','customer-payments','branch-deposits','general-ledger','opening-balances'],true))throw new RuntimeException('Unknown fixture endpoint');
 require __DIR__.'/../../api/endpoints/'.$endpoint.'.php';
