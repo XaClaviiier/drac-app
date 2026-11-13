@@ -29,6 +29,10 @@ function repairLegacyCashAccountDetails(PDO $pdo): int {
     $mappingUpdate=$pdo->prepare('UPDATE cash_accounts SET ledger_account_id=? WHERE id=? AND ledger_account_id=?');
     $usedByBranch=[];
     foreach($accounts as $account){
+        $ledgerId=(string)($account['ledger_account_id']??'');
+        if($ledgerId!==''&&!isset($children[$ledgerId])&&(string)($account['branch_id']??'')!=='')$usedByBranch[(string)$account['branch_id'].'|'.$ledgerId]=true;
+    }
+    foreach($accounts as $account){
         $ledgerId=(string)($account['ledger_account_id']??'');if($ledgerId==='')continue;
         $coa=null;foreach($coas as $candidate)if((string)$candidate['id']===$ledgerId){$coa=$candidate;break;}
         if(!$coa||!isset($children[$ledgerId]))continue;
@@ -52,7 +56,7 @@ function repairLegacyCashAccountDetails(PDO $pdo): int {
 }
 
 function ensureCashAccountDetails(PDO $pdo): void {
-    runVersionedApiBootstrap($pdo,'api_support_20261113_cash_account_details_v2',static function(PDO $pdo): void {
+    runVersionedApiBootstrap($pdo,'api_support_20261113_cash_account_details_v3',static function(PDO $pdo): void {
         $pdo->beginTransaction();
         try { repairLegacyCashAccountDetails($pdo);$pdo->commit(); }
         catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
