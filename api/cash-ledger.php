@@ -52,7 +52,7 @@ function repairLegacyCashAccountDetails(PDO $pdo): int {
 }
 
 function ensureCashAccountDetails(PDO $pdo): void {
-    runVersionedApiBootstrap($pdo,'api_support_20261113_cash_account_details_v1',static function(PDO $pdo): void {
+    runVersionedApiBootstrap($pdo,'api_support_20261113_cash_account_details_v2',static function(PDO $pdo): void {
         $pdo->beginTransaction();
         try { repairLegacyCashAccountDetails($pdo);$pdo->commit(); }
         catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
