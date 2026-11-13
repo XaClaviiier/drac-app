@@ -26,7 +26,7 @@ type Deposit = {
   status: string;
   createdByName?: string;
 };
-type Account = { id: string; name: string; accountType: string };
+type Account = { id: string; name: string; accountType: string; branchId?: string | null; isActive?: boolean; postingEnabled?: boolean };
 export default function BranchDeposits() {
   const { currentUser, currentBranchId } = useApp();
   const [summary, setSummary] = useState<Summary[]>([]),
@@ -62,6 +62,9 @@ export default function BranchDeposits() {
   const visible = summary.filter(
     (s) => currentBranchId === "ALL" || s.branchId === currentBranchId,
   );
+  const destinationAccounts = accounts.filter(account => account.accountType === "bank"
+    && account.isActive !== false && account.postingEnabled === true
+    && (!account.branchId || account.branchId === form.branchId));
   const open = (s: Summary) => {
     setForm({
       branchId: s.branchId,
@@ -75,6 +78,9 @@ export default function BranchDeposits() {
   };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!destinationAccounts.some(account => account.id === form.destinationAccountId)) {
+      return window.alert("Pilih rekening tujuan setoran.");
+    }
     const r = await api.create("branch-deposits", {
       ...form,
       createdBy: currentUser?.id,
@@ -209,23 +215,23 @@ export default function BranchDeposits() {
                 <IndonesianDateInput max={today} value={form.date} onChange={date=>setForm({...form,date})} className="mt-1 h-11 w-full"/>
               </label>
               <label className="block text-sm">
-                Tujuan
+                Rekening tujuan setoran
                 <select
+                  required
                   value={form.destinationAccountId}
                   onChange={(e) =>
                     setForm({ ...form, destinationAccountId: e.target.value })
                   }
                   className="mt-1 w-full rounded-lg border p-2.5"
                 >
-                  <option value="">Otomatis sesuai pengaturan cabang</option>
-                  {accounts
-                    .filter((a) => a.accountType !== "cash")
-                    .map((a) => (
+                  <option value="">Pilih rekening tujuan</option>
+                  {destinationAccounts.map((a) => (
                       <option value={a.id} key={a.id}>
                         {a.name}
                       </option>
                     ))}
                 </select>
+                {!destinationAccounts.length && <span className="mt-1 block text-xs text-amber-700">Belum ada rekening bank aktif yang siap digunakan untuk cabang ini.</span>}
               </label>
               <label className="block text-sm">
                 Nominal

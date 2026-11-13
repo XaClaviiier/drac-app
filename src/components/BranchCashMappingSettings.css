@@ -1,54 +1,52 @@
 .branch-cash-settings { padding: 24px; min-width: 0; color: #1d2b40; background: #fff; }
-.branch-cash-heading { display: flex; align-items: flex-start; gap: 10px; color: #1556d9; margin-bottom: 24px; }
-.branch-cash-heading > svg { margin-top: 4px; flex-shrink: 0; }
+.branch-cash-heading { display: flex; align-items: center; gap: 10px; color: #1556d9; margin-bottom: 18px; }
+.branch-cash-heading > svg { flex-shrink: 0; }
 .branch-cash-heading h2 { font-size: 18px; font-weight: 600; }
-.branch-cash-heading p { font-size: 13px; color: #64748b; margin-top: 4px; }
 .branch-cash-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 .branch-cash-table thead th { text-align: left; background: #f6f8fc; color: #64748b; border-block: 1px solid #d8e0eb; font-size: 12px; font-weight: 600; padding: 12px; }
 .branch-cash-table thead th:first-child { width: 23%; }
 .branch-cash-table thead th:not(:first-child) { width: 38.5%; }
 .branch-cash-table thead svg { display: inline-block; vertical-align: middle; margin-right: 5px; }
-.branch-cash-table tbody th, .branch-cash-table td { padding: 24px 12px; border-bottom: 1px solid #d8e0eb; text-align: left; vertical-align: top; }
+.branch-cash-table tbody th, .branch-cash-table td { padding: 16px 12px; border-bottom: 1px solid #d8e0eb; text-align: left; vertical-align: top; }
 .branch-cash-table tbody th > strong { display: block; padding-top: 11px; font-size: 13px; font-weight: 650; text-transform: uppercase; overflow-wrap: anywhere; }
 .branch-cash-table tbody th > small { display: block; font-size: 12px; font-weight: 400; color: #64748b; margin-top: 4px; }
 .branch-cash-mobile-label { display: none; }
 .branch-cash-picker { min-width: 0; }
-.branch-cash-control { display: flex; align-items: stretch; min-height: 70px; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; }
-.branch-cash-control.is-open { border-color: #1556d9; box-shadow: 0 0 0 2px #e6efff; }
+.branch-cash-control { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 4px; min-height: 64px; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; }
+.branch-cash-control.is-open, .branch-cash-control:focus-within { border-color: #1556d9; box-shadow: 0 0 0 2px #e6efff; }
 .branch-cash-control.has-error { border-color: #d4a363; }
-.branch-cash-trigger { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; text-align: left; }
-.branch-cash-trigger > span { min-width: 0; }
-.branch-cash-trigger strong { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.branch-cash-trigger small { display: block; font-size: 11px; color: #1556d9; margin-top: 4px; }
-.branch-cash-placeholder { font-size: 13px; color: #64748b; }
-.branch-cash-clear { display: grid; place-items: center; padding: 0 8px; color: #64748b; border-left: 1px solid #d8e0eb; }
+.branch-cash-search { display: flex; width: 100%; min-width: 0; align-items: center; gap: 4px; }
+.branch-cash-search input { min-width: 0; width: 100%; flex: 1; min-height: 24px; border: 0; background: transparent; padding: 2px; color: #1d2b40; font-size: 14px; }
+.branch-cash-settings .branch-cash-search input:focus-visible { outline: none; box-shadow: none; }
+.branch-cash-search input::placeholder { color: #64748b; }
+.branch-cash-search-button { display: grid; flex-shrink: 0; place-items: center; min-width: 24px; min-height: 24px; }
+.branch-cash-selection { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 4px; border: 1px solid #79a8ff; border-radius: 2px; background: #edf4ff; color: #1d2b40; font-size: 13px; }
+.branch-cash-selection > span { min-width: 0; overflow-wrap: anywhere; }
+.branch-cash-clear { display: grid; flex-shrink: 0; place-items: center; width: 20px; min-height: 20px; color: #52657e; }
 .branch-cash-settings svg { flex-shrink: 0; }
 .branch-cash-description { display: flex; align-items: flex-start; gap: 5px; color: #64748b; font-size: 11px; padding-top: 7px; overflow-wrap: anywhere; }
 .branch-cash-description > svg { margin-top: 2px; }
 .branch-cash-description.is-warning { color: #936014; }
-.branch-cash-options { padding: 10px; margin-top: 7px; border: 1px solid #1556d9; border-radius: 5px; background: #fff; }
-.branch-cash-options input { width: 100%; min-width: 0; border: 1px solid #cbd5e1; border-radius: 4px; padding: 9px 10px; font-size: 13px; }
-.branch-cash-results { display: grid; gap: 4px; margin-top: 8px; }
-.branch-cash-results button { text-align: left; border: 1px solid transparent; padding: 10px 8px; border-radius: 4px; background: #f6f8fc; }
-.branch-cash-results button:hover:not(:disabled) { border-color: #1556d9; background: #edf4ff; }
-.branch-cash-results strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
-.branch-cash-results small { display: block; font-size: 11px; color: #64748b; margin-top: 3px; overflow-wrap: anywhere; }
-.branch-cash-results p { font-size: 12px; color: #64748b; padding: 8px; }
+.branch-cash-options { position: fixed; z-index: 120; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #cbd5e1; border-radius: 3px; background: #fff; color: #1d2b40; box-shadow: 0 4px 10px #0f172a26; }
+.branch-cash-options button { display: flex; align-items: flex-start; gap: 8px; width: 100%; border: 0; border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; background: #fff; cursor: pointer; }
+.branch-cash-options button:last-child { border-bottom: 0; }
+.branch-cash-options button > span:last-child { min-width: 0; }
+.branch-cash-options button:hover:not(:disabled), .branch-cash-options button.is-highlighted { background: #edf4ff; }
+.branch-cash-options button:disabled { color: #64748b; cursor: not-allowed; background: #f8fafc; }
+.branch-cash-options button:focus-visible { outline: 2px solid #1556d9; outline-offset: -2px; }
+.branch-cash-option-check { display: grid; flex-shrink: 0; place-items: center; width: 18px; height: 18px; margin-top: 1px; border: 1px solid #b9c4d1; border-radius: 3px; color: #1556d9; }
+.branch-cash-options strong { display: block; font-size: 13px; font-weight: 400; overflow-wrap: anywhere; }
+.branch-cash-options small { display: block; font-size: 11px; color: #64748b; margin-top: 3px; overflow-wrap: anywhere; }
+.branch-cash-options p { font-size: 12px; color: #64748b; padding: 12px; }
 .branch-cash-settings button { cursor: pointer; }
 .branch-cash-settings button:disabled { opacity: .55; cursor: not-allowed; }
-.branch-cash-settings button:focus-visible, .branch-cash-settings input:focus-visible, .branch-cash-settings summary:focus-visible { outline: 2px solid #1556d9; outline-offset: 3px; }
-.branch-cash-additional { margin-top: 18px; font-size: 13px; }
-.branch-cash-additional summary { cursor: pointer; font-weight: 500; color: #1556d9; }
-.branch-cash-additional > p { color: #64748b; margin: 10px 0; }
-.branch-cash-deposit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: start; gap: 14px; padding: 12px 0; }
-.branch-cash-deposit > strong { padding-top: 12px; font-size: 12px; }
+.branch-cash-settings button:focus-visible, .branch-cash-settings input:focus-visible { outline: 2px solid #1556d9; outline-offset: 3px; }
 .branch-cash-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid #d8e0eb; }
 .branch-cash-footer strong { display: block; font-size: 12px; font-weight: 600; }
 .branch-cash-footer small { display: block; font-size: 12px; color: #64748b; margin-top: 3px; }
 .branch-cash-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .branch-cash-actions button, .branch-cash-error button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; border: 1px solid #cbd5e1; border-radius: 5px; padding: 9px 13px; font-size: 13px; background: #fff; }
 .branch-cash-actions .branch-cash-save { color: #fff; background: #1855d6; border-color: #1855d6; }
-.branch-cash-footnote { margin-top: 14px; font-size: 12px; color: #64748b; }
 .branch-cash-state { display: flex; align-items: center; gap: 8px; padding: 16px 0; font-size: 13px; }
 .branch-cash-error { background: #fff8eb; color: #8b5412; padding: 12px; margin-top: 12px; border-radius: 5px; font-size: 13px; }
 .branch-cash-error button { margin-top: 8px; }
@@ -61,10 +59,12 @@
   .branch-cash-table tbody th, .branch-cash-table td { padding: 7px 0; border: 0; }
   .branch-cash-table tbody th > strong { padding-top: 0; font-size: 14px; }
   .branch-cash-mobile-label { display: block; color: #64748b; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
-  .branch-cash-clear { min-width: 44px; }
-  .branch-cash-trigger, .branch-cash-results button, .branch-cash-actions button { min-height: 44px; }
-  .branch-cash-options input { font-size: 16px; }
-  .branch-cash-deposit { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  .branch-cash-search input, .branch-cash-search-button, .branch-cash-options button, .branch-cash-actions button { min-height: 36px; }
+  .branch-cash-search input { font-size: 16px; }
   .branch-cash-actions { width: 100%; }
   .branch-cash-actions button { flex: 1; }
+}
+@media (pointer: coarse) {
+  .branch-cash-clear { min-width: 44px; min-height: 44px; }
+  .branch-cash-search input, .branch-cash-search-button, .branch-cash-options button, .branch-cash-actions button { min-height: 44px; }
 }
