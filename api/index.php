@@ -17,6 +17,7 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_adjustment_details_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_simple_opname_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_coa_details_v1');
+    ensureCashAccountDetails($pdo);
     runVersionedApiBootstrap($pdo, 'api_support_20260915_customer_import_v1', static function(PDO $pdo): void {
         ensureCustomerImportSchema($pdo);
     });

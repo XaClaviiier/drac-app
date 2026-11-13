@@ -22,6 +22,54 @@ function fixture(t){
 }
 const cashForm={code:'CASH',name:'Kas Cabang Satu',accountType:'cash',branchId:'B1',ledgerAccountId:'LC',isActive:true};
 
+run('legacy default cash metadata is repaired after the old bootstrap and payments keep their original ledger',t=>{
+  const f=fixture(t);
+  f.sql("CREATE TABLE app_schema_migrations(migration_key VARCHAR(100) PRIMARY KEY)");
+  f.sql("INSERT INTO app_schema_migrations VALUES('api_support_20260910_coa_details_v1'),('coa_accurate_alignment_v1')");
+  f.sql("UPDATE chart_of_accounts SET code='PR.110102',detail_type='' WHERE id='LC'");
+  f.sql("UPDATE chart_of_accounts SET code='PR.110101',detail_type=NULL WHERE id='LB'");
+  f.journal([['LC',1000,0],['EQ',0,1000]],{sourceType:'opening_balance'});
+  const oldLines=f.sql('SELECT * FROM journal_lines ORDER BY id');
+  const oldMappings=f.sql('SELECT * FROM cash_accounts ORDER BY id');
+  assert.equal(f.balances().find(a=>a.id==='CASH').postingEnabled,false);
+  assert.equal(f.call({op:'cash_details_bootstrap'}).success,true);
+  const cash=f.balances().find(a=>a.id==='CASH');
+  assert.equal(cash.postingEnabled,true);assert.equal(cash.mappingError,null);assert.equal(cash.balance,1000);
+  assert.equal(f.balances().find(a=>a.id==='BANK').postingEnabled,true);
+  assert.deepEqual(f.sql('SELECT * FROM journal_lines ORDER BY id'),oldLines);
+  assert.deepEqual(f.sql('SELECT * FROM cash_accounts ORDER BY id'),oldMappings);
+  const metadata=f.sql("SELECT id,detail_type,revision FROM chart_of_accounts WHERE id IN ('LC','LB') ORDER BY id");
+  assert.ok(metadata.every(a=>a.detail_type==='Kas & Bank'&&Number(a.revision)===1));
+  f.call({op:'cash_details_bootstrap'});assert.deepEqual(f.sql("SELECT id,detail_type,revision FROM chart_of_accounts WHERE id IN ('LC','LB') ORDER BY id"),metadata);
+  const paid=f.api('customer-payments','POST',{invoiceId:'SI',date:f.today,amount:100,paymentMethod:'Tunai',accountId:'CASH'});
+  assert.equal(paid.success,true,JSON.stringify(paid));assert.equal(f.balance(),1100);
+  assert.equal(Number(f.sql("SELECT SUM(debit-credit) amount FROM journal_lines WHERE account_id='AR'")[0].amount),-100);
+});
+
+run('legacy metadata repair preserves explicit account types, inactive accounts, custom codes and invalid mappings',t=>{
+  const f=fixture(t);
+  f.sql("UPDATE chart_of_accounts SET code='PR.110102',detail_type='Piutang Usaha' WHERE id='LC'");
+  f.sql("UPDATE chart_of_accounts SET code='PR.110101',detail_type='',is_active=0 WHERE id='LB'");
+  f.sql("UPDATE chart_of_accounts SET detail_type='' WHERE id='LC2'");
+  f.call({op:'cash_details_bootstrap'});
+  const rows=Object.fromEntries(f.sql('SELECT * FROM chart_of_accounts').map(a=>[a.id,a]));
+  assert.equal(rows.LC.detail_type,'Piutang Usaha');assert.equal(Number(rows.LC.revision),0);
+  assert.equal(rows.LB.detail_type,'Kas & Bank');assert.equal(Number(rows.LB.is_active),0);
+  assert.equal(rows.LC2.detail_type,'');assert.equal(Number(rows.LC2.revision),0);
+  assert.ok(f.balances().every(a=>a.postingEnabled===false));
+});
+
+run('legacy cash mappings to a parent move to unused detail accounts without touching journals',t=>{
+  const f=fixture(t);
+  f.sql("INSERT INTO chart_of_accounts(id,code,name,account_type,detail_type,normal_balance,parent_id) VALUES('PRROOT','PR.1101','PERINTIS CASH & BANK','Asset','Kas & Bank','Debit','ROOT'),('PRBANK','PR.110101','PERINTIS BANK','Asset','Kas & Bank','Debit','PRROOT'),('PRCASH','PR.110102','PERINTIS KAS KECIL','Asset','Kas & Bank','Debit','PRROOT')");
+  f.sql("UPDATE cash_accounts SET branch_id='B1',ledger_account_id='PRROOT' WHERE id='CASH'");
+  f.sql("UPDATE branches SET name='PERINTIS' WHERE id='B1'");
+  f.call({op:'cash_details_bootstrap'});
+  const mapped=f.sql("SELECT ledger_account_id FROM cash_accounts WHERE id='CASH'")[0].ledger_account_id;
+  assert.equal(mapped,'PRCASH');assert.equal(f.balances().find(a=>a.id==='CASH').mappingError,null);
+  assert.equal(f.sql("SELECT COUNT(*) n FROM journal_lines WHERE account_id='PRROOT'")[0].n,0);
+});
+
 run('customer create, edit, delete update cash, receivable and invoice together',t=>{
   const f=fixture(t),payload={invoiceId:'SI',date:f.today,amount:300,paymentMethod:'Tunai',accountId:'CASH'};
   const created=f.api('customer-payments','POST',payload);assert.equal(created.success,true,JSON.stringify(created));

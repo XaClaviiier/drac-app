@@ -1,5 +1,64 @@
 <?php
 /** Kas/bank and Buku Besar share posted journal lines as their source of truth. */
+function repairLegacyCashAccountDetails(PDO $pdo): int {
+    // Older installations already completed the schema bootstrap before the
+    // detail-type alignment was added. Restore only blank metadata for known
+    // cash/bank codes; keep account IDs, mappings, activation and journals intact.
+    $codes=[];
+    foreach(require __DIR__.'/coa-seed.php' as $seed)if($seed[1]==='BANK')$codes[]=$seed[0];
+    $marks=implode(',',array_fill(0,count($codes),'?'));
+    $find=$pdo->prepare("SELECT DISTINCT c.id FROM chart_of_accounts c
+        JOIN cash_accounts a ON a.ledger_account_id COLLATE utf8mb4_unicode_ci=c.id COLLATE utf8mb4_unicode_ci
+        WHERE c.code IN ($marks) AND c.account_type='Asset' AND c.normal_balance='Debit'
+        AND TRIM(COALESCE(c.detail_type,''))=''");
+    $find->execute($codes);
+    $update=$pdo->prepare("UPDATE chart_of_accounts SET detail_type='Kas & Bank',revision=revision+1
+        WHERE id=? AND account_type='Asset' AND normal_balance='Debit' AND TRIM(COALESCE(detail_type,''))=''");
+    $count=0;
+    foreach($find->fetchAll() as $row){$update->execute([$row['id']]);$count+=$update->rowCount();}
+
+    // Older branch records were sometimes linked to the group account
+    // (1101/PR.1101/CK.1101) instead of a detail account. Repair only mappings
+    // with no journal history, so existing posted lines are never reassigned.
+    $branches=$pdo->query('SELECT id,name FROM branches')->fetchAll();
+    $accounts=$pdo->query('SELECT id,name,account_type,branch_id,ledger_account_id FROM cash_accounts WHERE is_active=1 ORDER BY branch_id,id')->fetchAll();
+    $coas=$pdo->query('SELECT id,code,parent_id,is_active FROM chart_of_accounts')->fetchAll();
+    $byCode=[];foreach($coas as $coa)$byCode[(string)$coa['code']]=$coa;
+    $children=[];foreach($coas as $coa)if((string)($coa['parent_id']??'')!=='')$children[(string)$coa['parent_id']]=true;
+    $journalCheck=$pdo->prepare('SELECT COUNT(*) FROM journal_lines WHERE account_id=?');
+    $mappingUpdate=$pdo->prepare('UPDATE cash_accounts SET ledger_account_id=? WHERE id=? AND ledger_account_id=?');
+    $usedByBranch=[];
+    foreach($accounts as $account){
+        $ledgerId=(string)($account['ledger_account_id']??'');if($ledgerId==='')continue;
+        $coa=null;foreach($coas as $candidate)if((string)$candidate['id']===$ledgerId){$coa=$candidate;break;}
+        if(!$coa||!isset($children[$ledgerId]))continue;
+        $journalCheck->execute([$ledgerId]);if((int)$journalCheck->fetchColumn()>0)continue;
+        $branchName='';foreach($branches as $branch)if((string)$branch['id']===(string)$account['branch_id']){$branchName=strtoupper((string)$branch['name']);break;}
+        $prefix=str_contains($branchName,'PERINTIS')?'PR':(str_contains($branchName,'CAKALANG')?'CK':(str_contains($branchName,'MAMUJU')?'MM':(str_contains($branchName,'HERTASNING')?'HT':'')));
+        if($prefix==='')continue;
+        $name=strtoupper((string)$account['name']);
+        $candidates=$account['account_type']==='bank'
+            ? ($prefix==='PR'?['PR.110101']:[$prefix.'.1101-02'])
+            : (str_contains($name,'PETTY')||str_contains($name,'PATTY')
+                ? [$prefix.'.1101-03', $prefix.'.1101-01']
+                : ($prefix==='PR'?['PR.110102']:[$prefix.'.1101-01',$prefix.'.1101-03']));
+        $target=null;
+        foreach($candidates as $code){$candidate=$byCode[$code]??null;if(!$candidate||!(bool)$candidate['is_active']||isset($children[(string)$candidate['id']]))continue;$key=(string)$account['branch_id'].'|'.(string)$candidate['id'];if(isset($usedByBranch[$key]))continue;$target=$candidate;break;}
+        if(!$target)continue;
+        $mappingUpdate->execute([(string)$target['id'],(string)$account['id'],$ledgerId]);
+        if($mappingUpdate->rowCount()>0){$usedByBranch[(string)$account['branch_id'].'|'.(string)$target['id']]=true;$count++;}
+    }
+    return $count;
+}
+
+function ensureCashAccountDetails(PDO $pdo): void {
+    runVersionedApiBootstrap($pdo,'api_support_20261113_cash_account_details_v1',static function(PDO $pdo): void {
+        $pdo->beginTransaction();
+        try { repairLegacyCashAccountDetails($pdo);$pdo->commit(); }
+        catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+    });
+}
+
 function cashJournalScope(PDO $pdo, array $actor, string $branchId = ''): array {
     if ($branchId !== '' && $branchId !== 'ALL') {
         requireAccessibleBranch($pdo, $actor, $branchId);

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Banknote,
   Edit3,
@@ -49,6 +49,7 @@ type CashAccount = {
   branchId?: string;
   isActive?: boolean;
   postingEnabled?: boolean;
+  mappingError?: string | null;
 };
 type BranchAccountSetting = {
   branchId: string;
@@ -99,10 +100,9 @@ const demoPaymentRows: PaymentRow[] = [
   },
 ];
 
-const demoCashAccounts: CashAccount[] = [
-  { id: "demo-cash", name: "Kas Perintis", accountType: "cash", branchId: "BR-001" },
-  { id: "demo-bank-bca", name: "Bank BCA Cakalang", accountType: "bank", branchId: "BR-001" },
-];
+const accountIssue = (account: CashAccount) => account.isActive === false
+  ? "Akun nonaktif."
+  : account.mappingError || (account.postingEnabled === false ? "Kode perkiraan nonaktif atau belum siap menerima pembayaran." : "");
 
 export default function CustomerPayments() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -139,24 +139,30 @@ export default function CustomerPayments() {
   };
   const [form, setForm] = useState(emptyForm);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
+  const [accountError, setAccountError] = useState("");
+  const loadRequest = useRef(0);
 
   const load = async () => {
+    const request = ++loadRequest.current;
     setLoading(true);
+    setAccountError("");
     const [p, a, s] = await Promise.all([
       api.get("customer-payments"),
       api.get("cash-accounts"),
       api.get<BranchAccountSetting[]>("branch-account-settings"),
     ]);
+    if (request !== loadRequest.current) return;
     if (p.success) setRows(p.data || []);
     else if (import.meta.env.DEV) setRows(demoPaymentRows);
     else window.alert(p.message);
     if (a.success) setAccounts(a.data || []);
-    else if (import.meta.env.DEV) setAccounts(demoCashAccounts);
-    if (s.success) setAccountSettings(s.data || []);
+    else { setAccounts([]);setAccountError(a.message || "Daftar kas/bank gagal dimuat."); }
+    setAccountSettings(s.success ? s.data || [] : []);
     setLoading(false);
   };
   useEffect(() => {
     void load();
+    return () => { loadRequest.current++; };
   }, []);
 
   useEffect(() => {
@@ -222,22 +228,47 @@ export default function CustomerPayments() {
       })
       .slice(0, 60);
   }, [unpaid, invoiceSearch, data.customers]);
+  const formInvoiceChoices = editingPayment && invoice ? [invoice]
+    : invoice && !invoiceChoices.some(item => item.id === invoice.id) ? [invoice, ...invoiceChoices] : invoiceChoices;
   const paymentAccountOptions = accounts.filter(
-    (a) => a.isActive !== false && a.postingEnabled !== false && (!a.branchId || a.branchId === invoice?.branchId),
+    (a) => (!a.branchId || a.branchId === invoice?.branchId)
+      && (a.isActive !== false || a.id === editingPayment?.accountId),
   );
+  const usablePaymentAccounts = paymentAccountOptions.filter(a => !accountIssue(a));
+  const relevantPaymentAccounts = paymentAccountOptions.filter(a => editingPayment || paymentMode === "multi"
+    || a.accountType === (paymentMode === "cash" ? "cash" : "bank"));
+  const blockedPaymentAccounts = relevantPaymentAccounts.filter(a => !!accountIssue(a));
+  const neededAccountTypes: CashAccount["accountType"][] = editingPayment ? []
+    : paymentMode === "transfer" ? ["bank"] : paymentMode === "multi" && form.amount2 > 0 ? ["cash", "bank"] : ["cash"];
+  const missingAccountTypes = neededAccountTypes.filter(type => !paymentAccountOptions.some(a => a.accountType === type));
+  const noPaymentAccounts = !!invoice && !loading && !accountError
+    && (!relevantPaymentAccounts.length || missingAccountTypes.length > 0);
+  const selectedAccountsReady = !loading && !accountError
+    && usablePaymentAccounts.some(a => a.id === form.accountId)
+    && (!(form.amount2 > 0) || usablePaymentAccounts.some(a => a.id === form.accountId2));
   const totalReceived = Number(form.amount || 0) + Number(form.amount2 || 0);
   const paymentMaximum = editingPayment ? maximumEditableAmount : outstanding;
   const allocatedAmount = Math.min(totalReceived, paymentMaximum);
   const unappliedAmount = Math.max(0, totalReceived - allocatedAmount);
   const balanceAfterPayment = Math.max(0, paymentMaximum - allocatedAmount);
   const defaultAccountId = (type: CashAccount["accountType"], branchId = invoice?.branchId) => {
-    const options = accounts.filter((a) => a.isActive !== false && a.postingEnabled !== false && (!a.branchId || a.branchId === branchId));
+    const options = accounts.filter((a) => !accountIssue(a) && a.accountType === type && (!a.branchId || a.branchId === branchId));
     const setting = accountSettings.find((item) => item.branchId === branchId);
     const configured = type === "cash" ? setting?.cashAccountId : setting?.bankAccountId;
     return configured && options.some((account) => account.id === configured)
       ? configured
       : options.find((account) => account.accountType === type)?.id || "";
   };
+  // A WO can open the form before account requests finish. Apply its branch
+  // defaults once the accounts arrive, without replacing a user's selection.
+  useEffect(() => {
+    if (!showForm || editingPayment || !invoice?.branchId) return;
+    setForm(current => {
+      const accountId = current.accountId || defaultAccountId(paymentMode === "transfer" ? "bank" : "cash", invoice.branchId);
+      const accountId2 = current.accountId2 || (paymentMode === "multi" ? defaultAccountId("bank", invoice.branchId) : "");
+      return accountId === current.accountId && accountId2 === current.accountId2 ? current : { ...current, accountId, accountId2 };
+    });
+  }, [accounts, accountSettings, showForm, editingPayment, invoice?.branchId, paymentMode]);
   const changePaymentMode = (mode: PaymentMode) => {
     setPaymentMode(mode);
     const cashAccountId = defaultAccountId("cash");
@@ -376,6 +407,7 @@ export default function CustomerPayments() {
   };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedAccountsReady) return window.alert("Pilih kas/bank yang aktif dan memiliki kode perkiraan yang valid.");
     const maximum = editingPayment ? maximumEditableAmount : outstanding;
     const amount2 = Number(form.amount2 || 0);
     const combinedAmount = Number(form.amount || 0) + amount2;
@@ -507,8 +539,23 @@ export default function CustomerPayments() {
     setForm(emptyForm);
   };
 
+  const accountNotice = !loading && (accountError || blockedPaymentAccounts.length > 0 || noPaymentAccounts) && (
+    <div role="alert" className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      {accountError ? <p>Daftar kas/bank gagal dimuat: {accountError}</p> : <>
+        {noPaymentAccounts && <p>Belum ada {missingAccountTypes.map(type => type === "cash" ? "kas tunai" : "bank/transfer").join(" dan ") || "kas/bank"} aktif untuk cabang faktur ini.</p>}
+        {blockedPaymentAccounts.map(account => <p key={account.id}><b>{account.name}:</b> {accountIssue(account)}</p>)}
+        <p>{hasPermission("settings:edit") ? "Periksa hubungan kode perkiraan di pengaturan akun, lalu muat ulang pilihan kas/bank." : "Minta admin memeriksa pengaturan akun kas/bank cabang ini."}</p>
+        {hasPermission("report:view") && <div className="flex flex-wrap gap-3 font-semibold underline">
+          <Link to="/cash-accounts" target="_blank" rel="noreferrer">Buka Kas Cabang</Link>
+          <Link to="/bank-accounts" target="_blank" rel="noreferrer">Buka Bank / Transfer</Link>
+        </div>}
+      </>}
+    </div>
+  );
+
   return (
     <div className="app-module-page">
+      {!showForm && accountError && accountNotice}
       {/* Subtab Pembayaran Pelanggan: daftar, data baru/edit, dan detail pembayaran. */}
       <div className={`${ui.childBar} hidden lg:flex`}>
         <button
@@ -848,9 +895,9 @@ export default function CustomerPayments() {
                   className="mt-1 w-full rounded-lg border p-2.5 disabled:bg-gray-100"
                 >
                   <option value="">
-                    Pilih faktur ({invoiceChoices.length})
+                    Pilih faktur ({formInvoiceChoices.length})
                   </option>
-                  {(editingPayment && invoice ? [invoice] : invoiceChoices).map((i) => (
+                  {formInvoiceChoices.map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.invoiceNumber} · {i.customerName} ·{" "}
                       {rupiah(i.total - i.payment)}
@@ -892,6 +939,8 @@ export default function CustomerPayments() {
                   <button key={value} type="button" onClick={() => changePaymentMode(value)} className={`rounded-md px-3 py-2 ${paymentMode === value ? "bg-white text-blue-700 shadow-sm" : "text-gray-600"}`}>{label}</button>
                 ))}
               </div>}
+              {loading && <p role="status" className="text-sm text-gray-500">Memuat pilihan kas/bank...</p>}
+              {accountNotice}
               <div className="space-y-2 rounded-xl border border-gray-200 p-3">
                 {(editingPayment
                   ? [{label: "Pembayaran 1", amount: "amount", account: "accountId", type: undefined as CashAccount["accountType"] | undefined, required: true}]
@@ -902,13 +951,14 @@ export default function CustomerPayments() {
                   <div key={item.label} className="grid min-w-0 grid-cols-[4.75rem_minmax(7rem,0.9fr)_minmax(0,1.2fr)] items-center gap-1.5 sm:grid-cols-[7rem_8rem_minmax(0,1fr)] sm:gap-2">
                     <b className="whitespace-nowrap text-[11px] sm:text-xs">{item.label}</b>
                     <input type="text" inputMode="numeric" pattern="[0-9.]*" placeholder="0" value={formatAmountInput(form[item.amount as "amount" | "amount2"])} onChange={(e) => setForm({ ...form, [item.amount]: parseAmountInput(e.target.value) })} className="min-w-0 rounded-lg border px-2 py-2 text-right text-xs font-semibold sm:text-sm" />
-                    <select disabled={!!editingPayment && item.amount === "amount2"} required={item.required && !editingPayment} value={form[item.account as "accountId" | "accountId2"]} onChange={(e) => setForm({ ...form, [item.account]: e.target.value })} className="min-w-0 rounded-lg border px-1.5 py-2 text-[11px] sm:px-2 sm:text-sm">
+                    <select aria-label={`Akun ${item.label}`} disabled={loading || (!!editingPayment && item.amount === "amount2")} required={item.required && !editingPayment} value={form[item.account as "accountId" | "accountId2"]} onChange={(e) => setForm({ ...form, [item.account]: e.target.value })} className="min-w-0 rounded-lg border px-1.5 py-2 text-[11px] sm:px-2 sm:text-sm">
                       <option value="">Pilih {item.type === "bank" ? "bank" : item.type === "cash" ? "kas" : "kas/bank"}</option>
-                      {paymentAccountOptions.filter((a) => !item.type || a.accountType === item.type).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      {paymentAccountOptions.filter((a) => !item.type || a.accountType === item.type).map((a) => <option key={a.id} value={a.id} disabled={!!accountIssue(a)}>{a.name}{accountIssue(a) ? " — perlu perbaikan" : ""}</option>)}
                     </select>
                   </div>
                 ))}
                 {!editingPayment && paymentMode === "multi" && <small className="block text-gray-500">Nominal Transfer boleh dikosongkan jika pembayaran hanya tunai.</small>}
+                <button type="button" disabled={loading} onClick={() => void load()} className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5"/>Muat ulang kas/bank</button>
               </div>
               <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm">
                 <h3 className="mb-2 font-semibold text-blue-900">Distribusi Pembayaran</h3>
@@ -953,7 +1003,7 @@ export default function CustomerPayments() {
               >
                 Batal
               </button>
-              <button className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white">
+              <button disabled={!selectedAccountsReady} className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white disabled:opacity-50">
                 {editingPayment ? "Simpan Perubahan" : "Simpan Pembayaran"}
               </button>
             </footer>
