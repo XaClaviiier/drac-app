@@ -24,6 +24,8 @@ try {
         $used=$pdo->prepare('SELECT (SELECT COUNT(*) FROM chart_of_accounts WHERE parent_id=?)+(SELECT COUNT(*) FROM cash_accounts WHERE ledger_account_id=?)+(SELECT COUNT(*) FROM branch_account_settings WHERE receivable_coa_id=? OR service_revenue_coa_id=? OR goods_revenue_coa_id=? OR inventory_coa_id=?)');
         $used->execute([$id,$id,$id,$id,$id,$id]);
         if((int)$used->fetchColumn()>0)throw new DomainException('Akun sedang digunakan. Nonaktifkan akun bila tidak dipakai.',422);
+        $history=$pdo->prepare('SELECT COUNT(*) FROM journal_lines WHERE account_id=?');$history->execute([$id]);
+        if((int)$history->fetchColumn()>0)throw new DomainException('Akun memiliki riwayat jurnal dan tidak dapat dihapus.',422);
         $pdo->prepare('DELETE FROM chart_of_accounts WHERE id=?')->execute([$id]);
         $pdo->commit();respondSuccess(null,'Akun dihapus');
     }
@@ -36,6 +38,8 @@ try {
     if(!in_array($normal,['Debit','Credit'],true))throw new InvalidArgumentException('Saldo normal tidak valid');
     $parent=trim((string)($d['parentId']??''));
     if($parent!=='') {
+        $cashParent=$pdo->prepare('SELECT COUNT(*) FROM cash_accounts WHERE ledger_account_id=?');$cashParent->execute([$parent]);
+        if((int)$cashParent->fetchColumn()>0)throw new InvalidArgumentException('Kode perkiraan kas/bank yang sudah terhubung harus tetap menjadi akun detail.');
         if(!isset($byId[$parent]))throw new InvalidArgumentException('Akun induk tidak ditemukan');
         if($byId[$parent]['account_type']!==$type)throw new InvalidArgumentException('Tipe akun induk harus sesuai');
         if(!(bool)$byId[$parent]['is_active']&&(!$existing||$existing['parent_id']!==$parent))throw new InvalidArgumentException('Akun induk nonaktif');
@@ -53,6 +57,12 @@ try {
     if(!preg_match('/^[A-Z0-9._-]+$/D',$code))throw new InvalidArgumentException('Kode hanya boleh huruf, angka, titik, garis bawah, dan tanda hubung');
     foreach($all as $row)if(strcasecmp($row['code'],$code)===0&&$row['id']!==$id)throw new InvalidArgumentException('Kode akun sudah digunakan');
     $active=!empty($d['isActive'])?1:0;
+    if($existing) {
+        $linked=$pdo->prepare('SELECT COUNT(*) FROM cash_accounts WHERE ledger_account_id=? AND is_active=1');$linked->execute([$id]);
+        if((int)$linked->fetchColumn()>0&&(!$active||$type!=='Asset'||$detail!=='Kas & Bank'||$normal!=='Debit')) {
+            throw new InvalidArgumentException('Akun masih terkait kas/bank aktif. Pertahankan tipe Kas & Bank dan saldo normal Debit, atau nonaktifkan akun kas/bank terlebih dahulu.');
+        }
+    }
     if($method==='POST') {
         $id=generateId();$pdo->prepare('INSERT INTO chart_of_accounts(id,code,name,account_type,parent_id,normal_balance,is_active,detail_type,notes) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$id,$code,$name,$type,$parent?:null,$normal,$active,$detail,$notes]);
     } else {

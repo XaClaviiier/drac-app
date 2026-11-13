@@ -14,6 +14,7 @@ type CashAccount = {
   accountType: 'cash' | 'bank';
   branchId?: string | null;
   isActive: boolean;
+  postingEnabled?: boolean;
 };
 
 export default function PurchaseInvoicesPage() {
@@ -738,12 +739,12 @@ export default function PurchaseInvoicesPage() {
                 <select required value={paymentForm.bankAccount} onChange={(e) => setPaymentForm({ ...paymentForm, bankAccount: e.target.value })} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-green-500">
                   <option value="">Pilih akun kas/bank</option>
                   {cashAccounts
-                    .filter(account => account.isActive !== false)
+                    .filter(account => account.isActive !== false && account.postingEnabled !== false)
                     .filter(account => !account.branchId || account.branchId === payingInvoice.branchId)
                     .filter(account => paymentForm.paymentMethod === 'Kas' ? account.accountType === 'cash' : account.accountType === 'bank')
                     .map(account => <option key={account.id} value={account.id}>{account.code ? `${account.code} - ` : ''}{account.name}</option>)}
                 </select>
-                {cashAccounts.filter(account => account.isActive !== false && (!account.branchId || account.branchId === payingInvoice.branchId)).length === 0 && (
+                {cashAccounts.filter(account => account.isActive !== false && account.postingEnabled !== false && (!account.branchId || account.branchId === payingInvoice.branchId)).length === 0 && (
                   <p className="mt-1 text-xs text-red-600">Belum ada akun kas/bank aktif untuk cabang faktur.</p>
                 )}
               </div>

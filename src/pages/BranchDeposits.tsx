@@ -12,6 +12,7 @@ type Summary = {
   cashReceived: number;
   deposited: number;
   unsubmitted: number;
+  mappingError?: string | null;
 };
 type Deposit = {
   id: string;
@@ -104,11 +105,11 @@ export default function BranchDeposits() {
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         {visible.map((s) => (
-          <div key={s.branchId} className="rounded-xl border bg-white p-4">
+          <div key={s.accountId} className="rounded-xl border bg-white p-4">
             <b>{s.branchName}</b>
             <div className="mt-3 grid grid-cols-2 text-sm">
               <span>
-                Tunai diterima
+                Kas masuk tercatat
                 <br />
                 <b>Rp {s.cashReceived.toLocaleString("id-ID")}</b>
               </span>
@@ -119,6 +120,7 @@ export default function BranchDeposits() {
               </span>
             </div>
             <p className="mt-3 text-sm">Belum disetor</p>
+            {s.mappingError&&<p role="alert" className="text-sm text-red-700">{s.mappingError}</p>}
             <p className="text-2xl font-bold text-red-600">
               Rp {s.unsubmitted.toLocaleString("id-ID")}
             </p>

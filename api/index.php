@@ -41,6 +41,12 @@ try {
     runVersionedApiBootstrap($pdo, 'api_support_20261013_journal_party_v1', static function(PDO $pdo): void {
         migrateJournalPartyReferences($pdo);
     });
+    runVersionedApiBootstrap($pdo, 'api_support_20261112_supplier_payment_direction_v1', static function(PDO $pdo): void {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS cash_ledger_repair_audit (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,journal_id VARCHAR(64) NOT NULL,repair_key VARCHAR(100) NOT NULL,snapshot_json LONGTEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_cash_repair(journal_id,repair_key)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->beginTransaction();
+        try { repairSupplierPaymentJournals($pdo); $pdo->commit(); }
+        catch(Throwable $e) { if($pdo->inTransaction())$pdo->rollBack();throw $e; }
+    });
 } catch (Throwable $e) {
     $errorReference = substr(hash('sha256', uniqid('', true)), 0, 10);
     error_log(sprintf(
@@ -134,11 +140,13 @@ if ($requestUser && $resource === 'receipt-ocr') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
 }
 if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
-    if ($method === 'GET' && $resource === 'cash-accounts') {
+    if ($method === 'GET' && in_array($resource, ['cash-accounts','branch-account-settings'], true)) {
         // Pengguna pembayaran perlu membaca akun kas/bank untuk mengisi penerimaan,
         // meskipun tidak diberi akses ke laporan keuangan.
         if (!authenticatedUserHasPermission($pdo, $requestUser, 'report:view')
             && !authenticatedUserHasPermission($pdo, $requestUser, 'payment:view')
+            && !authenticatedUserHasPermission($pdo, $requestUser, 'payment:create')
+            && !authenticatedUserHasPermission($pdo, $requestUser, 'purchase:pay')
             && !authenticatedUserHasPermission($pdo, $requestUser, 'settings:view')) {
             requireAuthenticatedUserPermission($pdo, $requestUser, 'report:view');
         }
@@ -146,7 +154,7 @@ if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', '
         requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
     }
 }
-if ($requestUser && $resource === 'general-ledger') {
+if ($requestUser && in_array($resource, ['general-ledger','cash-bank-report'], true)) {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'report:view');
 }
 if ($requestUser && $resource === 'opening-balances') {
@@ -273,6 +281,9 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
             break;
         case 'cash-accounts':
             require 'endpoints/cash-accounts.php';
+            break;
+        case 'cash-bank-report':
+            require 'endpoints/cash-bank-report.php';
             break;
         case 'branch-deposits':
             require 'endpoints/branch-deposits.php';

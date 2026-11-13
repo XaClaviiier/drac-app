@@ -47,6 +47,8 @@ type CashAccount = {
   name: string;
   accountType: "cash" | "bank";
   branchId?: string;
+  isActive?: boolean;
+  postingEnabled?: boolean;
 };
 type BranchAccountSetting = {
   branchId: string;
@@ -221,7 +223,7 @@ export default function CustomerPayments() {
       .slice(0, 60);
   }, [unpaid, invoiceSearch, data.customers]);
   const paymentAccountOptions = accounts.filter(
-    (a) => !a.branchId || a.branchId === invoice?.branchId,
+    (a) => a.isActive !== false && a.postingEnabled !== false && (!a.branchId || a.branchId === invoice?.branchId),
   );
   const totalReceived = Number(form.amount || 0) + Number(form.amount2 || 0);
   const paymentMaximum = editingPayment ? maximumEditableAmount : outstanding;
@@ -229,7 +231,7 @@ export default function CustomerPayments() {
   const unappliedAmount = Math.max(0, totalReceived - allocatedAmount);
   const balanceAfterPayment = Math.max(0, paymentMaximum - allocatedAmount);
   const defaultAccountId = (type: CashAccount["accountType"], branchId = invoice?.branchId) => {
-    const options = accounts.filter((a) => !a.branchId || a.branchId === branchId);
+    const options = accounts.filter((a) => a.isActive !== false && a.postingEnabled !== false && (!a.branchId || a.branchId === branchId));
     const setting = accountSettings.find((item) => item.branchId === branchId);
     const configured = type === "cash" ? setting?.cashAccountId : setting?.bankAccountId;
     return configured && options.some((account) => account.id === configured)

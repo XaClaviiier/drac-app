@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/cash-ledger.php';
 // Helper API ditempatkan terpisah agar pembaruan fungsi tidak perlu
 // menimpa config.php yang berisi kredensial database hosting.
 
@@ -1128,11 +1129,9 @@ function ensureApiSupportTables(PDO $pdo): void {
         if ($branchLedger[0] && isset($coaIds[$branchLedger[0]],$coaIds[$branchLedger[1]])) {
             $cashId = 'CASH-' . $branch['id'];
             $bankId = 'BANK-' . $branch['id'];
-            $cashAccount = $pdo->prepare("INSERT INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id,is_active) VALUES(?,?,?,?,?,?,1)
-                ON DUPLICATE KEY UPDATE name=VALUES(name),account_type='cash',branch_id=VALUES(branch_id),ledger_account_id=VALUES(ledger_account_id),is_active=1");
+            $cashAccount = $pdo->prepare("INSERT IGNORE INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id,is_active) VALUES(?,?,?,?,?,?,1)");
             $cashAccount->execute([$cashId,'KAS-'.$branch['code'],'KAS TUNAI '.$branch['name'],'cash',$branch['id'],$coaIds[$branchLedger[0]]]);
-            $bankAccount = $pdo->prepare("INSERT INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id,is_active) VALUES(?,?,?,?,?,?,1)
-                ON DUPLICATE KEY UPDATE name=VALUES(name),account_type='bank',branch_id=VALUES(branch_id),ledger_account_id=VALUES(ledger_account_id),is_active=1");
+            $bankAccount = $pdo->prepare("INSERT IGNORE INTO cash_accounts(id,code,name,account_type,branch_id,ledger_account_id,is_active) VALUES(?,?,?,?,?,?,1)");
             $bankAccount->execute([$bankId,'BANK-'.$branch['code'],'BANK / TRANSFER '.$branch['name'],'bank',$branch['id'],$coaIds[$branchLedger[1]]]);
             if ($branchMappingPending) {
                 $setting = $pdo->prepare("INSERT INTO branch_account_settings(branch_id,cash_account_id,bank_account_id,qris_account_id,deposit_destination_account_id,receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id)
@@ -2045,10 +2044,9 @@ function postCustomerPaymentJournal(PDO $pdo, array $payment, array $invoice, ar
     if($check->fetchColumn())return;
     $accountDefaults=getDefaultAccountSettings($pdo,(string)$payment['branch_id']);
     $receivable=(string)($accountDefaults['receivableCoaId']??'');
-    $cash=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');
-    $cash->execute([$payment['account_id']]);
-    $cashAccount=(string)($cash->fetchColumn()?:'');
+    $cashAccount=requireCashLedgerAccount($pdo,(string)$payment['account_id']);
     if($receivable===''||$cashAccount==='')throw new InvalidArgumentException('Mapping akun piutang atau akun penerimaan belum lengkap');
+    validatePaymentCounterAccount($pdo,$receivable,'Asset',$cashAccount);
     $journalId=generateId();$userId=$user['id']??null;$number=$payment['payment_number'];
     $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,party_type,party_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
         ->execute([$journalId,$payment['date'],$number,'Pembayaran '.$payment['payment_number'],$payment['branch_id'],'customer_payment',$payment['id'],'customer',(string)($invoice['customer_id'] ?? ''),$userId,$userId]);
@@ -2696,17 +2694,13 @@ function runVehicleOtherColorCleanup20260817(PDO $pdo): void {
 }
 
 function branchCashSummary(PDO $pdo, ?array $actor = null): array {
-    $sql="SELECT b.id branch_id,b.name branch_name,a.id account_id,a.name account_name,
-        COALESCE((SELECT SUM(p.amount) FROM customer_payments p WHERE p.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND p.account_id COLLATE utf8mb4_unicode_ci=a.id COLLATE utf8mb4_unicode_ci),0) cash_received,
-        COALESCE((SELECT SUM(pp.amount) FROM purchase_payments pp WHERE pp.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND pp.account_id COLLATE utf8mb4_unicode_ci=a.id COLLATE utf8mb4_unicode_ci),0) cash_expenses,
-        COALESCE((SELECT SUM(d.amount) FROM branch_deposits d WHERE d.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND d.source_account_id COLLATE utf8mb4_unicode_ci=a.id COLLATE utf8mb4_unicode_ci AND d.status IN ('Dikirim','Terverifikasi')),0) deposited
-        FROM branches b JOIN cash_accounts a ON a.branch_id COLLATE utf8mb4_unicode_ci=b.id COLLATE utf8mb4_unicode_ci AND a.account_type='cash' WHERE b.is_active=1 AND a.is_active=1";
-    $rows=$pdo->query($sql)->fetchAll();
-    if($actor){$allowed=array_fill_keys(getAccessibleBranchIds($pdo,$actor),true);$rows=array_values(array_filter($rows,fn($row)=>isset($allowed[(string)$row['branch_id']])));}
-    foreach($rows as &$r){
-        $r['branchId']=$r['branch_id'];$r['branchName']=$r['branch_name'];$r['accountId']=$r['account_id'];$r['accountName']=$r['account_name'];
-        $r['cashReceived']=(float)$r['cash_received'];$r['cashExpenses']=(float)$r['cash_expenses'];$r['deposited']=(float)$r['deposited'];
-        $r['unsubmitted']=max(0,$r['cashReceived']-$r['cashExpenses']-$r['deposited']);
+    $rows=[];
+    foreach(cashLedgerAccounts($pdo,$actor??requireAuthenticatedUser($pdo)) as $account){
+        if($account['account_type']!=='cash'||!(bool)$account['is_active'])continue;
+        $rows[]=['branchId'=>$account['branch_id'],'branchName'=>$account['branch_name'],'accountId'=>$account['id'],'accountName'=>$account['name'],
+            'cashReceived'=>$account['cash_received'],'cashExpenses'=>$account['cash_expenses'],'deposited'=>$account['deposited'],
+            'balance'=>$account['balance'],'inTransit'=>$account['in_transit'],'mappingError'=>$account['mappingError'],
+            'unsubmitted'=>$account['postingEnabled']?$account['unsubmitted']:0];
     }
     return $rows;
 }

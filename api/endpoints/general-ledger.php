@@ -100,15 +100,16 @@ if ($accountId === '') respondError('Akun wajib dipilih', 422);
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/D', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $to) || $from > $to) respondError('Rentang tanggal tidak valid', 422);
 if ($branchId !== '') requireAccessibleBranch($pdo, $requestUser, $branchId);
 
-$beforeSql = 'SELECT COALESCE(SUM(l.debit-l.credit),0) FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_id WHERE l.account_id=? AND j.posted=1 AND j.entry_date < ?';
+$beforeSql = 'SELECT COALESCE(SUM(l.debit-l.credit),0) FROM journal_lines l JOIN journal_entries j ON j.id COLLATE utf8mb4_unicode_ci=l.journal_id COLLATE utf8mb4_unicode_ci WHERE l.account_id=? AND j.posted=1 AND j.entry_date < ?';
 $params = [$accountId, $from];
-if ($branchId !== '') { $beforeSql .= ' AND j.branch_id=?'; $params[] = $branchId; }
+[$branchScope,$branchParams]=cashJournalScope($pdo,$requestUser,$branchId);
+$beforeSql.=' AND '.$branchScope;$params=array_merge($params,$branchParams);
 $stmt = $pdo->prepare($beforeSql); $stmt->execute($params);
 $opening = (float)$stmt->fetchColumn();
 
-$sql = 'SELECT j.id journalId,j.entry_date entryDate,j.entry_number entryNumber,j.description,j.party_type partyType,j.party_id partyId,l.debit,l.credit,l.memo,j.branch_id branchId,b.name branchName FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_id LEFT JOIN branches b ON b.id=j.branch_id WHERE l.account_id=? AND j.posted=1 AND j.entry_date BETWEEN ? AND ?';
+$sql = 'SELECT j.id journalId,j.entry_date entryDate,j.entry_number entryNumber,j.description,j.party_type partyType,j.party_id partyId,l.debit,l.credit,l.memo,j.branch_id branchId,b.name branchName FROM journal_lines l JOIN journal_entries j ON j.id COLLATE utf8mb4_unicode_ci=l.journal_id COLLATE utf8mb4_unicode_ci LEFT JOIN branches b ON b.id COLLATE utf8mb4_unicode_ci=j.branch_id COLLATE utf8mb4_unicode_ci WHERE l.account_id=? AND j.posted=1 AND j.entry_date BETWEEN ? AND ?';
 $params = [$accountId, $from, $to];
-if ($branchId !== '') { $sql .= ' AND j.branch_id=?'; $params[] = $branchId; }
+$sql.=' AND '.$branchScope;$params=array_merge($params,$branchParams);
 $sql .= ' ORDER BY j.entry_date,j.entry_number,l.id';
 $stmt = $pdo->prepare($sql); $stmt->execute($params);
 $balance = $opening; $rows = [];

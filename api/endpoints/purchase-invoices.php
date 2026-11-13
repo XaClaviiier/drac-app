@@ -1,5 +1,5 @@
 <?php
-$pdo->exec("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS source_type VARCHAR(30) NOT NULL DEFAULT 'Supplier'");
+ensureTableColumn($pdo,'goods_receipts','source_type',"VARCHAR(30) NOT NULL DEFAULT 'Supplier'");
 $refreshReceiptStatus = static function (PDO $pdo, string $receiptId): void {
     $stmt = $pdo->prepare("SELECT COALESCE(SUM(qty),0) total_qty, COALESCE(SUM(qty_invoiced),0) invoiced_qty FROM goods_receipt_items WHERE receipt_id=?");
     $stmt->execute([$receiptId]);
@@ -110,10 +110,10 @@ if ($action === 'payments') {
             ->execute([$payId,$paymentNumber,$id,$paymentDate,$amount,$paymentMethod,$accountId,$accountId,$d['notes'] ?? '',$invoice['branch_id']]);
         $accountDefaults=getDefaultAccountSettings($pdo,(string)$invoice['branch_id']);
         $payable=resolveDefaultCoaId($pdo,$accountDefaults,'payableCoaId','210101');
-        $cashLedger=$pdo->prepare('SELECT ledger_account_id FROM cash_accounts WHERE id=? AND is_active=1');$cashLedger->execute([$accountId]);
-        $cashLedgerId=(string)($cashLedger->fetchColumn()?:'');
+        $cashLedgerId=requireCashLedgerAccount($pdo,$accountId);
+        validatePaymentCounterAccount($pdo,$payable,'Liability',$cashLedgerId);
         postOperationalJournal($pdo,$paymentDate,'Pembayaran supplier '.$paymentNumber,(string)$invoice['branch_id'],'supplier_payment',(string)$payId,'PAYMENT',[
-            [$payable,0,$amount,'Pembayaran hutang supplier'],[$cashLedgerId,$amount,0,'Kas/Bank pembayaran supplier']
+            [$payable,$amount,0,'Pembayaran hutang supplier'],[$cashLedgerId,0,$amount,'Kas/Bank pembayaran supplier']
         ],$actor['id']??null);
         $paid = (float)$invoice['paid_amount'] + $amount;
         $status = $paid >= (float)$invoice['total'] ? 'Lunas' : 'Sebagian';

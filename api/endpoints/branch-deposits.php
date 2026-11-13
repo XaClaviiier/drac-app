@@ -13,6 +13,7 @@ case 'POST':
         $sourceAccountId=(string)($d['sourceAccountId']??'');
         $source=$pdo->prepare("SELECT id,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1 FOR UPDATE");$source->execute([$sourceAccountId]);$sourceRow=$source->fetch();
         if(!$sourceRow||$sourceRow['account_type']!=='cash'||(string)$sourceRow['branch_id']!==$branchId)throw new Exception('Akun sumber tunai tidak sesuai cabang');
+        requireCashLedgerAccount($pdo,$sourceAccountId);
         $summary=array_values(array_filter(branchCashSummary($pdo,$actor),fn($x)=>$x['branchId']===$branchId && $x['accountId']===$sourceAccountId));
         $available=$summary[0]['unsubmitted']??0;
         if($amount<=0||$amount>$available)throw new Exception('Nominal setoran melebihi tunai yang belum disetor');
@@ -28,6 +29,7 @@ case 'POST':
         $destination=$pdo->prepare("SELECT id,account_type,branch_id FROM cash_accounts WHERE id=? AND is_active=1");$destination->execute([$destinationAccountId]);$destinationRow=$destination->fetch();
         if(!$destinationRow||$destinationRow['account_type']==='cash')throw new Exception('Akun tujuan setoran cabang belum diatur');
         if($destinationRow['branch_id']&&$destinationRow['branch_id']!==$branchId)throw new Exception('Akun tujuan tidak sesuai cabang');
+        requireCashLedgerAccount($pdo,$destinationAccountId);
         $id=generateId();
         $stmt=$pdo->prepare("INSERT INTO branch_deposits(id,deposit_number,date,branch_id,source_account_id,destination_account_id,amount,status,notes,proof_url,created_by,created_by_name)VALUES(?,?,?,?,?,?,?,'Dikirim',?,?,?,?)");
         $stmt->execute([$id,$number,$date,$branchId,$sourceAccountId,$destinationAccountId,$amount,trim((string)($d['notes']??''))?:null,$d['proofUrl']??null,$actor['id']??null,$actor['name']??$actor['username']??null]);
@@ -40,9 +42,10 @@ case 'PUT':
         $current=$pdo->prepare("SELECT * FROM branch_deposits WHERE id=? FOR UPDATE");$current->execute([$id]);$deposit=$current->fetch();if(!$deposit)throw new Exception('Setoran tidak ditemukan');requireAccessibleBranch($pdo,$actor,(string)$deposit['branch_id']);if($deposit['status']!=='Dikirim')throw new Exception('Setoran yang sudah diproses tidak dapat diverifikasi ulang');
         $stmt=$pdo->prepare("UPDATE branch_deposits SET status=?,verified_by=?,verified_by_name=?,verified_at=NOW(),notes=CONCAT(COALESCE(notes,''),?) WHERE id=? AND status='Dikirim'");$stmt->execute([$status,$actor['id']??null,$actor['name']??$actor['username']??null,!empty($d['reason'])?' | '.$d['reason']:'',$id]);
         if($status==='Terverifikasi'){
-            $accounts=$pdo->prepare('SELECT id,ledger_account_id FROM cash_accounts WHERE id IN (?,?) AND is_active=1');$accounts->execute([$deposit['source_account_id'],$deposit['destination_account_id']]);$ledger=[];foreach($accounts->fetchAll() as $account)$ledger[(string)$account['id']]=(string)$account['ledger_account_id'];
+            $sourceLedger=requireCashLedgerAccount($pdo,(string)$deposit['source_account_id']);
+            $destinationLedger=requireCashLedgerAccount($pdo,(string)$deposit['destination_account_id']);
             postOperationalJournal($pdo,$deposit['date'],'Setoran kas '.$deposit['deposit_number'],(string)$deposit['branch_id'],'branch_deposit',(string)$id,'DEPOSIT',[
-                [$ledger[(string)$deposit['destination_account_id']]??'',(float)$deposit['amount'],0,'Bank tujuan setoran'],[$ledger[(string)$deposit['source_account_id']]??'',0,(float)$deposit['amount'],'Kas sumber setoran']
+                [$destinationLedger,(float)$deposit['amount'],0,'Bank tujuan setoran'],[$sourceLedger,0,(float)$deposit['amount'],'Kas sumber setoran']
             ],$actor['id']??null);
         }
         $pdo->commit();respondSuccess(null,'Setoran diperbarui');
