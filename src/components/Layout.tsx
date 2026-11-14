@@ -44,7 +44,6 @@ import {
   CalendarClock,
   CircleHelp,
   PackageOpen,
-  PackageMinus,
   ClipboardCheck,
   FilePlus2,
   PackageSearch,
@@ -469,13 +468,6 @@ const desktopGroups = [
         path: "/warehouse-transfers",
         icon: ArrowLeftRight,
         perm: "item:view",
-        tone: "green",
-      },
-      {
-        label: "Penyesuaian Stok",
-        path: "/warehouses",
-        icon: PackageMinus,
-        perm: "item:edit",
         tone: "green",
       },
       {

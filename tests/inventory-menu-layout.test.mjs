@@ -44,13 +44,12 @@ test('warna menu Persediaan membedakan transaksi master dan laporan seperti Accu
 
 test('ikon Persediaan profesional tetap mengikuti route dan permission yang ada', () => {
   const inventory = sectionBetween(layout, 'id: "inventory"', 'id: "reports"');
-  for (const icon of ['PackageOpen', 'ArrowLeftRight', 'PackageMinus', 'ClipboardCheck', 'FilePlus2', 'PackageSearch', 'Tags']) {
+  for (const icon of ['PackageOpen', 'ArrowLeftRight', 'ClipboardCheck', 'FilePlus2', 'PackageSearch', 'Tags']) {
     assert.match(layout, new RegExp(`\\b${icon}\\b`), icon);
   }
   const routesAndPermissions = [
     ['Penerimaan Barang', '/receipts', 'receipt:view'],
     ['Transfer Gudang', '/warehouse-transfers', 'item:view'],
-    ['Penyesuaian Stok', '/warehouses', 'item:edit'],
     ['Penyesuaian Stok', '/opening-stock', 'item:edit'],
     ['Stok Opname', '/reports/stock-count-sheet', 'item:view'],
     ['Barang & Jasa', '/items', 'item:view'],
