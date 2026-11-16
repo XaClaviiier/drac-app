@@ -695,9 +695,8 @@ export default function OpeningStockImport() {
           {showFilter && <div className="adjustment-filter-options"><label>Status <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="">Semua</option><option value="Draft">Draft</option><option value="Posted">Diposting</option><option value="Cancelled">Dibatalkan</option></select></label><button onClick={() => { setDocumentDate(""); setStatusFilter(""); }}>Bersihkan</button></div>}
         </div>
         <div className="adjustment-list-toolbar">
-          <button className="adjustment-add" title="Data Baru" onClick={() => newDocument()}><Plus size={23}/></button>
+          <button className="adjustment-add" title={`Data Baru: ${listAdjustmentType === "cost_adjustment" ? "Penyesuaian HPP" : "Penyesuaian Stok"}`} onClick={() => newDocument(listAdjustmentType)}><Plus size={23}/></button>
           <label className="adjustment-kind adjustment-list-kind">Jenis Penyesuaian<select aria-label="Filter jenis penyesuaian" value={listAdjustmentType} onChange={event => setListAdjustmentType(event.target.value as "opening_balance" | "cost_adjustment")}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP</option>}</select></label>
-          {canHpp && <button className="adjustment-outline" disabled={loading} onClick={() => newDocument("cost_adjustment")}>Penyesuaian HPP Baru</button>}
           <button className="adjustment-icon" title="Perbarui" disabled={loading} onClick={() => void Promise.all([loadDocuments(),refreshData()])}><RefreshCw size={16}/></button>
           <div className="adjustment-list-tools">
             <button className="adjustment-icon" title="Cetak daftar" onClick={() => window.print()}><Printer size={16}/></button>
@@ -720,11 +719,11 @@ export default function OpeningStockImport() {
         <div className="adjustment-form-main">
           <div className="adjustment-form-header">
             <label className="adjustment-form-date">Tanggal <span>*</span><IndonesianDateInput value={selectedDocument?.date || date} onChange={setDate} disabled={!!selectedDocument || (isHpp && rows.length > 0)}/></label>
-            <div className="adjustment-number-wrap"><label>No Penyesuaian # <span>*</span><input readOnly value={activeDocument?.adjustmentNumber || "Penyesuaian Persediaan"} aria-label="Nomor penyesuaian"/></label>
+            <div className="adjustment-number-wrap"><label>{isHpp ? "No Penyesuaian HPP #" : "No Penyesuaian Stok #"} <span>*</span><input readOnly value={activeDocument?.adjustmentNumber || (isHpp ? "Penyesuaian HPP" : "Penyesuaian Stok")} aria-label="Nomor penyesuaian"/></label>
               {!selectedDocument && !isHpp && <div className="adjustment-dropdown"><button className="adjustment-outline" onClick={() => toggleMenu("import")}>Ambil <ChevronDown size={12}/></button>{menu === "import" && <div className="adjustment-menu"><button disabled={!isAdmin} onClick={() => {setMenu(null); inputRef.current?.click();}}>Impor Excel/CSV</button><button onClick={() => {setMenu(null); downloadTemplate();}}>Unduh template</button></div>}</div>}
             </div>
           </div>
-          <label className="adjustment-kind">Jenis Penyesuaian<select aria-label="Jenis penyesuaian" disabled={!!selectedDocument || !!editingId || !!rows.length || loading} value={selectedDocument ? (selectedDocument.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance") : adjustmentType} onChange={event => setAdjustmentType(event.target.value)}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP — Stok Tetap</option>}</select></label>
+          <label className="adjustment-kind">Jenis Penyesuaian<select aria-label="Jenis penyesuaian" disabled value={selectedDocument ? (selectedDocument.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance") : adjustmentType}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP — Stok Tetap</option>}</select></label>
           <div className="adjustment-body-wrap">
             <nav className="adjustment-side-tabs" aria-label="Bagian penyesuaian">
               <button title="Rincian Barang" className={formTab === "items" ? "active" : ""} onClick={() => {setFormTab("items"); setMenu(null);}}><FileText size={19}/></button>
