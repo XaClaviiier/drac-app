@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, CircleEllipsis, FileText, Info, List, Paperclip, Plus, Printer, RefreshCw, Save, Search, Trash2, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
@@ -10,7 +10,7 @@ import './OpeningStockImport.css';
 import './SimpleStockOpname.css';
 
 type Row = { itemId:string;code:string;name:string;unit:string;categoryName:string;systemQuantity:number;movementIn?:number;movementOut?:number;editVersion:string;finalQuantity:number|null;count:string };
-type Document = {id:string;orderNumber:string;endDate:string;warehouseId:string;warehouseName:string;assignedUserName:string;notes:string;revision:number;entryMode:string;createdAt:string;lastUpdatedAt?:string;rows?:Row[];result?:{status?:string;adjustmentId?:string;adjustmentNumber?:string;notes?:string}};
+type Document = {id:string;orderNumber:string;endDate:string;warehouseId:string;warehouseName:string;assignedUserName:string;notes:string;revision:number;entryMode:string;createdAt:string;lastUpdatedAt?:string;rows?:Row[];result?:{id?:string;resultNumber?:string;status?:string;adjustmentId?:string;adjustmentNumber?:string;notes?:string}};
 type Adjustment = {adjustmentNumber:string;rows:{itemCode:string;itemName:string;quantity:number;unit:string}[]};
 type Column='name'|'code'|'systemQuantity'|'count'|'variance'|'unit';
 type DocumentColumn='orderNumber'|'endDate'|'warehouseName'|'notes'|'adjustment';
@@ -43,6 +43,9 @@ const readWorkspaceSnapshot = (storageKey:string):WorkspaceSnapshot|null => {
 export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   const {data,currentUser,currentBranchId,hasPermission,refreshData}=useApp();
   const navigate=useNavigate();
+  const [searchParams,setSearchParams]=useSearchParams();
+  const requestedDocument=searchParams.get('view');
+  const [documentsLoaded,setDocumentsLoaded]=useState(false);
   const workspaceKey=`drac-stock-opname-workspace-v1:${currentUser?.id||currentUser?.username||'guest'}:${currentBranchId||'ALL'}`;
   const restored=useRef<WorkspaceSnapshot|null|undefined>(undefined);
   if(restored.current===undefined)restored.current=readWorkspaceSnapshot(workspaceKey);
@@ -78,7 +81,7 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   useEffect(()=>{try{sessionStorage.setItem(workspaceKey,JSON.stringify({tab,list,info,document,rows,catalog,date,warehouse,notes,requestKey,dirty} satisfies WorkspaceSnapshot));}catch{ /* storage tidak tersedia */ }},[workspaceKey,tab,list,info,document,rows,catalog,date,warehouse,notes,requestKey,dirty]);
   const lock=useRef(false),file=useRef<HTMLInputElement>(null);
   const warehouses=data.warehouses.filter(w=>w.isActive&&!w.isSystem&&(currentBranchId==='ALL'||w.branchId===currentBranchId));
-  const loadList=async()=>{const result=await api.get<Document[]>('stock-opnames');if(!result.success)throw new Error(result.message);setDocuments(result.data||[]);};
+  const loadList=async()=>{const result=await api.get<Document[]>('stock-opnames');if(!result.success)throw new Error(result.message);setDocuments(result.data||[]);setDocumentsLoaded(true);};
   useEffect(()=>{void loadList().catch(e=>setMessage(e.message));},[]);
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
   const run=async(work:()=>Promise<void>)=>{if(lock.current)return;lock.current=true;setBusy(true);setMessage('');try{await work();}catch(e){setMessage(e instanceof Error?e.message:'Proses gagal.');}finally{lock.current=false;setBusy(false);}};
@@ -95,6 +98,14 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
     setCatalog(normalizeCatalog(available.data.rows,doc));setAddSearch('');setAddOpen(false);setTableSearchOpen(false);
     setDetailItemId('');setDocument(doc);setRows(normalize(doc.rows||[]));setWarehouse(doc.warehouseId);setDate(doc.endDate);setNotes(doc.notes||'');setDirty(false);setTab(true);setList(false);setInfo(false);setSearch('');setFilter('all');
   };
+  useEffect(()=>{
+    if(!requestedDocument||!documentsLoaded||busy)return;
+    const target=documents.find(row=>row.id===requestedDocument||row.orderNumber===requestedDocument||row.result?.id===requestedDocument||row.result?.resultNumber===requestedDocument);
+    if(target&&target.entryMode!=='simple'){setLegacyOpen(true);return;}
+    if(target){if(discard()){setLegacyOpen(false);void run(()=>open(target.id));}}
+    else{setLegacyOpen(false);setList(true);setMessage('Stok opname sumber tidak ditemukan atau sudah tidak dapat diakses.');}
+    setSearchParams(params=>{const next=new URLSearchParams(params);next.delete('view');return next;},{replace:true});
+  },[requestedDocument,documentsLoaded,documents,busy,setSearchParams]);
   const preview=async(nextWarehouse:string,nextDate:string,preserve=false)=>{
     if(!nextWarehouse){setRows([]);setCatalog([]);return;}
     const result=await api.get<{rows:Row[]}>(`stock-opnames?preview=1&warehouseId=${encodeURIComponent(nextWarehouse)}&date=${nextDate}`);

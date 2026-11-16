@@ -2229,7 +2229,7 @@ function postOperationalJournal(
     $entryNumber = 'JRN-'.date('ymdHis', strtotime($date)).'-'.strtoupper(substr($journalId, -6));
     [$partyType, $partyId] = resolveJournalParty($pdo, $sourceType, $sourceId);
     $pdo->prepare("INSERT INTO journal_entries(id,entry_date,entry_number,description,branch_id,source_type,source_id,party_type,party_id,posted,status,created_by,posted_by,posted_at) VALUES(?,?,?,?,?,?,?,?,?,1,'Posted',?,?,NOW())")
-        ->execute([$journalId,$date,$entryNumber,$description,$branchId ?: null,$sourceType,$sourceId,$partyType,$partyId,$userId,$userId]);
+        ->execute([$journalId,$date,$entryNumber,$description,$branchId === '' ? null : $branchId,$sourceType,$sourceId,$partyType,$partyId,$userId,$userId]);
     $insert = $pdo->prepare('INSERT INTO journal_lines(id,journal_id,account_id,debit,credit,memo) VALUES(?,?,?,?,?,?)');
     foreach ($clean as [$accountId,$dr,$cr,$memo]) $insert->execute([generateId(),$journalId,$accountId,$dr,$cr,$memo]);
     $pdo->prepare("INSERT INTO journal_postings(id,journal_id,source_type,source_id,posting_key,status) VALUES(?,?,?,?,?,'Posted')")
@@ -2277,10 +2277,10 @@ function deleteOperationalJournal(PDO $pdo, string $sourceType, string $sourceId
 }
 
 function estimateInventoryUnitCost(PDO $pdo, string $itemId, string $warehouseId, string $date): float {
-    $stmt = $pdo->prepare("SELECT unit_cost FROM stock_movements WHERE item_id=? AND destination_warehouse_id=? AND unit_cost>0 AND is_voided=0 AND occurred_at<=? ORDER BY occurred_at DESC,created_at DESC LIMIT 1");
+    $stmt = $pdo->prepare("SELECT unit_cost FROM stock_movements WHERE item_id=? AND destination_warehouse_id=? AND (unit_cost>0 OR (movement_type IN ('cost_adjustment','cost_adjustment_reversal') AND unit_cost=0)) AND is_voided=0 AND occurred_at<=? ORDER BY occurred_at DESC,movement_sequence DESC LIMIT 1");
     $stmt->execute([$itemId,$warehouseId,$date.' 23:59:59']);
     $cost = $stmt->fetchColumn();
-    if ($cost !== false && (float)$cost > 0) return (float)$cost;
+    if ($cost !== false && (float)$cost >= 0) return (float)$cost;
     $stmt = $pdo->prepare('SELECT purchase_price FROM items WHERE id=? LIMIT 1');
     $stmt->execute([$itemId]);
     return max(0,(float)($stmt->fetchColumn() ?: 0));

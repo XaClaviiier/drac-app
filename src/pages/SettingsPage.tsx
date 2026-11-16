@@ -373,6 +373,7 @@ export default function SettingsPage() {
               </>}
               {innerTab === 'persediaan' && <>
                 <DefaultAccountSection title="Penyesuaian Persediaan" fields={[defaultAccountField('inventoryAdjustmentCoaId', 'Akun Penyesuaian', ['Equity', 'Expense'])]} />
+                <DefaultAccountSection title="Pemakaian Barang" fields={[defaultAccountField('inventoryUsageCoaId', 'Biaya Pemakaian', ['Expense'])]} />
                 <DefaultAccountSection title="Perintah Stok Opname" fields={[defaultAccountField('stockVarianceCoaId', 'Beban Selisih Stok', ['Expense'])]} />
                 <DefaultAccountSection title="Pekerjaan Pesanan" fields={[defaultAccountField('jobAccountCoaId', 'Akun Pekerjaan', ['Asset', 'Expense']), defaultAccountField('jobCostDifferenceCoaId', 'Selisih Biaya', ['Expense'])]} />
               </>}

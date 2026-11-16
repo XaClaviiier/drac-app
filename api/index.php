@@ -6,6 +6,8 @@ date_default_timezone_set('Asia/Makassar');
 require_once 'config.php';
 require_once 'helpers.php';
 require_once 'customer-import.php';
+require_once 'item-usage.php';
+require_once 'inventory-revaluation.php';
 // Seluruh audit operasional memakai WITA. Berkas router ini ikut deployment,
 // sedangkan config.php sengaja tidak ditimpa agar kredensial hosting tetap aman.
 try {
@@ -18,6 +20,9 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_simple_opname_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_coa_details_v1');
     ensureCashAccountDetails($pdo);
+    runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_schema_v1', 'ensureItemUsageSchema');
+    runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_permissions_v1', 'grantInitialItemUsagePermissions');
+    runVersionedApiBootstrap($pdo, 'api_support_20261116_inventory_revaluation_v1', 'ensureInventoryRevaluationSchema');
     runVersionedApiBootstrap($pdo, 'api_support_20260915_customer_import_v1', static function(PDO $pdo): void {
         ensureCustomerImportSchema($pdo);
     });
@@ -211,6 +216,9 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
             break;
         case 'stock-adjustments':
             require 'endpoints/stock-adjustments.php';
+            break;
+        case 'item-usages':
+            require 'endpoints/item-usages.php';
             break;
         case 'warehouse-transfers':
             require 'endpoints/warehouse-transfers.php';

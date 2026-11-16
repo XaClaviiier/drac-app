@@ -30,6 +30,16 @@ export const helpCategories = [
 
 export const helpArticles: HelpArticle[] = [
   {
+    id: 'pemakaian-barang', category: 'Persediaan', title: 'Pemakaian Barang',
+    summary: 'Catat barang dan jumlah yang dipakai untuk operasional cabang beserta riwayat stoknya.',
+    keywords: ['bahan', 'pemakaian', 'operasional', 'biaya', 'hpp', 'gudang'], route: '/item-usages', updatedAt: '2026-11-16',
+    sections: [
+      { title: 'Mencatat pemakaian', steps: ['Pilih cabang aktif, buka Persediaan → Pemakaian Barang, lalu Data Baru.', 'Isi tanggal dan gudang. Pilih barang, masukkan Jumlah Dipakai, lalu Lanjut.', 'Buka Info lainnya, isi Keperluan, Penanggung Jawab, dan Akun Biaya Pemakaian.', 'Simpan Draft untuk melanjutkan nanti, atau Simpan & Posting untuk langsung mencatat stok dan biaya.'] },
+      { title: 'Stok dan pencatatan', rules: ['Formulir, daftar, rincian, dan cetakan pemakaian hanya menampilkan barang serta kuantitas, tanpa HPP atau nilai pemakaian. Nilai persediaan dihitung otomatis oleh sistem untuk pembukuan.', 'Draft belum mengubah stok atau jurnal. Posting memeriksa kembali stok dan mencatat pemakaian.', 'Jumlah dipakai mengikuti satuan master barang dan harus bilangan bulat. Jika data persediaan belum siap untuk posting, hubungi administrator.', 'Cabang mengikuti gudang. Akun biaya default dapat diatur oleh administrator di Preferensi → Akun Perkiraan → Persediaan → Pemakaian Barang.', 'Barang yang sudah dibebankan melalui faktur penjualan tidak perlu dicatat lagi sebagai pemakaian operasional.'] },
+      { title: 'Koreksi dan pembatalan', rules: ['Draft dapat diedit atau dihapus sesuai hak akses.', 'Pemakaian Diposting dapat dibatalkan dengan alasan. Stok dan jurnal dibalik sekali; dokumen asli tetap tersimpan.', 'Dokumen yang berubah di perangkat lain harus dimuat ulang sebelum diedit atau diproses.', 'Hak lihat, buat, edit Draft, posting, pembatalan, dan hapus Draft diatur pada Pengguna & Akses.'] },
+    ],
+  },
+  {
     id: "pilih-cabang-dan-hak-akses",
     category: "Mulai Menggunakan",
     title: "Memilih Cabang dan Memahami Hak Akses",
@@ -175,18 +185,19 @@ export const helpArticles: HelpArticle[] = [
   {
     id: "penyesuaian-stok",
     category: "Persediaan",
-    title: "Penyesuaian Stok dan Saldo Awal",
+    title: "Penyesuaian Persediaan dan HPP",
     summary: "Gunakan penyesuaian untuk saldo awal atau koreksi selisih yang dapat dipertanggungjawabkan.",
-    keywords: ["adjustment", "penyesuaian", "saldo awal", "import", "hapus", "posted"],
+    keywords: ["adjustment", "penyesuaian", "saldo awal", "import", "hapus", "posted", "hpp", "nilai persediaan"],
     route: "/opening-stock",
     sources: [
       { label: "Accurate: Penyesuaian Persediaan", url: "https://help.accurate.id/product/penyesuaian-persediaan/" },
+      { label: "Accurate: Penyesuaian Nilai dengan Stok Tetap", url: "https://help.accurate.id/product/accurate-online/fitur-aol/persediaan/penyesuaian-persediaan/mencatat-penyesuaian-nilai-persediaan-tanpa-merubah-stok-barang/" },
       { label: "Accurate: Penghapusan Penyesuaian dari Saldo Awal", url: "https://help.accurate.id/product/accurate-online/fitur-aol/persediaan/error-hapus-saldo-awal/" },
     ],
-    updatedAt: "20 Agustus 2026",
+    updatedAt: "16 November 2026",
     sections: [
       { title: "Cara pakai", steps: ["Buat atau impor rincian barang, gudang, dan kuantitas.", "Simpan sebagai Draft dan periksa baris yang tidak valid.", "Posting dokumen setelah seluruh nilai benar.", "Periksa hasilnya pada stok per gudang dan mutasi barang."] },
-      { title: "Aturan koreksi seperti Accurate", rules: ["Draft dapat diedit atau dihapus.", "Dokumen Posted tidak dapat dihapus langsung.", "Gunakan Batalkan, isi alasan, lalu sistem membuat mutasi pembalik tanpa menghilangkan dokumen asli.", "Pembatalan ditolak jika akan membuat saldo gudang menjadi negatif."] },
+      { title: "Aturan koreksi seperti Accurate", steps: ["Administrator atau Owner memilih Penyesuaian HPP pada daftar, atau memilih jenis Penyesuaian HPP — Stok Tetap pada Data Baru.", "Pilih barang dan gudang. Sistem mengambil jumlah stok dan HPP lama; masukkan HPP baru lalu periksa selisih nilai.", "Pada Info lainnya pilih Akun Penyesuaian dan isi Alasan Koreksi. Simpan Draft untuk diperiksa, atau Simpan untuk posting."], rules: ["Jumlah stok gudang dan cabang tetap. Sistem mencatat pasangan keluar/masuk dengan kuantitas sama dan menjurnal selisih nilai ke akun persediaan serta akun penyesuaian.", "HPP mengikuti sumber nilai yang digunakan aplikasi untuk transaksi berikutnya. Koreksi ini tidak menghitung ulang jurnal penjualan atau pemakaian yang sudah terposting, dan tidak mengubah metode penilaian menjadi FIFO/rata-rata.", "Stok harus lebih dari nol. Tanggal mendatang atau tanggal sebelum mutasi berikutnya ditolak; stok dan HPP diperiksa kembali saat posting.", "Draft dapat diubah atau dihapus. Penyesuaian HPP terposting dipertahankan untuk audit; pembatalan dengan alasan hanya tersedia selama belum ada mutasi lanjutan barang di gudang terkait."] },
     ],
   },
   {

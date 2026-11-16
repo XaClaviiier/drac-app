@@ -67,7 +67,7 @@ try {
     $canUseAi = authenticatedUserHasPermission($pdo, $actor, 'ai:view');
     $canUseCustomers = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'customer:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create');
     $canUseVehicles = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'vehicle:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create');
-    $canUseItems = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'item:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create') || authenticatedUserHasPermission($pdo, $actor, 'invoice:create');
+    $canUseItems = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'item:view') || authenticatedUserHasPermission($pdo, $actor, 'item_usage:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create') || authenticatedUserHasPermission($pdo, $actor, 'invoice:create');
     $canUseWorkOrders = authenticatedUserHasPermission($pdo, $actor, 'wo:view');
     $canUseInvoices = authenticatedUserIsOwnerOrAdministrator($pdo, $actor) || authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view');
     $canUseReceipts = authenticatedUserHasPermission($pdo, $actor, 'receipt:view');

@@ -354,6 +354,7 @@ export type Permission =
   | 'customer:view' | 'customer:create' | 'customer:edit' | 'customer:delete'
   | 'vehicle:view' | 'vehicle:create' | 'vehicle:edit' | 'vehicle:delete'
   | 'item:view' | 'item:create' | 'item:edit' | 'item:delete'
+  | 'item_usage:view' | 'item_usage:create' | 'item_usage:edit' | 'item_usage:post' | 'item_usage:cancel' | 'item_usage:delete'
   | 'stock_opname:view' | 'stock_opname:create' | 'stock_opname:count' | 'stock_opname:post' | 'stock_opname:delete'
   | 'user:view' | 'user:create' | 'user:edit' | 'user:delete'
   | 'role:view' | 'role:create' | 'role:edit' | 'role:delete'

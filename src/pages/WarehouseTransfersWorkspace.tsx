@@ -1,5 +1,5 @@
 import { useEffect,useMemo,useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle,Check,Edit,FileText,List,Plus,RefreshCw,Search,X } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import { useApp } from '../context/AppContext';
@@ -29,6 +29,9 @@ export default function WarehouseTransfersWorkspace(){
 function WarehouseTransferSession({workspaceKey}:{workspaceKey:string}){
  const{data,currentBranchId,currentUser,refreshData}=useApp();
  const navigate=useNavigate();
+ const [searchParams,setSearchParams]=useSearchParams();
+ const requestedTransfer=searchParams.get('view');
+ const [transfersLoaded,setTransfersLoaded]=useState(false);
  const[restored]=useState(()=>readTransferWorkspace<TransferWorkspaceSnapshot>(workspaceKey));
  const[entryOpen,setEntryOpen]=useState(restored?.entryOpen||false);
  const activeBranchId=(currentBranchId==='ALL'?currentUser?.branchId:currentBranchId)||'';
@@ -43,7 +46,7 @@ function WarehouseTransferSession({workspaceKey}:{workspaceKey:string}){
  const canCorrect=!!currentUser?.isOwner||((role?.code.toUpperCase()==='ADM'||role?.name.toLowerCase()==='administrator')&&(currentUser?.permissions||role?.permissions||[]).includes('item:edit'));
  const beginCorrection=()=>{if(!selectedTransfer||!canCorrect||selectedTransfer.status!=='Diterima')return;setCorrecting(true);setCorrectionReason('');setProcess('Kirim Barang');setForm(current=>({...current,items:selectedTransfer.items.map(item=>({...item,qty:Number(item.qtySent)}))}))};
  const saveCorrection=async()=>{if(!selectedTransfer||savingCorrection)return;if(!correctionReason.trim()||!form.items.length)return alert('Isi alasan koreksi dan minimal satu barang.');if(selectedTransfer.id==='LOCAL-DUMMY-TRANSFER')return alert('Data dummy hanya untuk melihat tampilan. Gunakan transfer tersimpan untuk menguji stok.');setSavingCorrection(true);try{const result=await api.update('warehouse-transfers',selectedTransfer.id,{action:'correct',revision:selectedTransfer.revision,reason:correctionReason.trim(),items:form.items.map(item=>({itemId:item.itemId,qty:item.qty}))});if(!result.success)return alert(result.message||'Koreksi gagal');setCorrecting(false);setProcess('Terima Barang');setMessage('Koreksi transfer disimpan; stok kedua gudang dan riwayat diperbarui.');const [updated]=await Promise.all([load(),refreshData()]);const saved=updated.find(item=>item.id===selectedTransfer.id);if(saved)chooseTransfer(saved)}catch{alert('Tidak dapat memastikan hasil penyimpanan. Muat ulang transfer sebelum mencoba kembali.')}finally{setSavingCorrection(false)}};
- const load=async()=>{const result=await api.get<{transfers:Transfer[];warehouses:WarehouseOption[]}>('warehouse-transfers');setTransfers(result.data?.transfers||[]);setWarehouseOptions(result.data?.warehouses||[]);return result.data?.transfers||[]};
+ const load=async()=>{const result=await api.get<{transfers:Transfer[];warehouses:WarehouseOption[]}>('warehouse-transfers');if(!result.success){setMessage(result.message||'Daftar transfer gagal dimuat.');return [];}setTransfers(result.data?.transfers||[]);setWarehouseOptions(result.data?.warehouses||[]);setTransfersLoaded(true);return result.data?.transfers||[]};
  useEffect(()=>{void load()},[]);
  const sourceWarehouses=data.warehouses.filter(w=>w.isActive&&!w.isSystem&&(currentBranchId==='ALL'||w.branchId===activeBranchId));
  const activeWarehouse=sourceWarehouses.find(warehouse=>warehouse.isDefault)||sourceWarehouses[0];
@@ -57,6 +60,13 @@ function WarehouseTransferSession({workspaceKey}:{workspaceKey:string}){
  const reset=()=>{setCorrecting(false);setCorrectionReason('');setProcess('Kirim Barang');setFormTab('items');setSelectedTransfer(null);setReceiveQty({});setSearch('');setShowPicker(false);setShowTake(false);setSelectedItem(null);setQuantityItem(null);setDetailItemId('');setQuantityReadonly(false);setQuantity('1');setForm({date:localDateKey(),sourceWarehouseId:activeWarehouse?.id||'',destinationWarehouseId:'',sentById:currentUser?.id||'',deliveryMethod:'Diantar Langsung',notes:'',items:[]})};
  const newTransfer=()=>{if(!entryOpen){reset();setMessage('');setEntryOpen(true)}setView('entry')};
  const chooseTransfer=(transfer:Transfer)=>{setEntryOpen(true);setCorrecting(false);setCorrectionReason('');setProcess('Terima Barang');setSelectedTransfer(transfer);setReceiveQty(Object.fromEntries(transfer.items.map(item=>[item.itemId,Math.max(0,item.qtySent-item.qtyReceived)])));setForm(current=>({...current,date:transfer.date,sourceWarehouseId:transfer.sourceWarehouseId,destinationWarehouseId:transfer.destinationWarehouseId,notes:transfer.notes||'',items:[]}));setView('entry');setShowTake(false)};
+ useEffect(()=>{
+  if(!requestedTransfer||!transfersLoaded)return;
+  const transfer=transfers.find(row=>row.id===requestedTransfer||row.transferNumber===requestedTransfer);
+  if(transfer){chooseTransfer(transfer);setMessage('');}
+  else{setView('list');setMessage('Transfer sumber tidak ditemukan atau sudah tidak dapat diakses.');}
+  setSearchParams(params=>{const next=new URLSearchParams(params);next.delete('view');return next;},{replace:true});
+ },[requestedTransfer,transfersLoaded,transfers,setSearchParams]);
  const addItem=(item:typeof data.items[number])=>{if(form.items.some(row=>row.itemId===item.id)){setShowPicker(false);setSearch('');return}setQuantityItem(item);setDetailItemId('');setQuantityReadonly(false);setQuantityTab('detail');setQuantity('1');setShowPicker(false)};
  const openItemDetail=(item:SendItem|TransferItem)=>{const master=data.items.find(value=>value.id===item.itemId);if(!master){setSelectedItem(item);return}setSelectedItem(null);setQuantityItem(master);setDetailItemId(item.itemId);setQuantityReadonly(process!=='Kirim Barang');setQuantityTab('detail');setQuantity('qty' in item?String(item.qty):String(item.qtySent))};
  const confirmQuantity=()=>{if(!quantityItem||quantityReadonly)return;const qty=Number(quantity);if(!Number.isSafeInteger(qty)||qty<1){alert('Jumlah harus bilangan bulat minimal 1.');return}setForm(current=>({...current,items:detailItemId?current.items.map(item=>item.itemId===detailItemId?{...item,qty}:item):[...current.items,{itemId:quantityItem.id,itemCode:quantityItem.code,itemName:quantityItem.name,categoryName:quantityItem.categoryName,unit:quantityItem.unit,qty}]}));setQuantityItem(null);setSearch('')};

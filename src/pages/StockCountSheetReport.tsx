@@ -5,6 +5,7 @@ import { api } from '../lib/apiClient';
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import SimpleStockOpname from './SimpleStockOpname';
+import { useSearchParams } from 'react-router-dom';
 
 type CountRow={id:number;itemId:string;code:string;name:string;categoryName:string;categoryUsageCount?:number;unit:string;systemQuantity:number;movementIn:number;movementOut:number;isManual:boolean;count1:number|null;count2:number|null;finalQuantity:number|null;variance:number|null};
 type CountResult={id:string;resultNumber:string;date:string;status:string;adjustmentId?:string|null;adjustmentNumber?:string|null;notes?:string};
@@ -16,6 +17,9 @@ const escapeHtml=(value:unknown)=>String(value??'').replace(/&/g,'&amp;').replac
 export default function StockCountSheetReport(){return <SimpleStockOpname legacy={<LegacyStockCountSheetReport/>}/>;}
 
 function LegacyStockCountSheetReport(){
+ const [searchParams,setSearchParams]=useSearchParams();
+ const requestedDocument=searchParams.get('view');
+ const [ordersLoaded,setOrdersLoaded]=useState(false);
  const{data,currentUser,currentBranchId,hasPermission}=useApp();
  const canCreate=hasPermission('stock_opname:create');
  const canCount=hasPermission('stock_opname:count');
@@ -30,10 +34,16 @@ function LegacyStockCountSheetReport(){
  const selectableItems=useMemo(()=>data.items.filter(item=>item.isActive&&item.type==='Persediaan'&&(!form.categoryId||item.categoryId===form.categoryId)&&`${item.code} ${item.name}`.toLocaleLowerCase('id-ID').includes(itemSearch.toLocaleLowerCase('id-ID'))).slice(0,100),[data.items,form.categoryId,itemSearch]);
  const manualCandidates=useMemo(()=>{const existing=new Set((selected?.rows||[]).map(row=>row.itemId));const needle=itemSearch.trim().toLocaleLowerCase('id-ID');if(!selected?.result||!needle)return[];return data.items.filter(item=>item.isActive&&item.type==='Persediaan'&&!existing.has(item.id)&&`${item.code} ${item.name} ${item.brand||''} ${item.barcode||''}`.toLocaleLowerCase('id-ID').includes(needle)).slice(0,12);},[data.items,itemSearch,selected]);
  const filtered=orders.filter(x=>`${x.orderNumber} ${x.warehouseName} ${x.assignedUserName} ${x.status}`.toLowerCase().includes(search.toLowerCase()));
- const loadOrders=async()=>{setLoading(true);try{const r=await api.get<CountOrder[]>('stock-opnames');if(!r.success)throw new Error(r.message);setOrders((r.data||[]).filter(order=>(order as CountOrder & {entryMode?:string}).entryMode!=='simple'));}catch(e:any){setMessage(e?.message||'Daftar gagal dimuat.');}finally{setLoading(false);}};
+ const loadOrders=async()=>{setLoading(true);try{const r=await api.get<CountOrder[]>('stock-opnames');if(!r.success)throw new Error(r.message);setOrders((r.data||[]).filter(order=>(order as CountOrder & {entryMode?:string}).entryMode!=='simple'));setOrdersLoaded(true);}catch(e:any){setMessage(e?.message||'Daftar gagal dimuat.');}finally{setLoading(false);}};
  useEffect(()=>{void loadOrders();},[]);
  useEffect(()=>{if(form.warehouseId&&!warehouses.some(x=>x.id===form.warehouseId))setForm(x=>({...x,warehouseId:''}));},[warehouses,form.warehouseId]);
  const openDetail=async(id:string)=>{setLoading(true);try{const r=await api.get<CountOrder>(`stock-opnames/${id}`);if(!r.success||!r.data)throw new Error(r.message);setSelected(r.data);}catch(e:any){setMessage(e?.message||'Detail gagal dimuat.');}finally{setLoading(false);}};
+ useEffect(()=>{
+  if(!requestedDocument||!ordersLoaded)return;
+  const order=orders.find(row=>row.id===requestedDocument||row.orderNumber===requestedDocument||row.result?.id===requestedDocument||row.result?.resultNumber===requestedDocument);
+  if(order)void openDetail(order.id);else setMessage('Stok opname sumber tidak ditemukan atau sudah tidak dapat diakses.');
+  setSearchParams(params=>{const next=new URLSearchParams(params);next.delete('view');return next;},{replace:true});
+ },[requestedDocument,ordersLoaded,orders,setSearchParams]);
  const createOrder=async()=>{if(!canCreate)return;if(!form.warehouseId||!form.assignedUserId)return setMessage('Gudang dan petugas wajib dipilih.');if(form.startDate>form.endDate)return setMessage('Tanggal Mulai tidak boleh melewati Tanggal Akhir.');setLoading(true);try{const r=await api.create('stock-opnames',form);if(!r.success)throw new Error(r.message);setShowNew(false);await loadOrders();const created=r.data as {id?:string}|undefined;if(created?.id)await openDetail(created.id);}catch(e:any){setMessage(e?.message||'Perintah gagal dibuat.');}finally{setLoading(false);}};
  const action=async(type:'start'|'save-result'|'post-result')=>{if(type==='post-result'?!canPost:!canCount)return;if(!selected)return;setLoading(true);try{const r=await api.update('stock-opnames',selected.id,{action:type,rows:selected.rows||[],notes:selected.result?.notes||''});if(!r.success)throw new Error(r.message);await loadOrders();await openDetail(selected.id);setMessage(r.message||'Stok Opname diperbarui.');}catch(e:any){setMessage(e?.message||'Proses gagal.');}finally{setLoading(false);}};
  const remove=async(target:'order'|'result')=>{if(!canDelete)return;if(!selected||!confirm(`Hapus ${target==='result'?'Hasil':'Perintah'} Stok Opname?`))return;setLoading(true);try{const r=await api.removeWithBody('stock-opnames',selected.id,{target});if(!r.success)throw new Error(r.message);if(target==='result')await openDetail(selected.id);else setSelected(null);await loadOrders();setMessage(r.message||'Dokumen dihapus.');}catch(e:any){setMessage(e?.message||'Tidak dapat dihapus.');}finally{setLoading(false);}};

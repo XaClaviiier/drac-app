@@ -37,6 +37,7 @@ import InventoryReport from './pages/InventoryReport';
 import CashBankReport from './pages/CashBankReport';
 import HistoricalQuickEntry from './pages/HistoricalQuickEntry';
 import OpeningStockImport from './pages/OpeningStockImport';
+import ItemUsages from './pages/ItemUsages';
 import StockCountSheetReport from './pages/StockCountSheetReport';
 import StockCountSheetPrintReport from './pages/StockCountSheetPrintReport';
 import OnlineHelp from './pages/OnlineHelp';
@@ -116,6 +117,7 @@ function AppRoutes() {
         <Route path="warehouses" element={protectedPage('item:view', <Warehouses />)} />
         <Route path="warehouse-transfers" element={protectedPage('item:view', <WarehouseTransfers />)} />
         <Route path="opening-stock" element={protectedPage('item:edit', <OpeningStockImport />)} />
+        <Route path="item-usages" element={protectedPage('item_usage:view', <ItemUsages />)} />
         <Route path="help" element={<OnlineHelp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

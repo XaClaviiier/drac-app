@@ -10,7 +10,7 @@ export type DateSelection = {
   duration: string; unit: 'Hari' | 'Minggu' | 'Bulan';
 };
 
-export const JOURNAL_TYPES = ['Aset Tetap', 'Disposisi Aset Tetap', 'Faktur Pembelian', 'Faktur Penjualan', 'Jurnal Umum', 'Pekerjaan Pesanan', 'Penerimaan Penjualan', 'Pembayaran Pembelian'] as const;
+export const JOURNAL_TYPES = ['Aset Tetap', 'Disposisi Aset Tetap', 'Faktur Pembelian', 'Faktur Penjualan', 'Jurnal Umum', 'Pekerjaan Pesanan', 'Penerimaan Penjualan', 'Pembayaran Pembelian', 'Pemakaian Barang', 'Penyesuaian Persediaan'] as const;
 export const JOURNAL_COLUMNS = ['Nomor #', 'No. Trans #', 'Tanggal', 'Tipe Transaksi', 'Keterangan', 'Total', 'Cabang', 'Nama Pihak'] as const;
 export const DEFAULT_JOURNAL_COLUMNS = JOURNAL_COLUMNS.slice(0, 6);
 
@@ -19,9 +19,13 @@ export const sourceLabel = (type?: string) => ({
   purchase_invoice: 'Faktur Pembelian', supplier_payment: 'Pembayaran Pembelian',
   fixed_asset: 'Aset Tetap', asset_disposal: 'Disposisi Aset Tetap',
   work_order: 'Pekerjaan Pesanan', manual: 'Jurnal Umum',
+  item_usage: 'Pemakaian Barang',
+  stock_adjustment: 'Penyesuaian Persediaan',
 }[type || 'manual'] || type || 'Jurnal Umum');
 
 export function journalSourceType(label: string): string {
+  if (label === 'Pemakaian Barang') return 'item_usage';
+  if (label === 'Penyesuaian Persediaan') return 'stock_adjustment';
   return ({ 'Aset Tetap': 'fixed_asset', 'Disposisi Aset Tetap': 'asset_disposal', 'Faktur Pembelian': 'purchase_invoice', 'Faktur Penjualan': 'sales_invoice', 'Jurnal Umum': 'manual', 'Pekerjaan Pesanan': 'work_order', 'Penerimaan Penjualan': 'customer_payment', 'Pembayaran Pembelian': 'supplier_payment' } as Record<string, string>)[label] || label;
 }
 

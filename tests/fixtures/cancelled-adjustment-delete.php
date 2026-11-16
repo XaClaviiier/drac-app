@@ -12,7 +12,7 @@ final class AdjustmentDeleteDatabase extends PDO {
 $input=json_decode($argv[1],true,512,JSON_THROW_ON_ERROR);
 $pdo=new AdjustmentDeleteDatabase();
 $pdo->exec("CREATE TABLE roles(id TEXT,code TEXT,name TEXT,is_active INTEGER);
-CREATE TABLE stock_adjustments(id TEXT,adjustment_number TEXT,status TEXT,batch_key TEXT);
+CREATE TABLE stock_adjustments(id TEXT,adjustment_number TEXT,status TEXT,batch_key TEXT,adjustment_type TEXT DEFAULT 'opening_balance');
 CREATE TABLE stock_adjustment_items(id TEXT,adjustment_id TEXT,item_id TEXT,warehouse_id TEXT,quantity INTEGER);
 CREATE TABLE stock_movements(id TEXT,item_id TEXT,source_warehouse_id TEXT,destination_warehouse_id TEXT,quantity INTEGER,is_voided INTEGER,reference_type TEXT,reference_id TEXT,notes TEXT);
 CREATE TABLE stock_adjustment_maintenance_logs(adjustment_id TEXT,adjustment_number TEXT,previous_status TEXT,reason TEXT,snapshot_json TEXT,deleted_by TEXT,deleted_by_name TEXT);
@@ -20,7 +20,7 @@ CREATE TABLE transaction_activity_logs(entity_type TEXT,entity_id TEXT,entity_nu
 CREATE TABLE warehouse_stocks(warehouse_id TEXT,item_id TEXT,quantity INTEGER);
 INSERT INTO warehouse_stocks VALUES('W1','I1',27);
 INSERT INTO stock_adjustment_items VALUES('L1','ADJ1','I1','W1',10);");
-$pdo->prepare('INSERT INTO stock_adjustments VALUES(?,?,?,?)')->execute(['ADJ1','ADJ-2608-0001',$input['status']??'Cancelled',null]);
+$pdo->prepare('INSERT INTO stock_adjustments(id,adjustment_number,status,batch_key) VALUES(?,?,?,?)')->execute(['ADJ1','ADJ-2608-0001',$input['status']??'Cancelled',null]);
 $pdo->prepare('UPDATE stock_adjustment_items SET quantity=?')->execute([$input['quantity']??10]);
 $pdo->prepare('UPDATE warehouse_stocks SET quantity=?')->execute([$input['stock']??27]);
 foreach($input['movements']??[] as $row) {

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../stock-adjustment-values.php';
+require_once __DIR__.'/../inventory-revaluation.php';
 $actor = requireAuthenticatedUser($pdo);
 $roleStmt = $pdo->prepare("SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1");
 $roleStmt->execute([$actor['role_id'] ?? '']);
@@ -18,10 +19,28 @@ $mapDocument = function(array $row): array {
         'cancellationReason' => $row['cancellation_reason'] ?? null,
         'createdAt' => $row['created_at'], 'postedAt' => $row['posted_at'] ?? null,
         'cancelledAt' => $row['cancelled_at'] ?? null,
+        'valuationRevision' => (int)($row['valuation_revision'] ?? 0),
+        'valuationAccountId' => $row['valuation_account_id'] ?? '',
     ];
 };
 
 if ($method === 'GET') {
+    try {
+        if (($_GET['valuationOptions'] ?? '') === '1') {
+            $accounts=$pdo->query("SELECT a.id,a.code,a.name FROM chart_of_accounts a WHERE a.is_active=1 AND a.account_type IN ('Expense','Equity') AND NOT EXISTS(SELECT 1 FROM chart_of_accounts c WHERE c.parent_id=a.id) ORDER BY a.code")->fetchAll();
+            $defaults=getDefaultAccountSettings($pdo);
+            respondSuccess(['accounts'=>$accounts,'defaultAccountId'=>$defaults['inventoryAdjustmentCoaId']??'']);
+        }
+        if (($_GET['valuationPreview'] ?? '') === '1') {
+            $date=valuationDate($_GET['date']??'');$warehouseId=(string)($_GET['warehouseId']??'');$itemId=(string)($_GET['itemId']??'');
+            $warehouse=$pdo->prepare('SELECT branch_id FROM warehouses WHERE id=? AND is_active=1 AND is_system=0');$warehouse->execute([$warehouseId]);$branch=$warehouse->fetchColumn();
+            if ($branch===false) throw new InvalidArgumentException('Gudang tidak tersedia');
+            assertAccessibleBranch($pdo,$actor,(string)$branch);
+            $item=$pdo->prepare("SELECT id FROM items WHERE id=? AND type='Persediaan' AND is_active=1");$item->execute([$itemId]);
+            if (!$item->fetchColumn()) throw new InvalidArgumentException('Barang persediaan tidak tersedia');
+            respondSuccess(valuationSnapshot($pdo,$itemId,$warehouseId,$date));
+        }
+    } catch (Throwable $error) { respondError($error->getMessage(),transactionExceptionStatus($error,422)); }
     $accessibleBranchIds=getAccessibleBranchIds($pdo,$actor);
     if(!$accessibleBranchIds){if($id)respondError('Penyesuaian stok tidak ditemukan',404);respondSuccess([]);}
     $branchMarks=implode(',',array_fill(0,count($accessibleBranchIds),'?'));
@@ -33,7 +52,7 @@ if ($method === 'GET') {
         $document = $stmt->fetch(); if (!$document) respondError('Penyesuaian stok tidak ditemukan', 404);
         $lineStmt = $pdo->prepare("SELECT sai.*,w.name warehouse_name FROM stock_adjustment_items sai JOIN warehouses w ON w.id=sai.warehouse_id WHERE adjustment_id=? ORDER BY sai.id");
         $lineStmt->execute([$id]); $lines = $lineStmt->fetchAll();
-        foreach ($lines as &$line) { $line = ['id'=>$line['id'],'itemId'=>$line['item_id'],'itemCode'=>$line['item_code'],'itemName'=>$line['item_name'],'warehouseId'=>$line['warehouse_id'],'warehouseName'=>$line['warehouse_name'],'quantity'=>(int)$line['quantity'],'unit'=>$line['unit'],'unitCost'=>(float)($line['unit_cost']??0),'targetQuantity'=>isset($line['target_quantity'])?(int)$line['target_quantity']:null,'stockBefore'=>isset($line['stock_before'])?(int)$line['stock_before']:null,'lineNotes'=>$line['line_notes']??'']; }
+        foreach ($lines as &$line) { $line = ['id'=>$line['id'],'itemId'=>$line['item_id'],'itemCode'=>$line['item_code'],'itemName'=>$line['item_name'],'warehouseId'=>$line['warehouse_id'],'warehouseName'=>$line['warehouse_name'],'quantity'=>(int)$line['quantity'],'unit'=>$line['unit'],'unitCost'=>(float)($line['unit_cost']??0),'targetQuantity'=>isset($line['target_quantity'])?(int)$line['target_quantity']:null,'stockBefore'=>isset($line['stock_before'])?(int)$line['stock_before']:null,'lineNotes'=>$line['line_notes']??'','unitCostBefore'=>isset($line['unit_cost_before'])?(float)$line['unit_cost_before']:null,'valueChange'=>isset($line['value_change'])?(float)$line['value_change']:null]; }
         $payload = $mapDocument($document); $payload['rows'] = $lines; respondSuccess($payload);
     }
     $stmt = $pdo->prepare("SELECT sa.*,
@@ -47,6 +66,11 @@ if ($method === 'GET') {
 }
 
 $d = getInput();
+if ($method==='POST' && ($d['adjustmentType']??'')==='cost_adjustment') handleValuationMutation($pdo,$actor,$method,null,$d);
+if (in_array($method,['PUT','DELETE'],true) && $id) {
+    $kind=$pdo->prepare('SELECT adjustment_type FROM stock_adjustments WHERE id=?');$kind->execute([$id]);
+    if ($kind->fetchColumn()==='cost_adjustment') handleValuationMutation($pdo,$actor,$method,(string)$id,$d);
+}
 if ($method === 'POST') {
     $rows = is_array($d['rows'] ?? null) ? $d['rows'] : []; $date = (string)($d['date'] ?? date('Y-m-d'));
     $batchKey = preg_replace('/[^A-Z0-9_-]/', '', strtoupper((string)($d['batchKey'] ?? '')));

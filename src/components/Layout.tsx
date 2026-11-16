@@ -147,6 +147,14 @@ const navItems = [
     color: "from-cyan-500 to-blue-700",
   },
   {
+    path: "/item-usages",
+    label: "Pemakaian Barang",
+    short: "Pemakaian",
+    icon: PackageOpen,
+    perm: "item_usage:view" as const,
+    color: "from-teal-500 to-emerald-700",
+  },
+  {
     path: "/categories",
     label: "Kategori",
     short: "Kategori",
@@ -240,6 +248,7 @@ const pageTitles: Record<string, string> = {
   "/reports/stock-count-sheet": "Stok Opname",
   "/reports/stock-count-sheet-print": "Lembar Penghitungan Stok",
   "/opening-stock": "Penyesuaian Stok",
+  "/item-usages": "Pemakaian Barang",
   "/help": "Dokumentasi Online",
   "/reports/cash-bank": "Laporan Kas & Bank",
   "/cash-accounts": "Kas Cabang",
@@ -468,6 +477,13 @@ const desktopGroups = [
         path: "/warehouse-transfers",
         icon: ArrowLeftRight,
         perm: "item:view",
+        tone: "green",
+      },
+      {
+        label: "Pemakaian Barang",
+        path: "/item-usages",
+        icon: PackageOpen,
+        perm: "item_usage:view",
         tone: "green",
       },
       {

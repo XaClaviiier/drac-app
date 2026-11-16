@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2, RefreshCw, Printer, Share2, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember, StockMovement, ItemVehicleCompatibility } from '../types';
@@ -15,6 +15,7 @@ import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import VehicleCompatibilityPicker, { type VehicleCatalogBrandOption } from '../components/VehicleCompatibilityPicker';
 import { ITEM_COMPATIBILITY_TEMPLATES } from '../lib/itemCompatibilityTemplates';
+import { stockMovementSource } from '../lib/stockMovementSource';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -22,6 +23,8 @@ const stockMovementLabels:Record<string,string>={
   receipt:'Penerimaan Barang',sale:'Penjualan',reversal:'Pembalik Transaksi',
   transfer:'Pemindahan Barang',transfer_send:'Kirim Barang',transfer_receive:'Terima Barang',
   adjustment:'Penyesuaian Persediaan',
+  usage:'Pemakaian Barang',
+  cost_adjustment:'Penyesuaian HPP',cost_adjustment_reversal:'Pembatalan HPP',
 };
 
 const twoDigitSegment = (value: string, fallback: string) => {
@@ -1639,7 +1642,9 @@ export default function ItemsAndServices() {
                 <div className="app-table-scroll min-h-[340px] overflow-auto">
                   <table className="min-w-[900px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="w-[96px] px-3 py-2.5 text-left">Tanggal</th><th className="w-[142px] px-3 py-2.5 text-left">No. Sumber</th><th className="w-[145px] px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="w-[145px] px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
                     <tbody>{itemMovementRows.map((movement, index) => {
+                      const source = stockMovementSource(movement, data);
                       const sourceNumber = movement.referenceNumber || movement.id;
+                      const canOpenSource = source && hasPermission(source.permission);
                       const isTransferCorrection = movement.movementType === 'reversal'
                         && movement.referenceType === 'warehouse_transfer'
                         && /^Koreksi transfer:/i.test(movement.notes?.trim() || '');
@@ -1648,7 +1653,10 @@ export default function ItemsAndServices() {
                       const movementNotes = isTransferCorrection ? `${transferAction} ${sourceNumber}` : movement.notes || '—';
                       return <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}>
                         <td className="px-3 py-2.5 whitespace-nowrap">{new Date(movement.occurredAt||movement.createdAt).toLocaleDateString('id-ID')}</td>
-                        <td className="px-3 py-2.5 font-medium text-blue-700">{sourceNumber}</td>
+                        <td className="px-3 py-2.5 font-medium">{canOpenSource
+                          ? <Link to={source.path} title={`Buka transaksi ${sourceNumber}`} className="text-blue-700 underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-blue-600">{sourceNumber}</Link>
+                          : <span title={source ? 'Anda tidak memiliki akses ke transaksi sumber.' : 'Dokumen sumber tidak tersedia.'}>{sourceNumber}</span>}
+                        </td>
                         <td className="px-3 py-2.5">{movementLabel}</td><td className="px-3 py-2.5">{movementNotes}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{movement.incoming || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-red-700">{movement.outgoing || '—'}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td>
                       </tr>;
                     })}</tbody>
