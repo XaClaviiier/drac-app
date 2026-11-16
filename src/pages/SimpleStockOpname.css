@@ -150,4 +150,6 @@
 .opname-detail-dialog dt { color:#64748b; }
 .opname-detail-dialog dd { margin:0; overflow-wrap:anywhere; }
 .opname-detail-dialog footer { display:flex; justify-content:flex-end; border-top:1px solid #ddd; padding:12px 18px; }
+.opname-detail-dialog .opname-detail-delete { display:inline-flex; align-items:center; gap:6px; margin-right:auto; color:#b42318; border-color:#e2a6a1; }
+.opname-detail-dialog .opname-detail-delete:hover:not(:disabled) { background:#fff1f0; border-color:#b42318; }
 @media(max-width:480px){.opname-detail-dialog dl{grid-template-columns:95px minmax(0,1fr);padding:16px;gap:12px;}}

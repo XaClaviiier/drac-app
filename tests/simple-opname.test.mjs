@@ -12,6 +12,9 @@ const setup=t=>{const dir=mkdtempSync(join(tmpdir(),'simple-opname-'));t.after((
 };};
 const payload=(counts=[5,7,null])=>({action:'save-simple',date,warehouseId:'W1',notes:'Hitung fisik',requestKey:'abcdef123456abcdef123456',rows:counts.map((count,i)=>({itemId:`I${i+1}`,systemQuantity:[5,10,5][i],editVersion:'1',finalQuantity:count}))});
 const edit=(doc,counts)=>({action:'save-simple',date,warehouseId:'W1',revision:doc.revision,notes:'Koreksi',rows:doc.rows.map((row,i)=>({...row,finalQuantity:counts[Number(row.itemId.slice(1))-1]}))});
+const removeItems=(doc,itemIds)=>({action:'save-simple',date,warehouseId:'W1',revision:doc.revision,notes:'Hapus rincian',
+ rows:doc.rows.filter(row=>!itemIds.includes(row.itemId)),
+ removedItems:doc.rows.filter(row=>itemIds.includes(row.itemId)).map(row=>({itemId:row.itemId,editVersion:row.editVersion}))});
 const ok=r=>{assert.equal(r.success,true,r.message);return r;};
 test('one save records matches and blanks, posts only the difference, and supports safe retry',t=>{
  const run=setup(t),p=payload(),first=ok(run({payload:p}));
@@ -122,4 +125,90 @@ test('category preview includes month-to-date activity even when final stock is 
  const run=setup(t);run({seedActivity:[date.slice(0,7)+'-01 12:00:00','2020-01-01 12:00:00']});
  const result=ok(run({method:'GET',query:{preview:'1',warehouseId:'W1',date}}));
  const row=result.data.rows.find(row=>row.itemId==='I3');assert.equal(row.systemQuantity,0);assert.equal(row.movementIn,2);assert.equal(row.movementOut,2);
+});
+
+test('removing a draft item persists the remaining rows without changing stock',t=>{
+ const run=setup(t),first=ok(run({payload:{...payload([4,7,null]),mode:'draft'}}));
+ const doc=ok(run({method:'GET',id:first.data.id})).data;
+ const saved=ok(run({method:'PUT',id:doc.id,payload:{...removeItems(doc,['I2']),mode:'draft'},deny:['stock_opname:post']}));
+ assert.deepEqual(saved.tables.stock_count_result_items.map(row=>row.item_id).sort(),['I1','I3']);
+ assert.deepEqual(saved.tables.warehouse_stocks.map(row=>row.quantity),[5,10,5]);
+ assert.equal(saved.tables.stock_adjustments.length,0);assert.equal(saved.tables.stock_movements.length,0);
+ assert.deepEqual(ok(run({method:'GET',id:doc.id})).data.rows.map(row=>row.itemId).sort(),['I1','I3']);
+});
+
+test('removing a posted item reverses only its variance and preserves subsequent stock movements',t=>{
+ const run=setup(t),first=ok(run({payload:payload([4,7,null])}));
+ run({bump:{itemId:'I2',delta:4}});
+ const doc=ok(run({method:'GET',id:first.data.id})).data,change=removeItems(doc,['I2']);
+ const saved=ok(run({method:'PUT',id:doc.id,payload:change}));
+ assert.deepEqual(saved.tables.warehouse_stocks.map(row=>row.quantity),[4,14,5]);
+ assert.deepEqual(saved.tables.stock_count_result_items.map(row=>row.item_id).sort(),['I1','I3']);
+ assert.equal(saved.data.adjustmentNumber,first.data.adjustmentNumber);
+ assert.deepEqual(saved.tables.stock_adjustment_items.map(row=>[row.item_id,row.quantity]),[['I1',-1]]);
+ assert.deepEqual(saved.tables.stock_movements.map(row=>[row.item_id,row.quantity]),[['I1',1]]);
+ const audit=JSON.parse(saved.tables.stock_opname_audit.at(-1).snapshot);
+ assert.deepEqual(audit.removedItemIds,['I2']);assert.equal(audit.before.rows.length,3);
+ const retry=run({method:'PUT',id:doc.id,payload:change});assert.equal(retry.status,409);
+ assert.deepEqual(retry.tables.warehouse_stocks,saved.tables.warehouse_stocks);
+});
+
+test('removing the final posted item keeps the opname and clears its adjustment even if reversal makes stock negative',t=>{
+ const run=setup(t),p=payload([null,12,null]);p.rows=p.rows.filter(row=>row.itemId==='I2');
+ const first=ok(run({payload:p}));run({bump:{itemId:'I2',delta:-11}});
+ const doc=ok(run({method:'GET',id:first.data.id})).data;
+ const saved=ok(run({method:'PUT',id:doc.id,payload:removeItems(doc,['I2'])}));
+ assert.equal(saved.tables.warehouse_stocks[1].quantity,-1);
+ assert.equal(saved.tables.stock_count_orders.length,1);assert.equal(saved.tables.stock_count_results[0].status,'Posted');
+ assert.equal(saved.tables.stock_count_result_items.length,0);assert.equal(saved.tables.stock_adjustments.length,0);
+ assert.equal(saved.tables.stock_adjustment_items.length,0);assert.equal(saved.tables.stock_movements.length,0);
+ const fresh=ok(run({method:'GET',id:doc.id})).data;assert.deepEqual(fresh.rows,[]);assert.equal(fresh.result.adjustmentId,null);
+});
+
+test('removing an uncounted posted item does not alter balances or stock versions',t=>{
+ const run=setup(t),first=ok(run({payload:payload()})),doc=ok(run({method:'GET',id:first.data.id})).data;
+ const saved=ok(run({method:'PUT',id:doc.id,payload:removeItems(doc,['I3'])}));
+ assert.deepEqual(saved.tables.warehouse_stocks,first.tables.warehouse_stocks);
+ assert.deepEqual(saved.tables.stock_count_result_items.map(row=>row.item_id).sort(),['I1','I2']);
+});
+
+test('removing a posted item rejects stale stock until its version is reviewed',t=>{
+ const run=setup(t),first=ok(run({payload:payload()})),doc=ok(run({method:'GET',id:first.data.id})).data;
+ const bumped=ok(run({bump:{itemId:'I2',delta:2}}));
+ const rejected=run({method:'PUT',id:doc.id,payload:removeItems(doc,['I2'])});
+ assert.equal(rejected.status,409);assert.match(rejected.message,/Muat ulang stok/);
+ assert.deepEqual(rejected.tables,bumped.tables);
+ const reviewed=ok(run({method:'GET',id:doc.id})).data;
+ const saved=ok(run({method:'PUT',id:doc.id,payload:removeItems(reviewed,['I2'])}));assert.equal(saved.tables.warehouse_stocks[1].quantity,12);
+});
+
+test('removing a posted item below a newer completed opname is rejected atomically',t=>{
+ const run=setup(t),first=ok(run({payload:payload()}));
+ const p=payload([5,8,null]);p.requestKey='999999999999999999999999';p.rows[1].editVersion='2';p.rows[1].systemQuantity=7;
+ const later=ok(run({payload:p})),doc=ok(run({method:'GET',id:first.data.id})).data;
+ const rejected=run({method:'PUT',id:doc.id,payload:removeItems(doc,['I2'])});
+ assert.equal(rejected.status,409);assert.match(rejected.message,/opname lebih baru/);assert.deepEqual(rejected.tables,later.tables);
+});
+
+for(const permission of ['count','post'])test(`removing a posted item requires ${permission} permission`,t=>{
+ const run=setup(t),first=ok(run({payload:payload()})),doc=ok(run({method:'GET',id:first.data.id})).data;
+ const rejected=run({method:'PUT',id:doc.id,payload:removeItems(doc,['I2']),deny:[`stock_opname:${permission}`]});
+ assert.equal(rejected.status,403);assert.deepEqual(rejected.tables,first.tables);
+});
+
+test('a failure rebuilding remaining movements rolls back item deletion and stock reversal',t=>{
+ const run=setup(t),first=ok(run({payload:payload([4,7,null])})),doc=ok(run({method:'GET',id:first.data.id})).data;
+ const failed=run({method:'PUT',id:doc.id,payload:removeItems(doc,['I2']),failMovement:true});
+ assert.equal(failed.success,false);assert.deepEqual(failed.tables,first.tables);
+});
+
+for(const kind of ['missing','unknown','duplicate','retained'])test(`invalid ${kind} removal cannot silently drop posted rows`,t=>{
+ const run=setup(t),first=ok(run({payload:payload()})),doc=ok(run({method:'GET',id:first.data.id})).data;
+ const change=removeItems(doc,['I2']);
+ if(kind==='missing')delete change.removedItems;
+ if(kind==='unknown')change.removedItems=[{itemId:'UNKNOWN',editVersion:'1'}];
+ if(kind==='duplicate')change.removedItems.push(change.removedItems[0]);
+ if(kind==='retained')change.rows=doc.rows;
+ const rejected=run({method:'PUT',id:doc.id,payload:change});
+ assert.equal(rejected.success,false);assert.deepEqual(rejected.tables,first.tables);
 });
