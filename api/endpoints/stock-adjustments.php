@@ -6,7 +6,8 @@ $roleStmt = $pdo->prepare("SELECT code,name FROM roles WHERE id=? AND is_active=
 $roleStmt->execute([$actor['role_id'] ?? '']);
 $role = $roleStmt->fetch();
 $isAdmin = !empty($actor['is_owner']) || strtoupper((string)($role['code'] ?? '')) === 'ADM' || strtolower((string)($role['name'] ?? '')) === 'administrator';
-if (!$isAdmin) respondError('Penyesuaian stok hanya tersedia untuk Owner dan Administrator', 403);
+$canHpp = $isAdmin || authenticatedUserHasPermission($pdo, $actor, 'stock_adjustment:hpp');
+if (!$canHpp) respondError('Penyesuaian stok hanya tersedia untuk Owner, Administrator, atau user berizin HPP', 403);
 
 $mapDocument = function(array $row): array {
     return [
@@ -27,11 +28,13 @@ $mapDocument = function(array $row): array {
 if ($method === 'GET') {
     try {
         if (($_GET['valuationOptions'] ?? '') === '1') {
+            if (!$canHpp) respondError('Akun tidak memiliki izin penyesuaian HPP', 403);
             $accounts=$pdo->query("SELECT a.id,a.code,a.name FROM chart_of_accounts a WHERE a.is_active=1 AND a.account_type IN ('Expense','Equity') AND NOT EXISTS(SELECT 1 FROM chart_of_accounts c WHERE c.parent_id=a.id) ORDER BY a.code")->fetchAll();
             $defaults=getDefaultAccountSettings($pdo);
             respondSuccess(['accounts'=>$accounts,'defaultAccountId'=>$defaults['inventoryAdjustmentCoaId']??'']);
         }
         if (($_GET['valuationPreview'] ?? '') === '1') {
+            if (!$canHpp) respondError('Akun tidak memiliki izin penyesuaian HPP', 403);
             $date=valuationDate($_GET['date']??'');$warehouseId=(string)($_GET['warehouseId']??'');$itemId=(string)($_GET['itemId']??'');
             $warehouse=$pdo->prepare('SELECT branch_id FROM warehouses WHERE id=? AND is_active=1 AND is_system=0');$warehouse->execute([$warehouseId]);$branch=$warehouse->fetchColumn();
             if ($branch===false) throw new InvalidArgumentException('Gudang tidak tersedia');

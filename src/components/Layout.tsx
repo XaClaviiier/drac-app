@@ -268,6 +268,7 @@ type DesktopMenuItem = {
   path?: string;
   icon: any;
   perm?: Parameters<ReturnType<typeof useApp>["hasPermission"]>[0];
+  perms?: Parameters<ReturnType<typeof useApp>["hasPermission"]>[0][];
   tone: "green" | "blue" | "purple" | "orange";
 };
 
@@ -491,6 +492,7 @@ const desktopGroups = [
         path: "/opening-stock",
         icon: ClipboardCheck,
         perm: "item:edit",
+        perms: ["stock_adjustment:hpp"],
         tone: "green",
       },
       { label: "Stok Opname", path: "/reports/stock-count-sheet", icon: ClipboardCheck, perm: "stock_opname:view", tone: "green" },
@@ -677,7 +679,7 @@ export default function Layout() {
     currentUser?.roleName?.trim().toLowerCase() === "administrator",
   );
   const canAccessDesktopItem = (item: DesktopMenuItem) =>
-    (!item.perm || hasPermission(item.perm)) &&
+    ((!item.perm && !item.perms) || (item.perm ? hasPermission(item.perm) : false) || Boolean(item.perms?.some((permission) => hasPermission(permission)))) &&
     (item.path !== "/suppliers" || canUseSupplier);
 
   const visibleNavItems = navItems.filter(

@@ -114,7 +114,7 @@ export default function OpeningStockImport() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedDocument = searchParams.get('view');
   const [documentsLoaded, setDocumentsLoaded] = useState(false);
-  const { data, refreshData, currentUser, currentBranchId } = useApp();
+  const { data, refreshData, currentUser, currentBranchId, hasPermission } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
   const listImportRef = useRef<HTMLInputElement>(null);
   const [date, setDate] = useState(localDateKey());
@@ -141,6 +141,7 @@ export default function OpeningStockImport() {
   const [sortAsc, setSortAsc] = useState(false);
   const [rowDialog, setRowDialog] = useState<{ index: number; row: PreviewRow; readOnly: boolean } | null>(null);
   const [detailSearch, setDetailSearch] = useState("");
+  const [listAdjustmentType, setListAdjustmentType] = useState<"opening_balance" | "cost_adjustment">("opening_balance");
   const [adjustmentType, setAdjustmentType] = useState("opening_balance");
   const [valuationAccountId, setValuationAccountId] = useState("");
   const [valuationAccounts, setValuationAccounts] = useState<Array<{id:string;code:string;name:string}>>([]);
@@ -173,8 +174,10 @@ export default function OpeningStockImport() {
   useEffect(() => { setRowMessage(""); }, [rowDialog?.index, rowDialog?.row.quantity, rowDialog?.row.warehouseId]);
   const currentRole = data.roles.find(role => role.id === currentUser?.roleId);
   const isAdmin = Boolean(currentUser?.isOwner) || currentRole?.code?.toUpperCase() === "ADM" || (currentRole?.name || currentUser?.roleName || "").trim().toLowerCase() === "administrator";
+  const canHpp = isAdmin || hasPermission("stock_adjustment:hpp");
+  const canManageAdjustments = isAdmin || canHpp;
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageAdjustments) return;
     let active = true;
     void api.get<{accounts:Array<{id:string;code:string;name:string}>;defaultAccountId:string}>("stock-adjustments?valuationOptions=1").then(response => {
       if (!active || !response.success || !response.data) return;
@@ -183,7 +186,7 @@ export default function OpeningStockImport() {
       setValuationAccountId(previous => previous || response.data!.defaultAccountId);
     });
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [canManageAdjustments]);
   useEffect(() => {
     if (!isHpp || !rowDialog || rowDialog.readOnly) return;
     let active = true;
@@ -263,8 +266,8 @@ export default function OpeningStockImport() {
     );
   };
   useEffect(() => {
-    if (isAdmin) void loadDocuments();
-  }, [isAdmin]);
+    if (canManageAdjustments) void loadDocuments();
+  }, [canManageAdjustments]);
 
   const downloadTemplate = () => {
     const sampleWarehouse = data.warehouses.find(
@@ -389,7 +392,7 @@ export default function OpeningStockImport() {
   };
 
   const submit = async (postImmediately: boolean) => {
-    if (!isAdmin || !validRows.length || errorRows.length || duplicateKeys.size)
+    if ((isHpp ? !canHpp : !isAdmin) || !validRows.length || errorRows.length || duplicateKeys.size)
       return;
     if (isHpp && (!notes.trim() || !valuationAccountId)) { setMessage("Isi akun penyesuaian dan alasan koreksi HPP pada Info lainnya."); setFormTab("info"); return; }
     setLoading(true);
@@ -606,6 +609,7 @@ export default function OpeningStockImport() {
   const filteredDocuments = documents.filter((document) => {
     const query = documentSearch.trim().toLowerCase();
     return (
+      document.adjustmentType === listAdjustmentType &&
       (!documentDate || document.date >= documentDate) &&
       (!statusFilter || document.status === statusFilter) &&
       (!query ||
@@ -616,6 +620,7 @@ export default function OpeningStockImport() {
   });
 
   const newDocument = (type = "opening_balance") => {
+    setListAdjustmentType(type === "cost_adjustment" ? "cost_adjustment" : "opening_balance");
     setAdjustmentType(type); setValuationRevision(0); setValuationAccountId(defaultValuationAccount.current); pendingValuationCreate.current = null;
     setSelectedDocument(null); setEditingId(""); setRows([]); setNotes("");
     setFileName(""); setDate(localDateKey()); setEntryTabOpen(true); setViewMode("entry"); setFormTab("items"); setMenu(null);
@@ -627,10 +632,11 @@ export default function OpeningStockImport() {
   const quantityTotal = displayRows.reduce((sum, row) => sum + (isHpp ? row.stockBefore || 0 : Math.abs(row.quantity)), 0);
   const activeDocument = selectedDocument || documents.find(document => document.id === editingId);
   const showForm = !!selectedDocument || viewMode === "entry";
-  const saveDisabled = !isAdmin || loading || !validRows.length || !!errorRows.length || !!duplicateKeys.size;
+  const saveDisabled = (isHpp ? !canHpp : !isAdmin) || loading || !validRows.length || !!errorRows.length || !!duplicateKeys.size;
   const formatDate = (value: string) => value.split("-").reverse().join("/");
   const toggleMenu = (value: typeof menu) => setMenu(current => current === value ? null : value);
   const openDocument = (document: AdjustmentDocument) => {
+    setListAdjustmentType(document.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance");
     setMenu(null);
     if (document.status === "Draft" && !document.isStockOpnameLinked) void editDocument(document);
     else void viewDocument(document);
@@ -654,7 +660,7 @@ export default function OpeningStockImport() {
     String(a[sortKey] || "").localeCompare(String(b[sortKey] || ""), "id", { numeric: true }) * (sortAsc ? 1 : -1));
   const orderBy = (key: typeof sortKey) => { setSortAsc(sortKey === key ? !sortAsc : true); setSortKey(key); };
 
-  if (!isAdmin) return <div className="adjustment-message">Penyesuaian Persediaan hanya tersedia untuk administrator.</div>;
+  if (!canManageAdjustments) return <div className="adjustment-message">Penyesuaian Persediaan hanya tersedia untuk user yang memiliki izin edit barang.</div>;
   return (
     <div className={`app-module-page adjustment-workspace ${isHpp ? "adjustment-hpp" : ""}`}>
       <div className={ui.childBar}>
@@ -690,7 +696,8 @@ export default function OpeningStockImport() {
         </div>
         <div className="adjustment-list-toolbar">
           <button className="adjustment-add" title="Data Baru" onClick={() => newDocument()}><Plus size={23}/></button>
-          <button className="adjustment-outline" disabled={loading} onClick={() => newDocument("cost_adjustment")}>Penyesuaian HPP</button>
+          <label className="adjustment-kind adjustment-list-kind">Jenis Penyesuaian<select aria-label="Filter jenis penyesuaian" value={listAdjustmentType} onChange={event => setListAdjustmentType(event.target.value as "opening_balance" | "cost_adjustment")}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP</option>}</select></label>
+          {canHpp && <button className="adjustment-outline" disabled={loading} onClick={() => newDocument("cost_adjustment")}>Penyesuaian HPP Baru</button>}
           <button className="adjustment-icon" title="Perbarui" disabled={loading} onClick={() => void Promise.all([loadDocuments(),refreshData()])}><RefreshCw size={16}/></button>
           <div className="adjustment-list-tools">
             <button className="adjustment-icon" title="Cetak daftar" onClick={() => window.print()}><Printer size={16}/></button>
@@ -717,7 +724,7 @@ export default function OpeningStockImport() {
               {!selectedDocument && !isHpp && <div className="adjustment-dropdown"><button className="adjustment-outline" onClick={() => toggleMenu("import")}>Ambil <ChevronDown size={12}/></button>{menu === "import" && <div className="adjustment-menu"><button disabled={!isAdmin} onClick={() => {setMenu(null); inputRef.current?.click();}}>Impor Excel/CSV</button><button onClick={() => {setMenu(null); downloadTemplate();}}>Unduh template</button></div>}</div>}
             </div>
           </div>
-          <label className="adjustment-kind">Jenis Penyesuaian<select aria-label="Jenis penyesuaian" disabled={!!selectedDocument || !!editingId || !!rows.length || loading} value={selectedDocument ? (selectedDocument.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance") : adjustmentType} onChange={event => setAdjustmentType(event.target.value)}><option value="opening_balance">Kuantitas Stok</option><option value="cost_adjustment">Penyesuaian HPP — Stok Tetap</option></select></label>
+          <label className="adjustment-kind">Jenis Penyesuaian<select aria-label="Jenis penyesuaian" disabled={!!selectedDocument || !!editingId || !!rows.length || loading} value={selectedDocument ? (selectedDocument.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance") : adjustmentType} onChange={event => setAdjustmentType(event.target.value)}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP — Stok Tetap</option>}</select></label>
           <div className="adjustment-body-wrap">
             <nav className="adjustment-side-tabs" aria-label="Bagian penyesuaian">
               <button title="Rincian Barang" className={formTab === "items" ? "active" : ""} onClick={() => {setFormTab("items"); setMenu(null);}}><FileText size={19}/></button>

@@ -10,6 +10,7 @@ const allPermissions: any[] = [
   'customer:view', 'customer:create', 'customer:edit', 'customer:delete',
   'vehicle:view', 'vehicle:create', 'vehicle:edit', 'vehicle:delete',
   'item:view', 'item:create', 'item:edit', 'item:delete',
+  'stock_adjustment:hpp',
   'user:view', 'user:create', 'user:edit', 'user:delete',
   'role:view', 'role:create', 'role:edit', 'role:delete',
   'branch:view', 'branch:create', 'branch:edit', 'branch:delete',

@@ -61,8 +61,19 @@ function RequirePermission({ permission, children }: { permission: Permission; c
   return <>{children}</>;
 }
 
+function RequireAnyPermission({ permissions, children }: { permissions: Permission[]; children: React.ReactNode }) {
+  const { hasPermission, hasLoadedData } = useApp();
+  if (!hasLoadedData) return <div className="min-h-[40vh]" />;
+  if (!permissions.some((permission) => hasPermission(permission))) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 const protectedPage = (permission: Permission, page: React.ReactNode) => (
   <RequirePermission permission={permission}>{page}</RequirePermission>
+);
+
+const protectedAnyPage = (permissions: Permission[], page: React.ReactNode) => (
+  <RequireAnyPermission permissions={permissions}>{page}</RequireAnyPermission>
 );
 
 function AppRoutes() {
@@ -116,7 +127,7 @@ function AppRoutes() {
         <Route path="settings" element={protectedPage('settings:view', <SettingsPage />)} />
         <Route path="warehouses" element={protectedPage('item:view', <Warehouses />)} />
         <Route path="warehouse-transfers" element={protectedPage('item:view', <WarehouseTransfers />)} />
-        <Route path="opening-stock" element={protectedPage('item:edit', <OpeningStockImport />)} />
+        <Route path="opening-stock" element={protectedAnyPage(['item:edit', 'stock_adjustment:hpp'], <OpeningStockImport />)} />
         <Route path="item-usages" element={protectedPage('item_usage:view', <ItemUsages />)} />
         <Route path="help" element={<OnlineHelp />} />
         <Route path="*" element={<Navigate to="/" replace />} />

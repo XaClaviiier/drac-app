@@ -195,8 +195,7 @@ function handleValuationMutation(PDO $pdo,array $actor,string $method,?string $i
     $pdo->beginTransaction();
     try {
         lockInventoryMutation($pdo);
-        $authorization=lockInventoryMutationAuthorization($pdo,$actor,'item:'.($action==='create'?'create':($action==='delete'?'delete':'edit')));
-        assertLockedInventoryOwnerOrAdministrator($authorization);$actor=$authorization['actor'];
+        $authorization=lockInventoryMutationAuthorization($pdo,$actor,'stock_adjustment:hpp');$actor=$authorization['actor'];
         if ($action==='create') {
             $data=normalizeValuation($input);
             $request=valuationText($input['requestKey']??'',50,'Identitas permintaan',true);
