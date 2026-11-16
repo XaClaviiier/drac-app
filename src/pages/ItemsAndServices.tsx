@@ -1638,7 +1638,20 @@ export default function ItemsAndServices() {
                 </div>
                 <div className="app-table-scroll min-h-[340px] overflow-auto">
                   <table className="min-w-[900px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="w-[96px] px-3 py-2.5 text-left">Tanggal</th><th className="w-[142px] px-3 py-2.5 text-left">No. Sumber</th><th className="w-[145px] px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="w-[145px] px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
-                    <tbody>{itemMovementRows.map((movement, index) => <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}><td className="px-3 py-2.5 whitespace-nowrap">{new Date(movement.occurredAt||movement.createdAt).toLocaleDateString('id-ID')}</td><td className="px-3 py-2.5 font-medium text-blue-700">{movement.referenceNumber || movement.id}</td><td className="px-3 py-2.5">{stockMovementLabels[movement.movementType]||movement.movementType}</td><td className="px-3 py-2.5">{movement.notes || '—'}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{movement.incoming || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-red-700">{movement.outgoing || '—'}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td></tr>)}</tbody>
+                    <tbody>{itemMovementRows.map((movement, index) => {
+                      const sourceNumber = movement.referenceNumber || movement.id;
+                      const isTransferCorrection = movement.movementType === 'reversal'
+                        && movement.referenceType === 'warehouse_transfer'
+                        && /^Koreksi transfer:/i.test(movement.notes?.trim() || '');
+                      const transferAction = movement.incoming && !movement.outgoing ? 'Terima' : 'Kirim';
+                      const movementLabel = isTransferCorrection ? `${transferAction} Barang` : stockMovementLabels[movement.movementType] || movement.movementType;
+                      const movementNotes = isTransferCorrection ? `${transferAction} ${sourceNumber}` : movement.notes || '—';
+                      return <tr key={movement.id} className={`border-b border-slate-200 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}>
+                        <td className="px-3 py-2.5 whitespace-nowrap">{new Date(movement.occurredAt||movement.createdAt).toLocaleDateString('id-ID')}</td>
+                        <td className="px-3 py-2.5 font-medium text-blue-700">{sourceNumber}</td>
+                        <td className="px-3 py-2.5">{movementLabel}</td><td className="px-3 py-2.5">{movementNotes}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{movement.incoming || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-red-700">{movement.outgoing || '—'}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td>
+                      </tr>;
+                    })}</tbody>
                   </table>
                   {movementError && <div className="bg-red-50 py-3 text-center text-sm text-red-700">{movementError}</div>}
                   {!movementLoading && !movementError && !itemMovementRows.length && <div className="bg-white py-16 text-center text-slate-500">Belum ada data mutasi pada periode ini.</div>}
