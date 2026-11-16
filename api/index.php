@@ -21,7 +21,9 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_coa_details_v1');
     ensureCashAccountDetails($pdo);
     runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_schema_v1', 'ensureItemUsageSchema');
-    runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_permissions_v1', 'grantInitialItemUsagePermissions');
+    // v2 juga memperbaiki role pegawai yang sudah ada agar dapat mengisi dan
+    // mem-posting Pemakaian Barang tanpa memberi akses koreksi HPP.
+    runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_permissions_v2', 'grantInitialItemUsagePermissions');
     runVersionedApiBootstrap($pdo, 'api_support_20261116_inventory_revaluation_v1', 'ensureInventoryRevaluationSchema');
     runVersionedApiBootstrap($pdo, 'api_support_20260915_customer_import_v1', static function(PDO $pdo): void {
         ensureCustomerImportSchema($pdo);

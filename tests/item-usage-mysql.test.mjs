@@ -204,6 +204,14 @@ run('schema and initial permissions bootstrap is repeatable and respects later r
   const f=fixture(t); ok(f.call({op:'bootstrap'}));
   const permissions=JSON.parse(f.sql("SELECT permissions FROM roles WHERE id='ADMIN'")[0].permissions);
   assert.ok(permissions.includes('item_usage:post')); assert.ok(permissions.includes('item_usage:cancel'));
+  f.sql("UPDATE roles SET permissions=? WHERE id='STAFF'", [JSON.stringify(['item:view','item:create'])]);
+  ok(f.call({op:'permissions'}));
+  const staffPermissions=JSON.parse(f.sql("SELECT permissions FROM roles WHERE id='STAFF'")[0].permissions);
+  assert.ok(staffPermissions.includes('item_usage:view'));
+  assert.ok(staffPermissions.includes('item_usage:create'));
+  assert.ok(staffPermissions.includes('item_usage:edit'));
+  assert.ok(staffPermissions.includes('item_usage:post'));
+  assert.ok(!staffPermissions.includes('item_usage:cancel'));
   f.sql("UPDATE roles SET permissions='[]' WHERE id='ADMIN'");
   ok(f.call({op:'bootstrap'}));
   assert.deepEqual(JSON.parse(f.sql("SELECT permissions FROM roles WHERE id='ADMIN'")[0].permissions),[]);

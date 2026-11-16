@@ -33,9 +33,17 @@ function grantInitialItemUsagePermissions(PDO $pdo): void {
             $permissions = json_decode((string)$role['permissions'], true);
             $permissions = is_array($permissions) ? $permissions : [];
             $next = $permissions;
-            foreach (['view','create','edit','delete'] as $action) {
-                if (in_array('item:'.$action, $permissions, true)) $next[] = 'item_usage:'.$action;
-            }
+            $canViewItems = in_array('item:view', $permissions, true);
+            $canCreateItems = in_array('item:create', $permissions, true);
+            $canEditItems = in_array('item:edit', $permissions, true);
+            if ($canViewItems) $next[] = 'item_usage:view';
+            // Pegawai yang dapat mengakses master barang dapat mencatat
+            // pemakaian dan menyelesaikan dokumen operasionalnya. HPP tetap
+            // berada di endpoint penyesuaian persediaan yang terpisah.
+            if ($canViewItems || $canCreateItems) $next[] = 'item_usage:create';
+            if ($canCreateItems || $canEditItems) $next[] = 'item_usage:edit';
+            if ($canCreateItems) $next[] = 'item_usage:post';
+            if (in_array('item:delete', $permissions, true)) $next[] = 'item_usage:delete';
             if (strtoupper((string)$role['code']) === 'ADM' || strtolower((string)$role['name']) === 'administrator') {
                 foreach (['view','create','edit','post','cancel','delete'] as $action) $next[] = 'item_usage:'.$action;
             }
