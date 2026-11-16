@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
-import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, Printer, RefreshCw, Settings2, List } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, Printer, RefreshCw, Settings2, List, Filter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { GoodsReceipt, GoodsReceiptItem, PurchaseInvoice, PurchaseInvoiceItem } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { addLocalDays, localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
+import { ui } from '../components/ui/interfaceStandards';
+import { receiptDeliveryLabel, receiptDeliveryOptions } from '../lib/goodsReceiptSharing';
 
 type ReceiptColumn = 'number' | 'date' | 'notes' | 'receivedBy' | 'itemCount' | 'warehouse' | 'status';
 const defaultReceiptColumns: ReceiptColumn[] = ['number','date','notes','receivedBy','itemCount','warehouse','status'];
@@ -24,14 +26,49 @@ export default function GoodsReceiptPage() {
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterInvoice, setFilterInvoice] = useState('');
+  const [filterReceivedBy, setFilterReceivedBy] = useState('');
+  const [filterDeliveryMethod, setFilterDeliveryMethod] = useState('');
+  const [filterWarehouse, setFilterWarehouse] = useState('');
+  const [filterDate, setFilterDate] = useState('');
   const [filterFromDate, setFilterFromDate] = useState('');
-  const receiptFiltersActive = Boolean(filterStatus || filterInvoice || filterFromDate);
+  const [filterToDate, setFilterToDate] = useState('');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const filterBarRef = useRef<HTMLDivElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const activeFilterCount = [filterStatus, filterReceivedBy, filterDeliveryMethod, filterWarehouse, filterDate || filterFromDate || filterToDate].filter(Boolean).length;
+  const receiptFiltersActive = activeFilterCount > 0;
   const resetReceiptFilters = () => {
+    setFilterDate('');
     setFilterFromDate('');
+    setFilterToDate('');
     setFilterStatus('');
-    setFilterInvoice('');
+    setFilterReceivedBy('');
+    setFilterDeliveryMethod('');
+    setFilterWarehouse('');
   };
+  const updateFilterDate = (value: string) => {
+    setFilterDate(value);
+    setFilterFromDate('');
+    setFilterToDate('');
+  };
+  const closeFilterPanel = () => {
+    setShowFilterPanel(false);
+    filterButtonRef.current?.focus();
+  };
+
+  useEffect(() => {
+    setFilterWarehouse('');
+    setFilterReceivedBy('');
+    setFilterDeliveryMethod('');
+  }, [currentBranchId]);
+  useEffect(() => {
+    if (!showFilterPanel) return;
+    const closeFromOutside = (event: PointerEvent) => {
+      if (!filterBarRef.current?.contains(event.target as Node)) setShowFilterPanel(false);
+    };
+    document.addEventListener('pointerdown', closeFromOutside);
+    return () => document.removeEventListener('pointerdown', closeFromOutside);
+  }, [showFilterPanel]);
   const [receiptColumns, setReceiptColumns] = useState<ReceiptColumn[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(receiptColumnStorageKey) || '[]') as ReceiptColumn[];
@@ -163,20 +200,28 @@ export default function GoodsReceiptPage() {
     return 'Sebagian';
   };
 
+  const branchReceipts = useMemo(() => data.goodsReceipts
+    .filter(receipt => currentBranchId === 'ALL' || receipt.branchId === currentBranchId), [data.goodsReceipts, currentBranchId]);
+
   const filtered = useMemo(() => {
-    return data.goodsReceipts
+    return branchReceipts
       .filter((r) => {
-        const branchMatch = currentBranchId === 'ALL' || r.branchId === currentBranchId;
-        if (!branchMatch) return false;
-        const q = search.toLowerCase();
+        const q = search.trim().toLowerCase();
         const searchMatch = !q ||
           r.receiptNumber.toLowerCase().includes(q) ||
+          (r.transferNumber || '').toLowerCase().includes(q) ||
+          (r.notes || '').toLowerCase().includes(q) ||
           r.items.some(item => item.itemCode.toLowerCase().includes(q) || item.itemName.toLowerCase().includes(q));
-        const statusMatch = !filterStatus || r.status === filterStatus;
-        const dateMatch = !filterFromDate || r.date >= filterFromDate;
-        const invStatus = getInvoiceStatus(r);
-        const invMatch = !filterInvoice || invStatus === filterInvoice;
-        return searchMatch && statusMatch && dateMatch && invMatch;
+        // Penerimaan yang sudah/sebagian difakturkan tetap termasuk barang diterima.
+        const receiptStatus = r.status === 'Difakturkan' || r.status === 'Sebagian' ? 'Diterima' : r.status;
+        const statusMatch = !filterStatus || receiptStatus === filterStatus;
+        const receiverMatch = !filterReceivedBy || r.receivedBy?.trim() === filterReceivedBy;
+        const deliveryMatch = !filterDeliveryMethod || receiptDeliveryLabel(r.deliveryMethod, r.deliveryOther) === filterDeliveryMethod;
+        const warehouseMatch = !filterWarehouse || r.warehouseId === filterWarehouse;
+        const dateMatch = (!filterDate || r.date === filterDate)
+          && (!filterFromDate || r.date >= filterFromDate)
+          && (!filterToDate || r.date <= filterToDate);
+        return searchMatch && statusMatch && receiverMatch && deliveryMatch && warehouseMatch && dateMatch;
       })
       .sort((a, b) => {
         const documentNumber=(r:GoodsReceipt)=>r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber;
@@ -194,7 +239,17 @@ export default function GoodsReceiptPage() {
         if(comparison!==0)return receiptSort.direction==='asc'?comparison:-comparison;
         return documentNumber(b).localeCompare(documentNumber(a),'id',{numeric:true});
       });
-  }, [data.goodsReceipts, data.warehouses, search, filterStatus, filterFromDate, filterInvoice, currentBranchId, receiptSort]);
+  }, [branchReceipts, data.warehouses, search, filterStatus, filterReceivedBy, filterDeliveryMethod, filterWarehouse, filterDate, filterFromDate, filterToDate, receiptSort]);
+
+  const filterReceivers = useMemo(() => [...new Set(branchReceipts.map(receipt => receipt.receivedBy?.trim() || '').filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'id')), [branchReceipts]);
+  const filterDeliveryMethods = useMemo(() => [...new Set<string>([
+    ...receiptDeliveryOptions,
+    ...branchReceipts.map(receipt => receiptDeliveryLabel(receipt.deliveryMethod, receipt.deliveryOther)),
+  ])], [branchReceipts]);
+  const filterWarehouses = useMemo(() => data.warehouses
+    .filter(warehouse => currentBranchId === 'ALL' || warehouse.branchId === currentBranchId)
+    .sort((a, b) => a.name.localeCompare(b.name, 'id')), [data.warehouses, currentBranchId]);
 
   const moveReceiptColumn=(source:ReceiptColumn,target:ReceiptColumn)=>{
     if(source===target)return;
@@ -332,7 +387,6 @@ export default function GoodsReceiptPage() {
     Batal: 'bg-red-100 text-red-800',
   };
 
-  const branchReceipts = data.goodsReceipts.filter(r => currentBranchId === 'ALL' || r.branchId === currentBranchId);
   const draftCount = branchReceipts.filter(r => r.status === 'Draft').length;
   const pendingItems=data.items.filter(i=>i.verificationStatus==='Pending');
   const canVerify=Boolean(currentUser?.isOwner)||String(currentUser?.roleName||'').toLowerCase().includes('admin');
@@ -342,17 +396,78 @@ export default function GoodsReceiptPage() {
 
   return (
     <div className="app-fill-stack space-y-5">
-      <section className="app-fill-stack overflow-hidden rounded-none border-0 bg-[#f2f2f2] shadow-none [&_thead]:!bg-[#60778e]">
+      <section className="app-fill-stack rounded-none border-0 bg-[#f2f2f2] shadow-none [&_thead]:!bg-[#60778e]">
         <div className="mt-0.5 flex items-end border-b border-[#b8b8b8] bg-[#fafafa] pl-1.5"><div className="flex h-11 w-14 items-center justify-center rounded-t-lg border border-b-0 border-[#b8b8b8] bg-[#f2f2f2] text-blue-700" title="Daftar Penerimaan"><List className="h-5 w-5"/></div></div>
         <div className="space-y-3 bg-[#ededed] p-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="h-9 rounded border border-slate-300 bg-white px-3 text-sm"><option value="">Status: Semua</option><option value="Draft">Draft</option><option value="Diterima">Diterima</option><option value="Batal">Batal</option></select>
-            <div className="w-40 flex-shrink-0"><IndonesianDateInput value={filterFromDate} onChange={setFilterFromDate} title="Tampilkan mulai tanggal" className="h-9 w-full text-sm"/></div>
+          <div
+            ref={filterBarRef}
+            className="relative flex flex-wrap items-center gap-3"
+            onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowFilterPanel(false); }}
+            onKeyDown={event => { if (event.key === 'Escape' && showFilterPanel) { event.preventDefault(); closeFilterPanel(); } }}
+          >
+            <div className="w-40 flex-shrink-0"><IndonesianDateInput value={filterDate} onChange={updateFilterDate} ariaLabel="Filter satu tanggal penerimaan" title="Pilih satu tanggal penerimaan" className="h-9 w-full text-sm"/></div>
+            <button
+              ref={filterButtonRef}
+              type="button"
+              onClick={() => setShowFilterPanel(value => !value)}
+              aria-expanded={showFilterPanel}
+              aria-controls="receipt-filter-panel"
+              title="Filter daftar penerimaan"
+              className={`inline-flex h-9 items-center gap-2 rounded border border-blue-600 px-3 text-sm font-semibold ${showFilterPanel || receiptFiltersActive ? 'bg-blue-50 text-blue-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}
+            >
+              <Filter className="h-4 w-4"/> Filter
+              {receiptFiltersActive && <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] leading-none text-white">{activeFilterCount}</span>}
+            </button>
             <ActiveFilterResetButton active={receiptFiltersActive} onReset={resetReceiptFilters} className="w-11" />
+            {(filterFromDate || filterToDate) && <span className="text-xs text-blue-700">{filterFromDate ? new Date(`${filterFromDate}T00:00:00`).toLocaleDateString('id-ID') : 'Awal'} s.d. {filterToDate ? new Date(`${filterToDate}T00:00:00`).toLocaleDateString('id-ID') : 'Akhir'}</span>}
+            {showFilterPanel && <div id="receipt-filter-panel" role="region" aria-label="Filter Penerimaan Barang" className="absolute left-0 top-[calc(100%+6px)] z-40 max-h-[calc(100dvh-280px)] w-[min(360px,calc(100vw-48px))] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 shadow-xl sm:left-[172px]">
+              <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2">
+                <strong className="text-sm text-gray-800">Filter Penerimaan Barang</strong>
+                <button type="button" onClick={resetReceiptFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button>
+              </div>
+              <div className="space-y-3">
+                <label className="block text-xs font-semibold text-gray-600">Diterima Oleh
+                  <select aria-label="Diterima Oleh" value={filterReceivedBy} onChange={event => setFilterReceivedBy(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}>
+                    <option value="">Semua penerima</option>
+                    {filterReceivers.map(receiver => <option key={receiver} value={receiver}>{receiver}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-gray-600">Gudang
+                  <select aria-label="Gudang" value={filterWarehouse} onChange={event => setFilterWarehouse(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}>
+                    <option value="">Semua gudang</option>
+                    {filterWarehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{currentBranchId === 'ALL' && warehouse.branchName ? ` — ${warehouse.branchName}` : ''}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-gray-600">Status Penerimaan
+                  <select aria-label="Status Penerimaan" value={filterStatus} onChange={event => setFilterStatus(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}>
+                    <option value="">Semua status</option>
+                    {(['Draft', 'Diterima', 'Batal'] as const).map(status => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-gray-600">Cara Pengiriman
+                  <select aria-label="Cara Pengiriman" value={filterDeliveryMethod} onChange={event => setFilterDeliveryMethod(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}>
+                    <option value="">Semua pengiriman</option>
+                    {filterDeliveryMethods.map(method => <option key={method} value={method}>{method}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-gray-600">Tanggal Penerimaan
+                  <IndonesianDateInput value={filterDate} onChange={updateFilterDate} ariaLabel="Tanggal penerimaan" className="mt-1 h-9 w-full text-sm font-normal" />
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block text-xs font-semibold text-gray-600">Dari Tanggal
+                    <IndonesianDateInput value={filterFromDate} max={filterToDate || undefined} onChange={value => { setFilterDate(''); setFilterFromDate(value); if (filterToDate && value > filterToDate) setFilterToDate(value); }} ariaLabel="Dari tanggal penerimaan" className="mt-1 h-9 w-full text-sm font-normal" />
+                  </label>
+                  <label className="block text-xs font-semibold text-gray-600">Sampai Tanggal
+                    <IndonesianDateInput value={filterToDate} min={filterFromDate || undefined} onChange={value => { setFilterDate(''); setFilterToDate(value); if (value && filterFromDate > value) setFilterFromDate(value); }} ariaLabel="Sampai tanggal penerimaan" className="mt-1 h-9 w-full text-sm font-normal" />
+                  </label>
+                </div>
+              </div>
+              <button type="button" onClick={closeFilterPanel} className="mt-4 h-10 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700">Terapkan Filter</button>
+            </div>}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={openNewReceipt} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
-            <div className="flex items-center gap-2"><button onClick={()=>window.print()} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Cetak"><Printer className="h-5 w-5"/></button>{hasPermission('purchase:view')&&<button onClick={()=>navigate('/purchase-invoices')} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Faktur Pembelian"><Settings2 className="h-5 w-5"/></button>}<div className="relative"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ketik dan [Enter]" className="w-64 rounded border border-slate-300 bg-white px-3 py-2.5 pr-10 text-slate-900 placeholder:text-slate-400 focus:bg-white"/><Search className="absolute right-3 top-3 h-5 w-5"/></div><span className="min-w-16 rounded border border-slate-300 bg-white px-4 py-2.5 text-center">{filtered.length}</span></div>
+            <div className="flex items-center gap-2"><button onClick={()=>window.print()} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Cetak"><Printer className="h-5 w-5"/></button>{hasPermission('purchase:view')&&<button onClick={()=>navigate('/purchase-invoices')} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Faktur Pembelian"><Settings2 className="h-5 w-5"/></button>}<div className="relative"><input aria-label="Cari penerimaan barang" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari nomor, barang, keterangan..." className="w-64 rounded border border-slate-300 bg-white px-3 py-2.5 pr-10 text-slate-900 placeholder:text-slate-400 focus:bg-white"/><Search className="absolute right-3 top-3 h-5 w-5"/></div><span className="min-w-16 rounded border border-slate-300 bg-white px-4 py-2.5 text-center">{filtered.length}</span></div>
           </div>
         </div>
         {showSuccessMsg&&<div className="border-y border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-700">{showSuccessMsg}</div>}
@@ -465,12 +580,6 @@ export default function GoodsReceiptPage() {
           <option value="Draft">Draft</option>
           <option value="Diterima">Diterima</option>
           <option value="Batal">Batal</option>
-        </select>
-        <select value={filterInvoice} onChange={(e) => setFilterInvoice(e.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">
-          <option value="">Semua Faktur</option>
-          <option value="Belum">Belum Difakturkan</option>
-          <option value="Sebagian">Sebagian Difakturkan</option>
-          <option value="Lunas">Sudah Difakturkan</option>
         </select>
       </div>
 
