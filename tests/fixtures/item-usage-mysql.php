@@ -76,6 +76,9 @@ $method = $input['method'] ?? 'GET'; $id = $input['id'] ?? null; $_GET = $input[
 if (($input['op'] ?? '') === 'connect') return;
 if (($input['op'] ?? '') === 'hpp-bootstrap') { ensureRevaluationTestTables($pdo); respondSuccess(); }
 if (($input['op'] ?? '') === 'hpp-cost') { respondSuccess(estimateInventoryUnitCost($pdo,$input['itemId']??'I1',$input['warehouseId']??'W1',$input['date']??date('Y-m-d'))); }
+if (($input['op'] ?? '') === 'movement') {
+    respondSuccess(recordStockMovement($pdo,$input['itemId']??'I1',$input['source']??null,$input['destination']??null,$input['quantity'],$input['type'],$input['referenceType']??'test',$input['referenceId']??null,'TEST','','owner',($input['date']??date('Y-m-d')).' 12:00:00',$input['reversalOfId']??null,null,null,$input['cost']??null));
+}
 if (($input['op'] ?? '') === 'sql') { $stmt=$pdo->prepare($input['sql']); $stmt->execute($input['params'] ?? []); respondSuccess($stmt->columnCount() ? $stmt->fetchAll() : []); }
 if (($input['op'] ?? '') === 'permissions') { grantInitialItemUsagePermissions($pdo); respondSuccess(); }
 if (($input['op'] ?? '') === 'bootstrap') {
@@ -83,7 +86,7 @@ if (($input['op'] ?? '') === 'bootstrap') {
     runVersionedApiBootstrap($pdo,'test_item_usage_permissions','grantInitialItemUsagePermissions');
     respondSuccess();
 }
-if (in_array($input['endpoint'] ?? '', ['journal-entries','stock-movements','stock-adjustments'], true)) {
+if (in_array($input['endpoint'] ?? '', ['journal-entries','stock-movements','stock-adjustments','inventory-reports'], true)) {
     $requestUser = requireAuthenticatedUser($pdo);
     require __DIR__.'/../../api/endpoints/'.$input['endpoint'].'.php';
     exit;

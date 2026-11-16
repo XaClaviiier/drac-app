@@ -41,6 +41,8 @@ function adjustWarehouseStock(PDO $pdo,string $warehouse,string $branch,string $
 }
 function adjustWarehouseStockAllowNegative(PDO $pdo,string $warehouse,string $branch,string $item,int $delta):void{adjustWarehouseStock($pdo,$warehouse,$branch,$item,$delta);}
 function recordStockMovement(...$args):void{}
+// Valuation and posting journals are exercised against MySQL by inventory-reports-mysql.test.mjs.
+function estimateInventoryUnitCost(PDO $pdo,string $itemId,string $warehouseId,string $date):float{return 1200.25;}
 function result(bool $success,mixed $data,string $message,int $status):never{
  global $pdo;echo json_encode(['success'=>$success,'data'=>$data,'message'=>$message,'status'=>$status,'lines'=>$pdo->query('SELECT * FROM stock_adjustment_items')->fetchAll(),'stock'=>(int)$pdo->query('SELECT quantity FROM warehouse_stocks')->fetchColumn(),'documents'=>$pdo->query('SELECT * FROM stock_adjustments')->fetchAll()]);exit;
 }

@@ -62,6 +62,7 @@ final class ReceiptZeroSourcePDO extends PDO {
         if($q==='SELECT * FROM goods_receipt_items WHERE receipt_id = ?')return $this->state['lines'];
         if(str_starts_with($q,'SELECT COUNT(*) FROM purchase_invoice_items'))return [[$this->input['linkedInvoices']??0]];
         if($q==='SELECT type FROM items WHERE id=?')return [['type'=>'Persediaan']];
+        if(str_starts_with($q,'SELECT id,purchase_price FROM items WHERE id IN'))return [['id'=>'item','purchase_price'=>100]];
         if(str_starts_with($q,'SELECT ')&&str_contains($q,' FROM items WHERE'))return [['id'=>'item','code'=>'ITEM','name'=>'Item','unit'=>'pcs','type'=>'Persediaan','is_active'=>1]];
         if(str_starts_with($q,'SELECT quantity FROM warehouse_stocks'))return [[$this->state['warehouse'][$p[0]]]];
         if(str_starts_with($q,'INSERT INTO warehouse_stocks(')) {$this->state['warehouse'][$p[0]]+=$p[2];$this->state['versions'][$p[0]]++;return [];}
@@ -75,6 +76,10 @@ final class ReceiptZeroSourcePDO extends PDO {
         if(str_starts_with($q,'INSERT INTO transaction_activity_logs')) {$this->state['logs'][]=$p;return [];}
         if(str_starts_with($q,'UPDATE stock_movements SET is_voided=1')) {foreach($this->state['movements'] as &$m)if($m['reference_type']==='goods_receipt'&&$m['reference_id']===end($p))$m['is_voided']=1;return [];}
         if(str_starts_with($q,'SELECT id FROM stock_movements WHERE idempotency_key'))return [];
+        if(str_starts_with($q,'SELECT id,item_id,source_warehouse_id,destination_warehouse_id,quantity,unit_cost,movement_type')) {
+            return array_map(static fn($m)=>$m+['unit_cost'=>null,'reversal_of_id'=>null,'movement_type'=>!empty($m['source_warehouse_id'])?(!empty($m['destination_warehouse_id'])?'transfer':'sale'):'receipt'],array_values(array_filter($this->state['movements'],static fn($m)=>empty($m['is_voided']))));
+        }
+        if(str_starts_with($q,'UPDATE stock_movements SET unit_cost=')) {foreach($this->state['movements'] as &$m)if($m['reference_type']==='goods_receipt'&&$m['reference_id']===$p[1]&&$m['item_id']===$p[2]&&empty($m['is_voided']))$m['unit_cost']=$p[0];return [];}
         if(str_starts_with($q,'INSERT INTO stock_movements(')) {$cols=['id','item_id','source_warehouse_id','destination_warehouse_id','quantity','unit_cost','movement_type','reference_type','reference_id','reference_number','reversal_of_id','correction_group_id','idempotency_key','notes','occurred_at','created_by'];$this->state['movements'][]=array_combine($cols,$p)+['is_voided'=>0];return [];}
         if(str_starts_with($q,'INSERT IGNORE INTO goods_receipt_sequences')||str_starts_with($q,'UPDATE goods_receipt_sequences'))return [];
         if(str_starts_with($q,'SELECT last_number FROM goods_receipt_sequences')||str_starts_with($q,'SELECT COALESCE(MAX(CAST(SUBSTRING(receipt_number'))return [[0]];

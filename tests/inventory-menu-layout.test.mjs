@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const layout = fs.readFileSync(new URL('../src/components/Layout.tsx', import.meta.url), 'utf8');
 const itemsPage = fs.readFileSync(new URL('../src/pages/ItemsAndServices.tsx', import.meta.url), 'utf8');
 const inventoryReport = fs.readFileSync(new URL('../src/pages/InventoryReport.tsx', import.meta.url), 'utf8');
+const reports = fs.readFileSync(new URL('../src/pages/ReportsIndex.tsx', import.meta.url), 'utf8');
 const dashboard = fs.readFileSync(new URL('../src/pages/Dashboard.tsx', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const stockOpname = fs.readFileSync(new URL('../src/pages/StockCountSheetReport.tsx', import.meta.url), 'utf8');
@@ -28,7 +29,7 @@ test('menu Persediaan memakai grid kotak enam kolom model Accurate', () => {
   assert.match(layout, /usesAccurateTileMenu\s*\? "text-sm font-normal leading-tight text-gray-700"/);
 });
 
-test('warna menu Persediaan membedakan transaksi master dan laporan seperti Accurate', () => {
+test('menu Persediaan berisi transaksi dan master; laporan berada di Daftar Laporan', () => {
   const inventory = sectionBetween(layout, 'id: "inventory"', 'id: "reports"');
   for (const label of ['Penerimaan Barang', 'Transfer Gudang', 'Penyesuaian Stok', 'Stok Opname', 'Permintaan Barang']) {
     assert.match(inventory, new RegExp(`label: "${label}"[\\s\\S]*?tone: "green"`), label);
@@ -37,26 +38,24 @@ test('warna menu Persediaan membedakan transaksi master dan laporan seperti Accu
     assert.match(inventory, new RegExp(`label: "${label}"[\\s\\S]*?tone: "blue"`), label);
   }
   for (const label of ['Stok per Gudang', 'Kartu Stok', 'Stok Kosong / Minus']) {
-    assert.match(inventory, new RegExp(`label: "${label}"[\\s\\S]*?tone: "purple"`), label);
+    assert.ok(!inventory.includes(`label: "${label}"`), label);
+    assert.ok(reports.includes(`label: '${label}'`), label);
   }
   assert.match(layout, /const accurateInventoryTones:[\s\S]*?green:[\s\S]*?border-\[#58cd42\] bg-\[#e1fadd\][\s\S]*?blue:[\s\S]*?border-\[#43a3ea\] bg-\[#dceeff\][\s\S]*?purple:[\s\S]*?border-\[#b557ed\] bg-\[#f4e6ff\]/);
 });
 
 test('ikon Persediaan profesional tetap mengikuti route dan permission yang ada', () => {
   const inventory = sectionBetween(layout, 'id: "inventory"', 'id: "reports"');
-  for (const icon of ['PackageOpen', 'ArrowLeftRight', 'ClipboardCheck', 'FilePlus2', 'PackageSearch', 'Tags']) {
+  for (const icon of ['PackagePlus', 'PackageMinus', 'SlidersHorizontal', 'ArrowLeftRight', 'ClipboardCheck', 'FilePlus2', 'PackageSearch', 'Tags', 'BadgeCheck']) {
     assert.match(layout, new RegExp(`\\b${icon}\\b`), icon);
   }
   const routesAndPermissions = [
     ['Penerimaan Barang', '/receipts', 'receipt:view'],
     ['Transfer Gudang', '/warehouse-transfers', 'item:view'],
     ['Penyesuaian Stok', '/opening-stock', 'item:edit'],
-    ['Stok Opname', '/reports/stock-count-sheet', 'item:view'],
+    ['Stok Opname', '/reports/stock-count-sheet', 'stock_opname:view'],
     ['Barang & Jasa', '/items', 'item:view'],
     ['Gudang', '/warehouses', 'item:view'],
-    ['Stok per Gudang', '/warehouses', 'item:view'],
-    ['Kartu Stok', '/items?mode=stock-card', 'item:view'],
-    ['Stok Kosong / Minus', '/reports/inventory?availability=ATTENTION', 'report:view'],
     ['Kategori Barang', '/categories', 'item:view'],
     ['Merek Barang', '/items?master=item-brands', 'item:view'],
   ];
@@ -73,15 +72,13 @@ test('ikon Persediaan profesional tetap mengikuti route dan permission yang ada'
   assert.match(layout, /disabled=\{!available\}/);
 });
 
-test('deep-link laporan stok membuka mode operasional yang nyata dan tidak mengklaim HPP historis', () => {
+test('deep-link laporan stok menggunakan halaman laporan tanpa mengubah Barang & Jasa', () => {
   assert.match(itemsPage, /searchParams\.get\('mode'\) === 'stock-card'/);
   assert.match(itemsPage, /setItemFormTab\(item && stockCardMode \? 'movement' : 'general'\)/);
   assert.match(inventoryReport, /useSearchParams\(\)/);
-  assert.match(inventoryReport, /availabilityParam === 'ATTENTION'/);
-  assert.match(inventoryReport, /availability==='ATTENTION'\?item\.quantity<=0/);
-  assert.match(inventoryReport, /Estimasi Nilai Stok/);
-  assert.match(inventoryReport, /bukan HPP historis/);
-  assert.doesNotMatch(inventoryReport, /label="Nilai Persediaan"/);
+  assert.match(inventoryReport, /matchesStockAvailability/);
+  assert.match(inventoryReport, /inventory-reports\/balances/);
+  assert.match(app, /reports\/stock-card" element=\{protectedPage\('report:view'/);
   assert.match(dashboard, /to="\/reports\/inventory\?availability=ATTENTION"/);
   assert.doesNotMatch(dashboard, /to="\/inventory-report"/);
 });

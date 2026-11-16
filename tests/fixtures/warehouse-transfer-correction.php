@@ -35,6 +35,8 @@ class CorrectionDB extends PDO{
   if(str_starts_with($q,'SELECT id,branch_id,is_active FROM warehouses'))return [$this->warehouses[$p[0]]];
   if($q==='SELECT * FROM warehouse_transfers WHERE id=? FOR UPDATE')return [$this->state['header']];
   if(str_starts_with($q,'SELECT * FROM warehouse_transfer_items'))return array_values($this->state['lines']);
+  if(str_starts_with($q,'SELECT id,purchase_price FROM items WHERE id IN'))return array_map(fn($id)=>['id'=>$id,'purchase_price'=>100],$p);
+  if(str_starts_with($q,'SELECT id,item_id,source_warehouse_id,destination_warehouse_id,quantity,unit_cost,movement_type'))return array_map(static fn($m)=>array_combine(['id','item_id','source_warehouse_id','destination_warehouse_id','quantity','unit_cost','movement_type','reference_type','reference_id','reference_number','reversal_of_id','correction_group_id','idempotency_key','notes','occurred_at','created_by'],$m),$this->state['movements']);
   if(str_contains($q,'FROM items WHERE id IN'))return array_map(fn($id)=>['id'=>$id,'code'=>$id,'name'=>'Barang '.$id,'category_name'=>'Parts','unit'=>'PCS','type'=>'Persediaan','is_active'=>!in_array($id,$this->input['inactive']??[],true)],$p);
   if($q==='SELECT type FROM items WHERE id=?')return [['Persediaan']];
   if(str_starts_with($q,'SELECT quantity FROM warehouse_stocks'))return [[$this->state['stock'][$p[0].':'.$p[1]]??0]];

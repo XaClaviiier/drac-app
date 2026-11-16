@@ -194,7 +194,7 @@ switch ($method) {
                 foreach ($d['items'] as $i) {
                     if($sourceType==='Transfer Gudang')adjustWarehouseStock($pdo,$sourceWarehouseId,$sourceBranchId,$i['itemId'],-$i['qty']);
                     adjustWarehouseStockAllowNegative($pdo,$warehouseId,$branchId,$i['itemId'],$i['qty']);
-                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$receiptNumber,'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],$i['qty'],false,$actor,'POST-'.$rId,null,'goods_receipt:'.$rId.':'.$i['itemId'].':post',max(0,(float)($i['unitPrice']??0)));
+                    $journalReceipt($pdo,['id'=>$rId,'receipt_number'=>$receiptNumber,'date'=>$d['date'],'warehouse_id'=>$warehouseId,'source_type'=>$sourceType,'source_warehouse_id'=>$sourceWarehouseId],(string)$i['itemId'],$i['qty'],false,$actor,'POST-'.$rId,null,'goods_receipt:'.$rId.':'.$i['itemId'].':post',inventoryReceiptUnitCost($i));
                 }
             }
 
@@ -334,8 +334,12 @@ switch ($method) {
                 foreach ($d['items'] as $lineIndex=>$i) {
                     if(($oldRow['source_type']??'Supplier')==='Transfer Gudang'&&!empty($oldRow['source_warehouse_id'])&&isset($oldRow['source_branch_id'])&&(string)$oldRow['source_branch_id']!=='')adjustWarehouseStock($pdo,(string)$oldRow['source_warehouse_id'],(string)$oldRow['source_branch_id'],$i['itemId'],-$i['qty']);
                     adjustWarehouseStockAllowNegative($pdo,$newWarehouseId,$newBranchId,$i['itemId'],$i['qty']);
-                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':'.$lineIndex.':apply',max(0,(float)($i['unitPrice']??0)));
+                    $journalReceipt($pdo,['id'=>$id,'receipt_number'=>$d['receiptNumber'],'date'=>$d['date'],'warehouse_id'=>$newWarehouseId,'source_type'=>$oldRow['source_type']??'Supplier','source_warehouse_id'=>$oldRow['source_warehouse_id']??null],(string)$i['itemId'],$i['qty'],false,$actor,$correctionGroupId,null,$correctionGroupId.':'.$i['itemId'].':'.$lineIndex.':apply',inventoryReceiptUnitCost($i));
                 }
+            }
+            if (!$stockImpactChanged && $isReceived && ($oldRow['source_type']??'Supplier') !== 'Transfer Gudang') {
+                $updateCost = $pdo->prepare("UPDATE stock_movements SET unit_cost=? WHERE reference_type='goods_receipt' AND reference_id=? AND item_id=? AND is_voided=0 AND movement_type='receipt'");
+                foreach ($d['items'] as $line) $updateCost->execute([inventoryReceiptUnitCost($line),$id,$line['itemId']]);
             }
             if(!$stockImpactChanged&&$movementDateChanged)bumpStockVersionsForMovementReference($pdo,'goods_receipt',$id);
             if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET reference_number=?,occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='goods_receipt' AND reference_id=? AND is_voided=0")

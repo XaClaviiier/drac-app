@@ -34,6 +34,7 @@ import PerformanceBonus from './pages/PerformanceBonus';
 import SalesReport from './pages/SalesReport';
 import PurchaseReport from './pages/PurchaseReport';
 import InventoryReport from './pages/InventoryReport';
+import StockCardReport from './pages/StockCardReport';
 import CashBankReport from './pages/CashBankReport';
 import HistoricalQuickEntry from './pages/HistoricalQuickEntry';
 import OpeningStockImport from './pages/OpeningStockImport';
@@ -110,6 +111,7 @@ function AppRoutes() {
         <Route path="reports/sales" element={protectedPage('report:view', <SalesReport />)} />
         <Route path="reports/purchases" element={protectedPage('report:view', <PurchaseReport />)} />
         <Route path="reports/inventory" element={protectedPage('report:view', <InventoryReport />)} />
+        <Route path="reports/stock-card" element={protectedPage('report:view', <StockCardReport />)} />
         <Route path="reports/stock-count-sheet" element={protectedPage('stock_opname:view', <StockCountSheetReport />)} />
         <Route path="reports/stock-count-sheet-print" element={protectedPage('report:view', <StockCountSheetPrintReport />)} />
         <Route path="reports/cash-bank" element={protectedPage('report:view', <CashBankReport />)} />

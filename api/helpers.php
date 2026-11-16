@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/cash-ledger.php';
 require_once __DIR__ . '/account-ledger.php';
+require_once __DIR__ . '/inventory-cost.php';
 // Helper API ditempatkan terpisah agar pembaruan fungsi tidak perlu
 // menimpa config.php yang berisi kredensial database hosting.
 
@@ -1503,6 +1504,11 @@ function permissionsFromRoleRecord(array $role): array {
 
 function assertLockedInventoryPermission(array $authorization, string $permission): void {
     if (!empty($authorization['actor']['is_owner']) || in_array('*', $authorization['permissions'], true) || in_array($permission, $authorization['permissions'], true)) return;
+    // HPP is available to administrators as well as explicitly authorized roles.
+    if ($permission === 'stock_adjustment:hpp') {
+        $role = $authorization['role'] ?? [];
+        if (strtoupper(trim((string)($role['code'] ?? ''))) === 'ADM' || strtolower(trim((string)($role['name'] ?? ''))) === 'administrator') return;
+    }
     throw new DomainException('Akun tidak memiliki izin ' . $permission, 403);
 }
 
@@ -2288,13 +2294,8 @@ function deleteOperationalJournal(PDO $pdo, string $sourceType, string $sourceId
 }
 
 function estimateInventoryUnitCost(PDO $pdo, string $itemId, string $warehouseId, string $date): float {
-    $stmt = $pdo->prepare("SELECT unit_cost FROM stock_movements WHERE item_id=? AND destination_warehouse_id=? AND (unit_cost>0 OR (movement_type IN ('cost_adjustment','cost_adjustment_reversal') AND unit_cost=0)) AND is_voided=0 AND occurred_at<=? ORDER BY occurred_at DESC,movement_sequence DESC LIMIT 1");
-    $stmt->execute([$itemId,$warehouseId,$date.' 23:59:59']);
-    $cost = $stmt->fetchColumn();
-    if ($cost !== false && (float)$cost >= 0) return (float)$cost;
-    $stmt = $pdo->prepare('SELECT purchase_price FROM items WHERE id=? LIMIT 1');
-    $stmt->execute([$itemId]);
-    return max(0,(float)($stmt->fetchColumn() ?: 0));
+    $history = inventoryAverageForItem($pdo, $itemId, $date);
+    return $history['warehouses'][$warehouseId]['averageCost'] ?? $history['defaultCost'];
 }
 
 function requireUserPermission(PDO $pdo, string $permission): array {
@@ -2415,6 +2416,9 @@ function recordStockMovement(
         $existing->execute([$idempotencyKey]);
         $existingId=$existing->fetchColumn();
         if($existingId!==false)return (string)$existingId;
+    }
+    if ($unitCost === null || ($sourceWarehouseId && $destinationWarehouseId && $movementType === 'transfer')) {
+        $unitCost = inventoryMovementUnitCost($pdo, $itemId, $sourceWarehouseId, $destinationWarehouseId, $movementType, $referenceType, $referenceId, substr($occurredAt ?? date('Y-m-d'), 0, 10), $reversalOfId) ?? $unitCost;
     }
     $id='MOV-'.date('ymdHis').'-'.substr(bin2hex(random_bytes(4)),0,8);
     $sql="INSERT INTO stock_movements(id,item_id,source_warehouse_id,destination_warehouse_id,quantity,unit_cost,movement_type,reference_type,reference_id,reference_number,reversal_of_id,correction_group_id,idempotency_key,notes,occurred_at,created_by)

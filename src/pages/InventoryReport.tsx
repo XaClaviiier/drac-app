@@ -1,31 +1,82 @@
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Download, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Download, Printer, RefreshCw, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { api } from '../lib/apiClient';
+import { downloadReportCsv, inventoryBalanceCsv, matchesStockAvailability, reportMoney, reportNumber, stockAvailability, type InventoryBalancesReport } from '../lib/inventoryReports';
+import './InventoryReports.css';
 
-const money=(value:number)=>`Rp ${Number(value||0).toLocaleString('id-ID')}`;
-const csv=(value:unknown)=>`"${String(value??'').replace(/"/g,'""')}"`;
-
-export default function InventoryReport(){
-  const {data,currentBranchId}=useApp();
-  const [searchParams]=useSearchParams();
-  const availabilityParam=searchParams.get('availability');
-  const [warehouseId,setWarehouseId]=useState(''),[type,setType]=useState('Persediaan'),[availability,setAvailability]=useState(availabilityParam === 'ATTENTION' ? 'ATTENTION' : 'ALL'),[search,setSearch]=useState('');
-  const warehouses=useMemo(()=>data.warehouses.filter(w=>w.isActive&&(currentBranchId==='ALL'||w.branchId===currentBranchId)),[data.warehouses,currentBranchId]);
-  const quantity=(itemId:string)=>{
-    if(warehouseId)return Number(data.warehouseStocks.find(s=>s.warehouseId===warehouseId&&s.itemId===itemId)?.quantity||0);
-    const scopedIds=new Set(warehouses.map(w=>w.id));const stocks=data.warehouseStocks.filter(s=>s.itemId===itemId&&scopedIds.has(s.warehouseId));
-    if(stocks.length)return stocks.reduce((sum,row)=>sum+Number(row.quantity||0),0);
-    const item=data.items.find(i=>i.id===itemId);if(currentBranchId!=='ALL')return Number(item?.branchStocks?.[currentBranchId]?.stock||0);return Number(item?.stock||0);
-  };
-  const rows=useMemo(()=>data.items.filter(item=>(type==='ALL'||item.type===type)&&`${item.code} ${item.name} ${item.categoryName} ${item.brand} ${item.barcode||''}`.toLowerCase().includes(search.toLowerCase())).map(item=>({...item,quantity:quantity(item.id)})).filter(item=>availability==='ALL'||(availability==='AVAILABLE'?item.quantity>0:availability==='EMPTY'?item.quantity===0:availability==='ATTENTION'?item.quantity<=0:item.quantity<0)).sort((a,b)=>a.name.localeCompare(b.name,'id')),[data.items,data.warehouseStocks,warehouses,warehouseId,currentBranchId,type,availability,search]);
-  const stockRows=rows.filter(r=>r.type==='Persediaan'),units=stockRows.reduce((s,r)=>s+r.quantity,0),value=stockRows.reduce((s,r)=>s+r.quantity*Number(r.purchasePrice||0),0),empty=stockRows.filter(r=>r.quantity<=0).length;
-  const exportCsv=()=>{const h=['Kode','Nama','Jenis','Kategori','Merek','Gudang','Qty','Satuan','Harga Beli','Estimasi Nilai Stok'];const b=rows.map(r=>[r.code,r.name,r.type,r.categoryName,r.brand,data.warehouses.find(w=>w.id===warehouseId)?.name||'Semua Gudang',r.quantity,r.unit,r.purchasePrice,r.quantity*r.purchasePrice].map(csv).join(','));const blob=new Blob(['\uFEFF'+[h.map(csv).join(','),...b].join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='laporan_persediaan.csv';a.click();URL.revokeObjectURL(url)};
-  return <div className="app-fill-stack space-y-3 pb-4">
-    <div className="flex justify-end"><button onClick={exportCsv} disabled={!rows.length} className="inline-flex h-9 items-center gap-2 rounded-lg border border-green-300 px-3 text-sm font-semibold text-green-700 disabled:opacity-40"><Download className="h-4 w-4"/>Export CSV</button></div>
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4"><Card label="Barang Ditampilkan" value={String(rows.length)} note={`${stockRows.length} persediaan`}/><Card label="Total Unit" value={units.toLocaleString('id-ID')} note="stok pada lingkup terpilih"/><Card label="Estimasi Nilai Stok" value={money(value)} note="qty × harga beli; bukan HPP historis"/><Card label="Stok Kosong/Minus" value={String(empty)} note="perlu perhatian"/></div>
-    <div className="flex flex-wrap gap-2 border-b border-blue-200 pb-2"><label className="relative min-w-64 flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari kode, barcode, nama, kategori, merek..." className="h-9 w-full rounded-lg border pl-9 pr-3 text-sm"/></label><select value={warehouseId} onChange={e=>setWarehouseId(e.target.value)} className="h-9 rounded-lg border px-3 text-sm"><option value="">Semua Gudang</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select><select value={type} onChange={e=>setType(e.target.value)} className="h-9 rounded-lg border px-3 text-sm"><option value="ALL">Semua Jenis</option><option>Persediaan</option><option>Jasa</option><option>Non Persediaan</option><option>Group</option></select><select value={availability} onChange={e=>setAvailability(e.target.value)} className="h-9 rounded-lg border px-3 text-sm"><option value="ALL">Semua Stok</option><option value="AVAILABLE">Tersedia</option><option value="EMPTY">Kosong</option><option value="NEGATIVE">Minus</option><option value="ATTENTION">Kosong / Minus</option></select></div>
-    <div className="app-fill-stack overflow-hidden rounded-xl border bg-white"><div className="app-table-scroll app-table-scroll--fill max-h-[calc(100vh-330px)] overflow-auto"><table className="w-full min-w-[1100px] text-sm"><thead className="sticky top-0 bg-blue-900 text-left text-xs uppercase text-white"><tr>{['Kode','Barang','Jenis','Kategori','Merek','Qty','Satuan','Harga Beli','Nilai'].map(x=><th key={x} className="px-3 py-2.5">{x}</th>)}</tr></thead><tbody className="divide-y">{rows.map(r=><tr key={r.id} className="hover:bg-blue-50/40"><td className="px-3 py-2 font-mono text-xs text-blue-700">{r.code}</td><td className="px-3 font-semibold">{r.name}</td><td className="px-3">{r.type}</td><td className="px-3">{r.categoryName||'-'}</td><td className="px-3">{r.brand||'-'}</td><td className={`px-3 text-right font-bold ${r.quantity<=0&&r.type==='Persediaan'?'text-red-600':'text-gray-900'}`}>{r.type==='Jasa'?'-':r.quantity.toLocaleString('id-ID')}</td><td className="px-3">{r.unit}</td><td className="px-3 text-right">{money(r.purchasePrice)}</td><td className="px-3 text-right font-semibold">{r.type==='Persediaan'?money(r.quantity*r.purchasePrice):'-'}</td></tr>)}</tbody></table></div>{!rows.length&&<div className="p-12 text-center text-gray-400">Tidak ada barang sesuai filter.</div>}</div>
+export default function InventoryReport() {
+  const { currentBranchId, dataUpdatedAt } = useApp();
+  const [params, setParams] = useSearchParams();
+  const availability = params.get('availability') || 'ALL';
+  const warehouseId = params.get('warehouseId') || '';
+  const [search, setSearch] = useState('');
+  const [refresh, setRefresh] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState<{ branchId: string; report: InventoryBalancesReport } | null>(null);
+  const report = loaded?.branchId === currentBranchId ? loaded.report : null;
+  useEffect(() => {
+    let active = true;
+    setLoading(true); setError(''); setLoaded(null);
+    void api.get<InventoryBalancesReport>(`inventory-reports/balances?branchId=${encodeURIComponent(currentBranchId)}`).then(response => {
+      if (!active) return;
+      if (response.success && response.data) setLoaded({ branchId: currentBranchId, report: response.data });
+      else setError(response.message || 'Laporan persediaan gagal dimuat.');
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [currentBranchId, dataUpdatedAt, refresh]);
+  useEffect(() => {
+    if (report && warehouseId && !report.warehouses.some(warehouse => warehouse.id === warehouseId)) {
+      setParams(previous => { const next = new URLSearchParams(previous); next.delete('warehouseId'); return next; }, { replace: true });
+    }
+  }, [report, warehouseId, setParams]);
+  const changeFilter = (key: string, value: string) => setParams(previous => {
+    const next = new URLSearchParams(previous); if (value) next.set(key, value); else next.delete(key); return next;
+  }, { replace: true });
+  const rows = useMemo(() => {
+    const keyword = search.trim().toLocaleLowerCase('id-ID');
+    return (report?.rows || []).filter(row => (!warehouseId || row.warehouseId === warehouseId)
+      && matchesStockAvailability(row.quantity, availability)
+      && `${row.code} ${row.name} ${row.categoryName} ${row.branchName} ${row.warehouseName}`.toLocaleLowerCase('id-ID').includes(keyword));
+  }, [report, warehouseId, availability, search]);
+  const canViewCosts = Boolean(report?.canViewCosts);
+  const itemCount = new Set(rows.map(row => row.itemId)).size;
+  const warehouseCount = new Set(rows.map(row => row.warehouseId)).size;
+  const filterLabel = stockAvailability.find(([value]) => value === availability)?.[1] || 'Semua Stok';
+  return <div className="inventory-report app-fill-stack">
+    <header className="inventory-report-header">
+      <div><h1>Stok per Gudang</h1><p>Saldo saat ini untuk setiap barang dan gudang · {filterLabel}</p></div>
+      <div className="inventory-report-actions print:hidden">
+        <Link className="inventory-report-button" to="/reports">Daftar Laporan</Link>
+        <button onClick={() => setRefresh(value => value + 1)} disabled={loading} aria-label="Perbarui laporan"><RefreshCw size={17}/></button>
+        <button onClick={() => window.print()} disabled={!rows.length}><Printer size={17}/>Cetak</button>
+        <button onClick={() => downloadReportCsv('stok-per-gudang.csv', inventoryBalanceCsv(rows, canViewCosts))} disabled={!rows.length}><Download size={17}/>CSV</button>
+      </div>
+    </header>
+    {error && <div role="alert" className="inventory-report-error">{error}</div>}
+    <div className="inventory-report-summary">
+      <ReportCard label="Barang" value={String(itemCount)} note={`${warehouseCount} gudang · ${rows.length} baris`}/>
+      <ReportCard label="Stok Kosong" value={String(rows.filter(row => row.quantity === 0).length)} note="barang / gudang"/>
+      <ReportCard label="Stok Minus" value={String(rows.filter(row => row.quantity < 0).length)} note="barang / gudang"/>
+      {canViewCosts && <ReportCard label="Nilai Stok (Average)" value={reportMoney(rows.reduce((total, row) => total + (row.inventoryValue || 0), 0))} note="sesuai baris yang ditampilkan"/>}
+    </div>
+    <div className="inventory-report-filters print:hidden">
+      <label className="inventory-report-search"><Search size={17}/><input aria-label="Cari barang atau gudang" placeholder="Cari kode, nama barang, kategori, gudang…" value={search} onChange={event => setSearch(event.target.value)}/></label>
+      <label>Gudang<select aria-label="Filter gudang" value={warehouseId} onChange={event => changeFilter('warehouseId', event.target.value)}><option value="">Semua Gudang</option>{report?.warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.branchName} · {warehouse.name}</option>)}</select></label>
+      <label>Ketersediaan<select aria-label="Filter ketersediaan stok" value={availability} onChange={event => changeFilter('availability', event.target.value)}>{stockAvailability.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    </div>
+    <div className="inventory-report-table app-table-scroll" aria-busy={loading}>
+      <table><thead><tr><th>Kode</th><th>Barang</th><th>Cabang</th><th>Gudang</th><th className="numeric">Stok</th><th>Satuan</th>{canViewCosts && <><th className="numeric">HPP Average</th><th className="numeric">Nilai Stok</th></>}</tr></thead>
+        <tbody>{rows.map(row => <tr key={`${row.warehouseId}:${row.itemId}`}><td>{row.code}</td><td><Link to={`/reports/stock-card?itemId=${encodeURIComponent(row.itemId)}&warehouseId=${encodeURIComponent(row.warehouseId)}`} title="Lihat kartu stok">{row.name}</Link></td><td>{row.branchName}</td><td>{row.warehouseName}</td><td className={`numeric ${row.quantity < 0 ? 'text-red-700 font-semibold' : ''}`}>{reportNumber(row.quantity)}</td><td>{row.unit}</td>{canViewCosts && <><td className="numeric">{reportMoney(row.averageCost || 0, 4)}</td><td className="numeric">{reportMoney(row.inventoryValue || 0)}</td></>}</tr>)}</tbody>
+      </table>
+      {!rows.length && <p className="inventory-report-empty">{loading ? 'Memuat laporan…' : error ? 'Laporan belum tersedia.' : 'Tidak ada barang sesuai filter.'}</p>}
+    </div>
   </div>;
 }
-function Card({label,value,note}:{label:string;value:string;note:string}){return <div className="rounded-xl border bg-white p-3 shadow-sm"><p className="text-xs text-gray-500">{label}</p><p className="truncate text-lg font-bold text-gray-900">{value}</p><p className="text-[11px] text-gray-400">{note}</p></div>}
+
+export function ReportCard({ label, value, note }: { label: string; value: string; note?: string }) {
+  return <div className="inventory-report-card"><p>{label}</p><strong>{value}</strong>{note && <small>{note}</small>}</div>;
+}
