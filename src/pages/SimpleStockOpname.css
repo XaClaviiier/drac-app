@@ -13,6 +13,10 @@
 .opname-search svg { position:absolute; right:10px; color:#486677; pointer-events:none; }
 .opname-list-table { min-height:60vh; }
 .opname-list-table table { min-width:850px; }
+@media screen {
+  /* Keep each resize handle attached to its column inside the sticky header. */
+  .opname-workspace .app-table-scroll > table > thead th { position:relative!important; }
+}
 .opname-link { color:#087fba!important; text-decoration:none; text-align:left; }
 .opname-link:hover { text-decoration:underline; }
 .opname-form { display:grid; grid-template-columns:minmax(0,1fr) 90px; gap:22px; padding:8px 14px 20px 6px; }

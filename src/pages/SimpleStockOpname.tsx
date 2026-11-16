@@ -13,6 +13,7 @@ type Row = { itemId:string;code:string;name:string;unit:string;categoryName:stri
 type Document = {id:string;orderNumber:string;endDate:string;warehouseId:string;warehouseName:string;assignedUserName:string;notes:string;revision:number;entryMode:string;createdAt:string;lastUpdatedAt?:string;rows?:Row[];result?:{status?:string;adjustmentId?:string;adjustmentNumber?:string;notes?:string}};
 type Adjustment = {adjustmentNumber:string;rows:{itemCode:string;itemName:string;quantity:number;unit:string}[]};
 type Column='name'|'code'|'systemQuantity'|'count'|'variance'|'unit';
+type DocumentColumn='orderNumber'|'endDate'|'warehouseName'|'notes'|'adjustment';
 type WorkspaceSnapshot = {
   tab:boolean; list:boolean; info:boolean; document:Document|null; rows:Row[]; catalog:Row[];
   date:string; warehouse:string; notes:string; requestKey:string; dirty:boolean;
@@ -20,6 +21,10 @@ type WorkspaceSnapshot = {
 const columns:Column[]=['name','code','systemQuantity','count','variance','unit'];
 const labels:Record<Column,string>={name:'Nama Barang',code:'Kode Barang',systemQuantity:'Stok Sistem',count:'Hitung Fisik',variance:'Selisih',unit:'Satuan'};
 const widths:Record<Column,number>={name:360,code:180,systemQuantity:130,count:140,variance:120,unit:85};
+const documentColumns:DocumentColumn[]=['orderNumber','endDate','warehouseName','notes','adjustment'];
+const documentLabels:Record<DocumentColumn,string>={orderNumber:'Nomor #',endDate:'Tanggal',warehouseName:'Gudang',notes:'Keterangan',adjustment:'Penyesuaian'};
+const documentWidths:Record<DocumentColumn,number>={orderNumber:180,endDate:130,warehouseName:220,notes:300,adjustment:190};
+const adjustmentLabel=(doc:Document)=>doc.result?.status==='Draft'?'Draf':doc.result?.adjustmentNumber||'Tanpa selisih';
 const key = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), n=>n.toString(16).padStart(2,'0')).join('');
 const countValue = (text:string):number|null => text===''?null:/^\d+$/.test(text)&&Number(text)<=2147483647?Number(text):NaN;
 const normalize = (rows:Row[]) => rows.map(row=>({...row,count:row.finalQuantity===null||row.finalQuantity===undefined?'':String(row.finalQuantity)}));
@@ -62,6 +67,8 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   const [categoryOpen,setCategoryOpen]=useState(false),[scope,setScope]=useState('activity'),[categorySearch,setCategorySearch]=useState('');
   const table=useConfigurableTable<Column>({storageKey:`opname-table-v1:${currentUser?.id||'guest'}`,defaultOrder:columns,defaultWidths:widths,sortableKeys:columns});
   const orderedColumns=table.isDesktop?table.order:columns;
+  const documentTable=useConfigurableTable<DocumentColumn>({storageKey:`opname-list-table-v1:${currentUser?.id||'guest'}`,defaultOrder:documentColumns,defaultWidths:documentWidths,sortableKeys:documentColumns});
+  const orderedDocumentColumns=documentTable.isDesktop?documentTable.order:documentColumns;
   const applied=document?.result?.status==='Posted';
   const [saveMenuOpen,setSaveMenuOpen]=useState(false);
   const saveMenuRef=useRef<HTMLDivElement>(null);
@@ -177,6 +184,12 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
     return filter==='all'||(filter==='blank'?count===null:filter==='match'?variance===0:variance!==null&&variance!==0);
   });
   if(table.sort){const {key:sortKey,direction}=table.sort;const value=(row:Row):string|number|null=>sortKey==='count'?countValue(row.count):sortKey==='variance'?(row.count===''?null:Number(row.count)-row.systemQuantity):row[sortKey];visible.sort((a,b)=>{const x=value(a),y=value(b);if(x===null)return y===null?0:1;if(y===null)return -1;const cmp=typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'id',{numeric:true});return (direction==='asc'?cmp:-cmp)||a.itemId.localeCompare(b.itemId);});}
+  const visibleDocuments=documents.filter(doc=>doc.entryMode==='simple'&&(!listDate||doc.endDate===listDate)&&`${doc.orderNumber} ${doc.warehouseName} ${doc.notes}`.toLowerCase().includes(listSearch.toLowerCase()));
+  if(documentTable.sort){
+    const {key:sortKey,direction}=documentTable.sort;
+    const value=(doc:Document)=>sortKey==='adjustment'?adjustmentLabel(doc):doc[sortKey]||'';
+    visibleDocuments.sort((a,b)=>value(a).localeCompare(value(b),'id',{numeric:true,sensitivity:'base'})*(direction==='asc'?1:-1));
+  }
   const categoryRows=catalog.filter(row=>scope==='all'||row.systemQuantity!==0||(scope==='activity'&&((row.movementIn||0)!==0||(row.movementOut||0)!==0)));
   const categories=[...new Set(catalog.map(row=>row.categoryName))].filter(name=>name.toLowerCase().includes(categorySearch.toLowerCase()));
   const selectedCategoryAvailable=catalog.filter(row=>selectedCategories.includes(row.categoryName)&&!rows.some(old=>old.itemId===row.itemId));
@@ -195,8 +208,18 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
     {message&&<div role="status" className="adjustment-message">{message}<button className="ml-auto" onClick={()=>setMessage('')} aria-label="Tutup pesan"><X size={16}/></button></div>}
     {list?<div className="adjustment-list">
       <div className="opname-list-tools"><label>Tanggal: <IndonesianDateInput value={listDate} onChange={setListDate}/></label><button className="adjustment-icon" title="Hapus filter tanggal" onClick={()=>setListDate('')}><X size={16}/></button><button className="adjustment-outline ml-auto" disabled={busy} onClick={()=>{if(discard())setLegacyOpen(true);}}>Dokumen Lama</button></div>
-      <div className="opname-list-tools"><button className="opname-add" aria-label="Tambah Stok Opname" disabled={!canCreate||busy} onClick={newDocument}><Plus/></button><button className="adjustment-icon" title="Muat ulang daftar" disabled={busy} onClick={()=>void run(loadList)}><RefreshCw size={19}/></button><div className="opname-search ml-auto"><input aria-label="Cari opname" placeholder="Cari nomor, gudang, keterangan…" value={listSearch} onChange={e=>setListSearch(e.target.value)}/><Search size={18}/></div></div>
-      <div className="app-table-scroll adjustment-table-scroll opname-list-table"><table><thead><tr><th>Nomor #</th><th>Tanggal</th><th>Gudang</th><th>Keterangan</th><th>Penyesuaian</th></tr></thead><tbody>{documents.filter(doc=>doc.entryMode==='simple'&&(!listDate||doc.endDate===listDate)&&`${doc.orderNumber} ${doc.warehouseName} ${doc.notes}`.toLowerCase().includes(listSearch.toLowerCase())).map(doc=><tr key={doc.id}><td><button disabled={busy} className="opname-link" onClick={()=>{if(discard())void run(()=>open(doc.id));}}>{doc.orderNumber}</button></td><td>{doc.endDate}</td><td>{doc.warehouseName}</td><td>{doc.notes||'—'}</td><td>{doc.result?.status==='Draft'?'Draf':doc.result?.adjustmentNumber||'Tanpa selisih'}</td></tr>)}</tbody></table>{!documents.some(doc=>doc.entryMode==='simple')&&<div className="adjustment-empty">Belum ada Stok Opname. Klik + untuk mulai menghitung.</div>}</div>
+      <div className="opname-list-tools"><button className="opname-add" aria-label="Tambah Stok Opname" disabled={!canCreate||busy} onClick={newDocument}><Plus/></button><button className="adjustment-icon" title="Muat ulang daftar" disabled={busy} onClick={()=>void run(loadList)}><RefreshCw size={19}/></button><button className="adjustment-outline" title="Reset kolom daftar opname" onClick={documentTable.resetLayout}>Reset Kolom</button><div className="opname-search ml-auto"><input aria-label="Cari opname" placeholder="Cari nomor, gudang, keterangan…" value={listSearch} onChange={e=>setListSearch(e.target.value)}/><Search size={18}/></div></div>
+      <div className="app-table-scroll adjustment-table-scroll opname-list-table">
+        <table style={{minWidth:Math.max(850,orderedDocumentColumns.reduce((sum,col)=>sum+(documentTable.isDesktop?documentTable.widths[col]:documentWidths[col]),0))}}>
+          <colgroup>{orderedDocumentColumns.map(col=><col key={col} style={{width:documentTable.isDesktop?documentTable.widths[col]:documentWidths[col]}}/>)}</colgroup>
+          <thead><tr>{orderedDocumentColumns.map(col=><ConfigurableTableHeaderCell key={col} columnKey={col} label={documentLabels[col]} sortable movable={documentTable.isDesktop} sort={documentTable.sort} onMove={documentTable.moveColumn} onSort={documentTable.toggleSort} onResize={documentTable.beginResize} onResetWidth={documentTable.resetWidth}/>)}</tr></thead>
+          <tbody>{visibleDocuments.map(doc=>{
+            const cells:Record<DocumentColumn,ReactNode>={orderNumber:<button disabled={busy} className="opname-link" onClick={()=>{if(discard())void run(()=>open(doc.id));}}>{doc.orderNumber}</button>,endDate:doc.endDate,warehouseName:doc.warehouseName,notes:doc.notes||'—',adjustment:adjustmentLabel(doc)};
+            return <tr key={doc.id}>{orderedDocumentColumns.map(col=><td key={col}>{cells[col]}</td>)}</tr>;
+          })}</tbody>
+        </table>
+        {!visibleDocuments.length&&<div className="adjustment-empty">{documents.some(doc=>doc.entryMode==='simple')?'Tidak ada opname yang sesuai filter.':'Belum ada Stok Opname. Klik + untuk mulai menghitung.'}</div>}
+      </div>
     </div>:<div className="opname-form">
       <main><div className="opname-header"><label><span>Tanggal Opname <b>*</b></span><IndonesianDateInput value={date} max={localDateKey()} disabled={applied||busy} onChange={value=>changeHeader(warehouse,value)}/></label><label><span>No. Opname #</span><input value={document?.orderNumber||'Otomatis'} readOnly/></label><label><span>Gudang <b>*</b></span><select aria-label="Gudang" value={warehouse} disabled={applied||busy} onChange={e=>changeHeader(e.target.value,date)}><option value="">Pilih Gudang</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label><label><span>Penyesuaian</span>{document?.result?.adjustmentId?<button className="opname-link" disabled={busy} onClick={showAdjustment}>{document.result.adjustmentNumber}</button>:<span className="opname-muted">{document?.result?.status==='Draft'?'Draf · stok belum berubah':document?'Tanpa selisih':'Otomatis jika ada selisih'}</span>}</label></div>
       <div className="adjustment-body-wrap"><nav className="adjustment-side-tabs"><button title="Rincian Barang" className={!info?'active':''} onClick={()=>setInfo(false)}><FileText size={18}/></button><button title="Info Lainnya" className={info?'active':''} onClick={()=>setInfo(true)}><Info size={18}/></button></nav><section className={`adjustment-body opname-body ${info?'opname-body-info':''}`}>
