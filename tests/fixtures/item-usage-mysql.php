@@ -35,7 +35,7 @@ if (($input['op'] ?? '') === 'init') {
         'user_login_rules'=>'user_id VARCHAR(64),idle_timeout_minutes INT',
         'chart_of_accounts'=>'id VARCHAR(64) PRIMARY KEY,code VARCHAR(40) UNIQUE,name VARCHAR(120),account_type VARCHAR(30),detail_type VARCHAR(60),normal_balance VARCHAR(10),parent_id VARCHAR(64),is_active TINYINT DEFAULT 1',
         'app_settings'=>'id INT PRIMARY KEY,settings_json TEXT',
-        'branch_account_settings'=>'branch_id VARCHAR(64) PRIMARY KEY,receivable_coa_id VARCHAR(64),service_revenue_coa_id VARCHAR(64),goods_revenue_coa_id VARCHAR(64),inventory_coa_id VARCHAR(64)',
+        'branch_account_settings'=>'branch_id VARCHAR(64) PRIMARY KEY,receivable_coa_id VARCHAR(64),service_revenue_coa_id VARCHAR(64),goods_revenue_coa_id VARCHAR(64),inventory_coa_id VARCHAR(64),inventory_usage_coa_id VARCHAR(64)',
         'journal_entries'=>"id VARCHAR(64) PRIMARY KEY,entry_date DATE,entry_number VARCHAR(60) UNIQUE,description VARCHAR(500),branch_id VARCHAR(64),source_type VARCHAR(40),source_id VARCHAR(64),party_type VARCHAR(20),party_id VARCHAR(64),posted TINYINT DEFAULT 1,status VARCHAR(20) DEFAULT 'Posted',created_by VARCHAR(64),posted_by VARCHAR(64),posted_at DATETIME,reversal_of_id VARCHAR(64),void_reason VARCHAR(500)",
         'journal_lines'=>'id VARCHAR(64) PRIMARY KEY,journal_id VARCHAR(64),account_id VARCHAR(64),debit DECIMAL(18,2),credit DECIMAL(18,2),memo VARCHAR(500)',
         'journal_postings'=>'id VARCHAR(64) PRIMARY KEY,journal_id VARCHAR(64),source_type VARCHAR(40),source_id VARCHAR(64),posting_key VARCHAR(60),status VARCHAR(20),UNIQUE KEY uq_posting(source_type,source_id,posting_key)',

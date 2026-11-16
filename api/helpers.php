@@ -1019,8 +1019,10 @@ function ensureApiSupportTables(PDO $pdo): void {
         bank_account_id VARCHAR(64) NULL, qris_account_id VARCHAR(64) NULL,
         deposit_destination_account_id VARCHAR(64) NULL, receivable_coa_id VARCHAR(64) NULL,
         service_revenue_coa_id VARCHAR(64) NULL, goods_revenue_coa_id VARCHAR(64) NULL,
-        inventory_coa_id VARCHAR(64) NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        inventory_coa_id VARCHAR(64) NULL, inventory_usage_coa_id VARCHAR(64) NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensureTableColumn($pdo,'branch_account_settings','inventory_usage_coa_id','VARCHAR(64) NULL AFTER inventory_coa_id');
     $cashColumns = array_column($pdo->query("SHOW COLUMNS FROM cash_accounts")->fetchAll(), 'Field');
     if (!in_array('ledger_account_id', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD ledger_account_id VARCHAR(64) NULL AFTER branch_id");
     if (!in_array('bank_name', $cashColumns, true)) $pdo->exec("ALTER TABLE cash_accounts ADD bank_name VARCHAR(100) NULL AFTER ledger_account_id");
@@ -1251,6 +1253,11 @@ function ensureApiSupportTables(PDO $pdo): void {
             $pdo->exec("ALTER TABLE sales_invoices ADD payment_method VARCHAR(30) NOT NULL DEFAULT 'Tunai' AFTER payment");
         }
     }
+}
+
+function ensureBranchUsageAccountMappingSchema(PDO $pdo): void {
+    if (!$pdo->query("SHOW TABLES LIKE 'branch_account_settings'")->fetchColumn()) return;
+    ensureTableColumn($pdo,'branch_account_settings','inventory_usage_coa_id','VARCHAR(64) NULL AFTER inventory_coa_id');
 }
 
 function grantInitialStockOpnamePermissions(PDO $pdo): void {
@@ -2152,9 +2159,8 @@ function isBackdateReasonRequired(PDO $pdo): bool {
 }
 
 /**
- * Akun jurnal utama bersifat global seperti Preferensi Akun Accurate.
- * Mapping cabang dipakai hanya sebagai fallback untuk data lama yang belum
- * memiliki defaultAccounts, sehingga migrasi tidak memutus transaksi lama.
+ * Akun jurnal utama tetap memiliki default global untuk kompatibilitas data lama.
+ * Mapping cabang menjadi prioritas untuk akun yang memang mengikuti cabang.
  */
 function getDefaultAccountSettings(PDO $pdo, ?string $branchId = null): array {
     $global = [];
@@ -2166,7 +2172,7 @@ function getDefaultAccountSettings(PDO $pdo, ?string $branchId = null): array {
         $global = [];
     }
     if ($branchId === null || $branchId === '') return $global;
-    $stmt = $pdo->prepare('SELECT receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id FROM branch_account_settings WHERE branch_id=?');
+    $stmt = $pdo->prepare('SELECT receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id,inventory_usage_coa_id FROM branch_account_settings WHERE branch_id=?');
     $stmt->execute([$branchId]);
     $legacy = $stmt->fetch() ?: [];
     $fallback = [
@@ -2174,9 +2180,14 @@ function getDefaultAccountSettings(PDO $pdo, ?string $branchId = null): array {
         'serviceRevenueCoaId' => $legacy['service_revenue_coa_id'] ?? null,
         'goodsRevenueCoaId' => $legacy['goods_revenue_coa_id'] ?? null,
         'inventoryCoaId' => $legacy['inventory_coa_id'] ?? null,
+        'inventoryUsageCoaId' => $legacy['inventory_usage_coa_id'] ?? null,
     ];
     foreach ($fallback as $key => $value) {
-        if (($global[$key] ?? '') === '' && $value) $global[$key] = $value;
+        if ($key === 'inventoryUsageCoaId' && $value) {
+            $global[$key] = $value;
+        } elseif (($global[$key] ?? '') === '' && $value) {
+            $global[$key] = $value;
+        }
     }
     return $global;
 }

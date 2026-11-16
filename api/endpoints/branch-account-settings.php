@@ -4,7 +4,7 @@ function mapBranchAccountSetting(array $r): array {
         'bankAccountId'=>$r['bank_account_id'],'qrisAccountId'=>null,
         'depositDestinationAccountId'=>$r['deposit_destination_account_id'],'receivableCoaId'=>$r['receivable_coa_id'],
         'serviceRevenueCoaId'=>$r['service_revenue_coa_id'],'goodsRevenueCoaId'=>$r['goods_revenue_coa_id'],
-        'inventoryCoaId'=>$r['inventory_coa_id']];
+        'inventoryCoaId'=>$r['inventory_coa_id'],'inventoryUsageCoaId'=>$r['inventory_usage_coa_id'] ?? null];
 }
 switch($method){
 case 'GET':
@@ -20,6 +20,7 @@ case 'PUT':
         'depositDestinationAccountId'=>'deposit_destination_account_id',
         'receivableCoaId'=>'receivable_coa_id','serviceRevenueCoaId'=>'service_revenue_coa_id',
         'goodsRevenueCoaId'=>'goods_revenue_coa_id','inventoryCoaId'=>'inventory_coa_id',
+        'inventoryUsageCoaId'=>'inventory_usage_coa_id',
     ];
     $pdo->beginTransaction();
     try {
@@ -49,11 +50,19 @@ case 'PUT':
             }
             requireCashLedgerAccount($pdo,$next[$field]);
         }
-        $pdo->prepare('INSERT INTO branch_account_settings(branch_id,cash_account_id,bank_account_id,deposit_destination_account_id,receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id)
-            VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE cash_account_id=VALUES(cash_account_id),bank_account_id=VALUES(bank_account_id),deposit_destination_account_id=VALUES(deposit_destination_account_id),receivable_coa_id=VALUES(receivable_coa_id),service_revenue_coa_id=VALUES(service_revenue_coa_id),goods_revenue_coa_id=VALUES(goods_revenue_coa_id),inventory_coa_id=VALUES(inventory_coa_id)')
+        if (array_key_exists('inventoryUsageCoaId',$d) && $next['inventoryUsageCoaId']) {
+            $check=$pdo->prepare("SELECT a.id,a.account_type,a.is_active,EXISTS(SELECT 1 FROM chart_of_accounts c WHERE c.parent_id=a.id) has_children FROM chart_of_accounts a WHERE a.id=? FOR UPDATE");
+            $check->execute([$next['inventoryUsageCoaId']]);
+            $account=$check->fetch();
+            if (!$account || !$account['is_active'] || $account['account_type']!=='Expense' || $account['has_children']) {
+                throw new InvalidArgumentException('Biaya pemakaian harus berupa akun detail Beban yang aktif');
+            }
+        }
+        $pdo->prepare('INSERT INTO branch_account_settings(branch_id,cash_account_id,bank_account_id,deposit_destination_account_id,receivable_coa_id,service_revenue_coa_id,goods_revenue_coa_id,inventory_coa_id,inventory_usage_coa_id)
+            VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE cash_account_id=VALUES(cash_account_id),bank_account_id=VALUES(bank_account_id),deposit_destination_account_id=VALUES(deposit_destination_account_id),receivable_coa_id=VALUES(receivable_coa_id),service_revenue_coa_id=VALUES(service_revenue_coa_id),goods_revenue_coa_id=VALUES(goods_revenue_coa_id),inventory_coa_id=VALUES(inventory_coa_id),inventory_usage_coa_id=VALUES(inventory_usage_coa_id)')
             ->execute([$id,...array_values($next)]);
         $pdo->commit();
-        respondSuccess(null,'Pemetaan kas cabang disimpan');
+        respondSuccess(null,'Pemetaan akun cabang disimpan');
     } catch (InvalidArgumentException $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         respondError($e->getMessage(),422);

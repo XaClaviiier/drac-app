@@ -7,8 +7,23 @@ if ($method === 'GET') {
     try {
         if (($_GET['options'] ?? '') === '1') {
             $accounts = $pdo->query("SELECT a.id,a.code,a.name FROM chart_of_accounts a WHERE a.is_active=1 AND a.account_type='Expense' AND NOT EXISTS(SELECT 1 FROM chart_of_accounts c WHERE c.parent_id=a.id) ORDER BY a.code")->fetchAll();
-            $defaults = getDefaultAccountSettings($pdo);
-            respondSuccess(['accounts'=>$accounts,'defaultExpenseAccountId'=>$defaults['inventoryUsageCoaId'] ?? '']);
+            $branchId = (string)($_GET['branchId'] ?? '');
+            $warehouseId = (string)($_GET['warehouseId'] ?? '');
+            if ($warehouseId !== '') {
+                $warehouse = $pdo->prepare('SELECT branch_id FROM warehouses WHERE id=? AND is_active=1 AND is_system=0 LIMIT 1');
+                $warehouse->execute([$warehouseId]);
+                $branchId = (string)($warehouse->fetchColumn() ?: '');
+            }
+            if ($branchId !== '') assertAccessibleBranch($pdo,$actor,$branchId);
+            $defaults = getDefaultAccountSettings($pdo,$branchId !== '' ? $branchId : null);
+            $defaultId = (string)($defaults['inventoryUsageCoaId'] ?? '');
+            $defaultName = '';
+            if ($defaultId !== '') {
+                $account = $pdo->prepare('SELECT CONCAT("[",code,"] ",name) FROM chart_of_accounts WHERE id=? AND is_active=1 LIMIT 1');
+                $account->execute([$defaultId]);
+                $defaultName = (string)($account->fetchColumn() ?: '');
+            }
+            respondSuccess(['accounts'=>$accounts,'defaultExpenseAccountId'=>$defaultId,'defaultExpenseAccountName'=>$defaultName,'branchId'=>$branchId]);
         }
         if (($_GET['preview'] ?? '') === '1') {
             $warehouseId = (string)($_GET['warehouseId'] ?? '');
@@ -85,7 +100,7 @@ try {
         }
         $warehouse = lockActiveInventoryWarehouses($pdo,[$data['warehouseId']])[$data['warehouseId']];
         assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);
-        if ($data['expenseAccountId'] !== '') itemUsageAccount($pdo,$data['expenseAccountId'],'Expense','Akun biaya pemakaian');
+        $data['expenseAccountId'] = resolveItemUsageExpenseAccount($pdo,(string)$warehouse['branch_id']);
         $prefix = 'PAK-'.date('ym',strtotime($data['date'])).'-';
         $sequence = $pdo->prepare('SELECT usage_number FROM item_usages WHERE usage_number LIKE ? ORDER BY usage_number DESC LIMIT 1 FOR UPDATE');
         $sequence->execute([$prefix.'%']);
@@ -116,7 +131,7 @@ try {
             $warehouse = lockActiveInventoryWarehouses($pdo,[$data['warehouseId']])[$data['warehouseId']];
             assertLockedInventoryBranchAccess($authorization,(string)$warehouse['branch_id']);
             if ((string)$warehouse['branch_id'] !== (string)$doc['branch_id']) throw new InvalidArgumentException('Gudang harus berada di cabang dokumen');
-            if ($data['expenseAccountId'] !== '') itemUsageAccount($pdo,$data['expenseAccountId'],'Expense','Akun biaya pemakaian');
+            $data['expenseAccountId'] = resolveItemUsageExpenseAccount($pdo,(string)$warehouse['branch_id']);
             $pdo->prepare('UPDATE item_usages SET usage_date=?,warehouse_id=?,purpose=?,responsible_name=?,expense_account_id=?,revision=revision+1 WHERE id=?')
                 ->execute([$data['date'],$data['warehouseId'],$data['purpose'],$data['responsibleName'],$data['expenseAccountId'] ?: null,$id]);
             saveItemUsageLines($pdo,$id,$data);

@@ -19,6 +19,7 @@ try {
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_adjustment_details_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_simple_opname_v1');
     ensureApiSupportTablesVersioned($pdo, 'api_support_20260910_coa_details_v1');
+    runVersionedApiBootstrap($pdo, 'api_support_20261116_branch_usage_account_mapping_v1', 'ensureBranchUsageAccountMappingSchema');
     ensureCashAccountDetails($pdo);
     runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_schema_v1', 'ensureItemUsageSchema');
     // v2 juga memperbaiki role pegawai yang sudah ada agar dapat mengisi dan
@@ -158,6 +159,8 @@ if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', '
             && !authenticatedUserHasPermission($pdo, $requestUser, 'settings:view')) {
             requireAuthenticatedUserPermission($pdo, $requestUser, 'report:view');
         }
+    } elseif ($method === 'GET' && $resource === 'chart-of-accounts' && authenticatedUserHasPermission($pdo, $requestUser, 'settings:view')) {
+        // Pengaturan cabang perlu membaca akun beban detail untuk pemetaan.
     } else {
         requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
     }

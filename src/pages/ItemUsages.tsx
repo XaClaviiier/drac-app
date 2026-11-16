@@ -9,7 +9,6 @@ import ItemSearchOption from '../components/ItemSearchOption';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
-import AccountSearch from '../components/AccountSearch';
 import './OpeningStockImport.css';
 import './ItemUsages.css';
 
@@ -53,7 +52,6 @@ export default function ItemUsages() {
   const [dateTo, setDateTo] = useState('');
   const [status, setStatus] = useState('');
   const [accounts, setAccounts] = useState<ExpenseAccount[]>([]);
-  const [choosingAccount, setChoosingAccount] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -71,12 +69,13 @@ export default function ItemUsages() {
   const shown = document || form;
   const currentWarehouse = data.warehouses.find(w => w.id === shown.warehouseId);
   const formWarehouse = data.warehouses.find(w => w.id === form.warehouseId);
+  const optionsWarehouseId = readOnly ? document?.warehouseId || '' : form.warehouseId;
   const editingBranch = form.id ? data.warehouses.find(w => w.id === form.warehouseId)?.branchId : undefined;
   const formWarehouses = warehouses.filter(w => !editingBranch || w.branchId === editingBranch);
   const branchMismatch = currentBranchId !== 'ALL' && !!formWarehouse && formWarehouse.branchId !== currentBranchId;
   const canSave = hasPermission(form.id ? 'item_usage:edit' : 'item_usage:create');
   const accountLabel = accounts.find(a => a.id === shown.expenseAccountId);
-  const selectedAccountName = accountLabel ? `[${accountLabel.code}] ${accountLabel.name}` : document?.expenseAccountName || '';
+  const selectedAccountName = document?.expenseAccountName || (accountLabel ? `[${accountLabel.code}] ${accountLabel.name}` : '') || (shown.expenseAccountId ? 'Akun biaya tersimpan' : '');
   const filtered = documents.filter(doc => (!dateFrom || doc.date >= dateFrom) && (!dateTo || doc.date <= dateTo) && (!status || doc.status === status)
     && `${doc.usageNumber} ${doc.purpose} ${doc.responsibleName} ${doc.branchName} ${doc.warehouseName}`.toLocaleLowerCase('id-ID').includes(search.toLocaleLowerCase('id-ID')));
   const suggestions = itemSearch.trim() ? data.items.filter(item => item.isActive && item.type === 'Persediaan'
@@ -94,16 +93,17 @@ export default function ItemUsages() {
   useEffect(() => { void loadDocuments(); return () => { listRequest.current++; }; }, [currentBranchId]);
   useEffect(() => {
     let active = true;
-    void api.get<{ accounts: ExpenseAccount[]; defaultExpenseAccountId: string }>('item-usages?options=1').then(response => {
+    if (!optionsWarehouseId) return () => { active = false; };
+    void api.get<{ accounts: ExpenseAccount[]; defaultExpenseAccountId: string; defaultExpenseAccountName?: string }>(`item-usages?options=1&warehouseId=${encodeURIComponent(optionsWarehouseId)}`).then(response => {
       if (!active) return;
       if (!response.success || !response.data) { setMessage(response.message || 'Akun biaya gagal dimuat.'); return; }
       setAccounts(response.data.accounts);
       const defaultId = response.data.accounts.some(a => a.id === response.data?.defaultExpenseAccountId) ? response.data.defaultExpenseAccountId : '';
       defaultAccount.current = defaultId;
-      setForm(previous => previous.id || previous.expenseAccountId ? previous : { ...previous, expenseAccountId: defaultId });
+      setForm(previous => previous.id ? previous : { ...previous, expenseAccountId: defaultId });
     });
     return () => { active = false; };
-  }, []);
+  }, [optionsWarehouseId, readOnly]);
   useEffect(() => {
     setForm(previous => previous.id || previous.rows.length ? previous : { ...previous, warehouseId: defaultWarehouseId });
   }, [currentBranchId, defaultWarehouseId]);
@@ -140,7 +140,7 @@ export default function ItemUsages() {
   function freshEntry() {
     detailRequest.current++;
     setForm(emptyForm()); setView('entry'); setEntryOpen(true); setFormTab('items'); setSelectedDocument(null);
-    setRowDialog(null); setItemSearch(''); setMessage(''); setChoosingAccount(false); pendingCreate.current = null;
+    setRowDialog(null); setItemSearch(''); setMessage(''); pendingCreate.current = null;
     if (requestedDocument) setParams({}, { replace: true });
   }
   function requestNew() { if (form.rows.length || form.purpose) setConfirmation('new'); else freshEntry(); }
@@ -176,11 +176,10 @@ export default function ItemUsages() {
       if (!form.purpose.trim() || !form.responsibleName.trim()) setFormTab('info');
       return;
     }
-    if (postImmediately && !form.expenseAccountId) { setMessage('Pilih akun biaya pemakaian.'); setFormTab('info'); return; }
     setMessage(''); busyRef.current = true; setBusy(true);
     try {
       const payload = { date: form.date, warehouseId: form.warehouseId, purpose: form.purpose, responsibleName: form.responsibleName,
-        expenseAccountId: form.expenseAccountId, rows: form.rows.map(({ itemId, quantity, lineNotes }) => ({ itemId, quantity, lineNotes })) };
+        rows: form.rows.map(({ itemId, quantity, lineNotes }) => ({ itemId, quantity, lineNotes })) };
       const fingerprint = JSON.stringify({ ...payload, postImmediately });
       if (!pendingCreate.current || pendingCreate.current.fingerprint !== fingerprint) pendingCreate.current = { fingerprint, key: crypto.randomUUID() };
       const response = form.id
@@ -240,7 +239,7 @@ export default function ItemUsages() {
               <h2><Info size={20}/> Info lainnya</h2>
               <label>Keperluan *<textarea aria-label="Keperluan pemakaian" readOnly={readOnly} disabled={busy} rows={3} maxLength={1000} placeholder="Contoh: Pembersihan peralatan cabang" value={shown.purpose} onChange={e => setForm(previous => ({ ...previous, purpose: e.target.value }))}/></label>
               <label>Penanggung Jawab *<input aria-label="Penanggung jawab" readOnly={readOnly} disabled={busy} maxLength={120} value={shown.responsibleName} onChange={e => setForm(previous => ({ ...previous, responsibleName: e.target.value }))}/></label>
-              <div className="usage-account-field"><span>Akun Biaya Pemakaian *</span><div>{readOnly ? <input readOnly aria-label="Akun biaya pemakaian" value={selectedAccountName || 'Belum dipilih'}/> : <>{!choosingAccount && !!selectedAccountName ? <button type="button" disabled={busy} className="usage-selected-account" aria-label="Ganti akun biaya pemakaian" onClick={() => setChoosingAccount(true)}>{selectedAccountName}<ChevronDown size={15}/></button> : <AccountSearch accounts={accounts.map(account => ({ ...account, isActive: true, accountType: 'Expense' }))} disabled={busy} onSelect={account => { setForm(previous => ({ ...previous, expenseAccountId: account.id })); setChoosingAccount(false); }}/>}</>}</div></div>
+              <div className="usage-account-field"><span>Akun Biaya Pemakaian</span><div><input readOnly aria-label="Akun biaya pemakaian" value={selectedAccountName || 'Belum diatur untuk cabang ini'} /></div><small>Mengikuti pemetaan akun pada cabang gudang.</small></div>
               {document && <><label>Dibuat oleh<input readOnly value={document.createdByName}/></label>{document.postedAt && <label>Diposting pada<input readOnly value={document.postedAt}/></label>}{document.cancellationReason && <label>Alasan pembatalan<textarea readOnly rows={3} value={document.cancellationReason}/></label>}</>}
             </div>}
           </div></div>

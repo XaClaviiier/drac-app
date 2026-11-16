@@ -93,7 +93,10 @@ function normalizeItemUsage(array $input): array {
         'warehouseId' => itemUsageText($input['warehouseId'] ?? '', 64, 'Gudang', true),
         'purpose' => itemUsageText($input['purpose'] ?? '', 1000, 'Keperluan', true),
         'responsibleName' => itemUsageText($input['responsibleName'] ?? '', 120, 'Penanggung jawab', true),
-        'expenseAccountId' => itemUsageText($input['expenseAccountId'] ?? '', 64, 'Akun biaya'),
+        // Akun biaya ditentukan server dari pemetaan cabang. Nilai dari klien
+        // dipertahankan hanya untuk kompatibilitas payload lama, tetapi tidak
+        // pernah dipakai sebagai akun jurnal.
+        'expenseAccountId' => '',
         'rows' => array_values($rows),
     ];
 }
@@ -105,6 +108,14 @@ function itemUsageAccount(PDO $pdo, string $id, string $type, string $label): vo
     if (!$account || !$account['is_active'] || $account['account_type'] !== $type || $account['has_children']) {
         throw new InvalidArgumentException($label.' harus berupa akun detail '.$type.' yang aktif');
     }
+}
+
+function resolveItemUsageExpenseAccount(PDO $pdo, string $branchId): string {
+    $defaults = getDefaultAccountSettings($pdo,$branchId);
+    $accountId = resolveDefaultCoaId($pdo,$defaults,'inventoryUsageCoaId','');
+    if ($accountId === '') throw new DomainException('Akun biaya pemakaian belum diatur untuk cabang ini',422);
+    itemUsageAccount($pdo,$accountId,'Expense','Akun biaya pemakaian');
+    return $accountId;
 }
 
 function itemUsageAmount(float $cost, int $quantity): float {
@@ -139,6 +150,12 @@ function itemUsageAudit(PDO $pdo, array $actor, array $doc, string $action, stri
 function postItemUsage(PDO $pdo, array $doc, array $actor): void {
     $warehouse = lockActiveInventoryWarehouses($pdo, [$doc['warehouse_id']])[$doc['warehouse_id']];
     if ((string)$warehouse['branch_id'] !== (string)$doc['branch_id']) throw new DomainException('Cabang gudang berubah. Periksa Draft.', 409);
+    // Draft lama juga harus mengikuti pemetaan akun cabang saat diposting.
+    $expenseAccount = resolveItemUsageExpenseAccount($pdo,(string)$doc['branch_id']);
+    if ((string)($doc['expense_account_id'] ?? '') !== $expenseAccount) {
+        $pdo->prepare('UPDATE item_usages SET expense_account_id=? WHERE id=?')->execute([$expenseAccount,$doc['id']]);
+        $doc['expense_account_id'] = $expenseAccount;
+    }
     $stmt = $pdo->prepare('SELECT * FROM item_usage_items WHERE usage_id=? ORDER BY item_id FOR UPDATE');
     $stmt->execute([$doc['id']]);
     $lines = $stmt->fetchAll();
@@ -146,7 +163,6 @@ function postItemUsage(PDO $pdo, array $doc, array $actor): void {
     lockActiveInventoryItems($pdo, array_column($lines, 'item_id'));
     $defaults = getDefaultAccountSettings($pdo, $doc['branch_id']);
     $inventory = resolveDefaultCoaId($pdo, $defaults, 'inventoryCoaId', '110401');
-    itemUsageAccount($pdo, (string)$doc['expense_account_id'], 'Expense', 'Akun biaya pemakaian');
     itemUsageAccount($pdo, $inventory, 'Asset', 'Akun persediaan');
     $total = 0.0;
     foreach ($lines as $line) {

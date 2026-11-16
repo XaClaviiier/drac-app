@@ -5,7 +5,7 @@
 .branch-cash-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 .branch-cash-table thead th { text-align: left; background: #f6f8fc; color: #64748b; border-block: 1px solid #d8e0eb; font-size: 12px; font-weight: 600; padding: 12px; }
 .branch-cash-table thead th:first-child { width: 23%; }
-.branch-cash-table thead th:not(:first-child) { width: 38.5%; }
+.branch-cash-table thead th:not(:first-child) { width: 25.66%; }
 .branch-cash-table thead svg { display: inline-block; vertical-align: middle; margin-right: 5px; }
 .branch-cash-table tbody th, .branch-cash-table td { padding: 16px 12px; border-bottom: 1px solid #d8e0eb; text-align: left; vertical-align: top; }
 .branch-cash-table tbody th > strong { display: block; padding-top: 11px; font-size: 13px; font-weight: 650; text-transform: uppercase; overflow-wrap: anywhere; }

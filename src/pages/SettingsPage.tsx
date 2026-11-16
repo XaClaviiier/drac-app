@@ -373,11 +373,10 @@ export default function SettingsPage() {
               </>}
               {innerTab === 'persediaan' && <>
                 <DefaultAccountSection title="Penyesuaian Persediaan" fields={[defaultAccountField('inventoryAdjustmentCoaId', 'Akun Penyesuaian', ['Equity', 'Expense'])]} />
-                <DefaultAccountSection title="Pemakaian Barang" fields={[defaultAccountField('inventoryUsageCoaId', 'Biaya Pemakaian', ['Expense'])]} />
                 <DefaultAccountSection title="Perintah Stok Opname" fields={[defaultAccountField('stockVarianceCoaId', 'Beban Selisih Stok', ['Expense'])]} />
                 <DefaultAccountSection title="Pekerjaan Pesanan" fields={[defaultAccountField('jobAccountCoaId', 'Akun Pekerjaan', ['Asset', 'Expense']), defaultAccountField('jobCostDifferenceCoaId', 'Selisih Biaya', ['Expense'])]} />
               </>}
-              <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun di halaman ini berlaku sama untuk semua cabang. Akun kas, bank, dan tujuan setoran tetap diatur pada tab <b>Pemetaan Kas Cabang</b>.</p>
+              <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">Akun di halaman ini berlaku sama untuk semua cabang. Kas, bank, tujuan setoran, dan biaya pemakaian diatur per cabang pada tab <b>Pemetaan Kas Cabang</b>.</p>
             </div>
           )}
 

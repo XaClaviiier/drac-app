@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Banknote, Check, Landmark, LoaderCircle, RefreshCw, Save, Search, X } from 'lucide-react';
+import { AlertCircle, Banknote, Check, CircleDollarSign, Landmark, LoaderCircle, RefreshCw, Save, Search, X } from 'lucide-react';
 import { api } from '../lib/apiClient';
 import './BranchCashMappingSettings.css';
 
@@ -9,7 +9,7 @@ interface CashAccount {
   id: string;
   code?: string;
   name: string;
-  accountType: 'cash' | 'bank';
+  accountType: 'cash' | 'bank' | 'Expense';
   branchId?: string | null;
   isActive?: boolean;
   postingEnabled?: boolean;
@@ -17,13 +17,14 @@ interface CashAccount {
   ledgerAccountCode?: string | null;
   ledgerAccountName?: string | null;
 }
-const mappingFields = ['cashAccountId', 'bankAccountId'] as const;
+const mappingFields = ['cashAccountId', 'bankAccountId', 'inventoryUsageCoaId'] as const;
 type MappingField = typeof mappingFields[number];
 type Mapping = { branchId: string } & Partial<Record<MappingField, string | null>>;
 
 function accountIssue(account: CashAccount, branchId: string, type: CashAccount['accountType']) {
   if (account.accountType !== type) return 'Jenis akun tidak sesuai.';
-  if ((type === 'cash' && account.branchId !== branchId) || (account.branchId && account.branchId !== branchId)) return 'Akun milik cabang lain.';
+  if (type === 'cash' && account.branchId !== branchId) return 'Akun milik cabang lain.';
+  if (type === 'bank' && account.branchId && account.branchId !== branchId) return 'Akun milik cabang lain.';
   if (account.isActive === false) return 'Akun nonaktif.';
   return account.mappingError || (account.postingEnabled !== true ? 'Kode perkiraan belum siap digunakan.' : '');
 }
@@ -44,7 +45,7 @@ function AccountPicker({ label, branchId, type, value, accounts, disabled, onCha
   const current = accounts.find(account => account.id === value);
   const issue = current ? accountIssue(current, branchId, type) : value ? 'Akun tersimpan tidak tersedia. Pilih akun pengganti.' : '';
   const options = accounts.filter(account => account.accountType === type
-    && (type === 'cash' ? account.branchId === branchId : !account.branchId || account.branchId === branchId)
+    && (type === 'cash' ? account.branchId === branchId : type === 'bank' ? !account.branchId || account.branchId === branchId : true)
     && [account.code, account.name, account.ledgerAccountCode, account.ledgerAccountName].join(' ').toLocaleLowerCase('id').includes(search.trim().toLocaleLowerCase('id')));
 
   useEffect(() => {
@@ -143,7 +144,7 @@ function AccountPicker({ label, branchId, type, value, accounts, disabled, onCha
         <span className="branch-cash-option-check" aria-hidden="true">{account.id === value && <Check size={14} />}</span>
         <span><strong>{account.name}</strong><small>{account.code}{problem ? ` · ${problem}` : ` · Akun perkiraan: ${account.ledgerAccountCode ? `[${account.ledgerAccountCode}] ` : ''}${account.ledgerAccountName || 'Belum dikaitkan'}`}</small></span>
       </button>; })}
-      {!options.length && <p role="status">{search ? 'Akun tidak ditemukan.' : `Belum ada ${type === 'cash' ? 'kas tunai' : 'rekening bank'} untuk cabang ini.`}</p>}
+      {!options.length && <p role="status">{search ? 'Akun tidak ditemukan.' : `Belum ada ${type === 'cash' ? 'kas tunai' : type === 'bank' ? 'rekening bank' : 'akun beban'} untuk cabang ini.`}</p>}
     </div>, document.body)}
   </div>;
 }
@@ -162,11 +163,14 @@ export default function BranchCashMappingSettings({ branches }: { branches: Bran
   useEffect(() => {
     let active = true;
     setLoading(true); setLoadError('');
-    Promise.all([api.get<CashAccount[]>('cash-accounts'), api.get<Mapping[]>('branch-account-settings')]).then(([cash, mappings]) => {
+    Promise.all([api.get<CashAccount[]>('cash-accounts'), api.get<Mapping[]>('branch-account-settings'), api.get<Array<{ id: string; code: string; name: string; accountType: string; parentId?: string | null; isActive?: boolean }>>('chart-of-accounts')]).then(([cash, mappings, chart]) => {
       if (!active) return;
-      if (!cash.success || !mappings.success) { setLoadError((!cash.success ? cash.message : mappings.message) || 'Gagal memuat pemetaan kas cabang.'); return; }
-      setAccounts(cash.data || []); setDraft(mappings.data || []); setSaved(mappings.data || []);
-    }).catch(() => { if (active) setLoadError('Gagal memuat pemetaan kas cabang.'); })
+      if (!cash.success || !mappings.success || !chart.success) { setLoadError((!cash.success ? cash.message : !mappings.success ? mappings.message : chart.message) || 'Gagal memuat pemetaan akun cabang.'); return; }
+      const expenseAccounts = (chart.data || []).filter(account => account.accountType === 'Expense' && account.isActive !== false && !account.parentId).map(account => ({
+        id: account.id, code: account.code, name: account.name, accountType: 'Expense' as const, branchId: null, isActive: true, postingEnabled: true,
+      }));
+      setAccounts([...(cash.data || []), ...expenseAccounts]); setDraft(mappings.data || []); setSaved(mappings.data || []);
+    }).catch(() => { if (active) setLoadError('Gagal memuat pemetaan akun cabang.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [reload]);
@@ -181,7 +185,7 @@ export default function BranchCashMappingSettings({ branches }: { branches: Bran
   });
   const missing = rows.filter(branch => branch.isActive !== false).reduce((count, branch) => {
     const mapping = draft.find(item => item.branchId === branch.id);
-    return count + Number(!mapping?.cashAccountId) + Number(!mapping?.bankAccountId);
+    return count + Number(!mapping?.cashAccountId) + Number(!mapping?.bankAccountId) + Number(!mapping?.inventoryUsageCoaId);
   }, 0);
   const setAccount = (branchId: string, field: MappingField, value: string | null) => {
     setDraft(previous => previous.some(item => item.branchId === branchId)
@@ -209,24 +213,25 @@ export default function BranchCashMappingSettings({ branches }: { branches: Bran
     } finally { setSaving(false); }
   };
   const picker = (branch: Branch, field: MappingField, label: string) => <AccountPicker
-    label={`${label} ${branch.name}`} branchId={branch.id} type={field === 'cashAccountId' ? 'cash' : 'bank'}
+    label={`${label} ${branch.name}`} branchId={branch.id} type={field === 'cashAccountId' ? 'cash' : field === 'bankAccountId' ? 'bank' : 'Expense'}
     value={draft.find(item => item.branchId === branch.id)?.[field]} accounts={accounts} disabled={loading || saving || !!loadError}
     onChange={value => setAccount(branch.id, field, value)} />;
 
   return <div className="branch-cash-settings">
-    <header className="branch-cash-heading"><Landmark size={21} aria-hidden="true" /><h2>Kas default per cabang</h2></header>
-    {loading ? <p className="branch-cash-state" role="status"><LoaderCircle size={18} className="animate-spin" />Memuat kas dan rekening cabang...</p>
+    <header className="branch-cash-heading"><Landmark size={21} aria-hidden="true" /><h2>Pemetaan akun per cabang</h2></header>
+    {loading ? <p className="branch-cash-state" role="status"><LoaderCircle size={18} className="animate-spin" />Memuat akun cabang...</p>
       : loadError ? <div className="branch-cash-error" role="alert"><p>{loadError}</p><button type="button" onClick={() => setReload(value => value + 1)}><RefreshCw size={16} />Muat ulang</button></div>
       : <>
         {!rows.length && <p className="branch-cash-state">Belum ada cabang yang dapat diatur.</p>}
-        {!!rows.length && <table className="branch-cash-table" aria-label="Pemetaan kas cabang"><thead><tr><th scope="col">Cabang</th><th scope="col"><Banknote size={15} /> Kas default tunai</th><th scope="col"><Landmark size={15} /> Kas default transfer</th></tr></thead><tbody>
+        {!!rows.length && <table className="branch-cash-table" aria-label="Pemetaan akun cabang"><thead><tr><th scope="col">Cabang</th><th scope="col"><Banknote size={15} /> Kas default tunai</th><th scope="col"><Landmark size={15} /> Kas default transfer</th><th scope="col"><CircleDollarSign size={15} /> Biaya pemakaian</th></tr></thead><tbody>
           {rows.map(branch => <tr key={branch.id}>
             <th scope="row"><strong>{branch.name}</strong>{branch.isActive === false && <small>Cabang nonaktif</small>}</th>
             <td><span className="branch-cash-mobile-label">Kas default tunai</span>{picker(branch, 'cashAccountId', 'Kas default tunai')}</td>
             <td><span className="branch-cash-mobile-label">Kas default transfer</span>{picker(branch, 'bankAccountId', 'Kas default transfer')}</td>
+            <td><span className="branch-cash-mobile-label">Biaya pemakaian</span>{picker(branch, 'inventoryUsageCoaId', 'Biaya pemakaian')}</td>
           </tr>)}
         </tbody></table>}
-        <footer className="branch-cash-footer"><div aria-live="polite"><strong>{rows.length} cabang{changes.length ? ` · ${changes.length} cabang diubah` : ''}</strong><small>{missing ? `${missing} pilihan default belum diisi` : 'Pilihan default sudah terisi'}</small></div>
+      <footer className="branch-cash-footer"><div aria-live="polite"><strong>{rows.length} cabang{changes.length ? ` · ${changes.length} cabang diubah` : ''}</strong><small>{missing ? `${missing} pilihan default belum diisi` : 'Pilihan default sudah terisi'}</small></div>
           <div className="branch-cash-actions"><button type="button" disabled={saving || !changes.length} onClick={() => { setDraft(saved); setSaveError(''); setNotice(''); }}>Batal perubahan</button><button type="button" className="branch-cash-save" disabled={saving || !changes.length} onClick={save}><Save size={16} />{saving ? 'Menyimpan...' : 'Simpan pemetaan'}</button></div>
         </footer>
       </>}

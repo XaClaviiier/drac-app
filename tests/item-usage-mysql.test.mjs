@@ -120,11 +120,20 @@ run('stale edits and deletion preserve the latest draft and audit history', t =>
 run('rejects malformed quantities, dates, account types, duplicate rows and missing purpose', t => {
   const f = fixture(t);
   for (const quantity of [0,-1,1.5,'1e2','',null,2147483648]) assert.equal(f.create({ rows:[{itemId:'I1',quantity}] }).success,false,String(quantity));
-  for (const changes of [{date:'2026-02-30'},{purpose:' '},{responsibleName:''},{expenseAccountId:'INV'},{expenseAccountId:'PARENT'},{rows:[{itemId:'I1',quantity:1},{itemId:'I1',quantity:2}]}]) assert.equal(f.create(changes).success,false,JSON.stringify(changes));
+  for (const changes of [{date:'2026-02-30'},{purpose:' '},{responsibleName:''},{rows:[{itemId:'I1',quantity:1},{itemId:'I1',quantity:2}]}]) assert.equal(f.create(changes).success,false,JSON.stringify(changes));
   assert.equal(f.sql('SELECT * FROM item_usages').length,0);
-  const draft = ok(f.create({ expenseAccountId:'' })); assert.equal(f.update(draft.id,'post').success,false);
+  f.sql("UPDATE app_settings SET settings_json='{}' WHERE id=1");
+  assert.equal(f.create({ expenseAccountId:'' }).success,false);
   assert.equal(f.create({action:'post',rows:[{itemId:'I3',quantity:1}]}).success,false);
   assert.equal(f.stock(),13); assert.equal(f.sql('SELECT * FROM journal_entries').length,0);
+});
+
+run('expense account follows the warehouse branch mapping and ignores client account tampering', t => {
+  const f = fixture(t);
+  f.sql("INSERT INTO branch_account_settings(branch_id,inventory_usage_coa_id) VALUES('B1','EXP2')");
+  const doc = ok(f.create({ action:'post', expenseAccountId:'INV' }));
+  assert.equal(f.sql('SELECT expense_account_id FROM item_usages WHERE id=?',[doc.id])[0].expense_account_id,'EXP2');
+  assert.deepEqual(f.sql('SELECT account_id,debit,credit FROM journal_lines WHERE journal_id=(SELECT id FROM journal_entries WHERE source_id=?) ORDER BY account_id',[doc.id]).map(row => [row.account_id,Number(row.debit),Number(row.credit)]), [['EXP2',300000,0],['INV',0,300000]]);
 });
 
 run('posted documents cannot be edited, deleted or cancelled without a reason', t => {
