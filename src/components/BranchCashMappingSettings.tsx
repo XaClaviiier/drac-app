@@ -166,7 +166,8 @@ export default function BranchCashMappingSettings({ branches }: { branches: Bran
     Promise.all([api.get<CashAccount[]>('cash-accounts'), api.get<Mapping[]>('branch-account-settings'), api.get<Array<{ id: string; code: string; name: string; accountType: string; parentId?: string | null; isActive?: boolean }>>('chart-of-accounts')]).then(([cash, mappings, chart]) => {
       if (!active) return;
       if (!cash.success || !mappings.success || !chart.success) { setLoadError((!cash.success ? cash.message : !mappings.success ? mappings.message : chart.message) || 'Gagal memuat pemetaan akun cabang.'); return; }
-      const expenseAccounts = (chart.data || []).filter(account => account.accountType === 'Expense' && account.isActive !== false && !account.parentId).map(account => ({
+      const parentIds = new Set((chart.data || []).map(account => account.parentId).filter((parentId): parentId is string => Boolean(parentId)));
+      const expenseAccounts = (chart.data || []).filter(account => account.accountType === 'Expense' && account.isActive !== false && !parentIds.has(account.id)).map(account => ({
         id: account.id, code: account.code, name: account.name, accountType: 'Expense' as const, branchId: null, isActive: true, postingEnabled: true,
       }));
       setAccounts([...(cash.data || []), ...expenseAccounts]); setDraft(mappings.data || []); setSaved(mappings.data || []);
