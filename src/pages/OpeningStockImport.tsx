@@ -715,12 +715,28 @@ export default function OpeningStockImport() {
             <td>{formatDate(document.date)}</td><td>{document.adjustmentType === "cost_adjustment" && <span className="adjustment-hpp-tag">HPP</span>}{document.notes || ""}</td>
           </tr>)}</tbody>
         </table>{!orderedDocuments.length && <div className="adjustment-empty">{loading ? "Memuat data…" : "Belum ada data"}</div>}</div>
-      </section> : <section className="adjustment-form">
+      </section> : <section className="adjustment-form adjustment-entry">
         <div className="adjustment-form-main">
           <div className="adjustment-form-header">
-            <label className="adjustment-form-date">Tanggal <span>*</span><IndonesianDateInput value={selectedDocument?.date || date} onChange={setDate} disabled={!!selectedDocument || (isHpp && rows.length > 0)}/></label>
-            <div className="adjustment-number-wrap"><label><span className="adjustment-field-label">No Penyesuaian # <em>*</em></span><input readOnly value={activeDocument?.adjustmentNumber || "Otomatis"} aria-label="Nomor penyesuaian"/></label></div>
-            <label className="adjustment-kind adjustment-form-kind">Jenis Penyesuaian<select aria-label="Jenis penyesuaian" disabled value={selectedDocument ? (selectedDocument.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance") : adjustmentType}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP — Stok Tetap</option>}</select></label>
+            <div className="adjustment-header-column">
+              <label className="adjustment-header-field">
+                <span className="adjustment-field-label">Tanggal <em>*</em></span>
+                <IndonesianDateInput className="adjustment-date-control" value={selectedDocument?.date || date} onChange={setDate} disabled={!!selectedDocument || (isHpp && rows.length > 0)}/>
+              </label>
+              <label className="adjustment-header-field">
+                <span className="adjustment-field-label">Jenis Penyesuaian</span>
+                <select aria-label="Jenis penyesuaian" disabled value={selectedDocument ? (selectedDocument.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance") : adjustmentType}>
+                  <option value="opening_balance">Penyesuaian Stok</option>
+                  {canHpp && <option value="cost_adjustment">Penyesuaian HPP</option>}
+                </select>
+              </label>
+            </div>
+            <div className="adjustment-header-column">
+              <label className="adjustment-header-field adjustment-header-number">
+                <span className="adjustment-field-label">No Penyesuaian #</span>
+                <input readOnly value={activeDocument?.adjustmentNumber || "Otomatis"} aria-label="Nomor penyesuaian"/>
+              </label>
+            </div>
           </div>
           <div className="adjustment-body-wrap">
             <nav className="adjustment-side-tabs" aria-label="Bagian penyesuaian">
