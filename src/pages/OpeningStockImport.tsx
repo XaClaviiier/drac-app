@@ -719,7 +719,7 @@ export default function OpeningStockImport() {
         <div className="adjustment-form-main">
           <div className="adjustment-form-header">
             <label className="adjustment-form-date">Tanggal <span>*</span><IndonesianDateInput value={selectedDocument?.date || date} onChange={setDate} disabled={!!selectedDocument || (isHpp && rows.length > 0)}/></label>
-            <div className="adjustment-number-wrap"><label>No Penyesuaian # <span>*</span><input readOnly value={activeDocument?.adjustmentNumber || "Otomatis"} aria-label="Nomor penyesuaian"/></label></div>
+            <div className="adjustment-number-wrap"><label><span className="adjustment-field-label">No Penyesuaian # <em>*</em></span><input readOnly value={activeDocument?.adjustmentNumber || "Otomatis"} aria-label="Nomor penyesuaian"/></label></div>
             <label className="adjustment-kind adjustment-form-kind">Jenis Penyesuaian<select aria-label="Jenis penyesuaian" disabled value={selectedDocument ? (selectedDocument.adjustmentType === "cost_adjustment" ? "cost_adjustment" : "opening_balance") : adjustmentType}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP — Stok Tetap</option>}</select></label>
           </div>
           <div className="adjustment-body-wrap">
