@@ -252,6 +252,7 @@ export default function WorkOrderTimeline() {
   const selectedInvoice = selectedRow?.invoice;
   const selectedHasLinkedInvoice = Boolean(selected?.invoiceId || selectedInvoice);
   const selectedPaid = selected ? timelineFinancialSummary(selected, selectedInvoice).isPaid : false;
+  const selectedDayEnded = date < witaDate(clock) || (date === witaDate(clock) && witaMinute(clock) >= 17 * 60 + 30);
 
   const renderAction = (label: string, onClick: () => void, tone: 'neutral' | 'warning' | 'primary' | 'danger' | 'success', Icon: typeof Wrench) => {
     const colors = {
@@ -464,7 +465,7 @@ export default function WorkOrderTimeline() {
           {date === witaDate(clock) && <>
           {hasPermission('wo:edit') && selectedStage === 'diagnosis' && <>
             {renderAction('Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
-            {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
+            {renderAction(selectedDayEnded ? 'Tutup Hari / Lost Sales' : 'Lost Sales', setLostSales, 'danger', XCircle)}
           </>}
           {hasPermission('wo:edit') && selectedStage === 'approval' && <>
             {renderAction('Disetujui · Dikerjakan', () => void setStage('working'), 'primary', Wrench)}

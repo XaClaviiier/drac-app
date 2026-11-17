@@ -89,6 +89,8 @@ test('action bar dan API menegakkan urutan Diagnosa, Dikerjakan, lalu status tun
   assert.doesNotMatch(parts, /Tunggu Persetujuan|Selesai/);
   assert.match(working, /Tunggu Persetujuan/);
   assert.match(working, /Tunggu Parts/);
+  assert.match(page, /selectedDayEnded = date < witaDate\(clock\) \|\| \(date === witaDate\(clock\) && witaMinute\(clock\) >= 17 \* 60 \+ 30\)/);
+  assert.match(page, /selectedDayEnded \? 'Tutup Hari \/ Lost Sales' : 'Lost Sales'/);
   assert.match(context, /const currentTimelineStage = timelineStageFromWorkOrder\(wo\)/);
   assert.match(context, /isTimelineStageTransitionAllowed\(currentTimelineStage, stage\)/);
   assert.ok(context.indexOf('isTimelineStageTransitionAllowed(currentTimelineStage, stage)') < context.indexOf('if (isDemoMode)', context.indexOf('const changeWorkOrderTimelineStage')));
