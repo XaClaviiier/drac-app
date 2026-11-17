@@ -439,6 +439,12 @@ export interface StockMovement {
   reversalOfId?: string;
   correctionGroupId?: string;
   unitCost?: number;
+  valuation?: {
+    quantity: number;
+    unitCostBefore?: number | null;
+    unitCostAfter?: number | null;
+    complete: boolean;
+  };
   notes: string;
   createdAt: string;
   occurredAt?: string;

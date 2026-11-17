@@ -26,6 +26,10 @@ const stockMovementLabels:Record<string,string>={
   usage:'Pemakaian Barang',
   cost_adjustment:'Penyesuaian HPP',cost_adjustment_reversal:'Pembatalan HPP',
 };
+const movementCostFormat = new Intl.NumberFormat('id-ID', {
+  style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 4,
+});
+const formatMovementCost = (value?: number | null) => typeof value === 'number' ? movementCostFormat.format(value) : '—';
 
 const twoDigitSegment = (value: string, fallback: string) => {
   const normalized = value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
@@ -1227,7 +1231,9 @@ export default function ItemsAndServices() {
   };
   const movementIncoming = itemMovementRows.reduce((total, movement) => total + Number(movement.incoming || 0), 0);
   const movementOutgoing = itemMovementRows.reduce((total, movement) => total + Number(movement.outgoing || 0), 0);
-  const movementOpening = itemMovementRows.length ? Number(itemMovementRows[itemMovementRows.length - 1].balance ?? 0) : null;
+  const oldestMovement = itemMovementRows[itemMovementRows.length - 1];
+  const movementOpening = oldestMovement ? Number(oldestMovement.balance ?? 0)
+    - Number(oldestMovement.incoming || 0) + Number(oldestMovement.outgoing || 0) : null;
   const movementClosing = itemMovementRows.length ? Number(itemMovementRows[0].balance ?? 0) : null;
 
   const saveItemBrand=async(e:React.FormEvent)=>{e.preventDefault();const payload={...brandForm,code:brandForm.code.trim().toUpperCase(),name:brandForm.name.trim().toUpperCase()};if(!payload.name)return window.alert('Nama merek wajib diisi');if(payload.id&&!hasPermission('item:edit'))return window.alert('Anda tidak memiliki izin mengubah merek barang');if(!payload.id&&!hasPermission('item:create'))return window.alert('Anda tidak memiliki izin menambah merek barang');const result=payload.id?await api.update('item-brands',payload.id,payload):await api.create('item-brands',{...payload,id:`IB-${Date.now()}`});if(!result.success)return window.alert(result.message||'Merek gagal disimpan');setBrandForm({id:'',code:'',name:'',description:'',isActive:true});await loadItemBrands();};
@@ -1657,7 +1663,16 @@ export default function ItemsAndServices() {
                           ? <Link to={source.path} title={`Buka transaksi ${sourceNumber}`} className="text-blue-700 underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-blue-600">{sourceNumber}</Link>
                           : <span title={source ? 'Anda tidak memiliki akses ke transaksi sumber.' : 'Dokumen sumber tidak tersedia.'}>{sourceNumber}</span>}
                         </td>
-                        <td className="px-3 py-2.5">{movementLabel}</td><td className="px-3 py-2.5">{movementNotes}</td><td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{movement.incoming || '—'}</td><td className="px-3 py-2.5 text-right font-semibold text-red-700">{movement.outgoing || '—'}</td><td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td>
+                        <td className="px-3 py-2.5">{movementLabel}</td>
+                        <td className="px-3 py-2.5">{movement.valuation ? <div className="min-w-56 space-y-1">
+                          {('unitCostBefore' in movement.valuation || 'unitCostAfter' in movement.valuation) && <p className="font-medium text-slate-900">HPP {formatMovementCost(movement.valuation.unitCostBefore)} → {formatMovementCost(movement.valuation.unitCostAfter)} / {editingItem?.unit || 'unit'}</p>}
+                          <p className="text-xs text-slate-600">{movement.valuation.quantity} {editingItem?.unit || 'unit'} · Jumlah stok tetap</p>
+                          {!movement.valuation.complete && <p className="text-xs text-amber-700">Rincian pasangan HPP belum lengkap.</p>}
+                        </div> : movementNotes}</td>
+                        <td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{movement.valuation ? 0 : movement.incoming || '—'}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-red-700">{movement.valuation ? 0 : movement.outgoing || '—'}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td>
                       </tr>;
                     })}</tbody>
                   </table>

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../stock-movement-view.php';
 $actor=requireAuthenticatedUser($pdo);
 if($method==='GET'){
     $allowed=array_fill_keys(getAccessibleBranchIds($pdo,$actor),true);
@@ -9,6 +10,7 @@ if($method==='GET'){
     $search=trim((string)($_GET['search']??''));
     $validDate=fn($value)=>$value===''||preg_match('/^\d{4}-\d{2}-\d{2}$/',$value);
     $classifyMovement=static function(array $row,bool $sourceVisible,bool $destinationVisible):array{
+        if (isStockValuationMovement($row)) return [0, 0];
         $qty=(int)$row['quantity'];$type=(string)$row['movement_type'];
         $incoming=$qty>=0
             ?($destinationVisible&&$type!=='transfer_send'?$qty:0)
@@ -49,6 +51,9 @@ if($method==='GET'){
     $stmt=$pdo->prepare($sql);$stmt->execute($params);$allRows=$stmt->fetchAll();
     $isAllowed=fn($row)=>(!empty($row['source_branch_id'])&&isset($allowed[(string)$row['source_branch_id']]))||(!empty($row['destination_branch_id'])&&isset($allowed[(string)$row['destination_branch_id']]));
     $allRows=array_values(array_filter($allRows,$isAllowed));
+    $allRows=projectStockMovementValuations($allRows);
+    $canViewValuationCosts=authenticatedUserIsOwnerOrAdministrator($pdo,$actor)
+        || authenticatedUserHasPermission($pdo,$actor,'stock_adjustment:hpp');
 
     $runningBalance=0;
     if($itemId!==''){
@@ -63,10 +68,15 @@ if($method==='GET'){
         $sourceVisible=$warehouseId!==''?(string)$row['source_warehouse_id']===$warehouseId:$sourceAllowed;
         $destinationVisible=$warehouseId!==''?(string)$row['destination_warehouse_id']===$warehouseId:$destinationAllowed;
         [$incoming,$outgoing]=$classifyMovement($row,$sourceVisible,$destinationVisible);
-        if($warehouseId!==''&&$incoming===0&&$outgoing===0)continue;
-        $effectiveAt=(string)($row['occurred_at']??$row['created_at']);$rowDate=substr($effectiveAt,0,10);$searchable=strtolower(implode(' ',[$row['movement_type'],$row['notes'],$row['source_name'],$row['destination_name']]));
+        if($warehouseId!==''&&$incoming===0&&$outgoing===0&&!(isset($row['valuation'])&&($sourceVisible||$destinationVisible)))continue;
+        $effectiveAt=(string)($row['occurred_at']??$row['created_at']);$rowDate=substr($effectiveAt,0,10);$searchable=strtolower(implode(' ',[$row['movement_type'],$row['notes'],$row['source_name'],$row['destination_name'],$row['reference_number']??'',$row['_valuation_search']??'']));
         $row['running_balance']=$runningBalance;$runningBalance-=$incoming-$outgoing;
         if(($dateFrom!==''&&$rowDate<$dateFrom)||($dateTo!==''&&$rowDate>$dateTo)||($needle!==''&&!str_contains($searchable,$needle)))continue;
+        unset($row['_valuation_search']);
+        if(isset($row['valuation'])&&!$canViewValuationCosts){
+            unset($row['valuation']['unitCostBefore'],$row['valuation']['unitCostAfter']);
+            $row['unit_cost']=null;
+        }
         $row['incoming']=$incoming;$row['outgoing']=$outgoing;$rows[]=$row;
     }
     foreach($rows as &$r){$r['itemId']=$r['item_id'];$r['itemName']=$r['item_name'];$r['sourceWarehouseId']=$r['source_warehouse_id'];$r['sourceName']=$r['source_name'];$r['destinationWarehouseId']=$r['destination_warehouse_id'];$r['destinationName']=$r['destination_name'];$r['movementType']=$r['movement_type'];$r['referenceType']=$r['reference_type']??null;$r['referenceId']=$r['reference_id']??null;$r['referenceNumber']=$r['reference_number']??null;$r['movementSequence']=(int)($r['movement_sequence']??0);$r['reversalOfId']=$r['reversal_of_id']??null;$r['correctionGroupId']=$r['correction_group_id']??null;$r['unitCost']=$r['unit_cost']!==null?(float)$r['unit_cost']:null;$r['quantity']=(int)$r['quantity'];$r['occurredAt']=$r['occurred_at']??$r['created_at'];$r['recordedAt']=$r['created_at'];$r['createdAt']=$r['occurred_at']??$r['created_at'];$r['incoming']=(int)$r['incoming'];$r['outgoing']=(int)$r['outgoing'];$r['balance']=(int)$r['running_balance'];}
