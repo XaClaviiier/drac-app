@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/../billing-treatment.php';
 require_once __DIR__.'/../work-order-overtime.php';
+require_once __DIR__.'/../auto-close-diagnosis.php';
 if (!class_exists('WorkOrderVersionConflictException')) {
     class WorkOrderVersionConflictException extends RuntimeException {}
 }
@@ -317,6 +318,7 @@ $formatWorkOrderVersion = static function($value): ?string {
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+        autoCloseExpiredDiagnoses($pdo);
         if ($id && $action === 'timeline') {
             $woStmt = $pdo->prepare("SELECT id, branch_id, invoice_id, invoice_number FROM work_orders WHERE id=? LIMIT 1");
             $woStmt->execute([$id]);
