@@ -12,13 +12,15 @@ import IndonesianDateInput from '../components/IndonesianDateInput';
 import { workOrderStatusLabel } from '../lib/workOrderStatus';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import {
-  timelineFinancialSummary, timelineStageFromReason, timelineStageFromWorkOrder, type TimelineStageKey,
+  timelineFinancialSummary, type TimelineStageKey,
 } from '../lib/workOrderTimeline';
 import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from '../lib/workOrderAttention';
 
+import { workOrderDay, witaDate, witaMinute, type DailySegment } from '../lib/workOrderTimelineHistory';
+
 type BoardStageKey = TimelineStageKey | 'done';
-type Segment = { key: TimelineStageKey; start: Date; end: Date; duration: number; active: boolean };
-type TimelineRow = { wo: WorkOrder; invoice?: SalesInvoice; stage: BoardStageKey; segments: Segment[] };
+type Segment = DailySegment;
+type TimelineRow = { wo: WorkOrder; invoice?: SalesInvoice; stage: BoardStageKey; segments: Segment[]; history: ReturnType<typeof workOrderDay> };
 
 const STAGES: Record<TimelineStageKey, {
   label: string; short: string; color: string; bar: string; soft: string; text: string; icon: typeof Wrench; warningMinutes?: number;
@@ -44,69 +46,11 @@ function parseDateTime(value: string | undefined, fallbackDate: string, fallback
 }
 
 function durationLabel(milliseconds: number) {
-  const minutes = Math.max(1, Math.round(milliseconds / 60000));
+  const minutes = Math.max(0, Math.floor(milliseconds / 60000));
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return `${hours}j${rest ? ` ${rest}m` : ''}`;
-}
-
-function minuteOfDay(value: Date) {
-  return value.getHours() * 60 + value.getMinutes() + value.getSeconds() / 60;
-}
-
-function buildSegments(wo: WorkOrder, now: Date): Segment[] {
-  const fallbackTime = wo.transactionTime || '08:00';
-  const startedAt = parseDateTime(wo.createdAt, wo.date, fallbackTime);
-  const logs = [...(wo.statusLog || [])]
-    .map(log => ({ ...log, parsedAt: parseDateTime(log.at, wo.date, fallbackTime) }))
-    .filter(log => log.parsedAt.getTime() >= startedAt.getTime())
-    .sort((a, b) => a.parsedAt.getTime() - b.parsedAt.getTime());
-  let stage: TimelineStageKey = 'diagnosis';
-  let cursor = startedAt;
-  const segments: Segment[] = [];
-  const pushSegment = (end: Date, key = stage, active = false) => {
-    if (end.getTime() <= cursor.getTime()) return;
-    segments.push({ key, start: cursor, end, duration: end.getTime() - cursor.getTime(), active });
-    cursor = end;
-  };
-
-  for (const log of logs) {
-    const markedStage = timelineStageFromReason(log.reason || '');
-    const nextStage: TimelineStageKey | null = markedStage
-      || (log.to === 'Proses' ? 'working' : null)
-      || (log.to === 'Closed' || log.to === 'Batal' ? 'lost' : null);
-    const isComplete = log.to === 'Selesai' || log.to === 'Dibayar' || log.to === 'Invoiced';
-    if (!nextStage && !isComplete) continue;
-    if (log.parsedAt.getTime() > cursor.getTime()) pushSegment(log.parsedAt);
-    if (isComplete) return segments;
-    stage = nextStage || stage;
-    cursor = log.parsedAt;
-    if (stage === 'lost') {
-      pushSegment(new Date(cursor.getTime() + 10 * 60000), 'lost');
-      return segments;
-    }
-  }
-
-  if (wo.status === 'Selesai') {
-    if (!segments.length) {
-      const recordedEnd = parseDateTime(wo.updatedAt, wo.date, fallbackTime);
-      const visibleEnd = recordedEnd.getTime() > cursor.getTime()
-        ? recordedEnd
-        : new Date(cursor.getTime() + 30 * 60000);
-      pushSegment(visibleEnd, 'working');
-    }
-    return segments;
-  }
-  if (wo.status === 'Closed') {
-    const closedAt = parseDateTime(wo.updatedAt, wo.date, fallbackTime);
-    if (closedAt.getTime() > cursor.getTime()) pushSegment(closedAt);
-    pushSegment(new Date(cursor.getTime() + 10 * 60000), 'lost');
-    return segments;
-  }
-  const endpoint = wo.date === localDateKey(now) ? now : new Date(`${wo.date}T17:30:00`);
-  if (endpoint.getTime() > cursor.getTime()) pushSegment(endpoint, timelineStageFromWorkOrder(wo), true);
-  return segments;
 }
 
 function selectedDateLabel(value: string) {
@@ -115,7 +59,7 @@ function selectedDateLabel(value: string) {
 }
 
 function formatClock(value: Date) {
-  return value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+  return value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' }).replace('.', ':');
 }
 
 function formatRupiah(value: number) {
@@ -126,7 +70,7 @@ export default function WorkOrderTimeline() {
   const navigate = useNavigate();
   const {
     data, currentBranchId, currentUser, hasPermission, isLoading, refreshData,
-    changeWorkOrderStatus, changeWorkOrderTimelineStage,
+    changeWorkOrderStatus, changeWorkOrderTimelineStage, changeWorkOrderOverTime,
   } = useApp();
   const [date, setDate] = useState(localDateKey());
   const [selectedId, setSelectedId] = useState('');
@@ -148,31 +92,28 @@ export default function WorkOrderTimeline() {
   const invoicesByWo = useMemo(() => new Map(
     data.invoices.filter(invoice => invoice.woId).map(invoice => [invoice.woId!, invoice]),
   ), [data.invoices]);
-  const rows = useMemo<TimelineRow[]>(() => data.workOrders
-    .filter(wo => !wo.continuedToWoId && wo.date === date && (currentBranchId === 'ALL' || wo.branchId === currentBranchId))
-    .map<TimelineRow>(wo => ({
-      wo,
-      invoice: invoicesByWo.get(wo.id),
-      stage: wo.status === 'Selesai' ? 'done' : timelineStageFromWorkOrder(wo),
-      segments: buildSegments(wo, clock),
-    }))
-    .filter(row => (showCompleted || row.stage !== 'done') && (showLost || row.stage !== 'lost'))
+  const dayRows = useMemo<TimelineRow[]>(() => data.workOrders
+    .filter(wo => !wo.continuedToWoId && (currentBranchId === 'ALL' || wo.branchId === currentBranchId))
+    .map(wo => ({ wo, history: workOrderDay(wo, date, clock) }))
+    .filter(({ history }) => history.visible)
+    .map<TimelineRow>(({ wo, history }) => ({ wo, history, invoice: invoicesByWo.get(wo.id), stage: history.stage, segments: history.segments }))
     .sort((a, b) => {
       const priority: Record<BoardStageKey, number> = { working: 0, parts: 1, approval: 2, diagnosis: 3, done: 4, lost: 5 };
       return priority[a.stage] - priority[b.stage]
         || parseDateTime(a.wo.createdAt, a.wo.date, a.wo.transactionTime).getTime() - parseDateTime(b.wo.createdAt, b.wo.date, b.wo.transactionTime).getTime();
-    }), [data.workOrders, date, currentBranchId, invoicesByWo, clock, showCompleted, showLost]);
+    }), [data.workOrders, date, currentBranchId, invoicesByWo, clock]);
+  const rows = dayRows.filter(row => (showCompleted || row.stage !== 'done') && (showLost || row.stage !== 'lost'));
 
   const counts = useMemo(() => rows.reduce((result, row) => {
     result[row.stage] = (result[row.stage] || 0) + 1;
     return result;
   }, {} as Partial<Record<BoardStageKey, number>>), [rows]);
   const operationalAttentionItems = useMemo(() => buildWorkOrderAttentionItems(
-    data.workOrders.filter(wo => wo.date === date && (currentBranchId === 'ALL' || wo.branchId === currentBranchId)),
+    date === witaDate(clock) ? dayRows.map(row => row.wo) : [],
     data.invoices,
     localDateKey(clock),
     clock,
-  ), [data.workOrders, data.invoices, date, currentBranchId, clock]);
+  ), [dayRows, data.invoices, date, clock]);
   const closingCounts = useMemo(
     () => countWorkOrderAttentionByKind(operationalAttentionItems),
     [operationalAttentionItems],
@@ -190,6 +131,8 @@ export default function WorkOrderTimeline() {
     if (selectedId && !visibleRows.some(row => row.wo.id === selectedId)) setSelectedId('');
   }, [selectedId, visibleRows]);
 
+  const minuteOfDay = (value: Date) => witaDate(value) > date ? 1440 : witaMinute(value);
+  const axisStartMinute = Math.min(AXIS_START_MINUTE, ...visibleRows.flatMap(row => row.segments.map(segment => Math.floor(minuteOfDay(segment.start) / 60) * 60)));
   const latestObservedMinute = useMemo(() => {
     let latest = DEFAULT_AXIS_END_MINUTE;
     visibleRows.forEach(row => row.segments.forEach(segment => { latest = Math.max(latest, minuteOfDay(segment.end)); }));
@@ -197,18 +140,18 @@ export default function WorkOrderTimeline() {
     return Math.ceil(latest / HALF_HOUR) * HALF_HOUR;
   }, [visibleRows, date, clock]);
   const axisEndMinute = Math.max(DEFAULT_AXIS_END_MINUTE, latestObservedMinute);
-  const axisSpan = axisEndMinute - AXIS_START_MINUTE;
+  const axisSpan = axisEndMinute - axisStartMinute;
   const timelineWidth = Math.max(620, Math.round(axisSpan * 1.05));
   const mobileTimelineWidth = Math.max(960, Math.round(axisSpan * 2.1));
-  const position = (value: Date) => ((minuteOfDay(value) - AXIS_START_MINUTE) / axisSpan) * 100;
+  const position = (value: Date) => ((minuteOfDay(value) - axisStartMinute) / axisSpan) * 100;
   const nowPosition = position(clock);
   const showNowLine = date === localDateKey(clock) && nowPosition >= 0 && nowPosition <= 100;
   const axisLabels = useMemo(() => {
     const labels: number[] = [];
-    for (let minute = AXIS_START_MINUTE; minute <= axisEndMinute; minute += 60) labels.push(minute);
+    for (let minute = axisStartMinute; minute <= axisEndMinute; minute += 60) labels.push(minute);
     if (labels[labels.length - 1] !== axisEndMinute) labels.push(axisEndMinute);
     return labels;
-  }, [axisEndMinute]);
+  }, [axisEndMinute, axisStartMinute]);
 
   const scrollMobileToNow = (behavior: ScrollBehavior = 'smooth') => {
     const scroller = mobileTimelineRef.current;
@@ -216,7 +159,7 @@ export default function WorkOrderTimeline() {
     const mobileIdentityWidth = MOBILE_IDENTITY_WIDTH;
     const mobileFinancialWidth = MOBILE_FINANCIAL_WIDTH;
     const availableTimelineWidth = Math.max(80, scroller.clientWidth - mobileIdentityWidth - mobileFinancialWidth);
-    const currentPosition = Math.max(0, Math.min(100, ((minuteOfDay(new Date()) - AXIS_START_MINUTE) / axisSpan) * 100));
+    const currentPosition = Math.max(0, Math.min(100, ((minuteOfDay(new Date()) - axisStartMinute) / axisSpan) * 100));
     const absoluteNow = mobileIdentityWidth + (currentPosition / 100) * mobileTimelineWidth;
     const target = absoluteNow - mobileIdentityWidth - availableTimelineWidth / 2;
     scroller.scrollTo({ left: Math.max(0, target), behavior });
@@ -323,7 +266,7 @@ export default function WorkOrderTimeline() {
 
   const renderFinancialSummary = (row: TimelineRow, compact = false) => {
     const financial = timelineFinancialSummary(row.wo, row.invoice);
-    const isLostSales = workOrderStatusLabel(row.wo.status) === 'Lost Sales';
+    const isLostSales = row.stage === 'lost';
     return <div className={`flex min-w-0 flex-col items-end justify-center text-right ${compact ? 'px-1 py-1' : 'px-2 py-1.5'}`}>
       <span className={`text-[8px] font-bold uppercase tracking-wide ${isLostSales ? 'text-gray-400' : 'text-slate-400'}`}>{isLostSales ? 'Estimasi Lost Sales' : financial.amountLabel}</span>
       <b className={`truncate ${isLostSales ? 'text-gray-400 line-through decoration-gray-400 decoration-1' : 'text-slate-900'} ${compact ? 'text-[10px]' : 'text-xs'}`}>{formatRupiah(financial.amount)}</b>
@@ -359,6 +302,21 @@ export default function WorkOrderTimeline() {
     .filter(Boolean)
     .join(', ') || workDescription(wo);
 
+  const renderDuration = (row: TimelineRow) => <p className="mt-1 text-[10px] leading-4 text-slate-600" title={`WO dibuat ${row.wo.date} · umur WO ${row.history.ageDays} hari. Jam normal setiap hari 08.00–17.30 WITA. Durasi berstatus Dikerjakan, bukan jam kerja teknisi.`}>
+    Kunjungan hari ke-{row.history.visitDay} · Dikerjakan {durationLabel(row.history.workingMs)}
+    {row.history.overtimeMs > 0 && <> · Over Time {durationLabel(row.history.overtimeMs)}</>}
+    {row.history.overtimeActive && <strong className="ml-1 text-orange-700"> · Over Time aktif</strong>}
+    {row.history.approximate && <span className="ml-1 text-gray-400">(perkiraan)</span>}
+  </p>;
+  const toggleOverTime = async () => {
+    if (!selected || actionBusy) return;
+    setActionBusy(true);
+    try {
+      const result = await changeWorkOrderOverTime(selected.id, !selectedRow?.history.overtimeActive);
+      setClock(new Date());
+      if (!result.ok) window.alert(result.message || 'Over Time gagal disimpan.');
+    } finally { setActionBusy(false); }
+  };
   const renderSegments = (segments: Segment[], minimumLabelWidth = 4.2) => segments.map((segment, index) => {
     const rawLeft = position(segment.start);
     const rawRight = position(segment.end);
@@ -367,7 +325,7 @@ export default function WorkOrderTimeline() {
     const right = Math.max(0, Math.min(100, rawRight));
     const width = Math.max(0.8, right - left);
     return <span key={`${segment.key}-${index}`} title={`${STAGES[segment.key].label}: ${durationLabel(segment.duration)} (${formatClock(segment.start)}–${formatClock(segment.end)})`} className={`absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center justify-center overflow-hidden px-1 text-[9px] font-bold shadow-sm first:rounded-l-md last:rounded-r-md ${segment.key === 'lost' ? 'text-gray-500' : 'text-white'}`} style={{ left: `${left}%`, width: `${width}%`, backgroundColor: STAGES[segment.key].color }}>
-      {width >= minimumLabelWidth ? durationLabel(segment.duration) : ''}{segment.active && <i className="absolute right-0 h-2 w-2 animate-pulse rounded-full border border-white bg-white/90"/>}
+      {width >= minimumLabelWidth ? segment.key === 'lost' ? 'Lost Sales' : durationLabel(segment.duration) : ''}{segment.active && <i className="absolute right-0 h-2 w-2 animate-pulse rounded-full border border-white bg-white/90"/>}
     </span>;
   });
 
@@ -386,7 +344,7 @@ export default function WorkOrderTimeline() {
           <div className={`flex items-end bg-slate-50 px-3 py-2.5 ${stickyIdentity}`}>{mobile ? 'Kendaraan' : 'Kendaraan / Customer'}</div>
           {!mobile && <div className={`flex items-end justify-end bg-slate-50 px-2 py-2.5 text-right ${stickyIndicator}`}>Total · Invoice</div>}
           <div className="relative h-11 border-x border-slate-200">
-            {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - AXIS_START_MINUTE) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
+            {axisLabels.map(minute => <span key={minute} className="absolute bottom-0 top-0 border-l border-slate-200" style={{ left: `${((minute - axisStartMinute) / axisSpan) * 100}%` }}><i className="absolute left-1 top-2 whitespace-nowrap not-italic">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</i></span>)}
             {showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}><i className="absolute bottom-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-50 px-1 text-[9px] font-bold not-italic text-red-600">Sekarang {formatClock(clock)}</i></span>}
           </div>
           {mobile && <div className={`flex items-end justify-center bg-slate-50 px-1 py-2.5 ${stickyIndicator}`}>Total</div>}
@@ -402,9 +360,9 @@ export default function WorkOrderTimeline() {
           const stickyBackground = isSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-slate-50';
           return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`group grid w-full border-b text-left last:border-b-0 ${isSelected ? 'bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-slate-50/80'}`} style={{ gridTemplateColumns: gridColumns }}>
             <div className={`min-w-0 px-3 py-2.5 ${stickyIdentity} ${stickyBackground}`} title={`${wo.plateNumber}${wo.customerName ? ` - ${wo.customerName}` : ''} · ${wo.woNumber} · ${wo.vehicleInfo} · Teknisi: ${wo.technicianName || '-'}`}>
-              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 text-gray-950 ${mobile ? 'break-words text-xs' : 'truncate text-sm'}`}>{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : '!'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
+              <div className="flex items-center gap-1"><b className={`min-w-0 flex-1 text-gray-950 ${mobile ? 'break-words text-xs' : 'truncate text-sm'}`}>{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b><span className={`inline-flex flex-none rounded border px-1 py-0.5 text-[7px] font-bold uppercase ${isDone ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : currentConfig?.soft + ' ' + currentConfig?.text}`}>{isDone ? 'Selesai' : currentConfig?.short}</span>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex flex-none items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{mobile ? '' : 'Periksa'}</span> : warning && <span title="Durasi tahap aktif melewati batas perhatian" className="inline-flex flex-none items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{mobile ? '' : durationLabel(activeSegment.duration)}</span>}</div>
               <p className={`truncate text-gray-500 ${mobile ? 'text-[9px]' : 'text-[11px]'}`}>{wo.vehicleInfo || '-'}</p>
-              {renderOriginalReceiptNumber(row.invoice)}
+              {renderOriginalReceiptNumber(row.invoice)}{renderDuration(row)}
             </div>
             {!mobile && <div className={`bg-white group-hover:bg-slate-50 ${stickyIndicator} ${isSelected ? '!bg-blue-50' : ''}`}>{renderFinancialSummary(row, mobile)}</div>}
             <div className="relative my-2 min-h-[48px] overflow-hidden border-x border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.75)_1px,transparent_1px)]" style={{ backgroundSize: `${(HALF_HOUR / axisSpan) * 100}% 100%` }}>
@@ -432,7 +390,7 @@ export default function WorkOrderTimeline() {
       return <button key={wo.id} type="button" onClick={() => setSelectedId(wo.id)} className={`w-full px-3 py-3 text-left ${isSelected ? 'bg-blue-50 shadow-[inset_3px_0_0_#2563eb]' : 'bg-white'}`}>
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5"><b className="min-w-0 break-words text-sm text-gray-950">{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{attention.elapsedMinutes ? durationLabel(attention.elapsedMinutes * 60000) : 'Periksa'}</span> : warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
+            <div className="flex items-center gap-1.5"><b className="min-w-0 break-words text-sm text-gray-950">{wo.plateNumber}{wo.customerName ? ` - ${wo.customerName}` : ''}</b>{attention ? <span title={`${attention.label}: ${attention.description}`} className={`inline-flex items-center gap-0.5 text-[9px] font-bold ${attention.severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}><CircleAlert className="h-3 w-3"/>{'Periksa'}</span> : warning && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><CircleAlert className="h-3 w-3"/>{durationLabel(activeSegment.duration)}</span>}</div>
             <p className="truncate text-[10px] text-gray-500">{wo.vehicleInfo || '-'}</p>
             {renderOriginalReceiptNumber(row.invoice)}
           </div>
@@ -440,9 +398,9 @@ export default function WorkOrderTimeline() {
           {renderFinancialSummary(row, true)}
         </div>
         <div className="relative mt-5 h-9 rounded-md border border-slate-100 bg-[linear-gradient(to_right,rgba(226,232,240,.9)_1px,transparent_1px)]" style={{ backgroundSize: `${(60 / axisSpan) * 100}% 100%` }}>
-          <span className="absolute -top-4 left-0 text-[8px] font-semibold text-gray-400">08:00</span>
-          <span className="absolute -top-4 text-[8px] font-semibold text-gray-400" style={{ left: `${((12 * 60 - AXIS_START_MINUTE) / axisSpan) * 100}%` }}>12:00</span>
-          <span className="absolute -top-4 text-[8px] font-semibold text-gray-400" style={{ left: `${((16 * 60 - AXIS_START_MINUTE) / axisSpan) * 100}%` }}>16:00</span>
+          <span className="absolute -top-4 left-0 text-[8px] font-semibold text-gray-400">{String(Math.floor(axisStartMinute / 60)).padStart(2, '0')}:00</span>
+          <span className="absolute -top-4 text-[8px] font-semibold text-gray-400" style={{ left: `${((12 * 60 - axisStartMinute) / axisSpan) * 100}%` }}>12:00</span>
+          <span className="absolute -top-4 text-[8px] font-semibold text-gray-400" style={{ left: `${((16 * 60 - axisStartMinute) / axisSpan) * 100}%` }}>16:00</span>
           <span className="absolute -right-0 -top-4 text-[8px] font-semibold text-gray-400">{String(Math.floor(axisEndMinute / 60)).padStart(2, '0')}:{String(axisEndMinute % 60).padStart(2, '0')}</span>
           {renderSegments(segments, 12)}
           <>{showNowLine && <span className="absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: `${nowPosition}%` }}/>}</>
@@ -498,11 +456,12 @@ export default function WorkOrderTimeline() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><b className="min-w-0 break-words text-sm text-gray-950">{selected.plateNumber}{selected.customerName ? ` - ${selected.customerName}` : ''}</b><span className="text-xs text-gray-400">{selected.woNumber}</span></div>
             <p className="truncate text-xs text-gray-500">{selected.vehicleInfo || '-'} · {selected.technicianName || 'Teknisi belum dipilih'}</p>
-            {renderOriginalReceiptNumber(selectedInvoice)}
+            {renderOriginalReceiptNumber(selectedInvoice)}{renderDuration(selectedRow)}
           </div>
           <span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold uppercase sm:text-[10px] ${selectedStage === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : STAGES[selectedStage as TimelineStageKey].soft + ' ' + STAGES[selectedStage as TimelineStageKey].text}`}>{selectedStage === 'done' ? 'Selesai' : STAGES[selectedStage as TimelineStageKey].label}</span>
         </div>
         <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap lg:justify-end">
+          {date === witaDate(clock) && <>
           {hasPermission('wo:edit') && selectedStage === 'diagnosis' && <>
             {renderAction('Dikerjakan', () => void setStage('working'), 'primary', Wrench)}
             {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
@@ -516,6 +475,7 @@ export default function WorkOrderTimeline() {
             {renderAction('Lost Sales', setLostSales, 'danger', XCircle)}
           </>}
           {hasPermission('wo:edit') && selectedStage === 'working' && selected.status === 'Proses' && <>
+            {(selectedRow.history.overtimeActive || witaMinute(clock) < 480 || witaMinute(clock) >= 1050) && renderAction(selectedRow.history.overtimeActive ? 'Akhiri Over Time' : 'Mulai Over Time', () => void toggleOverTime(), 'warning', Clock3)}
             {renderAction('Konfirmasi Progress', () => void confirmProgress(), 'primary', Activity)}
             {renderAction('Tunggu Persetujuan', () => void setStage('approval', 'Menunggu persetujuan pelanggan'), 'warning', UserRound)}
             {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
@@ -527,6 +487,7 @@ export default function WorkOrderTimeline() {
           {selectedHasLinkedInvoice && !selectedInvoice && <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Sudah difakturkan · detail terbatas</span>}
           {hasPermission('payment:create') && selectedInvoice && !isGoodwill(selectedInvoice) && !selectedPaid && renderAction('Pembayaran', () => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`), 'success', Banknote)}
           {selectedPaid && <span className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
+          </>}
           <button type="button" onClick={() => navigate(`/workorders?${selectedHasLinkedInvoice || selected.status === 'Closed' ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)} className="col-span-2 h-10 rounded-lg border px-3 text-xs font-bold text-gray-600 hover:bg-gray-50 sm:h-9">Detail WO</button>
         </div>
       </section>}
@@ -556,7 +517,7 @@ export default function WorkOrderTimeline() {
 
       <footer className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-400">
         <span className="inline-flex items-center gap-1.5"><Activity className="h-3.5 w-3.5"/>Pembaruan otomatis setiap 2 menit · operator {currentUser?.name || '-'}</span>
-        <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5"/>Rentang awal 08:00–17:30 · otomatis memanjang mengikuti aktivitas</span>
+        <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5"/>Jam normal 08:00–17:30 WITA setiap hari · Over Time berakhir saat dihentikan atau pukul 08:00 berikutnya</span>
       </footer>
     </div>
   );

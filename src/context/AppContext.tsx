@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus, WorkOrderTimelineStage } from '../types';
 import { api } from '../lib/apiClient';
 import { validBillingTotal } from '../lib/billingTreatment';
+import { overtimeSessions, witaMinute } from '../lib/workOrderTimelineHistory';
 import { demoData } from '../lib/demoData';
 import { failSystemProcess, finishSystemProcess, startSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
@@ -53,6 +54,7 @@ interface AppContextType {
   changeWorkOrderStatus: (woId: string, nextStatus: WOStatus, reason?: string, estimatedDurationMinutes?: number) => Promise<{ ok: boolean; message?: string; workOrder?: WorkOrder; changed?: boolean }>;
   /** Catat tahap operasional timeline tanpa mengubah status inti WO. */
   changeWorkOrderTimelineStage: (woId: string, stage: WorkOrderTimelineStage, note?: string) => Promise<{ ok: boolean; message?: string }>;
+  changeWorkOrderOverTime: (woId: string, enabled: boolean) => Promise<{ ok: boolean; message?: string }>;
   createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string) => Promise<SalesInvoice | null>;
   addItem: (item: Item & { autoCode?: boolean; provisional?: boolean }) => Promise<Item>;
   updateItem: (id: string, item: Item) => Promise<void>;
@@ -807,6 +809,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   };
 
+  const changeWorkOrderOverTime = async (woId: string, enabled: boolean): Promise<{ ok: boolean; message?: string }> => {
+    const wo = data.workOrders.find(item => item.id === woId);
+    if (!wo || !hasPermission('wo:edit') || wo.status !== 'Proses' || wo.invoiceId) return { ok: false, message: 'Over Time hanya untuk WO Dikerjakan yang belum difakturkan dengan izin Edit WO.' };
+    const now = new Date();
+    if (enabled && (timelineStageFromWorkOrder(wo) !== 'working' || (witaMinute(now) >= 480 && witaMinute(now) < 1050))) return { ok: false, message: 'Mulai Over Time pada tahap Dikerjakan di luar jam normal 08.00–17.30 WITA.' };
+    if (isDemoMode) {
+      if (overtimeSessions(wo, now).active === enabled) return { ok: true };
+      setData(previous => ({ ...previous, workOrders: previous.workOrders.map(item => item.id !== woId ? item : { ...item, updatedAt: now.toISOString(), statusLog: [...(item.statusLog || []), { from: item.status, to: item.status, at: now.toISOString(), byUserId: currentUser?.id || '-', byUserName: currentUser?.name || 'System', reason: `[WO_OVERTIME:${enabled ? 'start' : 'stop'}] ${enabled ? 'Mulai' : 'Akhiri'} Over Time` }] }) }));
+      return { ok: true };
+    }
+    const result = await api.update('work-orders', `${encodeURIComponent(woId)}/over-time`, { mode: enabled ? 'start' : 'stop', updatedAt: wo.updatedAt });
+    await refreshData();
+    return { ok: Boolean(result?.success), message: result?.message || result?.error };
+  };
+
   const continueWorkOrder = async (
     sourceWoId: string,
     targetBranchId: string,
@@ -1197,7 +1214,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addCustomer, updateCustomer, deleteCustomer, generateCustomerCode,
         addInvoice, updateInvoice, deleteInvoice,
         addWorkOrder, updateWorkOrder, deleteWorkOrder, continueWorkOrder,
-        findActiveWoByPlate, changeWorkOrderStatus, changeWorkOrderTimelineStage,
+        findActiveWoByPlate, changeWorkOrderStatus, changeWorkOrderTimelineStage, changeWorkOrderOverTime,
         createInvoiceFromWO,
         addItem, updateItem, deleteItem,
         addItemCategory, updateItemCategory, deleteItemCategory,

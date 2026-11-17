@@ -209,7 +209,7 @@ test('Lost Sales tampil merah dengan angka ringkasan dan durasi berwarna abu-abu
   assert.match(page, /counts\.lost \|\| 0\}<\/b> <span className="text-red-600">Lost Sales<\/span>/);
   assert.match(page, /key === 'lost' \? 'text-red-600' : ''/);
   assert.match(page, /segment\.key === 'lost' \? 'text-gray-500' : 'text-white'/);
-  assert.match(page, /const isLostSales = workOrderStatusLabel\(row\.wo\.status\) === 'Lost Sales'/);
+  assert.match(page, /const isLostSales = row\.stage === 'lost'/);
   assert.match(page, /isLostSales \? 'Estimasi Lost Sales' : financial\.amountLabel/);
   assert.match(page, /isLostSales \? 'text-gray-400 line-through decoration-gray-400 decoration-1' : 'text-slate-900'/);
   assert.match(page, /isLostSales \? 'Tidak ada tagihan' : 'Belum ditagih'/);
@@ -257,7 +257,9 @@ test('item pekerjaan membentang di bawah timeline pada desktop dan mobile', () =
 test('WO yang sudah dilanjutkan tidak masuk lagi ke papan Lost Sales', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
-  assert.match(page, /\.filter\(wo => !wo\.continuedToWoId && wo\.date === date/);
+  assert.match(page, /\.filter\(wo => !wo\.continuedToWoId &&/);
+  assert.match(page, /history: workOrderDay\(wo, date, clock\)/);
+  assert.match(page, /\.filter\(\(\{ history \}\) => history\.visible\)/);
 });
 
 test('item pekerjaan tidak menjadi kolom timeline baru', () => {

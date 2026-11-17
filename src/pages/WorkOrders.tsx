@@ -2604,6 +2604,11 @@ export default function WorkOrders() {
       continuation: true,
     });
     (wo.statusLog || []).forEach(log => {
+      const overTime = log.reason?.match(/\[WO_OVERTIME:(start|stop)\]/)?.[1];
+      if (overTime) {
+        events.push({ at: log.at, title: overTime === 'start' ? 'Mulai Over Time' : 'Akhiri Over Time', description: `Oleh ${log.byUserName || '-'}`, tone: 'bg-orange-500' });
+        return;
+      }
       const operationalStage = timelineStageFromReason(log.reason || '');
       if (operationalStage) {
         const stage = OPERATIONAL_TIMELINE_STAGES[operationalStage];

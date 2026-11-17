@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../billing-treatment.php';
+require_once __DIR__.'/../work-order-overtime.php';
 if (!class_exists('WorkOrderVersionConflictException')) {
     class WorkOrderVersionConflictException extends RuntimeException {}
 }
@@ -677,9 +678,40 @@ switch ($method) {
 
     case 'PUT':
         if (!$id) respondError('ID required');
+        $actor = $requestUser ?? requireAuthenticatedUser($pdo);
         $d = getInput();
+        if ($action === 'over-time') {
+            requireAuthenticatedUserPermission($pdo, $actor, 'wo:edit');
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare('SELECT status,branch_id,invoice_id,status_log,updated_at FROM work_orders WHERE id=? FOR UPDATE');
+                $stmt->execute([$id]);
+                $wo = $stmt->fetch();
+                if (!$wo) throw new InvalidArgumentException('WO tidak ditemukan.');
+                if (!in_array((string)$wo['branch_id'], getAccessibleBranchIds($pdo, $actor), true)) throw new WorkOrderAccessDeniedException('Akun tidak memiliki akses ke cabang tersebut.');
+                $assertActiveBranchWithinTransaction($pdo, (string)$wo['branch_id']);
+                if (!$normalizeWorkOrderVersion($d['updatedAt'] ?? null) || $normalizeWorkOrderVersion($d['updatedAt']) !== $normalizeWorkOrderVersion($wo['updated_at'])) throw new WorkOrderVersionConflictException('Data WO berubah. Muat ulang sebelum mengubah Over Time.');
+                $logs = json_decode((string)($wo['status_log'] ?? '[]'), true) ?: [];
+                $next = appendWorkOrderOverTime($logs, (string)$wo['status'], $timelineStageFromStatusLog($logs, (string)$wo['status']), !empty($wo['invoice_id']), (string)($d['mode'] ?? ''), $actor, new DateTimeImmutable('now', new DateTimeZone('Asia/Makassar')));
+                if ($next !== $logs) $pdo->prepare('UPDATE work_orders SET status_log=?,updated_at=CURRENT_TIMESTAMP(6) WHERE id=?')->execute([json_encode($next), $id]);
+                $pdo->commit();
+                respondSuccess(null, 'Over Time diperbarui.');
+            } catch (WorkOrderAccessDeniedException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError($e->getMessage(), 403);
+            } catch (WorkOrderVersionConflictException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError($e->getMessage(), 409);
+            } catch (InvalidArgumentException | DomainException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                respondError($e->getMessage(), 422);
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $reference = $logWorkOrderFailure('over time', $e);
+                respondError('Gagal menyimpan Over Time. Referensi: '.$reference, 500);
+            }
+        }
         if ($action === 'timeline-stage') {
-            $actor = $requestUser ?? requireAuthenticatedUser($pdo);
             requireAuthenticatedUserPermission($pdo, $actor, 'wo:edit');
             $allowedStages = ['diagnosis', 'approval', 'parts', 'working'];
             $stage = strtolower(trim((string)($d['stage'] ?? '')));

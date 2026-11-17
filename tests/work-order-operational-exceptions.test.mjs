@@ -97,7 +97,7 @@ test('konfirmasi progress adalah heartbeat Dikerjakan yang diaudit dan wajib ber
   const transactionStart = endpoint.indexOf('$pdo->beginTransaction();', timelineActionStart);
   assert.ok(permissionCheck < transactionStart, 'izin wo:edit diperiksa sebelum transaksi dibuka');
   assert.ok(endpoint.indexOf('SELECT id,status,branch_id,invoice_id,status_log') < endpoint.indexOf("$currentTimelineStage === 'working' && $stage === 'working'"));
-  assert.ok(endpoint.indexOf("$currentTimelineStage === 'working' && $stage === 'working'") < endpoint.indexOf('UPDATE work_orders SET status_log=?'));
+  assert.ok(endpoint.indexOf("$currentTimelineStage === 'working' && $stage === 'working'", timelineActionStart) < endpoint.indexOf('UPDATE work_orders SET status_log=?', timelineActionStart));
 });
 
 test('penolakan akses cabang heartbeat selalu melewati rollback transaksi', () => {
