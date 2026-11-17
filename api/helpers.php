@@ -2295,7 +2295,20 @@ function deleteOperationalJournal(PDO $pdo, string $sourceType, string $sourceId
 
 function estimateInventoryUnitCost(PDO $pdo, string $itemId, string $warehouseId, string $date): float {
     $history = inventoryAverageForItem($pdo, $itemId, $date);
-    return $history['averageCost'] ?? $history['defaultCost'];
+    $cost = (float)($history['averageCost'] ?? $history['defaultCost'] ?? 0);
+    if ($cost > 0) return $cost;
+
+    // HPP is global per item. If a historical date has no positive movement
+    // yet, reuse the latest positive HPP recorded for the item in any warehouse
+    // instead of incorrectly treating the selected warehouse as incomplete.
+    $fallback = $pdo->prepare("SELECT unit_cost
+        FROM stock_movements
+        WHERE item_id=? AND is_voided=0 AND unit_cost>0
+        ORDER BY COALESCE(occurred_at,created_at) DESC,movement_sequence DESC
+        LIMIT 1");
+    $fallback->execute([$itemId]);
+    $latest = (float)($fallback->fetchColumn() ?: 0);
+    return $latest > 0 ? $latest : (float)($history['defaultCost'] ?? 0);
 }
 
 function requireUserPermission(PDO $pdo, string $permission): array {
