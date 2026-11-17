@@ -26,10 +26,6 @@ const stockMovementLabels:Record<string,string>={
   usage:'Pemakaian Barang',
   cost_adjustment:'Penyesuaian HPP',cost_adjustment_reversal:'Pembatalan HPP',
 };
-const movementCostFormat = new Intl.NumberFormat('id-ID', {
-  style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 4,
-});
-const formatMovementCost = (value?: number | null) => typeof value === 'number' ? movementCostFormat.format(value) : '—';
 
 const twoDigitSegment = (value: string, fallback: string) => {
   const normalized = value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
@@ -1665,7 +1661,6 @@ export default function ItemsAndServices() {
                         </td>
                         <td className="px-3 py-2.5">{movementLabel}</td>
                         <td className="px-3 py-2.5">{movement.valuation ? <div className="min-w-56 space-y-1">
-                          {('unitCostBefore' in movement.valuation || 'unitCostAfter' in movement.valuation) && <p className="font-medium text-slate-900">HPP {formatMovementCost(movement.valuation.unitCostBefore)} → {formatMovementCost(movement.valuation.unitCostAfter)} / {editingItem?.unit || 'unit'}</p>}
                           <p className="text-xs text-slate-600">{movement.valuation.quantity} {editingItem?.unit || 'unit'} · Jumlah stok tetap</p>
                           {!movement.valuation.complete && <p className="text-xs text-amber-700">Rincian pasangan HPP belum lengkap.</p>}
                         </div> : movementNotes}</td>
