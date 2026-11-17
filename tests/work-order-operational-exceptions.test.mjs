@@ -30,6 +30,28 @@ function workOrder(overrides = {}) {
   };
 }
 
+test('WO selesai gratis tidak meminta faktur, sedangkan transaksi normal tetap mendapat perhatian', () => {
+  const now = new Date('2026-11-17T12:00:00+08:00');
+  const free = workOrder({ status: 'Selesai', billingTreatment: 'goodwill', total: 0 });
+  const items = attention.buildWorkOrderAttentionItems([free], [], '2026-11-17', now);
+  assert.deepEqual(items, []);
+  assert.deepEqual(attention.countWorkOrderAttentionByKind(items), { register: 0, process: 0, invoice: 0, payment: 0 });
+  for (const overrides of [{ billingTreatment: 'normal' }, { billingTreatment: undefined }, { total: 100000 }]) {
+    const result = attention.buildWorkOrderAttentionItems([{ ...free, ...overrides }], [], '2026-11-17', now);
+    assert.equal(result[0].kind, 'invoice');
+  }
+});
+
+test('goodwill tetap mengikuti peringatan operasional dan saldo faktur yang belum dibayar', () => {
+  const now = new Date('2026-11-17T12:00:00+08:00');
+  const free = workOrder({ billingTreatment: 'goodwill', total: 0 });
+  for (const [status, kind] of [['Register', 'register'], ['Proses', 'process']]) {
+    assert.equal(attention.buildWorkOrderAttentionItems([{ ...free, status }], [], '2026-11-17', now)[0].kind, kind);
+  }
+  const invoice = { id: 'INV-1', woId: free.id, total: 100000, payment: 0 };
+  assert.equal(attention.buildWorkOrderAttentionItems([{ ...free, status: 'Selesai', invoiceId: invoice.id }], [invoice], '2026-11-17', now)[0].kind, 'payment');
+});
+
 test('Dikerjakan hari ini menjadi perhatian berdasarkan aktivitas operasional terakhir', () => {
   const warningNow = new Date('2026-09-02T10:30:00+08:00');
   const criticalNow = new Date('2026-09-02T12:30:00+08:00');

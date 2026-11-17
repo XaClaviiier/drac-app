@@ -128,11 +128,12 @@ export function buildWorkOrderAttentionItems(
       || invoiceByWorkOrder.get(workOrder.id);
 
     const hasLinkedInvoice = Boolean(workOrder.invoiceId || invoice);
-    const completedAt = workOrder.status === 'Selesai' && !hasLinkedInvoice ? workOrderCompletedAt(workOrder) : null;
+    const requiresInvoice = workOrder.billingTreatment !== 'goodwill' || workOrder.total !== 0;
+    const completedAt = workOrder.status === 'Selesai' && requiresInvoice && !hasLinkedInvoice ? workOrderCompletedAt(workOrder) : null;
     const completedElapsedMinutes = completedAt
       ? Math.max(0, Math.floor((now.getTime() - completedAt.getTime()) / 60000))
       : 0;
-    if (workOrder.status === 'Selesai' && !hasLinkedInvoice && (
+    if (workOrder.status === 'Selesai' && requiresInvoice && !hasLinkedInvoice && (
       workOrder.date < today || completedElapsedMinutes >= INVOICE_WARNING_MINUTES
     )) {
       return [{
