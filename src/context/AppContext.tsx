@@ -74,6 +74,7 @@ interface AppContextType {
   generateSupplierCode: () => string;
   addGoodsReceipt: (receipt: GoodsReceipt) => Promise<GoodsReceipt>;
   updateGoodsReceipt: (id: string, receipt: GoodsReceipt) => Promise<void>;
+  assignGoodsReceiptSupplier: (id: string, supplierId: string, expectedSupplierId: string) => Promise<void>;
   deleteGoodsReceipt: (id: string) => Promise<void>;
   generateReceiptNumber: (branchId: string, date?: string) => string;
   receiveGoods: (receiptId: string) => Promise<void>;
@@ -1096,6 +1097,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       () => setData(prev => ({ ...prev, goodsReceipts: prev.goodsReceipts.map(x => x.id === id ? receipt : x) }))
     );
   };
+  const assignGoodsReceiptSupplier = async (id: string, supplierId: string, expectedSupplierId: string) => {
+    await executeCRUD(
+      () => api.assignGoodsReceiptSupplier(id, supplierId, expectedSupplierId),
+      () => setData(prev => ({ ...prev, goodsReceipts: prev.goodsReceipts.map(receipt => receipt.id === id
+        ? { ...receipt, supplierId, supplierName: prev.suppliers.find(supplier => supplier.id === supplierId)?.name || '' }
+        : receipt) }))
+    );
+  };
   const deleteGoodsReceipt = async (id: string) => {
     await executeCRUD(
       () => api.remove('goods-receipts', id),
@@ -1186,7 +1195,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addRole, updateRole, deleteRole,
         addUser, updateUser, deleteUser,
         addSupplier, updateSupplier, deleteSupplier, generateSupplierCode,
-        addGoodsReceipt, updateGoodsReceipt, deleteGoodsReceipt,
+        addGoodsReceipt, updateGoodsReceipt, assignGoodsReceiptSupplier, deleteGoodsReceipt,
         generateReceiptNumber, receiveGoods,
         addPurchaseInvoice, updatePurchaseInvoice, deletePurchaseInvoice,
         generatePurchaseInvoiceNumber, addPurchasePayment, deletePurchasePayment,

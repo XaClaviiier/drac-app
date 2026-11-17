@@ -8,6 +8,7 @@ import IndonesianDateInput from '../components/IndonesianDateInput';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import { ui } from '../components/ui/interfaceStandards';
 import { receiptDeliveryLabel, receiptDeliveryOptions } from '../lib/goodsReceiptSharing';
+import ReceiptSupplierSelect from '../components/ReceiptSupplierSelect';
 
 type ReceiptColumn = 'number' | 'date' | 'notes' | 'receivedBy' | 'itemCount' | 'warehouse' | 'status';
 const defaultReceiptColumns: ReceiptColumn[] = ['number','date','notes','receivedBy','itemCount','warehouse','status'];
@@ -111,6 +112,15 @@ export default function GoodsReceiptPage() {
     notes: '',
   });
   const [showSuccessMsg, setShowSuccessMsg] = useState('');
+  const supplierRole = data.roles.find(role => role.id === currentUser?.roleId);
+  const canSeeSuppliers = Boolean(currentUser?.isOwner)
+    || supplierRole?.code.trim().toUpperCase() === 'ADM'
+    || (supplierRole?.name || currentUser?.roleName || '').trim().toLowerCase() === 'administrator';
+  const activeSuppliers = useMemo(() => data.suppliers.filter(supplier => supplier.isActive)
+    .sort((a, b) => a.name.localeCompare(b.name, 'id')), [data.suppliers]);
+  const invoicedReceiptIds = useMemo(() => new Set(data.purchaseInvoices.flatMap(invoice => invoice.receiptIds)), [data.purchaseInvoices]);
+  const supplierSelect = (receipt: GoodsReceipt) => <ReceiptSupplierSelect receipt={receipt} suppliers={activeSuppliers}
+    canEdit={hasPermission('receipt:edit')} linked={invoicedReceiptIds.has(receipt.id)}/>;
 
   const openInvoicePreview = (r: GoodsReceipt) => {
     if (r.sourceType === 'Transfer Gudang') { window.alert('Transfer antar gudang tidak membuat Faktur Pembelian.'); return; }
@@ -481,12 +491,13 @@ export default function GoodsReceiptPage() {
               <div className="mt-0.5 font-mono text-[13px] font-semibold text-blue-700">{documentNumber}</div>
               <div className="mt-2 grid grid-cols-[minmax(72px,auto)_1fr] gap-x-2 border-t border-slate-100 pt-2 text-xs text-slate-700"><span className="truncate font-medium">{r.receivedBy||'-'}</span><span className="truncate border-l border-slate-300 pl-2" title={r.notes||''}>{r.notes||'-'}</span></div>
               <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs"><span className="shrink-0 font-semibold text-slate-800">{r.items.length} item ({totalQuantity} pcs)</span><span className="text-slate-300">|</span><span className="truncate text-slate-600" title={warehouseName}>{warehouseName}</span></div>
+              {canSeeSuppliers && <div className="mt-2 border-t border-slate-100 pt-2"><p className="mb-1 text-[11px] font-medium text-slate-500">Supplier</p>{supplierSelect(r)}</div>}
             </article>
           })}
           {!filtered.length&&<div className="rounded border border-slate-200 bg-white py-14 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-10 w-10"/>Belum ada penerimaan barang.</div>}
         </div>
         <div className="app-fill-stack hidden lg:block">
-        <div className="app-table-scroll app-table-scroll--fill mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{receiptColumns.map(column=><th key={column} draggable onDragStart={()=>setDraggedReceiptColumn(column)} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedReceiptColumn)moveReceiptColumn(draggedReceiptColumn,column);setDraggedReceiptColumn(null)}} onDragEnd={()=>setDraggedReceiptColumn(null)} onClick={()=>setReceiptSort(current=>({column,direction:current.column===column&&current.direction==='asc'?'desc':'asc'}))} title="Klik untuk mengurutkan. Tarik untuk memindahkan kolom." className={`cursor-grab select-none whitespace-nowrap border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0 ${draggedReceiptColumn===column?'opacity-50':''}`}>{receiptColumnLabels[column]} {receiptSort.column===column&&<span className="text-[10px]">{receiptSort.direction==='asc'?'▲':'▼'}</span>}</th>)}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{receiptColumns.map(column=>{
+        <div className="app-table-scroll app-table-scroll--fill mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{receiptColumns.map(column=><th key={column} draggable onDragStart={()=>setDraggedReceiptColumn(column)} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedReceiptColumn)moveReceiptColumn(draggedReceiptColumn,column);setDraggedReceiptColumn(null)}} onDragEnd={()=>setDraggedReceiptColumn(null)} onClick={()=>setReceiptSort(current=>({column,direction:current.column===column&&current.direction==='asc'?'desc':'asc'}))} title="Klik untuk mengurutkan. Tarik untuk memindahkan kolom." className={`cursor-grab select-none whitespace-nowrap border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0 ${draggedReceiptColumn===column?'opacity-50':''}`}>{receiptColumnLabels[column]} {receiptSort.column===column&&<span className="text-[10px]">{receiptSort.direction==='asc'?'▲':'▼'}</span>}</th>)}{canSeeSuppliers && <th className="min-w-[240px] p-3 text-left">Supplier</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{receiptColumns.map(column=>{
           const base='border-r border-[#d8d8d8] p-3 last:border-r-0';
           if(column==='number')return <td key={column} className={`${base} font-normal text-blue-700 underline-offset-2 hover:underline`}>{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td>;
           if(column==='date')return <td key={column} className={`${base} whitespace-nowrap`}>{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td>;
@@ -495,7 +506,7 @@ export default function GoodsReceiptPage() {
           if(column==='itemCount')return <td key={column} className={`${base} whitespace-nowrap`}>{r.items.length} item ({r.items.reduce((sum,item)=>sum+item.qty,0)} pcs)</td>;
           if(column==='warehouse')return <td key={column} className={base}>{data.warehouses.find(w=>w.id===r.warehouseId)?.name||'-'}</td>;
           return <td key={column} className={base}><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${r.status==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span></td>;
-        })}</tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
+        })}{canSeeSuppliers && <td className="min-w-[240px] p-3">{supplierSelect(r)}</td>}</tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
         </div>
       </section>
       <div className="hidden">

@@ -39,6 +39,7 @@ export default function PurchaseInvoicesPage() {
   const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
 
   const [showModal, setShowModal] = useState(false);
+  const [savingInvoice, setSavingInvoice] = useState(false);
   const [editing, setEditing] = useState<PurchaseInvoice | null>(null);
   const [viewing, setViewing] = useState<PurchaseInvoice | null>(null);
   const [form, setForm] = useState({
@@ -131,7 +132,7 @@ export default function PurchaseInvoicesPage() {
     if (!form.supplierId) return [];
     return data.goodsReceipts.filter(r => {
       if (r.supplierId !== form.supplierId) return false;
-      if (r.status !== 'Diterima') return false;
+      if (!['Diterima', 'Sebagian'].includes(r.status) || r.sourceType === 'Transfer Gudang') return false;
       if (currentBranchId !== 'ALL' && r.branchId !== currentBranchId) return false;
       // Has at least 1 item with remaining qty
       return r.items.some(it => (it.qty - (it.qtyInvoiced || 0)) > 0);
@@ -205,8 +206,9 @@ export default function PurchaseInvoicesPage() {
     }));
   };
 
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingInvoice) return;
     if (form.items.length === 0) { window.alert('Pilih minimal 1 penerimaan barang'); return; }
     if (form.items.some(it => it.unitPrice <= 0)) {
       if (!window.confirm('Ada barang dengan harga 0. Lanjutkan?')) return;
@@ -214,7 +216,10 @@ export default function PurchaseInvoicesPage() {
     const supplier = data.suppliers.find(s => s.id === form.supplierId);
     if (!supplier) return;
 
-    const branchId = (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
+    const receiptBranches = [...new Set(form.receiptIds.map(id => data.goodsReceipts.find(receipt => receipt.id === id)?.branchId).filter(Boolean))];
+    if (receiptBranches.length > 1) { window.alert('Pilih penerimaan dari satu cabang yang sama.'); return; }
+    const branchId = editing?.branchId || receiptBranches[0]
+      || (currentBranchId === 'ALL' ? currentUser?.branchId : currentBranchId) || 'BR-001';
 
     const payload: PurchaseInvoice = {
       id: editing?.id || Date.now().toString(),
@@ -231,9 +236,14 @@ export default function PurchaseInvoicesPage() {
       createdAt: editing?.createdAt || localDateKey(),
     };
 
-    if (editing) updatePurchaseInvoice(editing.id, payload);
-    else addPurchaseInvoice(payload);
-    setShowModal(false);
+    setSavingInvoice(true);
+    try {
+      if (editing) await updatePurchaseInvoice(editing.id, payload);
+      else await addPurchaseInvoice(payload);
+      setShowModal(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Faktur gagal disimpan.');
+    } finally { setSavingInvoice(false); }
   };
 
   const handleDelete = (inv: PurchaseInvoice) => {
@@ -684,7 +694,7 @@ export default function PurchaseInvoicesPage() {
 
               <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50">Batal</button>
-                <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"><Save className="h-4 w-4" /> Simpan Faktur</button>
+                <button type="submit" disabled={savingInvoice} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-60"><Save className="h-4 w-4" /> {savingInvoice ? 'Menyimpan...' : 'Simpan Faktur'}</button>
               </div>
             </form>
           </div>

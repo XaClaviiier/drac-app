@@ -57,6 +57,10 @@ $journalReceipt = static function(PDO $pdo,array $row,string $itemId,int $qty,bo
         $reversalOfId,$correctionGroupId,$idempotencyKey,$unitCost
     );
 };
+if (($action ?? null) === 'supplier') {
+    require __DIR__.'/goods-receipt-supplier.php';
+    return;
+}
 switch ($method) {
     case 'GET':
         $actor = $requestUser ?? requireAuthenticatedUser($pdo);
@@ -268,9 +272,9 @@ switch ($method) {
             foreach ($oldItemsList as $oldItem) {
                 if ((int)$oldItem['qty_invoiced'] > 0) throw new DomainException('Penerimaan yang sudah difakturkan tidak boleh diubah. Koreksi atau hapus faktur pembelian terlebih dahulu.');
             }
-            $supplier=null;
-            if(canSeeReceiptSupplier($pdo,$actor)&&!empty($d['supplierId'])){$supplierCheck=$pdo->prepare("SELECT id,name FROM suppliers WHERE id=? AND is_active=1");$supplierCheck->execute([$d['supplierId']]);$supplier=$supplierCheck->fetch();if(!$supplier)throw new InvalidArgumentException('Supplier tidak ditemukan atau nonaktif');}
-            if(!canSeeReceiptSupplier($pdo,$actor)&&!empty($oldRow['supplier_id']))$supplier=['id'=>$oldRow['supplier_id'],'name'=>$oldRow['supplier_name']];
+            // General receipt edits preserve mapping, even from a stale form.
+            // Supplier changes go through the dedicated /supplier action.
+            $supplier=isset($oldRow['supplier_id'])?['id'=>$oldRow['supplier_id'],'name'=>$oldRow['supplier_name']??'']:null;
             $receiver=lockedInventoryDelegatedUserForBranch($authorization,$receiverId,$newBranchId,'Petugas penerima');
 
             $stmt=$pdo->prepare("UPDATE goods_receipts SET receipt_number=?,date=?,supplier_id=?,supplier_name=?,do_number=?,delivery_method=?,delivery_other=?,shipping_notes=?,shipping_cost=?,status=?,notes=?,branch_id=?,warehouse_id=?,received_by=?,received_by_id=? WHERE id=?");

@@ -10,7 +10,7 @@ $refreshReceiptStatus = static function (PDO $pdo, string $receiptId): void {
     $pdo->prepare("UPDATE goods_receipts SET status=? WHERE id=? AND status<>'Batal'")->execute([$status, $receiptId]);
 };
 
-$normalizePurchaseLines = static function (PDO $pdo, array $lines, string $branchId, ?string $excludeInvoiceId = null): array {
+$normalizePurchaseLines = static function (PDO $pdo, array $lines, string $branchId, string $supplierId, ?string $excludeInvoiceId = null): array {
     if (!$lines) throw new InvalidArgumentException('Faktur pembelian wajib memiliki rincian barang');
     $result = [];
     $subtotal = 0.0;
@@ -25,11 +25,13 @@ $normalizePurchaseLines = static function (PDO $pdo, array $lines, string $branc
         if (!$item || $item['type'] !== 'Persediaan') throw new InvalidArgumentException('Barang pembelian tidak ditemukan atau bukan persediaan aktif');
         $receiptId = !empty($line['receiptId']) ? (string)$line['receiptId'] : null;
         if ($receiptId) {
-            $receiptStmt = $pdo->prepare("SELECT r.branch_id,r.source_type,ri.qty,ri.qty_invoiced FROM goods_receipts r JOIN goods_receipt_items ri ON ri.receipt_id=r.id WHERE r.id=? AND ri.item_id=? FOR UPDATE");
+            $receiptStmt = $pdo->prepare("SELECT r.branch_id,r.source_type,r.status,r.supplier_id,ri.qty,ri.qty_invoiced FROM goods_receipts r JOIN goods_receipt_items ri ON ri.receipt_id=r.id WHERE r.id=? AND ri.item_id=? FOR UPDATE");
             $receiptStmt->execute([$receiptId, $item['id']]);
             $receipt = $receiptStmt->fetch();
             if (!$receipt || (string)$receipt['branch_id'] !== $branchId) throw new InvalidArgumentException('Penerimaan barang tidak ditemukan atau cabang tidak sesuai');
             if (($receipt['source_type']??'Supplier') === 'Transfer Gudang') throw new InvalidArgumentException('Transfer antar gudang tidak boleh dibuatkan Faktur Pembelian');
+            if (!in_array($receipt['status'], ['Diterima', 'Sebagian', 'Difakturkan'], true)) throw new InvalidArgumentException('Barang harus diterima sebelum dibuatkan faktur');
+            if ((string)($receipt['supplier_id'] ?? '') !== $supplierId) throw new InvalidArgumentException('Supplier penerimaan tidak sesuai dengan faktur. Periksa pemetaan supplier pada daftar penerimaan.');
             if ($qty > ((int)$receipt['qty'] - (int)$receipt['qty_invoiced'])) throw new InvalidArgumentException('Qty faktur melebihi sisa penerimaan');
         }
         $lineSubtotal = max(0, ($qty * $unitPrice) - $discount);
@@ -204,7 +206,7 @@ switch ($method) {
         if (empty($d['items']) || !is_array($d['items'])) respondError('Faktur pembelian wajib memiliki rincian barang', 422);
         $pdo->beginTransaction();
         try {
-            $normalized = $normalizePurchaseLines($pdo, $d['items'], $branchId);
+            $normalized = $normalizePurchaseLines($pdo, $d['items'], $branchId, (string)$supplier['id']);
             $invoiceDiscount = max(0, (float)($d['discount'] ?? 0));
             $invoiceTax = max(0, (float)($d['tax'] ?? 0));
             $subtotal = $normalized['subtotal'];
@@ -291,7 +293,7 @@ switch ($method) {
                 }
             }
 
-            $normalized = $normalizePurchaseLines($pdo, $d['items'], $branchId, (string)$id);
+            $normalized = $normalizePurchaseLines($pdo, $d['items'], $branchId, (string)$current['supplier_id'], (string)$id);
             $invoiceDiscount = max(0, (float)($d['discount'] ?? 0));
             $invoiceTax = max(0, (float)($d['tax'] ?? 0));
             $subtotal = $normalized['subtotal'];

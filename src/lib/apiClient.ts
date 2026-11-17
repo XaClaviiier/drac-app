@@ -120,6 +120,10 @@ export const api = {
     request(`/customer-payments/invoice/${invoiceId}`, { method: 'DELETE' }),
 
   // ========== SPECIFIC HELPERS ==========
+  assignGoodsReceiptSupplier: (receiptId: string, supplierId: string, expectedSupplierId: string) =>
+    request(`/goods-receipts/${encodeURIComponent(receiptId)}/supplier`, {
+      method: 'PUT', body: JSON.stringify({ supplierId, expectedSupplierId }),
+    }),
   addPurchasePayment: (invoiceId: string, payment: any) =>
     request(`/purchase-invoices/${invoiceId}/payments`, {
       method: 'POST',
