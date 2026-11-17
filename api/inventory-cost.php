@@ -9,12 +9,14 @@ function inventoryReceiptUnitCost(array $line): float {
     return round(($gross - $discount) / $quantity, 4);
 }
 
-/** Moving average per item and warehouse; order by business date, then posting sequence. */
+/** Moving average per item across all warehouses; quantities remain warehouse-specific. */
 function inventoryAverageHistory(array $movements, float $defaultCost = 0): array {
     $defaultCost = max(0, $defaultCost);
     $warehouses = [];
     $movementCosts = [];
     $transferCosts = [];
+    $globalQuantity = 0;
+    $globalAverage = $defaultCost;
     $empty = static fn() => ['quantity' => 0, 'averageCost' => $defaultCost];
     foreach ($movements as $movement) {
         $quantity = abs((int)$movement['quantity']);
@@ -26,7 +28,6 @@ function inventoryAverageHistory(array $movements, float $defaultCost = 0): arra
         $in = $type === 'transfer_send' ? '' : $destination;
         if ((int)$movement['quantity'] < 0) [$out, $in] = [$in, $out];
         $sourceState = $warehouses[$out !== '' ? $out : $source] ?? $empty();
-        $destinationState = $warehouses[$in] ?? $empty();
         $storedCost = isset($movement['unit_cost']) ? max(0, (float)$movement['unit_cost']) : null;
         $originalCost = $movementCosts[(string)($movement['reversal_of_id'] ?? '')] ?? null;
         $transferKey = (string)($movement['reference_type'] ?? '').'|'.(string)($movement['reference_id'] ?? '');
@@ -36,19 +37,19 @@ function inventoryAverageHistory(array $movements, float $defaultCost = 0): arra
             $cost = $originalCost;
         } elseif ($type === 'transfer_receive' && $sent && $sent['quantity'] > 0) {
             $cost = $sent['value'] / $sent['quantity'];
-        } elseif ($out !== '' && $in !== '' && $type !== 'reversal') {
-            // Moving between warehouses carries the source average, never the destination purchase price.
-            $cost = $sourceState['averageCost'];
+        } elseif ($out !== '' && $in !== '') {
+            // A warehouse transfer does not change the global HPP.
+            $cost = $globalAverage;
         } elseif ($out !== '' && !in_array($type, ['reversal', 'cost_adjustment', 'cost_adjustment_reversal'], true)) {
-            $cost = $sourceState['averageCost'];
+            $cost = $globalAverage;
         } else {
-            $cost = $storedCost ?? ($out !== '' ? $sourceState['averageCost'] : ($type === 'transfer_receive' ? $sourceState['averageCost'] : $destinationState['averageCost']));
+            $cost = $storedCost ?? $globalAverage;
         }
         $cost = round(max(0, $cost), 4);
         if ($type === 'transfer_send') {
             $transferCosts[$transferKey] = [
                 'quantity' => ($sent['quantity'] ?? 0) + $quantity,
-                'value' => ($sent['value'] ?? 0) + $quantity * ($storedCost ?? $cost),
+                'value' => ($sent['value'] ?? 0) + $quantity * $cost,
             ];
         }
         if ($out !== '') {
@@ -70,9 +71,28 @@ function inventoryAverageHistory(array $movements, float $defaultCost = 0): arra
             $state['quantity'] += $quantity;
             $warehouses[$in] = $state;
         }
+
+        // Direct transfers move stock between warehouses in one movement and
+        // therefore leave the global pool unchanged.
+        if ($out !== '' && $in !== '') {
+            // no global quantity change
+        } elseif ($in !== '') {
+            $globalAverage = $globalQuantity > 0
+                ? round(($globalQuantity * $globalAverage + $quantity * $cost) / ($globalQuantity + $quantity), 4)
+                : $cost;
+            $globalQuantity += $quantity;
+        } elseif ($out !== '') {
+            $remainingGlobal = $globalQuantity - $quantity;
+            if ($type === 'reversal' && $remainingGlobal > 0 && $globalQuantity > 0) {
+                $globalAverage = round(max(0, ($globalQuantity * $globalAverage - $quantity * $cost) / $remainingGlobal), 4);
+            }
+            $globalQuantity = $remainingGlobal;
+        }
+        foreach ($warehouses as &$warehouseState) $warehouseState['averageCost'] = $globalAverage;
+        unset($warehouseState);
         $movementCosts[(string)$movement['id']] = $storedCost ?? $cost;
     }
-    return ['warehouses' => $warehouses, 'movementCosts' => $movementCosts, 'transferCosts' => $transferCosts];
+    return ['warehouses' => $warehouses, 'averageCost' => $globalAverage, 'quantity' => $globalQuantity, 'movementCosts' => $movementCosts, 'transferCosts' => $transferCosts];
 }
 
 function inventoryAverageForItem(PDO $pdo, string $itemId, string $date): array {
@@ -110,5 +130,5 @@ function inventoryMovementUnitCost(PDO $pdo, string $itemId, ?string $source, ?s
         if ($sent && $sent['quantity'] > 0) return round($sent['value'] / $sent['quantity'], 4);
     }
     $warehouse = $source !== null && $source !== '' ? $source : $destination;
-    return $history['warehouses'][(string)$warehouse]['averageCost'] ?? $history['defaultCost'];
+    return $history['averageCost'] ?? $history['defaultCost'];
 }

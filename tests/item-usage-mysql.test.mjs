@@ -17,18 +17,20 @@ function fixture(t) {
   const update = (id, action, changes = {}, extra = {}) => call({ method: 'PUT', id, payload: { action, revision: 0, ...changes }, ...extra });
   const detail = (id, extra = {}) => call({ id, ...extra });
   const stock = (warehouseId = 'W1', itemId = 'I1') => Number(sql('SELECT quantity FROM warehouse_stocks WHERE warehouse_id=? AND item_id=?', [warehouseId, itemId])[0].quantity);
+  const hpp = (warehouseId = 'W1', itemId = 'I1') => Number(call({ op: 'hpp-cost', warehouseId, itemId, date: today }).data);
   const parallel = input => new Promise((resolve, reject) => { const child = spawn('php', args(input)); let out = '', err = ''; child.stdout.on('data', data => out += data); child.stderr.on('data', data => err += data); child.on('error', reject); child.on('close', code => { if (code) reject(new Error(err)); else { try { resolve(JSON.parse(out)); } catch (error) { reject(error); } } }); });
-  return { call, sql, today, payload, create, update, detail, stock, parallel };
+  return { call, sql, today, payload, create, update, detail, stock, hpp, parallel };
 }
 const ok = result => { assert.equal(result.success, true, result.message); return result.data; };
+const money = value => Number(Number(value).toFixed(2));
 
 run('draft, posting and cancellation keep stock, branch totals and journal balanced', t => {
-  const f = fixture(t); const draft = ok(f.create());
+  const f = fixture(t); const initialHpp = f.hpp(); const draft = ok(f.create());
   assert.equal(f.stock(), 13); assert.equal(f.sql('SELECT * FROM journal_entries').length, 0);
   assert.match(draft.usageNumber, /^PAK-\d{4}-\d{6}$/);
   assert.equal(ok(f.detail(draft.id)).rows[0].lineNotes, 'Bahan perawatan');
   const posted = ok(f.update(draft.id, 'post')); assert.equal(posted.status, 'Posted');
-  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [draft.id])[0].total_value), 300000);
+  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [draft.id])[0].total_value), money(initialHpp * 2));
   assert.equal(f.stock(), 11); assert.equal(f.stock('W2'), 9);
   assert.equal(Number(f.sql("SELECT stock FROM branch_item_stocks WHERE branch_id='B1' AND item_id='I1'")[0].stock), 11);
   assert.equal(Number(f.sql("SELECT stock FROM items WHERE id='I1'")[0].stock), 11);
@@ -36,7 +38,7 @@ run('draft, posting and cancellation keep stock, branch totals and journal balan
   assert.equal(movements.length, 1); assert.equal(movements[0].movement_type, 'usage');
   const journal = f.sql('SELECT * FROM journal_entries')[0]; assert.equal(journal.branch_id, 'B1');
   const lines = f.sql('SELECT account_id,debit,credit FROM journal_lines ORDER BY account_id');
-  assert.deepEqual(lines.map(l => [l.account_id, Number(l.debit), Number(l.credit)]), [['EXP',300000,0],['INV',0,300000]]);
+  assert.deepEqual(lines.map(l => [l.account_id, Number(l.debit), Number(l.credit)]), [['EXP',money(initialHpp * 2),0],['INV',0,money(initialHpp * 2)]]);
   ok(f.update(draft.id, 'post')); assert.equal(f.stock(), 11);
   f.sql("UPDATE items SET purchase_price=999999 WHERE id='I1'");
   f.sql("UPDATE app_settings SET settings_json=? WHERE id=1", [JSON.stringify({ defaultAccounts: { inventoryCoaId: 'CHILD' } })]);
@@ -75,8 +77,9 @@ run('posting revalidates current stock and cost and keeps failed draft unchanged
   assert.equal(f.stock(), 3); assert.equal(f.sql('SELECT * FROM journal_entries').length, 0);
   f.sql("UPDATE warehouse_stocks SET quantity=13 WHERE warehouse_id='W1' AND item_id='I1'");
   f.sql("UPDATE stock_movements SET unit_cost=200000 WHERE item_id='I1' AND destination_warehouse_id='W1'");
+  const currentHpp = f.hpp();
   ok(f.update(draft.id, 'post'));
-  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [draft.id])[0].total_value), 2400000);
+  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [draft.id])[0].total_value), money(currentHpp * 12));
 });
 
 run('branch scope protects list, details, previews, mutation and branch identity zero', t => {
@@ -133,7 +136,8 @@ run('expense account follows the warehouse branch mapping and ignores client acc
   f.sql("INSERT INTO branch_account_settings(branch_id,inventory_usage_coa_id) VALUES('B1','EXP2')");
   const doc = ok(f.create({ action:'post', expenseAccountId:'INV' }));
   assert.equal(f.sql('SELECT expense_account_id FROM item_usages WHERE id=?',[doc.id])[0].expense_account_id,'EXP2');
-  assert.deepEqual(f.sql('SELECT account_id,debit,credit FROM journal_lines WHERE journal_id=(SELECT id FROM journal_entries WHERE source_id=?) ORDER BY account_id',[doc.id]).map(row => [row.account_id,Number(row.debit),Number(row.credit)]), [['EXP2',300000,0],['INV',0,300000]]);
+  const globalHpp = f.hpp('W2');
+  assert.deepEqual(f.sql('SELECT account_id,debit,credit FROM journal_lines WHERE journal_id=(SELECT id FROM journal_entries WHERE source_id=?) ORDER BY account_id',[doc.id]).map(row => [row.account_id,Number(row.debit),Number(row.credit)]), [['EXP2',money(globalHpp * 2),0],['INV',0,money(globalHpp * 2)]]);
 });
 
 run('posted documents cannot be edited, deleted or cancelled without a reason', t => {
@@ -146,14 +150,15 @@ run('posted documents cannot be edited, deleted or cancelled without a reason', 
 
 run('server ignores supplied cost and stock delta and pins valuation to the selected warehouse', t => {
   const f = fixture(t); const doc = ok(f.create({ action:'post',warehouseId:'W2',rows:[{itemId:'I1',quantity:2,unitCost:1,stockBefore:999,totalValue:2}] }));
-  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [doc.id])[0].total_value),340000);
+  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [doc.id])[0].total_value), money(f.hpp('W2') * 2));
   assert.equal(f.stock('W2'),7); assert.equal(f.stock(),13);
-  assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?', [doc.id])[0].unit_cost),170000);
+  assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?', [doc.id])[0].unit_cost), f.hpp('W2'));
   assert.equal(ok(f.detail(doc.id)).rows[0].stockBefore,9);
 });
 
 run('operational responses omit valuation for staff and administrators while accounting retains HPP', t => {
   const f = fixture(t);
+  const initialHpp = f.hpp();
   const operational = response => {
     const data = ok(response);
     const inspect = value => {
@@ -179,9 +184,9 @@ run('operational responses omit valuation for staff and administrators while acc
     operational(f.update(draft.id, 'post', { revision:edited.revision }, { user }));
     operational(f.detail(draft.id, { user }));
     assert.equal(f.stock(),10);
-    assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [draft.id])[0].total_value),450000);
-    assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?', [draft.id])[0].unit_cost),150000);
-    assert.equal(Number(f.sql('SELECT SUM(l.debit) amount FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_id WHERE j.source_id=?', [draft.id])[0].amount),450000);
+    assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?', [draft.id])[0].total_value),money(initialHpp * 3));
+    assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?', [draft.id])[0].unit_cost),initialHpp);
+    assert.equal(Number(f.sql('SELECT SUM(l.debit) amount FROM journal_lines l JOIN journal_entries j ON j.id=l.journal_id WHERE j.source_id=?', [draft.id])[0].amount),money(initialHpp * 3));
     operational(f.update(draft.id, 'cancel', { revision:posted.revision, reason:'Koreksi uji akses' }, { user }));
     operational(f.update(draft.id, 'cancel', { revision:posted.revision, reason:'Koreksi uji akses' }, { user }));
     operational(f.detail(draft.id, { user }));

@@ -12,16 +12,16 @@ test('moving average weights remaining quantities, not the last incoming price',
   assert.deepEqual(history(first, second).warehouses.W1, { quantity: 20, averageCost: 150 });
   assert.deepEqual(history(first, second, move('W1', null, 5, null, 'usage'), move(null, 'W1', 10, 300)).warehouses.W1, { quantity: 25, averageCost: 210 });
 });
-test('partial transfer receipts carry the sent cost even after new purchases at the source', () => {
+test('partial transfer receipts carry the sent cost while HPP remains global', () => {
   const ref = { reference_type: 'warehouse_transfer', reference_id: 'T1' };
   const result = history(move(null, 'W1', 20, 150), move(null, 'W2', 10, 100), move('W1', 'W2', 10, 150, 'transfer_send', ref), move(null, 'W1', 10, 300), move('W1', 'W2', 5, null, 'transfer_receive', ref), move('W1', 'W2', 5, null, 'transfer_receive', ref));
-  assert.deepEqual(result.warehouses.W1, { quantity: 20, averageCost: 225 });
-  assert.deepEqual(result.warehouses.W2, { quantity: 20, averageCost: 125 });
+  assert.deepEqual(result.warehouses.W1, { quantity: 20, averageCost: 175 });
+  assert.deepEqual(result.warehouses.W2, { quantity: 20, averageCost: 175 });
 });
-test('direct transfers preserve source average and warehouse costs remain separate', () => {
+test('direct transfers keep one global HPP across warehouses', () => {
   const result = history(move(null, 'W1', 10, 100), move(null, 'W2', 10, 300), move('W1', 'W2', 5, null, 'transfer'));
-  assert.deepEqual(result.warehouses.W1, { quantity: 5, averageCost: 100 });
-  assert.deepEqual(result.warehouses.W2, { quantity: 15, averageCost: 233.3333 });
+  assert.deepEqual(result.warehouses.W1, { quantity: 5, averageCost: 200 });
+  assert.deepEqual(result.warehouses.W2, { quantity: 15, averageCost: 200 });
 });
 test('receipt and usage reversals restore the original costs', () => {
   const receipt = move(null, 'W1', 10, 200);

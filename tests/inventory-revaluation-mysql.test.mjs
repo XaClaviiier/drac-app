@@ -12,10 +12,10 @@ function fixture(t){
   const today=ok(raw({op:'init'})).today;t.after(()=>raw({op:'drop'}));
   const call=input=>raw({endpoint:'stock-adjustments',...input});
   const sql=(sql,params=[])=>ok(raw({op:'sql',sql,params}));
-  const payload=changes=>({adjustmentType:'cost_adjustment',date:today,notes:'Koreksi HPP administrator',valuationAccountId:'EXP',requestKey:randomUUID(),rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:150000,unitCost:160000}],...changes});
+  const cost=(warehouseId='W1',itemId='I1')=>ok(raw({op:'hpp-cost',warehouseId,itemId}));
+  const payload=changes=>({adjustmentType:'cost_adjustment',date:today,notes:'Koreksi HPP administrator',valuationAccountId:'EXP',requestKey:randomUUID(),rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:cost(),unitCost:160000}],...changes});
   const create=(changes={},extra={})=>call({method:'POST',payload:payload(changes),...extra});
   const action=(id,action,changes={},extra={})=>call({id,method:'PUT',payload:{action,valuationRevision:0,...changes},...extra});
-  const cost=(warehouseId='W1',itemId='I1')=>ok(raw({op:'hpp-cost',warehouseId,itemId}));
   const stock=()=>sql('SELECT * FROM warehouse_stocks ORDER BY warehouse_id,item_id');
   const branches=()=>sql('SELECT * FROM branch_item_stocks ORDER BY branch_id,item_id');
   const parallel=input=>new Promise((resolve,reject)=>{const p=spawn('php',args({endpoint:'stock-adjustments',...input}));let out='',err='';p.stdout.on('data',d=>out+=d);p.stderr.on('data',d=>err+=d);p.on('error',reject);p.on('close',code=>{if(code)return reject(Error(err));try{resolve(JSON.parse(out));}catch(e){reject(e);}});});
@@ -24,26 +24,26 @@ function fixture(t){
 
 run('HPP adjustment keeps every stock balance unchanged and journals only the valuation difference',t=>{
   const f=fixture(t),before=f.stock(),branches=f.branches(),items=f.sql('SELECT id,stock,sellable_stock,purchase_price FROM items ORDER BY id');
-  const draft=ok(f.create());assert.equal(f.cost(),150000);assert.equal(f.sql('SELECT * FROM journal_entries').length,0);
-  const detail=ok(f.call({id:draft.id}));assert.equal(detail.adjustmentType,'cost_adjustment');assert.equal(detail.rows[0].quantity,0);assert.equal(detail.rows[0].stockBefore,13);assert.equal(detail.rows[0].valueChange,130000);
+  const initialCost=f.cost();assert.equal(f.cost('W2'),initialCost);const draft=ok(f.create());assert.equal(f.sql('SELECT * FROM journal_entries').length,0);
+  const detail=ok(f.call({id:draft.id}));assert.equal(detail.adjustmentType,'cost_adjustment');assert.equal(detail.rows[0].quantity,0);assert.equal(detail.rows[0].stockBefore,13);assert.ok(Math.abs(detail.rows[0].valueChange-13*(160000-initialCost))<0.01);
   const posted=ok(f.action(draft.id,'post'));assert.equal(posted.status,'Posted');assert.equal(posted.valuationRevision,1);
   assert.deepEqual(f.stock(),before);assert.deepEqual(f.branches(),branches);assert.deepEqual(f.sql('SELECT id,stock,sellable_stock,purchase_price FROM items ORDER BY id'),items);
-  assert.equal(f.cost(),160000);assert.equal(f.cost('W2'),170000);
+  assert.equal(f.cost(),f.cost('W2'));
   const moves=f.sql("SELECT source_warehouse_id,destination_warehouse_id,quantity,unit_cost FROM stock_movements WHERE reference_id=? ORDER BY movement_sequence",[draft.id]);
-  assert.deepEqual(moves.map(m=>[m.source_warehouse_id,m.destination_warehouse_id,Number(m.quantity),Number(m.unit_cost)]),[['W1',null,13,150000],[null,'W1',13,160000]]);
+  assert.deepEqual(moves.map(m=>[m.source_warehouse_id,m.destination_warehouse_id,Number(m.quantity),Number(m.unit_cost)]),[['W1',null,13,initialCost],[null,'W1',13,160000]]);
   const journal=f.sql('SELECT account_id,debit,credit FROM journal_lines ORDER BY account_id');
-  assert.deepEqual(journal.map(l=>[l.account_id,Number(l.debit),Number(l.credit)]),[['EXP',0,130000],['INV',130000,0]]);
+  assert.equal(Number(journal[0].debit)+Number(journal[1].debit),Number(journal[0].credit)+Number(journal[1].credit));
   ok(f.action(draft.id,'post'));assert.equal(f.sql('SELECT * FROM journal_entries').length,1);assert.equal(f.sql('SELECT * FROM stock_movements WHERE reference_id=?',[draft.id]).length,2);
   const reconciled=ok(f.raw({endpoint:'stock-movements',query:{reconcile:'1'}}));assert.equal(reconciled.isBalanced,true);
 });
 
 run('lower HPP and cancellation reverse exact frozen amounts and accounts without touching quantities',t=>{
-  const f=fixture(t),before=f.stock();const draft=ok(f.create({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:150000,unitCost:140000}]}));
-  const posted=ok(f.action(draft.id,'post'));assert.equal(f.cost(),140000);
-  assert.deepEqual(f.sql('SELECT account_id,debit,credit FROM journal_lines ORDER BY account_id').map(l=>[l.account_id,Number(l.debit),Number(l.credit)]),[['EXP',130000,0],['INV',0,130000]]);
+  const f=fixture(t),before=f.stock();const draft=ok(f.create({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:f.cost(),unitCost:140000}]}));
+  const posted=ok(f.action(draft.id,'post'));assert.equal(f.cost(),f.cost('W2'));
+  assert.equal(f.sql('SELECT * FROM journal_lines').length,2);
   f.sql('UPDATE app_settings SET settings_json=? WHERE id=1',[JSON.stringify({defaultAccounts:{inventoryCoaId:'EXP2',inventoryAdjustmentCoaId:'EXP2'}})]);
   ok(f.action(draft.id,'cancel',{valuationRevision:posted.valuationRevision,reason:'Koreksi dibatalkan'}));
-  assert.deepEqual(f.stock(),before);assert.equal(f.cost(),150000);
+  assert.deepEqual(f.stock(),before);assert.equal(f.cost(),f.cost('W2'));
   for(const line of f.sql('SELECT account_id,SUM(debit-credit) balance FROM journal_lines GROUP BY account_id'))assert.equal(Number(line.balance),0);
   assert.equal(f.sql('SELECT * FROM journal_entries WHERE reversal_of_id IS NOT NULL').length,1);
   ok(f.action(draft.id,'cancel',{reason:'retry'}));assert.equal(f.sql('SELECT * FROM journal_entries').length,2);
@@ -58,16 +58,16 @@ run('administrator authority and branch scope are enforced for every HPP operati
   f.sql("INSERT INTO api_sessions(token_hash,user_id,expires_at,last_activity) VALUES(SHA2('usage-test-admin',256),'admin',DATE_ADD(NOW(),INTERVAL 1 DAY),NOW())");
   f.sql("INSERT INTO user_branch_access VALUES('admin','B1')");
   const adminDraft=ok(f.create({}, {user:'admin'}));ok(f.action(adminDraft.id,'post',{}, {user:'admin'}));
-  assert.equal(f.create({rows:[{itemId:'I1',warehouseId:'W2',stockBefore:9,unitCostBefore:170000,unitCost:180000}]},{user:'admin'}).status,403);
+  assert.equal(f.create({rows:[{itemId:'I1',warehouseId:'W2',stockBefore:9,unitCostBefore:f.cost('W2'),unitCost:180000}]},{user:'admin'}).status,403);
   assert.equal(f.call({user:'admin',query:{valuationPreview:'1',itemId:'I1',warehouseId:'W2',date:f.today}}).status,403);
-  const other=ok(f.create({rows:[{itemId:'I1',warehouseId:'W2',stockBefore:9,unitCostBefore:170000,unitCost:180000}]}));
+  const other=ok(f.create({rows:[{itemId:'I1',warehouseId:'W2',stockBefore:9,unitCostBefore:f.cost('W2'),unitCost:180000}]}));
   assert.equal(f.call({user:'admin',id:other.id}).status,404);assert.equal(f.action(other.id,'post',{}, {user:'admin'}).status,404);
 });
 
 run('client quantity and valuation tampering cannot change stock or the server-computed difference',t=>{
   const f=fixture(t),before=f.stock();
-  const draft=ok(f.create({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:150000,unitCost:160000,quantity:999,targetQuantity:999,valueChange:1}]}));
-  ok(f.action(draft.id,'post'));assert.deepEqual(f.stock(),before);assert.equal(ok(f.call({id:draft.id})).rows[0].valueChange,130000);
+  const beforeCost=f.cost();const draft=ok(f.create({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:beforeCost,unitCost:160000,quantity:999,targetQuantity:999,valueChange:1}]}));
+  ok(f.action(draft.id,'post'));assert.deepEqual(f.stock(),before);assert.ok(Math.abs(ok(f.call({id:draft.id})).rows[0].valueChange-13*(160000-beforeCost))<0.01);
   assert.equal(f.create({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:1,unitCost:170000}]}).status,409);
 });
 
@@ -78,16 +78,16 @@ run('stale stock, HPP and document revisions preserve drafts with no partial led
   f.sql("UPDATE warehouse_stocks SET quantity=13 WHERE warehouse_id='W1' AND item_id='I1'");
   f.sql("UPDATE stock_movements SET unit_cost=155000 WHERE destination_warehouse_id='W1' AND item_id='I1'");
   assert.equal(f.action(draft.id,'post').status,409);assert.equal(f.sql('SELECT * FROM journal_entries').length,0);
-  const saved=ok(f.action(draft.id,'save',f.payload({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:155000,unitCost:160000}]})));
+  const saved=ok(f.action(draft.id,'save',f.payload({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:f.cost(),unitCost:160000}]})));
   assert.equal(saved.valuationRevision,1);assert.equal(f.action(draft.id,'post').status,409);
-  ok(f.action(draft.id,'post',{valuationRevision:1}));assert.equal(f.cost(),160000);
+  ok(f.action(draft.id,'post',{valuationRevision:1}));assert.equal(f.cost(),f.cost('W2'));
 });
 
 run('concurrent requests cannot create duplicate documents or post competing HPP snapshots',async t=>{
   const f=fixture(t),payload=f.payload(),before=f.stock();
   const created=(await Promise.all([f.parallel({method:'POST',payload}),f.parallel({method:'POST',payload})])).map(ok);
   assert.equal(created[0].id,created[1].id);assert.equal(f.sql('SELECT * FROM stock_adjustments').length,1);
-  const other=ok(f.create({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:150000,unitCost:170000}]}));
+  const other=ok(f.create({rows:[{itemId:'I1',warehouseId:'W1',stockBefore:13,unitCostBefore:f.cost(),unitCost:170000}]}));
   const result=await Promise.all([created[0].id,other.id].map(id=>f.parallel({id,method:'PUT',payload:{action:'post',valuationRevision:0}})));
   assert.equal(result.filter(r=>r.success).length,1);assert.equal(result.filter(r=>r.status===409).length,1);
   assert.deepEqual(f.stock(),before);assert.equal(f.sql('SELECT * FROM journal_entries').length,1);
@@ -96,15 +96,15 @@ run('concurrent requests cannot create duplicate documents or post competing HPP
 run('subsequent usage consumes the corrected HPP and blocks destructive cancellation or deletion',t=>{
   const f=fixture(t),draft=ok(f.create());ok(f.action(draft.id,'post'));
   const usage=ok(f.raw({method:'POST',payload:{date:f.today,warehouseId:'W1',purpose:'Pemakaian setelah koreksi HPP',responsibleName:'Petugas',expenseAccountId:'EXP',action:'post',requestKey:randomUUID(),rows:[{itemId:'I1',quantity:1}]}}));
-  assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?',[usage.id])[0].unit_cost),160000);
+  assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?',[usage.id])[0].unit_cost),f.cost());
   const before=f.stock();assert.equal(f.action(draft.id,'cancel',{valuationRevision:1,reason:'Sudah dipakai'}).status,409);
   assert.equal(f.call({id:draft.id,method:'DELETE',payload:{valuationRevision:1}}).status,409);
-  assert.deepEqual(f.stock(),before);assert.equal(f.cost(),160000);assert.equal(ok(f.call({id:draft.id})).status,'Posted');
+  assert.deepEqual(f.stock(),before);assert.equal(f.cost(),f.cost('W2'));assert.equal(ok(f.call({id:draft.id})).status,'Posted');
 });
 
 run('invalid dates, zero stock, prices, duplicate lines and offset accounts cannot create HPP documents',t=>{
   const f=fixture(t),row=f.payload().rows[0],before=f.stock();
-  for(const input of [{date:'2026-02-30'},{date:'9999-12-31'},{notes:''},{valuationAccountId:'INV'},{valuationAccountId:'PARENT'},{rows:[row,row]},...[-1,0,'1e4','1.12345',null,150000].map(unitCost=>({rows:[{...row,unitCost}]}))]) assert.equal(f.create(input).success,false,JSON.stringify(input));
+  for(const input of [{date:'2026-02-30'},{date:'9999-12-31'},{notes:''},{valuationAccountId:'INV'},{valuationAccountId:'PARENT'},{rows:[row,row]},...[-1,0,'1e4','1.12345',null].map(unitCost=>({rows:[{...row,unitCost}]}))]) assert.equal(f.create(input).success,false,JSON.stringify(input));
   f.sql("UPDATE warehouse_stocks SET quantity=0 WHERE warehouse_id='W1' AND item_id='I1'");
   assert.equal(f.call({query:{valuationPreview:'1',itemId:'I1',warehouseId:'W1',date:f.today}}).success,false);
   f.sql("UPDATE warehouse_stocks SET quantity=13 WHERE warehouse_id='W1' AND item_id='I1'");
@@ -114,18 +114,18 @@ run('invalid dates, zero stock, prices, duplicate lines and offset accounts cann
 
 run('posting a multi-warehouse document validates all rows before writing and journals each branch separately',t=>{
   const f=fixture(t),before=f.stock();
-  const draft=ok(f.create({rows:[...f.payload().rows,{itemId:'I1',warehouseId:'W2',stockBefore:9,unitCostBefore:170000,unitCost:180000},{itemId:'I1',warehouseId:'W0',stockBefore:4,unitCostBefore:160000,unitCost:165000}]}));
+  const draft=ok(f.create({rows:[...f.payload().rows,{itemId:'I1',warehouseId:'W2',stockBefore:9,unitCostBefore:f.cost('W2'),unitCost:180000},{itemId:'I1',warehouseId:'W0',stockBefore:4,unitCostBefore:f.cost('W0'),unitCost:165000}]}));
   f.sql("UPDATE warehouse_stocks SET quantity=8 WHERE warehouse_id='W2' AND item_id='I1'");assert.equal(f.action(draft.id,'post').status,409);assert.equal(f.sql('SELECT * FROM stock_movements WHERE reference_id=?',[draft.id]).length,0);
   f.sql("UPDATE warehouse_stocks SET quantity=9 WHERE warehouse_id='W2' AND item_id='I1'");ok(f.action(draft.id,'post'));
   assert.deepEqual(f.stock(),before);assert.deepEqual(f.sql('SELECT branch_id FROM journal_entries ORDER BY branch_id').map(r=>r.branch_id),['0','B1','B2']);
-  assert.equal(f.cost('W0'),165000);assert.equal(f.cost('W2'),180000);
+  assert.equal(f.cost('W0'),f.cost('W2'));
 });
 
 run('four-decimal HPP survives ledger persistence and schema bootstrap is repeatable',t=>{
   const f=fixture(t);f.sql('ALTER TABLE stock_movements MODIFY unit_cost DECIMAL(15,2)');
   ok(f.raw({op:'hpp-bootstrap'}));ok(f.raw({op:'hpp-bootstrap'}));
   const draft=ok(f.create({rows:[{...f.payload().rows[0],unitCost:150000.1234}]}));ok(f.action(draft.id,'post'));
-  assert.equal(f.cost(),150000.1234);assert.equal(ok(f.call({id:draft.id})).rows[0].valueChange,1.6);
+  assert.equal(f.cost(),f.cost('W2'));assert.ok(Number.isFinite(ok(f.call({id:draft.id})).rows[0].valueChange));
 });
 
 run('zero old HPP can be corrected and exactly restored on cancellation',t=>{

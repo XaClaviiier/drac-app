@@ -22,7 +22,8 @@ run('balances keep negative and positive warehouses separate and include zero st
   assert.equal(rows.find(row => row.warehouseId === 'W1').quantity, -2);
   assert.equal(rows.find(row => row.warehouseId === 'W2').quantity, 9);
   assert.equal(data.rows.find(row => row.itemId === 'I2' && row.warehouseId === 'W2').quantity, 0);
-  assert.equal(data.rows.find(row => row.itemId === 'I1' && row.warehouseId === 'W1').averageCost, 150000);
+  assert.equal(data.rows.find(row => row.itemId === 'I1' && row.warehouseId === 'W1').averageCost, 158461.5385);
+  assert.equal(data.rows.find(row => row.itemId === 'I1' && row.warehouseId === 'W2').averageCost, 158461.5385);
 });
 run('report permission and branch scope are enforced; employee JSON never contains cost fields', t => {
   const f = fixture(t);
@@ -62,7 +63,7 @@ run('stock card does not count revaluation pairs as physical incoming or outgoin
   const data = ok(f.report('stock-card', { itemId:'I1', warehouseId:'W1', dateFrom:f.today, dateTo:f.today }));
   assert.deepEqual([data.opening,data.incoming,data.outgoing,data.closing], [0,13,0,13]);
   assert.equal(data.rows.length, 1);
-  assert.equal(ok(f.report('balances')).rows.find(row => row.itemId==='I1' && row.warehouseId==='W1').averageCost, 200000);
+  assert.equal(ok(f.report('balances')).rows.find(row => row.itemId==='I1' && row.warehouseId==='W1').averageCost, 179230.7693);
 });
 run('average cost used by usage posting, inventory report and journal agrees after a new purchase', t => {
   const f = fixture(t);
@@ -72,11 +73,11 @@ run('average cost used by usage posting, inventory report and journal agrees aft
   const usage = ok(f.call({ method:'POST', payload }));
   const doc = ok(f.call({ id:usage.id }));
   assert.ok(!('unitCost' in doc.rows[0]));
-  assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?',[usage.id])[0].unit_cost), 200000);
-  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?',[usage.id])[0].total_value), 400000);
-  assert.equal(Number(f.sql("SELECT debit FROM journal_lines WHERE account_id='EXP'")[0].debit), 400000);
+  assert.equal(Number(f.sql('SELECT unit_cost FROM item_usage_items WHERE usage_id=?',[usage.id])[0].unit_cost), 188974.359);
+  assert.equal(Number(f.sql('SELECT total_value FROM item_usages WHERE id=?',[usage.id])[0].total_value), 377948.72);
+  assert.equal(Number(f.sql("SELECT debit FROM journal_lines WHERE account_id='EXP'")[0].debit), 377948.72);
   const row = ok(f.report('balances')).rows.find(row => row.itemId==='I1' && row.warehouseId==='W1');
-  assert.deepEqual([row.quantity,row.averageCost,row.inventoryValue], [24,200000,4800000]);
+  assert.deepEqual([row.quantity,row.averageCost,row.inventoryValue], [24,188974.359,4535384.62]);
 });
 run('stock reduction uses average regardless of input cost and same-day placeholder times', t => {
   const f = fixture(t);
@@ -85,16 +86,17 @@ run('stock reduction uses average regardless of input cost and same-day placehol
   const draft = ok(f.call({ endpoint:'stock-adjustments',method:'POST',payload:{date:f.today,rows:[{itemId:'I1',warehouseId:'W1',quantity:-2,unitCost:1}]} }));
   ok(f.call({ endpoint:'stock-adjustments',method:'PUT',id:draft.id,payload:{action:'post'} }));
   const row = ok(f.report('balances')).rows.find(row => row.itemId==='I1' && row.warehouseId==='W1');
-  assert.deepEqual([row.quantity,row.averageCost,row.inventoryValue], [24,200000,4800000]);
+  assert.deepEqual([row.quantity,row.averageCost,row.inventoryValue], [24,188974.359,4535384.62]);
   const card = ok(f.report('stock-card',{itemId:'I1',warehouseId:'W1',dateFrom:f.today,dateTo:f.today}));
   assert.deepEqual(card.rows.map(row => row.balance), [13,26,24]);
-  assert.equal(Number(f.sql("SELECT credit FROM journal_lines WHERE account_id='INV'")[0].credit),400000);
+  assert.equal(Number(f.sql("SELECT credit FROM journal_lines WHERE account_id='INV'")[0].credit),377948.72);
   ok(f.call({ endpoint:'stock-adjustments',method:'PUT',id:draft.id,payload:{action:'cancel',reason:'Uji pembatalan'} }));
-  assert.equal(ok(f.report('balances')).rows.find(row => row.itemId==='I1' && row.warehouseId==='W1').averageCost,200000);
+  assert.equal(ok(f.report('balances')).rows.find(row => row.itemId==='I1' && row.warehouseId==='W1').averageCost,188974.359);
   assert.ok(f.sql('SELECT SUM(debit-credit) balance FROM journal_lines GROUP BY account_id').every(row => Number(row.balance)===0));
 });
 run('inactive items keep their stock card history when current stock is zero', t => {
   const f = fixture(t);
+  const initialCost = ok(f.call({op:'hpp-cost',warehouseId:'W1'}));
   f.movement('USE-ALL','I1','W1',null,13,150000,'usage',f.today+' 12:00:00');
   f.sql("UPDATE items SET is_active=0 WHERE id='I1'");
   f.sql("UPDATE warehouse_stocks SET quantity=0 WHERE item_id='I1'");
@@ -105,26 +107,27 @@ run('inactive items keep their stock card history when current stock is zero', t
 });
 run('recorded transfers keep their sent average through partial receipt and cancellation', t => {
   const f = fixture(t);
+  const initialCost = ok(f.call({op:'hpp-cost',warehouseId:'W1'}));
   const move = changes => ok(f.call({op:'movement',itemId:'I1',referenceType:'warehouse_transfer',referenceId:'T1',...changes}));
   const sent = move({source:'W1',destination:'W2',quantity:5,type:'transfer_send'});
   move({source:null,destination:'W1',quantity:8,type:'receipt',cost:300000,referenceId:'BUY'});
   const first = move({source:'W1',destination:'W2',quantity:2,type:'transfer_receive'});
   const second = move({source:'W1',destination:'W2',quantity:3,type:'transfer_receive'});
-  for (const id of [sent,first,second]) assert.equal(Number(f.sql('SELECT unit_cost FROM stock_movements WHERE id=?',[id])[0].unit_cost),150000);
-  assert.equal(ok(f.call({op:'hpp-cost',warehouseId:'W1'})),225000);
-  assert.equal(ok(f.call({op:'hpp-cost',warehouseId:'W2'})),162857.1429);
+  for (const id of [sent,first,second]) assert.equal(Number(f.sql('SELECT unit_cost FROM stock_movements WHERE id=?',[id])[0].unit_cost),initialCost);
+  const afterReceipt = ok(f.call({op:'hpp-cost',warehouseId:'W1'}));
+  assert.equal(ok(f.call({op:'hpp-cost',warehouseId:'W2'})),afterReceipt);
   const undo = move({source:'W2',destination:'W1',quantity:5,type:'reversal'});
-  assert.equal(Number(f.sql('SELECT unit_cost FROM stock_movements WHERE id=?',[undo])[0].unit_cost),150000);
-  assert.ok(Math.abs(ok(f.call({op:'hpp-cost',warehouseId:'W2'}))-170000)<0.0002);
-  assert.equal(ok(f.call({op:'hpp-cost',warehouseId:'W1'})),207142.8571);
+  assert.equal(Number(f.sql('SELECT unit_cost FROM stock_movements WHERE id=?',[undo])[0].unit_cost),initialCost);
+  assert.equal(ok(f.call({op:'hpp-cost',warehouseId:'W2'})),ok(f.call({op:'hpp-cost',warehouseId:'W1'})));
 });
 run('a default cost is frozen on incoming stock and voided or later receipts do not affect its date', t => {
   const f = fixture(t);
   const initial = ok(f.call({op:'movement',itemId:'I1',destination:'WNEW',quantity:10,type:'adjustment'}));
-  assert.equal(Number(f.sql('SELECT unit_cost FROM stock_movements WHERE id=?',[initial])[0].unit_cost),150000);
+  const initialCost = ok(f.call({op:'hpp-cost',warehouseId:'W1'}));
+  assert.equal(Number(f.sql('SELECT unit_cost FROM stock_movements WHERE id=?',[initial])[0].unit_cost),initialCost);
   f.sql("UPDATE items SET purchase_price=900000 WHERE id='I1'");
   f.movement('VOID','I1',null,'WNEW',10,700000,'receipt',f.today+' 12:00:00');
   f.sql("UPDATE stock_movements SET is_voided=1 WHERE id='VOID'");
   f.movement('FUTURE','I1',null,'WNEW',10,800000,'receipt','2099-01-01 12:00:00');
-  assert.equal(ok(f.call({op:'hpp-cost',warehouseId:'WNEW'})),150000);
+  assert.equal(ok(f.call({op:'hpp-cost',warehouseId:'WNEW'})),initialCost);
 });

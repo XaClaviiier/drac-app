@@ -2295,7 +2295,7 @@ function deleteOperationalJournal(PDO $pdo, string $sourceType, string $sourceId
 
 function estimateInventoryUnitCost(PDO $pdo, string $itemId, string $warehouseId, string $date): float {
     $history = inventoryAverageForItem($pdo, $itemId, $date);
-    return $history['warehouses'][$warehouseId]['averageCost'] ?? $history['defaultCost'];
+    return $history['averageCost'] ?? $history['defaultCost'];
 }
 
 function requireUserPermission(PDO $pdo, string $permission): array {

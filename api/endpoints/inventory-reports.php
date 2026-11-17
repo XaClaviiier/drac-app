@@ -51,7 +51,7 @@ try {
                 'reservedQuantity' => (int)($stock['reserved_quantity'] ?? 0),
             ];
             if ($canViewCosts) {
-                $cost = $costs[$item['id']]['warehouses'][$warehouse['id']]['averageCost'] ?? $costs[$item['id']]['defaultCost'] ?? 0;
+                $cost = $costs[$item['id']]['averageCost'] ?? $costs[$item['id']]['defaultCost'] ?? 0;
                 $row['averageCost'] = $cost;
                 $row['inventoryValue'] = round($quantity * $cost, 2);
             }
