@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { Vehicle, Customer, SalesInvoice, WorkOrder, AppData, AppSettings, Item, ItemCategory, Branch, Role, User, Permission, Supplier, GoodsReceipt, PurchaseInvoice, PurchasePayment, WOStatus, WorkOrderTimelineStage } from '../types';
 import { api } from '../lib/apiClient';
+import { validBillingTotal } from '../lib/billingTreatment';
 import { demoData } from '../lib/demoData';
 import { failSystemProcess, finishSystemProcess, startSystemProcess } from '../lib/processQueue';
 import { localDateKey } from '../lib/date';
@@ -675,7 +676,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Faktur dibuat terpisah; status WO tetap Selesai.
     const positiveTotal = wo.services.reduce((sum, service) => sum + Number(service.price || 0) * Number(service.qty || 0), 0);
-    if (['Proses', 'Selesai'].includes(nextStatus) && (!wo.services.length || positiveTotal <= 0)) {
+    if (['Proses', 'Selesai'].includes(nextStatus) && (!wo.services.length || !validBillingTotal(positiveTotal, wo.billingTreatment))) {
       return {
         ok: false,
         message: nextStatus === 'Proses'
@@ -934,10 +935,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const today = invoiceDate || localDateKey();
     const finalItems = (invoiceItems || wo.services).map((item, index) => ({ ...item, id: `${Date.now()}-${index}` }));
     const invoiceTotal = finalItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-    if (invoiceTotal <= 0) {
-      throw new Error('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
+    if (!finalItems.length || !validBillingTotal(invoiceTotal, wo.billingTreatment)) {
+      throw new Error('Isi barang/jasa dan harga untuk faktur Normal, atau pilih Gratis / Goodwill pada WO untuk total Rp0.');
     }
     const payment = cashPayment + transferPayment;
+    if (payment > invoiceTotal) throw new Error('Pembayaran tidak boleh melebihi total faktur.');
     const paymentMethod: SalesInvoice['paymentMethod'] = cashPayment > 0 && transferPayment > 0
       ? 'Campuran'
       : transferPayment > 0 ? 'Transfer' : 'Tunai';
@@ -956,6 +958,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const newInvoice: SalesInvoice = {
+      billingTreatment: wo.billingTreatment || 'normal',
       id: invoiceId,
       invoiceNumber, date: today,
       manualReceiptNumber: manualReceiptNumber?.trim().toUpperCase() || undefined,

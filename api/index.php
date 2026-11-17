@@ -8,6 +8,7 @@ require_once 'helpers.php';
 require_once 'customer-import.php';
 require_once 'item-usage.php';
 require_once 'inventory-revaluation.php';
+require_once 'billing-treatment.php';
 // Seluruh audit operasional memakai WITA. Berkas router ini ikut deployment,
 // sedangkan config.php sengaja tidak ditimpa agar kredensial hosting tetap aman.
 try {
@@ -26,6 +27,7 @@ try {
     // mem-posting Pemakaian Barang tanpa memberi akses koreksi HPP.
     runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_permissions_v2', 'grantInitialItemUsagePermissions');
     runVersionedApiBootstrap($pdo, 'api_support_20261116_inventory_revaluation_v1', 'ensureInventoryRevaluationSchema');
+    runVersionedApiBootstrap($pdo, 'api_support_20261117_billing_treatment_v1', 'ensureBillingTreatmentSchema');
     runVersionedApiBootstrap($pdo, 'api_support_20260915_customer_import_v1', static function(PDO $pdo): void {
         ensureCustomerImportSchema($pdo);
     });

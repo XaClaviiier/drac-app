@@ -2,7 +2,9 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printer, Wrench, CheckCircle2, Receipt, User, Car, Copy, MessageCircle, RefreshCw, ChevronDown, Eye, Settings2, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { SalesInvoice } from '../types';
+import BillingTreatmentSelect from '../components/BillingTreatmentSelect';
+import { isGoodwill, validBillingTotal, invoiceStatusLabel } from '../lib/billingTreatment';
+import type { BillingTreatment, SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
 import { api } from '../lib/apiClient';
@@ -204,6 +206,7 @@ export default function SalesInvoice() {
   }, [viewingInvoice?.id]);
 
   const [formData, setFormData] = useState({
+    billingTreatment: 'normal' as BillingTreatment,
     date: localDateKey(),
     manualReceiptNumber: '',
     customerRefId: '',
@@ -296,7 +299,7 @@ export default function SalesInvoice() {
     &&
     (editingInvoice || (formData.customerRefId && formData.vehicleRefId))
     && formItems.length > 0
-    && formGrandTotal > 0
+    && validBillingTotal(formGrandTotal, formData.billingTreatment)
   );
   const visibleInvoiceItems = formItems.filter(item => !isPackageMemberItem(item));
   const searchableItems = data.items.filter(item => item.isActive && item.type !== 'Group' && (
@@ -360,7 +363,7 @@ export default function SalesInvoice() {
           inv.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.vehicleInfo.toLowerCase().includes(searchTerm.toLowerCase());
         const remaining = Math.max(0, Number(inv.total) - Number(inv.payment));
-        const matchesStatus = !filterStatus || (filterStatus === 'Belum Lunas' ? remaining > 0 : remaining === 0);
+        const matchesStatus = !filterStatus || (filterStatus === 'goodwill' ? isGoodwill(inv) : !isGoodwill(inv) && (filterStatus === 'Belum Lunas' ? remaining > 0 : remaining === 0));
         const invoiceDate = inv.date.slice(0, 10);
         const matchesDate = (!filterDate || invoiceDate === filterDate)
           && (!filterDateFrom || invoiceDate >= filterDateFrom)
@@ -427,7 +430,7 @@ export default function SalesInvoice() {
     const itemLines = items.length
       ? compactLines.join('\n')
       : `1. ${invoice.description || 'Faktur penjualan'} — Rp ${invoice.total.toLocaleString('id-ID')}`;
-    return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )${invoice.manualReceiptNumber ? `\nNO. NOTA FISIK: ${invoice.manualReceiptNumber}` : ''}\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoice.status}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
+    return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )${invoice.manualReceiptNumber ? `\nNO. NOTA FISIK: ${invoice.manualReceiptNumber}` : ''}\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoiceStatusLabel(invoice)}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
   };
 
   const copyInvoice = async (invoice: SalesInvoice) => {
@@ -450,6 +453,7 @@ export default function SalesInvoice() {
 
   const resetForm = () => {
     setFormData({
+      billingTreatment: 'normal',
       date: localDateKey(),
       manualReceiptNumber: '',
       customerRefId: '',
@@ -494,6 +498,7 @@ export default function SalesInvoice() {
         (v) => invoice.vehicleInfo.includes(v.plateNumber)
       );
       setFormData({
+        billingTreatment: invoice.billingTreatment || 'normal',
         date: invoice.date,
         manualReceiptNumber: invoice.manualReceiptNumber || '',
         customerRefId: invoice.customerRefId || '',
@@ -551,8 +556,8 @@ export default function SalesInvoice() {
       return;
     }
     const finalTotal = formItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-    if (finalTotal <= 0) {
-      window.alert('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
+    if (!validBillingTotal(finalTotal, formData.billingTreatment)) {
+      window.alert(isGoodwill(formData) ? 'Gratis / Goodwill harus memiliki total Rp0.' : 'Pilih Gratis / Goodwill untuk faktur Rp0, atau isi harga untuk faktur Normal.');
       return;
     }
     if (formFromWOId && selectedWO) {
@@ -569,7 +574,7 @@ export default function SalesInvoice() {
           normalizedManualReceiptNumber,
         );
         if (invoice) {
-          if (options.openPaymentAfterSave) {
+          if (options.openPaymentAfterSave && !isGoodwill(formData)) {
             window.location.assign(`/customer-payments?invoiceId=${encodeURIComponent(invoice.id)}`);
           } else {
             setSuccessMsg(`Faktur ${invoice.invoiceNumber} berhasil dibuat dari ${selectedWO.woNumber}!`);
@@ -590,7 +595,7 @@ export default function SalesInvoice() {
       window.alert(`Total faktur tidak boleh lebih kecil dari pembayaran yang sudah diterima (Rp ${existingPayment.toLocaleString('id-ID')}). Sesuaikan layanan atau koreksi pembayaran melalui menu Pembayaran terlebih dahulu.`);
       return;
     }
-    const computedStatus: SalesInvoice['status'] = existingPayment >= updatedInvoiceTotal && updatedInvoiceTotal > 0 ? 'Lunas' : 'Belum Lunas';
+    const computedStatus: SalesInvoice['status'] = existingPayment >= updatedInvoiceTotal ? 'Lunas' : 'Belum Lunas';
     if (editingInvoice?.status === 'Lunas' && computedStatus === 'Belum Lunas' && !window.confirm(
       `Total faktur berubah menjadi Rp ${updatedInvoiceTotal.toLocaleString('id-ID')}, sedangkan pembayaran baru Rp ${existingPayment.toLocaleString('id-ID')}.\n\nStempel LUNAS akan dihapus dan faktur menjadi Belum Lunas dengan sisa Rp ${(updatedInvoiceTotal - existingPayment).toLocaleString('id-ID')}. Lanjutkan?`
     )) return;
@@ -616,7 +621,9 @@ export default function SalesInvoice() {
         age: finalForm.status === 'Lunas' ? 0 : Math.floor((Date.now() - new Date(finalForm.date).getTime()) / (1000 * 60 * 60 * 24)),
       });
       setSuccessMsg(
-        finalForm.status === 'Lunas'
+        isGoodwill(finalForm)
+          ? `${editingInvoice.invoiceNumber} diperbarui sebagai Gratis / Goodwill. Tidak ada tagihan.`
+          : finalForm.status === 'Lunas'
           ? `${editingInvoice.invoiceNumber} diperbarui dan tetap Lunas.`
           : `${editingInvoice.invoiceNumber} diperbarui. Pembayaran kurang Rp ${Math.max(0, finalForm.total - finalForm.payment).toLocaleString('id-ID')}; status menjadi Belum Lunas.`,
       );
@@ -711,6 +718,7 @@ export default function SalesInvoice() {
       setWoPayment(total);
       setFormFromWOId(wo.id);
       setFormData({
+        billingTreatment: wo.billingTreatment || 'normal',
         date: localDateKey(),
         manualReceiptNumber: '',
         customerRefId: wo.customerRefId || '',
@@ -753,7 +761,7 @@ export default function SalesInvoice() {
     const from = validDate(requestedFrom);
     const to = validDate(requestedTo);
     const date = validDate(requestedDate);
-    const status = requestedStatus === 'Lunas' || requestedStatus === 'Belum Lunas' ? requestedStatus : '';
+    const status = requestedStatus === 'Lunas' || requestedStatus === 'Belum Lunas' || requestedStatus === 'goodwill' ? requestedStatus : '';
     const minAge = requestedMinAge && /^\d+$/.test(requestedMinAge) ? requestedMinAge : '';
     const fromDashboard = searchParams.get('source') === 'dashboard';
     if (!fromDashboard && !from && !to && !date && !status && !minAge && !requestedSearch) return;
@@ -804,7 +812,7 @@ export default function SalesInvoice() {
       const existing = current.find(entry => entry.itemId === item.id);
       return existing
         ? current.map(entry => entry.id === existing.id ? { ...entry, qty: entry.qty + 1 } : entry)
-        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: item.sellingPrice, qty: 1 }];
+        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: isGoodwill(formData) ? 0 : item.sellingPrice, qty: 1 }];
     });
     setFormItemSearch('');
     setItemSearchOpen(false);
@@ -832,7 +840,7 @@ export default function SalesInvoice() {
     if (detailItem.type === 'Persediaan') {
       if (!detailWarehouseId) return window.alert('Pilih gudang untuk barang persediaan.');
     }
-    const effectivePrice = detailQty > 0 ? Math.max(0, Math.round(detailFinalTotal / detailQty)) : 0;
+    const effectivePrice = isGoodwill(formData) ? 0 : detailQty > 0 ? Math.max(0, Math.round(detailFinalTotal / detailQty)) : 0;
     setFormItems(current => current.map(entry => entry.id === detailFormRowId ? { ...entry, qty: detailQty, price: effectivePrice, warehouseId: detailItem.type === 'Persediaan' ? detailWarehouseId : undefined } : entry));
     setDetailFormRowId('');
     setDetailItemId('');
@@ -841,12 +849,12 @@ export default function SalesInvoice() {
   };
 
   const updateFormItem = (id: string, field: 'qty' | 'price', value: number) => {
-    setFormItems((current) => updateInvoiceItems(current, id, field, value));
+    setFormItems((current) => updateInvoiceItems(current, id, field, field === 'price' && isGoodwill(formData) ? 0 : value));
   };
 
   const updateWODraftItem = (id: string, field: 'qty' | 'price', value: number) => {
     setWoDraftItems((current) => {
-      const next = updateInvoiceItems(current, id, field, value);
+      const next = updateInvoiceItems(current, id, field, field === 'price' && isGoodwill(formData) ? 0 : value);
       setWoPayment(next.reduce((sum, item) => sum + item.price * item.qty, 0));
       return next;
     });
@@ -872,7 +880,7 @@ export default function SalesInvoice() {
       const existing = current.find((entry) => entry.itemId === item.id);
       const next = existing
         ? current.map((entry) => entry.id === existing.id ? { ...entry, qty: entry.qty + 1 } : entry)
-        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: item.sellingPrice, qty: 1 }];
+        : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: isGoodwill(formData) ? 0 : item.sellingPrice, qty: 1 }];
       setWoPayment(next.reduce((sum, entry) => sum + entry.price * entry.qty, 0));
       return next;
     });
@@ -986,7 +994,7 @@ export default function SalesInvoice() {
                 <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Faktur Penjualan</strong><button type="button" onClick={resetInvoiceFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button></div>
                 <div className="space-y-3">
                   <label className="block text-xs font-semibold text-gray-600">Pelanggan<select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua pelanggan</option>{invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}</select></label>
-                  <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua status</option><option value="Lunas">Lunas</option><option value="Belum Lunas">Belum Lunas</option></select></label>
+                  <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua status</option><option value="Lunas">Lunas</option><option value="Belum Lunas">Belum Lunas</option><option value="goodwill">Gratis / Goodwill</option></select></label>
                   <label className="block text-xs font-semibold text-gray-600">Tanggal Faktur<IndonesianDateInput value={filterDate} onChange={updateFilterDate} className="mt-1 h-10 w-full text-sm font-normal" title="Tanggal faktur"/></label>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="block text-xs font-semibold text-gray-600">Dari Tanggal<IndonesianDateInput value={filterDateFrom} max={filterDateTo || undefined} onChange={value => { setFilterDate(''); setFilterDateFrom(value); }} ariaLabel="Dari tanggal faktur" className="mt-1 h-10 w-full text-sm font-normal" /></label>
@@ -1098,8 +1106,8 @@ export default function SalesInvoice() {
                       </button>
                       <p className="mt-0.5 text-[11px] text-gray-500">{formatBusinessDate(invoice.date)}</p>
                     </div>
-                    <span className={`inline-flex flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                      {invoicePaid ? 'Lunas' : 'Belum Lunas'}
+                    <span className={`inline-flex flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${isGoodwill(invoice) ? 'bg-blue-100 text-blue-700' : invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      {isGoodwill(invoice) ? 'Gratis / Goodwill' : invoicePaid ? 'Lunas' : 'Belum Lunas'}
                     </span>
                   </div>
                   <div className="mt-1 min-w-0 text-xs text-gray-600">
@@ -1124,7 +1132,7 @@ export default function SalesInvoice() {
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2">
                   <span className="truncate text-[10px] font-semibold text-gray-400">{data.branches.find(b => b.id === invoice.branchId)?.name.replace('CABANG ', '') || 'N/A'}</span>
-                  {!invoicePaid && invoice.age > 0 && <span className="text-[10px] font-semibold text-amber-700">{invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}</span>}
+                  {!isGoodwill(invoice) && !invoicePaid && invoice.age > 0 && <span className="text-[10px] font-semibold text-amber-700">{invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : `${invoice.age} hari`}</span>}
                   <span className="ml-auto text-xs font-bold text-gray-900">Rp {invoice.total.toLocaleString('id-ID')}</span>
                   <button
                     type="button"
@@ -1224,22 +1232,22 @@ export default function SalesInvoice() {
                         >
                           {invoice.invoiceNumber}
                         </button>
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                          {invoicePaid ? 'Lunas' : 'Belum Lunas'}
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${isGoodwill(invoice) ? 'bg-blue-100 text-blue-700' : invoicePaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          {isGoodwill(invoice) ? 'Gratis / Goodwill' : invoicePaid ? 'Lunas' : 'Belum Lunas'}
                         </span>
                       </div>
                       {invoice.woNumber && <span className="mt-0.5 block font-mono text-[11px] font-medium text-gray-600" title={`Faktur dibuat dari ${invoice.woNumber}`}>{invoice.woNumber}</span>}
                       {invoice.manualReceiptNumber && (
                         <span className="mt-0.5 block text-[11px] font-medium text-gray-500">No. Nota Asli: <strong className="font-mono font-semibold text-gray-700">{invoice.manualReceiptNumber}</strong></span>
                       )}
-                      {!invoicePaid && <span className="mt-0.5 block text-[10px] font-medium text-amber-700">Belum dibayar {invoice.age} hari</span>}
+                      {!isGoodwill(invoice) && !invoicePaid && <span className="mt-0.5 block text-[10px] font-medium text-amber-700">Belum dibayar {invoice.age} hari</span>}
                     </td>;
                       if (key === 'customer') return <td key={key} className="overflow-hidden px-4 py-2.5 text-sm text-gray-900">
                       <strong className="block truncate font-semibold">{invoice.customerName} <span className="font-normal text-gray-400">—</span> <span className="font-mono">{vehicleSummary.plateNumber}</span></strong>
                       <span className="mt-0.5 block truncate text-xs text-gray-500">{invoiceCustomerPhone(invoice)} <span className="text-gray-300">—</span> {vehicleSummary.detail}</span>
                     </td>;
                       if (key === 'attention') return <td key={key} className="overflow-hidden px-3 py-2.5 text-center">
-                      {!invoicePaid && (
+                      {!isGoodwill(invoice) && !invoicePaid && (
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${invoice.age >= 7 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`} title={`Sisa tagihan Rp ${Math.max(0, invoice.total - invoice.payment).toLocaleString('id-ID')}`}>
                           <AlertTriangle className="h-3.5 w-3.5" />
                           {invoice.age >= 7 ? `Terlambat ${invoice.age} hari` : invoice.age > 0 ? `${invoice.age} hari` : 'Belum lunas'}
@@ -1249,7 +1257,9 @@ export default function SalesInvoice() {
                       if (key === 'total') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-2.5 text-right text-sm text-gray-900">
                       <strong className="block font-semibold tabular-nums">Rp {invoice.total.toLocaleString('id-ID')}</strong>
                       <span className="mt-0.5 block text-[11px] text-gray-500">Bayar Rp {invoice.payment.toLocaleString('id-ID')}</span>
-                      {invoicePaid ? (
+                      {isGoodwill(invoice) ? (
+                        <span className="block text-[10px] font-semibold text-blue-700">Tidak ada tagihan</span>
+                      ) : invoicePaid ? (
                         <span className="block text-[10px] font-semibold text-emerald-700">Lunas</span>
                       ) : (
                         <span className="block text-[10px] font-semibold text-amber-700">Sisa Rp {Math.max(0, invoice.total - invoice.payment).toLocaleString('id-ID')}</span>
@@ -1357,7 +1367,7 @@ export default function SalesInvoice() {
                     <span>Nomor: <strong className="text-gray-800">{invoice.invoiceNumber}</strong></span>
                     {invoice.manualReceiptNumber && <span>Nota fisik: <strong className="text-gray-800">{invoice.manualReceiptNumber}</strong></span>}
                     <span>Cabang: <strong className="text-gray-800">{branchName}</strong></span>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${invoice.status === 'Lunas' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{invoice.status}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${invoice.status === 'Lunas' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{invoiceStatusLabel(invoice)}</span>
                   </div>
                   <button type="button" disabled title="Ambil hanya tersedia pada faktur baru" className={ui.documentAction}>Ambil <ChevronDown className="h-4 w-4"/></button>
                   <div className="relative">
@@ -1421,7 +1431,7 @@ export default function SalesInvoice() {
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Total</dt><dd className="font-semibold tabular-nums">Rp {invoice.total.toLocaleString('id-ID')}</dd></div>
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Pembayaran</dt><dd className="font-semibold tabular-nums text-emerald-700">Rp {invoice.payment.toLocaleString('id-ID')}</dd></div>
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Piutang / Sisa</dt><dd className={`font-semibold tabular-nums ${remaining > 0 ? 'text-amber-700' : 'text-gray-900'}`}>Rp {remaining.toLocaleString('id-ID')}</dd></div>
-                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Status</dt><dd><span className={`inline-flex rounded border px-2 py-0.5 text-xs font-semibold ${remaining <= 0 && invoice.total > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{remaining <= 0 && invoice.total > 0 ? 'Lunas' : 'Belum Lunas'}</span></dd></div>
+                      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Status</dt><dd><span className={`inline-flex rounded border px-2 py-0.5 text-xs font-semibold ${remaining <= 0 && invoice.total > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{invoiceStatusLabel(invoice)}</span></dd></div>
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Tanggal Faktur</dt><dd className="font-medium">{formatShareDate(invoice.date)}</dd></div>
                       <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-3 py-2"><dt>Referensi WO</dt><dd className="font-semibold text-orange-700">{invoice.woNumber || linkedWO?.woNumber || '-'}</dd></div>
                       <div className="flex items-center justify-between gap-4 px-3 py-2"><dt>Metode Terakhir</dt><dd className="font-medium">{invoice.payment > 0 ? invoice.paymentMethod || 'Tunai' : '-'}</dd></div>
@@ -1637,7 +1647,7 @@ export default function SalesInvoice() {
                           if (isPackageMemberItem(item)) return null;
                           const members = isPackageHeaderItem(item) ? packageMembersAfter(formItems, index) : [];
                           const visibleIndex = formItems.slice(0, index).filter(row => !isPackageMemberItem(row)).length + 1;
-                          return <tr key={item.id} onClick={() => setSelectedFormItemId(item.id)} onDoubleClick={() => openItemDetail(item.id)} className={`cursor-pointer ${selectedFormItemId === item.id ? 'bg-blue-100 outline outline-1 outline-blue-400' : members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}`}><td className="px-3 py-2 text-center text-xs text-gray-400">{visibleIndex}</td><td className="px-3 py-2"><p className={`font-semibold ${members.length ? 'text-purple-700' : 'text-gray-900'}`}>{invoiceItemReceiptName(item)}</p><p className="font-mono text-[10px] text-gray-400">{invoiceItemCode(item)}</p>{members.length > 0 && <div className="mt-1.5 border-l-2 border-purple-200 pl-2 text-[11px] text-purple-700"><span className="mr-2 font-semibold">Isi paket:</span>{members.map(member => <span key={member.id} className="mr-3">{invoiceItemReceiptName(member)} ×{member.qty}</span>)}</div>}</td><td className="px-3 py-2 font-mono text-xs text-gray-600">{invoiceItemBarcodeOrCode(item)}</td><td className="px-3 py-2"><input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(event) => updateFormItem(item.id, 'qty', Number(event.target.value) || 1)} className="w-full rounded border border-gray-300 px-2 py-1.5 text-center outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></td><td className="px-3 py-2"><div className="relative"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span><input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} onChange={(event) => updateFormItem(item.id, 'price', Number(event.target.value) || 0)} className="w-full rounded border border-gray-300 py-1.5 pl-7 pr-2 text-right outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></div></td><td className="whitespace-nowrap px-3 py-2 text-right font-bold text-gray-900">Rp {(item.price * item.qty).toLocaleString('id-ID')}</td></tr>;
+                          return <tr key={item.id} onClick={() => setSelectedFormItemId(item.id)} onDoubleClick={() => openItemDetail(item.id)} className={`cursor-pointer ${selectedFormItemId === item.id ? 'bg-blue-100 outline outline-1 outline-blue-400' : members.length ? 'bg-purple-50' : 'hover:bg-blue-50/40'}`}><td className="px-3 py-2 text-center text-xs text-gray-400">{visibleIndex}</td><td className="px-3 py-2"><p className={`font-semibold ${members.length ? 'text-purple-700' : 'text-gray-900'}`}>{invoiceItemReceiptName(item)}</p><p className="font-mono text-[10px] text-gray-400">{invoiceItemCode(item)}</p>{members.length > 0 && <div className="mt-1.5 border-l-2 border-purple-200 pl-2 text-[11px] text-purple-700"><span className="mr-2 font-semibold">Isi paket:</span>{members.map(member => <span key={member.id} className="mr-3">{invoiceItemReceiptName(member)} ×{member.qty}</span>)}</div>}</td><td className="px-3 py-2 font-mono text-xs text-gray-600">{invoiceItemBarcodeOrCode(item)}</td><td className="px-3 py-2"><input type="number" min="1" aria-label={`Jumlah ${item.name}`} value={item.qty} onChange={(event) => updateFormItem(item.id, 'qty', Number(event.target.value) || 1)} className="w-full rounded border border-gray-300 px-2 py-1.5 text-center outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></td><td className="px-3 py-2"><div className="relative"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span><input type="number" min="0" aria-label={`Harga ${item.name}`} value={item.price} readOnly={isGoodwill(formData)} onChange={(event) => updateFormItem(item.id, 'price', Number(event.target.value) || 0)} className="w-full rounded border border-gray-300 py-1.5 pl-7 pr-2 text-right outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></div></td><td className="whitespace-nowrap px-3 py-2 text-right font-bold text-gray-900">Rp {(item.price * item.qty).toLocaleString('id-ID')}</td></tr>;
                         })}
                         {!visibleInvoiceItems.length && <tr><td colSpan={6} className="h-48 px-4 text-center text-sm text-gray-400">Belum ada barang atau jasa.</td></tr>}
                       </tbody>
@@ -1652,8 +1662,9 @@ export default function SalesInvoice() {
                 </div>}
 
                 {invoiceDocumentTab === 'info' && <div className="min-h-[320px] p-4"><label className="block text-sm font-medium text-gray-800">Keterangan Faktur<textarea id="invoice-description" rows={5} value={formData.description} onChange={(event) => setFormData({ ...formData, description: event.target.value.toUpperCase() })} placeholder="Keterangan layanan atau faktur (opsional)" className="app-field mt-2 w-full resize-none p-3 text-sm uppercase"/></label>{editingInvoice?.woNumber && <p className="mt-3 text-sm text-gray-600">Referensi Order Kerja: <strong>{editingInvoice.woNumber}</strong></p>}</div>}
+                <BillingTreatmentSelect id="invoice-billing-treatment" value={formData.billingTreatment} disabled={Boolean(formFromWOId)} onChange={billingTreatment => { setFormData(current => ({ ...current, billingTreatment })); if (billingTreatment === 'goodwill') { setFormItems(items => items.map(item => ({ ...item, price: 0 }))); setFormDiscount(0); setWoPayment(0); } }} />
                 {invoiceDocumentTab === 'estimate' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Perhitungan Faktur</h4><div className="mt-4 ml-auto max-w-xl space-y-3 text-sm"><div className="flex justify-between border-b pb-2"><span>Subtotal barang/jasa</span><strong>Rp {formItemsTotal.toLocaleString('id-ID')}</strong></div><div className="flex justify-between border-b pb-2"><span>Diskon</span><strong>Rp {formDiscount.toLocaleString('id-ID')}</strong></div><div className="flex justify-between text-base"><span>Total Faktur</span><strong>Rp {formGrandTotal.toLocaleString('id-ID')}</strong></div></div></div>}
-                {invoiceDocumentTab === 'payment' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Pembayaran / Saldo</h4><div className="mt-4 grid max-w-2xl gap-3 sm:grid-cols-2"><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sudah dibayar</span><strong className="mt-1 block text-lg">Rp {(editingInvoice?.payment || 0).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sisa tagihan</span><strong className="mt-1 block text-lg">Rp {Math.max(0, formGrandTotal - (editingInvoice?.payment || 0)).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Status</span><strong className="mt-1 block">{editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 ? 'Lunas' : 'Belum Lunas'}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Metode terakhir</span><strong className="mt-1 block">{editingInvoice?.paymentMethod || '-'}</strong></div></div></div>}
+                {invoiceDocumentTab === 'payment' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Pembayaran / Saldo</h4><div className="mt-4 grid max-w-2xl gap-3 sm:grid-cols-2"><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sudah dibayar</span><strong className="mt-1 block text-lg">Rp {(editingInvoice?.payment || 0).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sisa tagihan</span><strong className="mt-1 block text-lg">Rp {Math.max(0, formGrandTotal - (editingInvoice?.payment || 0)).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Status</span><strong className="mt-1 block">{isGoodwill(formData) ? 'Gratis / Goodwill' : editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 ? 'Lunas' : 'Belum Lunas'}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Metode terakhir</span><strong className="mt-1 block">{editingInvoice?.paymentMethod || '-'}</strong></div></div></div>}
               </section>
 
               <div className="flex items-center justify-end gap-3 border-t border-gray-300 bg-gray-100 px-4 py-2 lg:hidden">
@@ -1701,7 +1712,7 @@ export default function SalesInvoice() {
                 </div>
                 <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Nama Barang</span><input value={detailItem.name} readOnly className="h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm font-medium outline-none sm:h-9"/></label>
                 <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Kuantitas</span><div className="grid grid-cols-[minmax(0,1fr)_110px]"><input type="number" min="1" value={detailQty} onChange={event => setDetailQty(Math.max(1, Number(event.target.value) || 1))} className="h-10 min-w-0 rounded-l border border-gray-300 px-3 text-right text-sm font-medium outline-none focus:border-blue-500 sm:h-9"/><div className="flex h-10 items-center justify-between rounded-r border border-l-0 border-gray-300 px-3 text-sm sm:h-9"><span className="text-blue-700">{detailItem.unit}</span><Search className="h-4 w-4"/></div></div></label>
-                <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">@Harga</span><div className="flex h-10 overflow-hidden rounded border border-gray-300 sm:h-9"><span className="flex items-center border-r bg-gray-50 px-3 text-sm text-gray-500">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(detailPrice)} onChange={event => setDetailPrice(parsePaymentInput(event.target.value))} className="min-w-0 flex-1 px-3 text-right text-sm font-medium outline-none"/></div></label>
+                <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">@Harga</span><div className="flex h-10 overflow-hidden rounded border border-gray-300 sm:h-9"><span className="flex items-center border-r bg-gray-50 px-3 text-sm text-gray-500">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(detailPrice)} readOnly={isGoodwill(formData)} onChange={event => setDetailPrice(parsePaymentInput(event.target.value))} className="min-w-0 flex-1 px-3 text-right text-sm font-medium outline-none"/></div></label>
                 <div className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Diskon</span><div className="grid gap-2 sm:grid-cols-2"><div className="flex h-10 overflow-hidden rounded border border-gray-300 sm:h-9"><span className="flex items-center border-r bg-gray-50 px-3 text-sm text-gray-500">%</span><input type="number" min="0" max="100" value={detailDiscountPercent} onChange={event => setDetailDiscountPercent(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} className="min-w-0 flex-1 px-3 text-right text-sm outline-none"/></div><div className="flex h-10 overflow-hidden rounded border border-gray-300 sm:h-9"><span className="flex items-center border-r bg-gray-50 px-3 text-sm text-gray-500">Rp</span><input type="text" inputMode="numeric" value={formatPaymentInput(detailDiscountAmount)} onChange={event => setDetailDiscountAmount(Math.min(detailGrossTotal, parsePaymentInput(event.target.value)))} className="min-w-0 flex-1 px-3 text-right text-sm outline-none"/></div></div></div>
                 <div className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-2"><span className="text-sm text-gray-800">Total Harga</span><div className="flex h-10 items-center justify-end rounded border border-gray-300 bg-gray-50 px-3 sm:h-9"><strong className="text-base tabular-nums text-gray-700">Rp {detailFinalTotal.toLocaleString('id-ID')}</strong></div></div>
                 {detailItem.type === 'Persediaan' && <label className="grid items-center gap-1 sm:grid-cols-[150px_minmax(0,1fr)_100px] sm:gap-2"><span className="text-sm text-gray-800">Gudang <span className="text-red-500">*</span></span><select value={detailWarehouseId} onChange={event => setDetailWarehouseId(event.target.value)} className="h-10 min-w-0 rounded border border-gray-300 bg-white px-3 text-sm outline-none sm:h-9"><option value="">Pilih gudang...</option>{availableWarehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select><span className="text-sm">Stok : <strong className={detailWarehouseStock > 0 ? 'text-orange-500' : 'text-red-600'}>{detailWarehouseStock}</strong></span></label>}
@@ -1725,7 +1736,7 @@ export default function SalesInvoice() {
               <div className="flex items-start justify-between gap-4"><div><p className="text-xs text-gray-500">Nama</p><h4 className="font-bold text-gray-900">{detailItem.name}</h4><p className="text-xs text-gray-500">{detailItem.description || detailItem.categoryName}</p></div>{detailItem.type === 'Persediaan' && <div className="text-right"><p className="text-xs text-gray-500">Bisa dijual</p><strong className={detailWarehouseStock > 0 ? 'text-green-700' : 'text-red-600'}>{detailWarehouseStock} {detailItem.unit}</strong></div>}</div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm text-gray-700">Kuantitas<div className="mt-1 flex h-10"><input type="number" min="1" value={detailQty} onChange={event => setDetailQty(Math.max(1, Number(event.target.value) || 1))} className="min-w-0 flex-1 rounded-l border px-3 text-right font-semibold"/><span className="flex items-center rounded-r border border-l-0 bg-gray-50 px-3">{detailItem.unit}</span></div></label>
-                <label className="text-sm text-gray-700">Harga<input type="text" inputMode="numeric" value={formatPaymentInput(detailPrice)} onChange={event => setDetailPrice(parsePaymentInput(event.target.value))} className="mt-1 h-10 w-full rounded border px-3 text-right font-semibold"/></label>
+                <label className="text-sm text-gray-700">Harga<input type="text" inputMode="numeric" value={formatPaymentInput(detailPrice)} readOnly={isGoodwill(formData)} onChange={event => setDetailPrice(parsePaymentInput(event.target.value))} className="mt-1 h-10 w-full rounded border px-3 text-right font-semibold"/></label>
                 <label className="text-sm text-gray-700">Diskon (%)<input type="number" min="0" max="100" value={detailDiscountPercent} onChange={event => setDetailDiscountPercent(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} className="mt-1 h-10 w-full rounded border px-3 text-right"/></label>
                 <label className="text-sm text-gray-700">Diskon (Rp)<input type="text" inputMode="numeric" value={formatPaymentInput(detailDiscountAmount)} onChange={event => setDetailDiscountAmount(Math.min(detailGrossTotal, parsePaymentInput(event.target.value)))} className="mt-1 h-10 w-full rounded border px-3 text-right"/></label>
                 {detailItem.type === 'Persediaan' && <label className="text-sm text-gray-700 sm:col-span-2">Gudang <span className="text-red-500">*</span><select value={detailWarehouseId} onChange={event => setDetailWarehouseId(event.target.value)} className="mt-1 h-10 w-full rounded border bg-white px-3"><option value="">Pilih gudang...</option>{availableWarehouses.map(warehouse => { const stock = data.warehouseStocks.find(row => row.warehouseId === warehouse.id && row.itemId === detailItem.id)?.quantity || 0; return <option key={warehouse.id} value={warehouse.id}>{warehouse.name} · Stok {stock} {detailItem.unit}</option>; })}</select></label>}
@@ -1909,7 +1920,7 @@ export default function SalesInvoice() {
                           className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-right font-semibold tabular-nums focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                         />
                         <p className={`mt-2 text-sm font-medium ${woPayment >= selectedWO.total ? 'text-green-600' : 'text-yellow-600'}`}>
-                          Status: {woPayment >= woDraftTotal ? 'Lunas' : `Belum Lunas (sisa Rp ${Math.max(0, woDraftTotal - woPayment).toLocaleString('id-ID')})`}
+                          Status: {isGoodwill(selectedWO) ? 'Gratis / Goodwill' : woPayment >= woDraftTotal ? 'Lunas' : `Belum Lunas (sisa Rp ${Math.max(0, woDraftTotal - woPayment).toLocaleString('id-ID')})`}
                         </p>
                       </div>
                     </div>

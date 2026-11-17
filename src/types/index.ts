@@ -70,7 +70,10 @@ export interface CustomerPerson {
   updatedAt?: string;
 }
 
+export type BillingTreatment = 'normal' | 'goodwill';
+
 export interface SalesInvoice {
+  billingTreatment?: BillingTreatment;
   id: string;
   invoiceNumber: string;
   /** Nomor pada nota fisik asli. Opsional, tetapi unik jika diisi. */
@@ -119,6 +122,7 @@ export interface WOStatusLog {
 }
 
 export interface WorkOrder {
+  billingTreatment?: BillingTreatment;
   id: string;
   woNumber: string;
   date: string;

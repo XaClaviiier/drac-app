@@ -421,6 +421,7 @@ try {
         $r['complaintComment'] = $r['complaint_comment'] ?? null;
         $r['backdateReason'] = $r['backdate_reason'] ?? null;
         $r['invoiceId'] = $r['invoice_id'];
+        $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['manualReceiptNumber'] = $r['manual_receipt_number'] ?? null;
         $r['total'] = (float)$r['total'];
@@ -475,6 +476,7 @@ try {
     }
     foreach ($rows as &$r) {
         $r['invoiceNumber'] = $r['invoice_number'];
+        $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
         $r['customerRefId'] = $r['customer_ref_id'];
         $r['customerId'] = $r['customer_id'];
         $r['customerName'] = $r['customer_name'];

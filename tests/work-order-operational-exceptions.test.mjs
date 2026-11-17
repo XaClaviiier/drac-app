@@ -103,7 +103,7 @@ test('penyelesaian WO memakai checklist operasional sebelum mutasi status', () =
   assert.match(page, /Kendaraan siap diserahkan/);
   assert.match(page, /window\.confirm/);
   assert.match(page, /void completeSelectedWorkOrder\(\)/);
-  assert.match(endpoint, /WO tidak dapat diselesaikan\. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0/);
+  assert.match(endpoint, /WO tidak dapat diselesaikan\. Tambahkan minimal satu layanan\. Untuk total Rp0, pilih Gratis \/ Goodwill/);
   assert.match(endpoint, /Teknisi utama wajib dipilih sebelum WO dikerjakan atau diselesaikan/);
 });
 

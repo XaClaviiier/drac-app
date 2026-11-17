@@ -6,6 +6,7 @@ export default function WorkOrderPaidStamp({ wo, invoices }: { wo: WorkOrder; in
   // Use only the authorized invoice snapshot, never the operational WO status.
   const invoice = invoices.find(candidate => candidate.branchId === wo.branchId
     && (wo.invoiceId ? candidate.id === wo.invoiceId : candidate.woId === wo.id));
+  if (invoice?.billingTreatment === 'goodwill' || (!wo.invoiceId && wo.billingTreatment === 'goodwill')) return <span className="mt-0.5 inline-block rounded border border-blue-500 px-1 text-[9px] font-bold text-blue-700">GRATIS / GOODWILL</span>;
   if (!timelineFinancialSummary(wo, invoice).isPaid) return null;
   return <span className="mt-0.5 inline-block rounded border border-emerald-600 px-1 text-[9px] font-extrabold leading-tight tracking-wider text-emerald-700">LUNAS</span>;
 }

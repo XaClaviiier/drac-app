@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../billing-treatment.php';
 $logSalesInvoiceFailure = static function(string $operation, Throwable $error): string {
     $reference = substr(hash('sha256', uniqid('', true)), 0, 10);
     error_log(sprintf('Sales invoice %s failed [%s] %s in %s:%d', $operation, $reference, $error->getMessage(), $error->getFile(), $error->getLine()));
@@ -25,7 +26,7 @@ $assertManualReceiptNumberUnique = static function (PDO $pdo, ?string $number, ?
     $existing = $stmt->fetchColumn();
     if ($existing) throw new InvalidArgumentException("No. Nota Fisik {$number} sudah dipakai pada Faktur {$existing}");
 };
-$normalizeSalesInvoiceItems = static function (PDO $pdo, array $items): array {
+$normalizeSalesInvoiceItems = static function (PDO $pdo, array $items, string $billingTreatment = 'normal'): array {
     if (!$items) throw new InvalidArgumentException('Tambahkan minimal satu barang atau jasa ke faktur');
     $result=[];$total=0.0;$itemStmt=$pdo->prepare("SELECT id,code,name,receipt_description,type,is_active FROM items WHERE id=?");
     foreach($items as $line){
@@ -35,7 +36,8 @@ $normalizeSalesInvoiceItems = static function (PDO $pdo, array $items): array {
         $warehouseId=trim((string)($line['warehouseId']??''))?:null;
         $subtotal=$qty*$price;$total+=$subtotal;$result[]=compact('itemId','warehouseId','code','name','description','price','qty','subtotal','isStockItem');
     }
-    if($total<=0)throw new InvalidArgumentException('Invoice dengan nilai Rp0 tidak dapat dibuat. Isi harga minimal satu layanan atau barang terlebih dahulu.');
+    assertGoodwillTotal($total, $billingTreatment);
+    if(!validBillingTotal($total, $billingTreatment))throw new InvalidArgumentException('Faktur Rp0 harus menggunakan perlakuan Gratis / Goodwill. Isi harga untuk faktur Normal.');
     return ['items'=>$result,'total'=>$total];
 };
 
@@ -72,7 +74,8 @@ $journalSale = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,
     return recordStockMovement($pdo,$itemId,$reverse?null:$warehouseId,$reverse?$warehouseId:null,abs($qty),$reverse?'reversal':'sale','sales_invoice',$invoiceId,$invoiceNumber,($reverse?'Pembalik penjualan ':'Penjualan ').$invoiceNumber,(string)($actor['id']??''),$date.' 12:00:00',$reversalOfId,$correctionGroupId,$idempotencyKey);
 };
 $postSalesRevenueJournal = static function(PDO $pdo,string $invoiceId,string $invoiceNumber,string $date,string $branchId,float $total,float $serviceTotal,float $goodsTotal,float $goodsCost,array $actor):void {
-
+    // Jasa gratis tanpa biaya persediaan tidak menciptakan jurnal Rp0 atau kas semu.
+    if ($total === 0.0 && $goodsCost === 0.0) return;
     $exists=$pdo->prepare('SELECT journal_id FROM journal_postings WHERE source_type=? AND source_id=? AND posting_key=? LIMIT 1');$exists->execute(['sales_invoice',$invoiceId,'SALES_REVENUE']);if($exists->fetchColumn())return;
     $setting=$pdo->prepare('SELECT cash_account_id,bank_account_id FROM branch_account_settings WHERE branch_id=?');$setting->execute([$branchId]);$branchMap=$setting->fetch()?:[];
     $map=array_merge(getDefaultAccountSettings($pdo,$branchId),$branchMap);
@@ -118,6 +121,7 @@ switch ($method) {
         }
         foreach ($rows as &$r) {
             $r['invoiceNumber'] = $r['invoice_number'];
+            $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
             $r['manualReceiptNumber'] = $r['manual_receipt_number'] ?? null;
             $r['customerRefId'] = $r['customer_ref_id'];
             $r['customerId'] = $r['customer_id'];
@@ -195,7 +199,8 @@ switch ($method) {
                         'description' => $service['description'], 'price' => (float)$service['price'], 'qty' => (int)$service['qty'],
                     ];
                 }, $services);
-                $normalizedInvoice = $normalizeSalesInvoiceItems($pdo,$rawInvoiceItems);
+                $billingTreatment = normalizeBillingTreatment($wo['billing_treatment'] ?? 'normal');
+                $normalizedInvoice = $normalizeSalesInvoiceItems($pdo,$rawInvoiceItems,$billingTreatment);
                 $invoiceItems=$prepareSalesStockItems($pdo,(string)$wo['branch_id'],$normalizedInvoice['items']);$total=$normalizedInvoice['total'];
                 // Pembayaran awal boleh sebagian. Status dan saldo berikutnya
                 // direkonsiliasi dari customer_payments; yang tidak boleh hanya
@@ -225,6 +230,7 @@ switch ($method) {
                     $description, $total, $payment, $paymentDate, $backdateReason ?: null, $paymentMethod, $status,
                     $woId, $wo['wo_number'], $wo['branch_id'],
                 ]);
+                $pdo->prepare('UPDATE sales_invoices SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $invoiceId]);
 
                 $insertItem = $pdo->prepare("
                     INSERT INTO sales_invoice_items
@@ -280,7 +286,8 @@ switch ($method) {
                 throw new Exception('Metode pembayaran tidak valid');
             }
             $invoiceDate = (string)($d['date'] ?? date('Y-m-d'));
-            $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,is_array($d['items']??null)?$d['items']:[]);
+            $billingTreatment = normalizeBillingTreatment($d['billingTreatment'] ?? 'normal');
+            $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,is_array($d['items']??null)?$d['items']:[],$billingTreatment);
             $normalizedInvoice['items']=$prepareSalesStockItems($pdo,$branchId,$normalizedInvoice['items']);
             $invoiceTotal=$normalizedInvoice['total'];$initialPayment=max(0,(float)($d['payment']??0));
             if($initialPayment>$invoiceTotal)throw new InvalidArgumentException('Pembayaran awal tidak boleh melebihi total faktur');
@@ -300,6 +307,7 @@ switch ($method) {
                 $d['woId'] ?? null, $d['woNumber'] ?? null,
                 $branchId
             ]);
+            $pdo->prepare('UPDATE sales_invoices SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $invoiceId]);
 
             // Stok dipotong di AKHIR, saat faktur dibuat dari WO.
             // Hanya item Persediaan; jasa dan header Group tidak mengurangi stok.
@@ -422,7 +430,8 @@ switch ($method) {
             $oldDetails->execute([$id]);
             $oldDetailsList=$oldDetails->fetchAll();
 
-            $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,isset($d['items'])&&is_array($d['items'])?$d['items']:[]);
+            $billingTreatment = normalizeBillingTreatment($d['billingTreatment'] ?? $current['billing_treatment'] ?? 'normal');
+            $normalizedInvoice=$normalizeSalesInvoiceItems($pdo,isset($d['items'])&&is_array($d['items'])?$d['items']:[],$billingTreatment);
             $items=$normalizedInvoice['items'];$total=$normalizedInvoice['total'];
             $recordedPaymentStmt=$pdo->prepare("SELECT COALESCE(SUM(amount),0) paid,MIN(date) first_date,MAX(date) latest_date,COUNT(DISTINCT payment_method) method_count FROM customer_payments WHERE invoice_id=?");
             $recordedPaymentStmt->execute([$id]);$paymentLedger=$recordedPaymentStmt->fetch();
@@ -485,6 +494,7 @@ switch ($method) {
                 $d['description'] ?? '', $total, $payment, $paymentDate, $backdateReason ?: null, $paymentMethod,
                 $status, $d['age'] ?? 0, $branchId, $id
             ]);
+            $pdo->prepare('UPDATE sales_invoices SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $id]);
 
             $pdo->prepare("DELETE FROM sales_invoice_items WHERE invoice_id=?")->execute([$id]);
             $insertItem = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id,item_id,warehouse_id,code,name,description,price,qty,subtotal) VALUES (?,?,?,?,?,?,?,?,?)");
@@ -504,7 +514,7 @@ switch ($method) {
             if(!$stockImpactChanged&&$movementDateChanged)bumpStockVersionsForMovementReference($pdo,'sales_invoice',$id);
             if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
                 ->execute([$invoiceDate,$id]);
-            $afterSnapshot=['document'=>array_merge($current,['date'=>$invoiceDate,'description'=>$d['description']??'','total'=>$total,'payment'=>$payment,'status'=>$status,'branch_id'=>$branchId]),'items'=>$items];
+            $afterSnapshot=['document'=>array_merge($current,['date'=>$invoiceDate,'description'=>$d['description']??'','total'=>$total,'payment'=>$payment,'status'=>$status,'branch_id'=>$branchId,'billing_treatment'=>$billingTreatment]),'items'=>$items];
             $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('sales_invoice',?,?,'update',?,?,?,?)")
                 ->execute([$id,$current['invoice_number'],$stockImpactChanged?'Perubahan berdampak stok':($movementMetadataChanged?'Perubahan tanggal tanpa perubahan saldo':'Perubahan non-stok'),json_encode(['before'=>['document'=>$current,'items'=>$oldDetailsList],'after'=>$afterSnapshot],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
             $pdo->commit();

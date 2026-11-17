@@ -5,6 +5,8 @@ import ts from 'typescript';
 import { transformSync } from 'esbuild';
 
 const root = new URL('../', import.meta.url);
+const billingJs = transformSync(readFileSync(new URL('src/lib/billingTreatment.ts', root), 'utf8'), { loader: 'ts', format: 'esm' }).code;
+const { isGoodwill } = await import(`data:text/javascript;base64,${Buffer.from(billingJs).toString('base64')}`);
 const pages = Object.fromEntries(['SalesInvoice', 'CustomerPayments', 'WorkOrders'].map(name => {
   const source = readFileSync(new URL(`src/pages/${name}.tsx`, root), 'utf8');
   return [name, ts.createSourceFile(`${name}.tsx`, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)];
@@ -52,6 +54,7 @@ const invoice = (id, date, overrides = {}) => ({
   age: 8, status: 'Belum Lunas', customerName: 'Pelanggan', vehicleInfo: '', ...overrides,
 });
 const invoiceContext = invoices => ({
+  isGoodwill,
   data: { invoices }, currentBranchId: 'B1', searchTerm: '', filterCustomer: '', filterStatus: '',
   filterDate: '', filterDateFrom: '', filterDateTo: '', filterMinAge: '',
 });

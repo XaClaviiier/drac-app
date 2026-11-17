@@ -695,7 +695,7 @@ test('identitas dan aksi daftar Faktur Penjualan mengikuti daftar Order Kerja', 
   assert.match(page, /key: 'number', label: 'Nomor Faktur \/ Status'/);
   assert.match(page, /invoicePaid = invoice\.total > 0 && invoice\.payment >= invoice\.total/);
   assert.match(page, /title=\{`Faktur dibuat dari \$\{invoice\.woNumber\}`\}>\{invoice\.woNumber\}<\/span>/);
-  assert.match(page, /\{invoicePaid \? 'Lunas' : 'Belum Lunas'\}/);
+  assert.match(page, /\{isGoodwill\(invoice\) \? 'Gratis \/ Goodwill' : invoicePaid \? 'Lunas' : 'Belum Lunas'\}/);
   assert.match(page, /No\. Nota Asli:[\s\S]*?\{invoice\.manualReceiptNumber\}/);
   assert.match(page, /invoiceCustomerPhone\(invoice\)[\s\S]*?vehicleSummary\.detail/);
   assert.match(page, /shareInvoiceToWhatsApp\(invoice\)/);
@@ -776,7 +776,7 @@ test('Teknisi dapat menyimpan layanan dan melanjutkan Register menjadi Dikerjaka
   assert.match(context, /nextStatus === 'Proses' && !wo\.technicianId && currentUserIsTechnician/);
   assert.match(workOrders, /const latest = data\.workOrders\.find\(\(workOrder\) => workOrder\.id === detailWO\.id\)/);
   assert.match(workOrders, /onClick=\{\(\) => requestStartProcessing\(detailWO\)\}/);
-  assert.match(workOrders, /formData\.services\.length > 0 && totalServices > 0/);
+  assert.match(workOrders, /formData\.services\.length > 0 && validBillingTotal\(totalServices, formData\.billingTreatment\)/);
   assert.match(workOrders, /diagnosisSubmitAction\.current = 'process'/);
   assert.match(workOrders, />\s*Dikerjakan\s*<\/button>/);
 });

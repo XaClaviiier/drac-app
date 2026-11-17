@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../billing-treatment.php';
 if (!class_exists('WorkOrderVersionConflictException')) {
     class WorkOrderVersionConflictException extends RuntimeException {}
 }
@@ -345,6 +346,7 @@ switch ($method) {
                 'total' => (float)$invoice['total'],
                 'payment' => (float)$invoice['payment'],
                 'status' => (string)$invoice['status'],
+                'billingTreatment' => $invoice['billing_treatment'] ?? 'normal',
                 'createdAt' => $formatAuditTimestamp($invoice['created_at'] ?? null),
                 'updatedAt' => $formatAuditTimestamp($invoice['updated_at'] ?? null),
             ];
@@ -413,6 +415,7 @@ switch ($method) {
             $r['complaintComment']        = $r['complaint_comment'] ?? null;
             $r['backdateReason']          = $r['backdate_reason'] ?? null;
             $r['invoiceId']               = $r['invoice_id'];
+            $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
             $r['invoiceNumber']           = $r['invoice_number'];
             $r['total']                   = (float)$r['total'];
             $r['findings']                = $r['findings'] ?? null;
@@ -491,6 +494,8 @@ switch ($method) {
         $pdo->beginTransaction();
         try {
             $normalizedServices = $normalizeWorkOrderServices($pdo, is_array($d['services'] ?? null) ? $d['services'] : []);
+            $billingTreatment = normalizeBillingTreatment($d['billingTreatment'] ?? 'normal');
+            assertGoodwillTotal($normalizedServices['total'], $billingTreatment);
             $woId = trim((string)($d['id'] ?? '')) ?: generateId();
             $assertActiveBranchWithinTransaction($pdo, $branchId);
             $invoiceCollision = $pdo->prepare('SELECT id FROM sales_invoices WHERE wo_id=? LIMIT 1 FOR UPDATE');
@@ -512,7 +517,7 @@ switch ($method) {
                 ? date('Y-m-d H:i:s', $workStartedTimestamp + ($estimatedDurationMinutes * 60))
                 : null;
             if ($isInitialWorking) {
-                if (empty($normalizedServices['services']) || $normalizedServices['total'] <= 0) {
+                if (empty($normalizedServices['services']) || !validBillingTotal($normalizedServices['total'], $billingTreatment)) {
                     throw new InvalidArgumentException('Layanan dan total estimasi wajib diisi sebelum WO dikerjakan.');
                 }
                 if (trim((string)($d['technicianId'] ?? '')) === '') {
@@ -614,6 +619,7 @@ switch ($method) {
                 $continuation['toId'], $continuation['toNumber'], $continuation['toBranchName'],
             ]);
             $pdo->prepare("UPDATE work_orders SET complaint_comment=? WHERE id=?")->execute([($d['complaintComment'] ?? '') ?: null, $woId]);
+            $pdo->prepare('UPDATE work_orders SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $woId]);
             $technicianAssignment = $syncWorkOrderTechnicians($pdo, $woId, $branchId, ($d['technicianId'] ?? '') ?: null, is_array($d['assistantTechnicianIds'] ?? null) ? $d['assistantTechnicianIds'] : []);
             if ($technicianAssignment['primaryName'] !== '') {
                 $pdo->prepare("UPDATE work_orders SET technician_name=? WHERE id=?")->execute([$technicianAssignment['primaryName'], $woId]);
@@ -738,7 +744,7 @@ switch ($method) {
         }
         $pdo->beginTransaction();
         try {
-            $currentStmt = $pdo->prepare("SELECT wo_number,customer_ref_id,customer_name,vehicle_ref_id,plate_number,date,transaction_time,backdate_reason,description,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,estimated_duration_minutes,work_started_at,estimated_completion_at,approved_at,approved_services_json,technician_id,continued_from_wo_id,continued_from_wo_number,continued_from_branch_name,continued_to_wo_id,continued_to_wo_number,continued_to_branch_name,continued_at,continued_by,continued_by_name,continued_branch_id,updated_at FROM work_orders WHERE id=? FOR UPDATE");
+            $currentStmt = $pdo->prepare("SELECT wo_number,billing_treatment,customer_ref_id,customer_name,vehicle_ref_id,plate_number,date,transaction_time,backdate_reason,description,status,branch_id,invoice_id,invoice_number,status_log,estimate_total,estimated_duration_minutes,work_started_at,estimated_completion_at,approved_at,approved_services_json,technician_id,continued_from_wo_id,continued_from_wo_number,continued_from_branch_name,continued_to_wo_id,continued_to_wo_number,continued_to_branch_name,continued_at,continued_by,continued_by_name,continued_branch_id,updated_at FROM work_orders WHERE id=? FOR UPDATE");
             $currentStmt->execute([$id]);
             $currentWorkOrder = $currentStmt->fetch();
             if (!$currentWorkOrder) {
@@ -755,6 +761,8 @@ switch ($method) {
             $assertActiveBranchWithinTransaction($pdo, (string)$currentWorkOrder['branch_id']);
             $assertUserPermission($pdo, $actor, 'wo:edit');
             $normalizedServices = $normalizeWorkOrderServices($pdo, is_array($d['services'] ?? null) ? $d['services'] : []);
+            $billingTreatment = normalizeBillingTreatment($d['billingTreatment'] ?? $currentWorkOrder['billing_treatment'] ?? 'normal');
+            assertGoodwillTotal($normalizedServices['total'], $billingTreatment);
             [$customer, $vehicle] = resolveCustomerVehicle(
                 $pdo,
                 (string)($d['customerRefId'] ?? ''),
@@ -775,8 +783,11 @@ switch ($method) {
             $linkedInvoiceStmt->execute([$id]);
             $reverseLinkedInvoice = $linkedInvoiceStmt->fetch();
             $hasLinkedInvoice = !empty($currentWorkOrder['invoice_id']) || $reverseLinkedInvoice;
-            if ($hasLinkedInvoice && !authenticatedUserHasPermission($actor, 'invoice:edit')) {
+            if ($hasLinkedInvoice && !authenticatedUserHasPermission($pdo, $actor, 'invoice:edit')) {
                 throw new DomainException('WO yang sudah difakturkan tidak dapat diedit. Ubah rincian pada faktur atau hapus faktur terlebih dahulu.');
+            }
+            if ($hasLinkedInvoice && $billingTreatment !== ($currentWorkOrder['billing_treatment'] ?? 'normal')) {
+                throw new DomainException('Perlakuan tagihan WO yang sudah difakturkan tidak dapat diubah. Koreksi faktur terlebih dahulu.');
             }
             $vehicleChanged = (string)$currentWorkOrder['vehicle_ref_id'] !== (string)$vehicle['id'];
             if ($vehicleChanged) assertVehicleColorClear($vehicle);
@@ -808,12 +819,12 @@ switch ($method) {
             if (!isset($allowedTransitions[$currentStatus]) || !in_array($nextStatus, $allowedTransitions[$currentStatus], true)) {
                 throw new InvalidArgumentException("Perubahan status {$currentStatus} ke {$nextStatus} tidak diizinkan.");
             }
-            $hasPositiveEstimate = !empty($normalizedServices['services']) && $normalizedServices['total'] > 0;
+            $hasPositiveEstimate = !empty($normalizedServices['services']) && validBillingTotal($normalizedServices['total'], $billingTreatment);
             if (in_array($nextStatus, ['Proses', 'Selesai'], true) && !$hasPositiveEstimate) {
                 throw new InvalidArgumentException(
                     $nextStatus === 'Proses'
-                        ? 'Persetujuan tidak dapat diproses. Tambahkan minimal satu layanan dan pastikan total estimasi lebih dari Rp0.'
-                        : 'WO tidak dapat diselesaikan. Tambahkan minimal satu layanan dan pastikan total pekerjaan lebih dari Rp0.'
+                        ? 'Persetujuan tidak dapat diproses. Tambahkan minimal satu layanan. Untuk total Rp0, pilih Gratis / Goodwill.'
+                        : 'WO tidak dapat diselesaikan. Tambahkan minimal satu layanan. Untuk total Rp0, pilih Gratis / Goodwill.'
                 );
             }
             if (in_array($nextStatus, ['Proses', 'Selesai'], true) && $technicianId === '') {
@@ -933,6 +944,13 @@ switch ($method) {
                 ];
             }
             $isApproval = $nextStatus === 'Proses' && in_array($currentStatus, ['Register', 'Closed'], true);
+            if ($billingTreatment !== ($currentWorkOrder['billing_treatment'] ?? 'normal')) {
+                $statusLog[] = [
+                    'from' => $currentStatus, 'to' => $nextStatus, 'at' => date('c'),
+                    'byUserId' => $actor['id'] ?? '-', 'byUserName' => $actor['name'] ?? 'System',
+                    'reason' => 'Perlakuan tagihan diubah menjadi '.($billingTreatment === 'goodwill' ? 'Gratis / Goodwill (Rp0)' : 'Normal'),
+                ];
+            }
             $approvedAt = $isApproval ? date('Y-m-d') : ($currentWorkOrder['approved_at'] ?? null);
             $approvedServicesJson = $isApproval
                 ? json_encode($normalizedServices['services'])
@@ -1036,6 +1054,7 @@ switch ($method) {
             $pdo->prepare("UPDATE work_orders SET technician_name=? WHERE id=?")->execute([$technicianAssignment['primaryName'] ?: null, $id]);
 
             $pdo->prepare("DELETE FROM work_order_services WHERE wo_id = ?")->execute([$id]);
+            $pdo->prepare('UPDATE work_orders SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $id]);
             if (!empty($normalizedServices['services'])) {
                 $sStmt = $pdo->prepare("INSERT INTO work_order_services (wo_id, item_id, code, name, description, price, qty, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 foreach ($normalizedServices['services'] as $s) {

@@ -74,7 +74,7 @@ test('Register ke Dikerjakan melewati satu pintu dengan prasyarat operasional', 
   assert.match(requestStart, /requireEditableWorkOrder\(wo\)/);
   assert.match(requestStart, /const services\s*=\s*useEditorDraft\s*\?\s*formData\.services\s*:\s*wo\.services/);
   assert.match(requestStart, /const total\s*=\s*useEditorDraft\s*\?\s*totalServices\s*:\s*wo\.total/);
-  assert.match(requestStart, /if \(!services\.length \|\| total <= 0\)/);
+  assert.match(requestStart, /if \(!services\.length \|\| !validBillingTotal\(total, useEditorDraft \? formData\.billingTreatment : wo\.billingTreatment\)\)/);
   assert.match(requestStart, /const technicianId\s*=\s*useEditorDraft\s*\?\s*formData\.technicianId\s*:\s*wo\.technicianId/);
   assert.match(requestStart, /if \(!technicianId\)/);
   assert.match(requestStart, /setDocumentTab\('info'\)/);
@@ -83,15 +83,15 @@ test('Register ke Dikerjakan melewati satu pintu dengan prasyarat operasional', 
 
   // Aksi dari rincian maupun editor harus melewati helper di atas. Syarat
   // layanan dan nilai positif juga ditentukan dari data, bukan hanya label UI.
-  assert.match(page, /detailWO\.services\.length\s*>\s*0\s*&&\s*detailWO\.total\s*>\s*0[\s\S]*?requestStartProcessing\(detailWO\)/);
-  assert.match(page, /formData\.services\.length\s*>\s*0\s*&&\s*totalServices\s*>\s*0[\s\S]*?requestStartProcessing\(editingWO,\s*true\)/);
+  assert.match(page, /detailWO\.services\.length\s*>\s*0\s*&&\s*validBillingTotal\(detailWO\.total, detailWO\.billingTreatment\)[\s\S]*?requestStartProcessing\(detailWO\)/);
+  assert.match(page, /formData\.services\.length\s*>\s*0\s*&&\s*validBillingTotal\(totalServices, formData\.billingTreatment\)[\s\S]*?requestStartProcessing\(editingWO,\s*true\)/);
 
   const updateContract = sectionBetween(endpoint, "case 'PUT':", "case 'DELETE':");
   assert.match(updateContract, /'Register'\s*=>\s*\[[^\]]*'Proses'/);
   requireInOrder(updateContract, [
     "$complaint = trim((string)($d['description'] ?? $currentWorkOrder['description'] ?? ''))",
     "if ($complaint === '') throw new InvalidArgumentException('Keluhan pelanggan wajib diisi.')",
-    "$hasPositiveEstimate = !empty($normalizedServices['services']) && $normalizedServices['total'] > 0",
+    "$hasPositiveEstimate = !empty($normalizedServices['services']) && validBillingTotal($normalizedServices['total'], $billingTreatment)",
     "if (in_array($nextStatus, ['Proses', 'Selesai'], true) && !$hasPositiveEstimate)",
     "if (in_array($nextStatus, ['Proses', 'Selesai'], true) && $technicianId === '')",
   ], 'backend harus memvalidasi keluhan, layanan bernilai positif, lalu teknisi');

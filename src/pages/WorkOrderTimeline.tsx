@@ -4,6 +4,7 @@ import {
   Activity, Banknote, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3,
   FileText, Package, RefreshCw, Settings2, Stethoscope, UserRound, Wrench, XCircle,
 } from 'lucide-react';
+import { isGoodwill, validBillingTotal } from '../lib/billingTreatment';
 import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WorkOrder, WorkOrderTimelineStage } from '../types';
 import { localDateKey } from '../lib/date';
@@ -326,7 +327,9 @@ export default function WorkOrderTimeline() {
     return <div className={`flex min-w-0 flex-col items-end justify-center text-right ${compact ? 'px-1 py-1' : 'px-2 py-1.5'}`}>
       <span className={`text-[8px] font-bold uppercase tracking-wide ${isLostSales ? 'text-gray-400' : 'text-slate-400'}`}>{isLostSales ? 'Estimasi Lost Sales' : financial.amountLabel}</span>
       <b className={`truncate ${isLostSales ? 'text-gray-400 line-through decoration-gray-400 decoration-1' : 'text-slate-900'} ${compact ? 'text-[10px]' : 'text-xs'}`}>{formatRupiah(financial.amount)}</b>
-      {financial.isPaid
+      {isGoodwill(row.invoice) || (!row.wo.invoiceId && isGoodwill(row.wo))
+        ? <span className="mt-0.5 text-[8px] font-bold text-blue-700">GRATIS / GOODWILL</span>
+        : financial.isPaid
         ? <span className={`mt-0.5 w-fit -rotate-2 rounded border-2 border-emerald-600 bg-emerald-50 font-black tracking-[0.12em] text-emerald-700 ${compact ? 'px-1 py-0.5 text-[7px]' : 'px-1.5 py-0.5 text-[8px]'}`}>LUNAS</span>
         : financial.detailsRestricted
           ? <span className="mt-0.5 text-[8px] font-semibold text-slate-500">Sudah difakturkan · detail terbatas</span>
@@ -518,11 +521,11 @@ export default function WorkOrderTimeline() {
             {renderAction('Tunggu Parts', () => void setStage('parts', 'Menunggu parts'), 'neutral', Package)}
             {renderAction('Selesai', () => void completeSelectedWorkOrder(), 'success', Check)}
           </>}
-          {hasPermission('invoice:create') && selectedStage === 'done' && !selectedHasLinkedInvoice && (selected.total > 0
+          {hasPermission('invoice:create') && selectedStage === 'done' && !selectedHasLinkedInvoice && (validBillingTotal(selected.total, selected.billingTreatment)
             ? renderAction('Buat Faktur', () => navigate(`/invoices?woId=${encodeURIComponent(selected.id)}`), 'primary', FileText)
             : <span className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500">Lengkapi layanan &amp; harga</span>)}
           {selectedHasLinkedInvoice && !selectedInvoice && <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Sudah difakturkan · detail terbatas</span>}
-          {hasPermission('payment:create') && selectedInvoice && !selectedPaid && renderAction('Pembayaran', () => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`), 'success', Banknote)}
+          {hasPermission('payment:create') && selectedInvoice && !isGoodwill(selectedInvoice) && !selectedPaid && renderAction('Pembayaran', () => navigate(`/customer-payments?invoiceId=${encodeURIComponent(selectedInvoice.id)}`), 'success', Banknote)}
           {selectedPaid && <span className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4"/>Lunas</span>}
           <button type="button" onClick={() => navigate(`/workorders?${selectedHasLinkedInvoice || selected.status === 'Closed' ? 'view' : 'edit'}=${encodeURIComponent(selected.id)}`)} className="col-span-2 h-10 rounded-lg border px-3 text-xs font-bold text-gray-600 hover:bg-gray-50 sm:h-9">Detail WO</button>
         </div>

@@ -337,6 +337,7 @@ CREATE TABLE IF NOT EXISTS `item_group_members` (
 -- 10. TABEL WORK ORDERS (ORDER KERJA)
 -- ==========================================================
 CREATE TABLE IF NOT EXISTS `work_orders` (
+  `billing_treatment` VARCHAR(20) NOT NULL DEFAULT 'normal',
   `id` VARCHAR(20) NOT NULL,
   `wo_number` VARCHAR(30) NOT NULL,
   `date` DATE NOT NULL,
@@ -426,6 +427,7 @@ CREATE TABLE IF NOT EXISTS `work_order_services` (
 -- 12. TABEL SALES INVOICES (FAKTUR PENJUALAN)
 -- ==========================================================
 CREATE TABLE IF NOT EXISTS `sales_invoices` (
+  `billing_treatment` VARCHAR(20) NOT NULL DEFAULT 'normal',
   `id` VARCHAR(20) NOT NULL,
   `invoice_number` VARCHAR(30) NOT NULL,
   `manual_receipt_number` VARCHAR(50) NULL,
