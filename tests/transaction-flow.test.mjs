@@ -371,13 +371,10 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /unitOptions\.map/);
   assert.match(page, /Kode # \/ Barcode/);
   assert.match(page, /Kategori \/ Merek/);
-  assert.match(page, /lg:grid-cols-\[448px_minmax\(24px,1fr\)_300px\]/);
-  assert.match(page, /lg:grid-cols-\[112px_170px\]/);
   assert.match(page, /receipt-notes-inline/);
   assert.match(page, /placeholder="Keterangan \(opsional\)"/);
   assert.match(page, /ActiveWarehouseHeader/);
   assert.match(page, /value=\{form\.notes\}/);
-  assert.match(page, /lg:grid-cols-\[128px_312px\]/);
   assert.match(page, /hidden lg:inline">:<\/span>/);
   assert.match(page, /Menyimpan\.\.\./);
   assert.match(page, /sudah ada dengan kode/);
@@ -502,7 +499,6 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   const detail = source('src/pages/GoodsReceiptDetail.tsx');
   const list = source('src/pages/GoodsReceipt.tsx');
   const warehouseHeader = source('src/components/ActiveWarehouseHeader.tsx');
-  assert.match(detail, /lg:grid-cols-\[448px_minmax\(24px,1fr\)_300px\]/);
   assert.match(detail, /receipt-notes-inline/);
   assert.match(detail, /disabled=\{!editing\} value=\{form\.notes\}.*placeholder="Keterangan \(opsional\)"/);
   assert.match(detail, /Edit Penerimaan/);

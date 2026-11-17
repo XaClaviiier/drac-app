@@ -284,6 +284,15 @@ body {
   box-shadow: 0 0 0 1px #cbd0d6;
 }
 
+#root textarea.receipt-notes-field {
+  min-height: 96px;
+  background-color: #fffdf2;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
 /* Pencarian dan tabel menyatu tanpa garis tambahan di atas header tabel. */
 .goods-receipt-entry .mx-2.mt-1 > .border-b {
   border-bottom-width: 0;
