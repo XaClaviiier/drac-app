@@ -182,6 +182,14 @@ const navItems = [
     color: "from-rose-500 to-pink-600",
   },
   {
+    path: "/receipt-supplier-mapping",
+    label: "Pemetaan Supplier",
+    short: "Pemetaan",
+    icon: ClipboardPenLine,
+    perm: "receipt:supplier" as const,
+    color: "from-amber-500 to-orange-600",
+  },
+  {
     path: "/purchase-invoices",
     label: "Faktur Pembelian",
     short: "Pembelian",
@@ -238,6 +246,7 @@ const pageTitles: Record<string, string> = {
   "/categories": "Kategori",
   "/suppliers": "Supplier",
   "/receipts": "Penerimaan Barang",
+  "/receipt-supplier-mapping": "Pemetaan Supplier",
   "/receipts/new": "Terima Barang Baru",
   "/purchase-invoices": "Faktur Pembelian",
   "/ai": "Asisten AI",
@@ -446,6 +455,13 @@ const desktopGroups = [
         icon: PackageCheck,
         perm: "receipt:view",
         tone: "green",
+      },
+      {
+        label: "Pemetaan Supplier",
+        path: "/receipt-supplier-mapping",
+        icon: ClipboardPenLine,
+        perm: "receipt:supplier",
+        tone: "orange",
       },
       {
         label: "Faktur Pembelian",
@@ -728,14 +744,19 @@ export default function Layout() {
     document.addEventListener('click', openFilterFromContainer);
     return () => document.removeEventListener('click', openFilterFromContainer);
   }, []);
+  const canMapReceiptSupplier = hasPermission('receipt:supplier');
   useEffect(() => {
     const path = workspacePathFor(location.pathname);
     const label = path === "/receipts" ? "Penerimaan Barang" : getPageTitle();
     setWorkspaceTabs((current) => {
+      const accessibleTabs = canMapReceiptSupplier
+        ? current
+        : current.filter((tab) => tab.path !== '/receipt-supplier-mapping');
+      if (path === '/receipt-supplier-mapping' && !canMapReceiptSupplier) return accessibleTabs;
       const withoutReceiptChildren =
         path === "/receipts"
-          ? current.filter((tab) => !tab.path.startsWith("/receipts/"))
-          : current;
+          ? accessibleTabs.filter((tab) => !tab.path.startsWith("/receipts/"))
+          : accessibleTabs;
       const existing = withoutReceiptChildren.find((tab) => tab.path === path);
       if (!existing) return [...withoutReceiptChildren, { path, label }];
       if (existing.label === label) return withoutReceiptChildren;
@@ -743,7 +764,7 @@ export default function Layout() {
         tab.path === path ? { ...tab, label } : tab,
       );
     });
-  }, [location.pathname, data.goodsReceipts]);
+  }, [location.pathname, data.goodsReceipts, canMapReceiptSupplier]);
   useEffect(() => {
     localStorage.setItem("drac-workspace-tabs", JSON.stringify(workspaceTabs));
   }, [workspaceTabs]);

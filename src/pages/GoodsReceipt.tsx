@@ -16,7 +16,8 @@ const receiptColumnLabelList = ['Nomor #','Tanggal','Keterangan','Diterima Oleh'
 const receiptColumnLabels: Record<ReceiptColumn,string> = {number:receiptColumnLabelList[0],date:receiptColumnLabelList[1],notes:receiptColumnLabelList[2],receivedBy:receiptColumnLabelList[3],itemCount:receiptColumnLabelList[4],warehouse:receiptColumnLabelList[5],status:receiptColumnLabelList[6]};
 const receiptColumnStorageKey = 'drac.receipts.columnOrder.v1';
 
-export default function GoodsReceiptPage() {
+export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt' | 'supplier-mapping' }) {
+  const isSupplierMapping = mode === 'supplier-mapping';
   const navigate = useNavigate();
   const {
     data, addGoodsReceipt, updateGoodsReceipt, deleteGoodsReceipt,
@@ -30,13 +31,14 @@ export default function GoodsReceiptPage() {
   const [filterReceivedBy, setFilterReceivedBy] = useState('');
   const [filterDeliveryMethod, setFilterDeliveryMethod] = useState('');
   const [filterWarehouse, setFilterWarehouse] = useState('');
+  const [filterMapping, setFilterMapping] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterFromDate, setFilterFromDate] = useState('');
   const [filterToDate, setFilterToDate] = useState('');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const filterBarRef = useRef<HTMLDivElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
-  const activeFilterCount = [filterStatus, filterReceivedBy, filterDeliveryMethod, filterWarehouse, filterDate || filterFromDate || filterToDate].filter(Boolean).length;
+  const activeFilterCount = [filterStatus, filterReceivedBy, filterDeliveryMethod, filterWarehouse, filterMapping, filterDate || filterFromDate || filterToDate].filter(Boolean).length;
   const receiptFiltersActive = activeFilterCount > 0;
   const resetReceiptFilters = () => {
     setFilterDate('');
@@ -46,6 +48,7 @@ export default function GoodsReceiptPage() {
     setFilterReceivedBy('');
     setFilterDeliveryMethod('');
     setFilterWarehouse('');
+    setFilterMapping('');
   };
   const updateFilterDate = (value: string) => {
     setFilterDate(value);
@@ -112,11 +115,7 @@ export default function GoodsReceiptPage() {
     notes: '',
   });
   const [showSuccessMsg, setShowSuccessMsg] = useState('');
-  const supplierRole = data.roles.find(role => role.id === currentUser?.roleId);
-  const canSeeSuppliers = currentUser?.canMapReceiptSupplier ?? (Boolean(currentUser?.isOwner)
-    || supplierRole?.code.trim().toUpperCase() === 'ADM'
-    || (supplierRole?.name || currentUser?.roleName || '').trim().toLowerCase() === 'administrator'
-    || hasPermission('receipt:supplier'));
+  const canSeeSuppliers = isSupplierMapping && hasPermission('receipt:supplier');
   const activeSuppliers = useMemo(() => data.suppliers.filter(supplier => supplier.isActive)
     .sort((a, b) => a.name.localeCompare(b.name, 'id')), [data.suppliers]);
   const invoicedReceiptIds = useMemo(() => new Set(data.purchaseInvoices.flatMap(invoice => invoice.receiptIds)), [data.purchaseInvoices]);
@@ -212,7 +211,8 @@ export default function GoodsReceiptPage() {
   };
 
   const branchReceipts = useMemo(() => data.goodsReceipts
-    .filter(receipt => currentBranchId === 'ALL' || receipt.branchId === currentBranchId), [data.goodsReceipts, currentBranchId]);
+    .filter(receipt => (currentBranchId === 'ALL' || receipt.branchId === currentBranchId)
+      && (!isSupplierMapping || receipt.sourceType !== 'Transfer Gudang')), [data.goodsReceipts, currentBranchId, isSupplierMapping]);
 
   const filtered = useMemo(() => {
     return branchReceipts
@@ -222,6 +222,7 @@ export default function GoodsReceiptPage() {
           r.receiptNumber.toLowerCase().includes(q) ||
           (r.transferNumber || '').toLowerCase().includes(q) ||
           (r.notes || '').toLowerCase().includes(q) ||
+          (isSupplierMapping && (r.supplierName || '').toLowerCase().includes(q)) ||
           r.items.some(item => item.itemCode.toLowerCase().includes(q) || item.itemName.toLowerCase().includes(q));
         // Penerimaan yang sudah/sebagian difakturkan tetap termasuk barang diterima.
         const receiptStatus = r.status === 'Difakturkan' || r.status === 'Sebagian' ? 'Diterima' : r.status;
@@ -229,10 +230,11 @@ export default function GoodsReceiptPage() {
         const receiverMatch = !filterReceivedBy || r.receivedBy?.trim() === filterReceivedBy;
         const deliveryMatch = !filterDeliveryMethod || receiptDeliveryLabel(r.deliveryMethod, r.deliveryOther) === filterDeliveryMethod;
         const warehouseMatch = !filterWarehouse || r.warehouseId === filterWarehouse;
+        const mappingMatch = !filterMapping || (filterMapping === 'mapped' ? Boolean(r.supplierId) : !r.supplierId);
         const dateMatch = (!filterDate || r.date === filterDate)
           && (!filterFromDate || r.date >= filterFromDate)
           && (!filterToDate || r.date <= filterToDate);
-        return searchMatch && statusMatch && receiverMatch && deliveryMatch && warehouseMatch && dateMatch;
+        return searchMatch && statusMatch && receiverMatch && deliveryMatch && warehouseMatch && mappingMatch && dateMatch;
       })
       .sort((a, b) => {
         const documentNumber=(r:GoodsReceipt)=>r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber;
@@ -250,7 +252,7 @@ export default function GoodsReceiptPage() {
         if(comparison!==0)return receiptSort.direction==='asc'?comparison:-comparison;
         return documentNumber(b).localeCompare(documentNumber(a),'id',{numeric:true});
       });
-  }, [branchReceipts, data.warehouses, search, filterStatus, filterReceivedBy, filterDeliveryMethod, filterWarehouse, filterDate, filterFromDate, filterToDate, receiptSort]);
+  }, [branchReceipts, data.warehouses, search, isSupplierMapping, filterStatus, filterReceivedBy, filterDeliveryMethod, filterWarehouse, filterMapping, filterDate, filterFromDate, filterToDate, receiptSort]);
 
   const filterReceivers = useMemo(() => [...new Set(branchReceipts.map(receipt => receipt.receivedBy?.trim() || '').filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'id')), [branchReceipts]);
@@ -417,6 +419,11 @@ export default function GoodsReceiptPage() {
             onKeyDown={event => { if (event.key === 'Escape' && showFilterPanel) { event.preventDefault(); closeFilterPanel(); } }}
           >
             <div className="w-40 flex-shrink-0"><IndonesianDateInput value={filterDate} onChange={updateFilterDate} ariaLabel="Filter satu tanggal penerimaan" title="Pilih satu tanggal penerimaan" className="h-9 w-full text-sm"/></div>
+            {isSupplierMapping && <select aria-label="Status pemetaan supplier" value={filterMapping} onChange={event => setFilterMapping(event.target.value)} className="h-9 rounded border border-slate-300 bg-white px-3 text-sm text-slate-800">
+              <option value="">Semua pemetaan</option>
+              <option value="unmapped">Belum dipetakan</option>
+              <option value="mapped">Sudah dipetakan</option>
+            </select>}
             <button
               ref={filterButtonRef}
               type="button"
@@ -477,10 +484,16 @@ export default function GoodsReceiptPage() {
             </div>}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-2">{hasPermission('receipt:create')&&<button onClick={openNewReceipt} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
-            <div className="flex items-center gap-2"><button onClick={()=>window.print()} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Cetak"><Printer className="h-5 w-5"/></button>{hasPermission('purchase:view')&&<button onClick={()=>navigate('/purchase-invoices')} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Faktur Pembelian"><Settings2 className="h-5 w-5"/></button>}<div className="relative"><input aria-label="Cari penerimaan barang" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari nomor, barang, keterangan..." className="w-64 rounded border border-slate-300 bg-white px-3 py-2.5 pr-10 text-slate-900 placeholder:text-slate-400 focus:bg-white"/><Search className="absolute right-3 top-3 h-5 w-5"/></div><span className="min-w-16 rounded border border-slate-300 bg-white px-4 py-2.5 text-center">{filtered.length}</span></div>
+            <div className="flex gap-2">{!isSupplierMapping&&hasPermission('receipt:create')&&<button onClick={openNewReceipt} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
+            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+              <button onClick={()=>window.print()} className="shrink-0 rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Cetak"><Printer className="h-5 w-5"/></button>
+              {hasPermission('purchase:view')&&<button onClick={()=>navigate('/purchase-invoices')} className="shrink-0 rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Faktur Pembelian"><Settings2 className="h-5 w-5"/></button>}
+              <div className="relative min-w-0 flex-1 sm:flex-none"><input aria-label="Cari penerimaan barang" value={search} onChange={e=>setSearch(e.target.value)} placeholder={isSupplierMapping ? 'Cari nomor, barang, supplier...' : 'Cari nomor, barang, keterangan...'} className="w-full rounded border border-slate-300 bg-white px-3 py-2.5 pr-10 text-slate-900 placeholder:text-slate-400 focus:bg-white sm:w-64"/><Search className="absolute right-3 top-3 h-5 w-5"/></div>
+              <span className="min-w-10 shrink-0 rounded border border-slate-300 bg-white px-2 py-2.5 text-center sm:min-w-16 sm:px-4">{filtered.length}</span>
+            </div>
           </div>
         </div>
+        {isSupplierMapping && <p className="px-3 pt-2 text-xs text-slate-600">Pilih supplier pada penerimaan. Perubahan tersimpan otomatis dan dapat diubah sebelum difakturkan.</p>}
         {showSuccessMsg&&<div className="border-y border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-700">{showSuccessMsg}</div>}
         <div className="space-y-2 px-2 py-2 lg:hidden">
           {filtered.map(r=>{

@@ -314,11 +314,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = (perm: Permission): boolean => {
     if (!currentUser) return false;
+    const role = data.roles.find((r) => r.id === currentUser.roleId);
+    if (perm === 'receipt:supplier') {
+      return currentUser.canMapReceiptSupplier ?? (Boolean(currentUser.isOwner)
+        || role?.code.trim().toUpperCase() === 'ADM'
+        || (role?.name || currentUser.roleName || '').trim().toLowerCase() === 'administrator'
+        || Boolean(currentUser.permissions?.includes(perm) || role?.permissions.includes(perm)));
+    }
     if (currentUser.isOwner) return true;
     // Izin efektif dari server adalah sumber utama. Nilai ini juga berisi
     // baseline kompatibilitas role lama dan otomatis diperbarui saat refresh.
     if (currentUser.permissions?.includes(perm)) return true;
-    const role = data.roles.find((r) => r.id === currentUser.roleId);
     // Kompatibilitas role Teknisi lama yang dibuat sebelum izin operasional
     // mobile ditambahkan. Role baru sudah membawa izin ini dari data awal.
     const normalizedRoleName = (role?.name || currentUser.roleName || '').trim().toLowerCase();

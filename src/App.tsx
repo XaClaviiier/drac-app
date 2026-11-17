@@ -119,7 +119,8 @@ function AppRoutes() {
         <Route path="performance-bonus" element={protectedPage('report:view', <PerformanceBonus />)} />
         <Route path="items" element={protectedPage('item:view', <ItemsAndServices />)} />
         <Route path="suppliers" element={protectedPage('supplier:view', <Suppliers />)} />
-        <Route path="receipts" element={protectedPage('receipt:view', <GoodsReceiptPage />)} />
+        <Route path="receipts" element={protectedPage('receipt:view', <GoodsReceiptPage key="receipts" />)} />
+        <Route path="receipt-supplier-mapping" element={protectedPage('receipt:supplier', <GoodsReceiptPage key="supplier-mapping" mode="supplier-mapping" />)} />
         <Route path="receipts/new" element={protectedPage('receipt:create', <GoodsReceiptEntry />)} />
         <Route path="receipts/view/:id" element={protectedPage('receipt:view', <GoodsReceiptDetail />)} />
         <Route path="purchase-invoices" element={protectedPage('purchase:view', <PurchaseInvoicesPage />)} />
