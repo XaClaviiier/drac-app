@@ -153,6 +153,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const synchronizedUser: User = {
             ...previous,
             permissions: access.permissions as Permission[],
+            canMapReceiptSupplier: typeof access.canMapReceiptSupplier === 'boolean' ? access.canMapReceiptSupplier : undefined,
             branchId: access.branchId || previous.branchId,
             branchIds: Array.isArray(access.branchIds)
               ? access.branchIds.map(String)

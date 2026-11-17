@@ -362,6 +362,7 @@ export type Permission =
   | 'branch:view' | 'branch:create' | 'branch:edit' | 'branch:delete'
   | 'supplier:view' | 'supplier:create' | 'supplier:edit' | 'supplier:delete'
   | 'receipt:view' | 'receipt:create' | 'receipt:edit' | 'receipt:delete'
+  | 'receipt:supplier'
   | 'purchase:view' | 'purchase:create' | 'purchase:edit' | 'purchase:delete' | 'purchase:pay'
   | 'settings:view' | 'settings:edit'
   | 'report:view'
@@ -389,6 +390,7 @@ export interface User {
   roleName: string;
   /** Izin efektif dari server, termasuk baseline role kompatibilitas lama. */
   permissions?: Permission[];
+  canMapReceiptSupplier?: boolean;
   branchId: string;
   branchName: string;
   branchIds?: string[];

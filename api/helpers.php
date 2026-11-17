@@ -1504,8 +1504,8 @@ function permissionsFromRoleRecord(array $role): array {
 
 function assertLockedInventoryPermission(array $authorization, string $permission): void {
     if (!empty($authorization['actor']['is_owner']) || in_array('*', $authorization['permissions'], true) || in_array($permission, $authorization['permissions'], true)) return;
-    // HPP is available to administrators as well as explicitly authorized roles.
-    if ($permission === 'stock_adjustment:hpp') {
+    // These operations are available to administrators and explicitly authorized roles.
+    if (in_array($permission, ['stock_adjustment:hpp', 'receipt:supplier'], true)) {
         $role = $authorization['role'] ?? [];
         if (strtoupper(trim((string)($role['code'] ?? ''))) === 'ADM' || strtolower(trim((string)($role['name'] ?? ''))) === 'administrator') return;
     }
@@ -1709,6 +1709,11 @@ function authenticatedUserIsOwnerOrAdministrator(PDO $pdo, array $user): bool {
     $role = $stmt->fetch() ?: [];
     return strtoupper(trim((string)($role['code'] ?? ''))) === 'ADM'
         || strtolower(trim((string)($role['name'] ?? ''))) === 'administrator';
+}
+
+function authenticatedUserCanMapReceiptSupplier(PDO $pdo, array $user): bool {
+    return authenticatedUserIsOwnerOrAdministrator($pdo, $user)
+        || authenticatedUserHasPermission($pdo, $user, 'receipt:supplier');
 }
 
 function requireAuthenticatedUserPermission(PDO $pdo, array $user, string $permission): void {

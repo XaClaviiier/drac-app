@@ -11,7 +11,7 @@ const [mb, dir, os] = JSON.parse(probe.stdout);
 const args = !mb && os === 'Windows' ? ['-d', `extension_dir=${dir}/ext`, '-d', 'extension=mbstring'] : [];
 function run(input = {}) {
   const result = spawnSync(php, [...args, fixture, JSON.stringify({
-    action: 'supplier', method: 'PUT', oldStatus: 'Diterima', sourceType: 'Supplier', roleCode: 'ADM',
+    action: 'supplier', method: 'PUT', oldStatus: 'Diterima', sourceType: 'Supplier', roleCode: 'ADM', supplierRouter: true,
     body: { supplierId: 'S1', expectedSupplierId: '' }, ...input,
   })], { encoding: 'utf8' });
   assert.ifError(result.error);
@@ -53,7 +53,7 @@ test('same mapping does not duplicate audit records', () => {
 });
 for (const [name, input, status] of [
   ['technician with receipt edit permission', { roleCode: 'TKN', roleName: 'Teknisi' }, 403],
-  ['permission revoked', { permissions: [] }, 403],
+  ['ordinary user without mapping authorization', { roleCode: 'STAFF', permissions: [] }, 403],
   ['branch access revoked', { lockedMemberships: ['OTHER'] }, 403],
   ['inactive supplier', { invalidSupplier: true }, 422],
   ['transfer receipt', { sourceType: 'Transfer Gudang' }, 422],
@@ -96,4 +96,40 @@ for (const [name, input] of [
   const result = run({ operation: 'normalizePurchase', action: null, ...input });
   assert.equal(result.status, 422, JSON.stringify(result));
   assert.deepEqual(result.state, result.initial);
+});
+
+for (const role of [
+  { roleCode: 'ADM', permissions: [] },
+  { roleCode: 'CUSTOM', roleName: 'Administrator', permissions: [] },
+  { roleCode: 'PURCHASE', roleName: 'Petugas Pembelian', permissions: ['receipt:view', 'receipt:supplier'] },
+  { roleCode: 'TKN', roleName: 'Teknisi', permissions: ['receipt:view', 'receipt:supplier'] },
+]) test(`${role.roleName || role.roleCode} with mapping authorization can save without receipt edit rights`, () => {
+  const result = run(role);
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal(result.state.receipt.supplier_id, 'S1');
+  unchangedInventory(result);
+});
+for (const input of [
+  { roleCode: 'STAFF', permissions: ['supplier:view', 'receipt:edit'] },
+  { roleCode: 'STAFF', permissions: ['receipt:supplier'], lockedPermissions: [] },
+  { roleCode: 'ADM', lockedRoleCode: 'STAFF', lockedRoleName: 'Staff' },
+  { roleCode: 'STAFF', permissions: ['receipt:supplier'], lockedRoleActive: 0 },
+]) test(`unauthorized or revoked mapping rights are rejected: ${JSON.stringify(input)}`, () => {
+  const result = run(input);
+  assert.equal(result.status, 403, JSON.stringify(result));
+  assert.deepEqual(result.state, result.initial);
+});
+for (const [roleCode, permissions, allowed] of [
+  ['ADM', ['receipt:view'], true],
+  ['STAFF', ['receipt:view', 'receipt:supplier'], true],
+  ['TKN', ['receipt:view', 'receipt:edit'], false],
+  ['STAFF', ['receipt:view', 'supplier:view'], false],
+]) test(`receipt GET exposes supplier only to admin or authorized role ${roleCode}: ${allowed}`, () => {
+  const result = run({ roleCode, permissions, method: 'GET', action: null, supplierId: 'S1', supplierName: 'Supplier S1' });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  const receipt = result.data[0];
+  assert.equal(receipt.supplierId, allowed ? 'S1' : '');
+  assert.equal(receipt.supplierName, allowed ? 'Supplier S1' : '');
+  assert.equal('supplier_id' in receipt, false);
+  assert.equal('supplier_name' in receipt, false);
 });

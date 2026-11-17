@@ -15,7 +15,7 @@ const allPermissions: any[] = [
   'role:view', 'role:create', 'role:edit', 'role:delete',
   'branch:view', 'branch:create', 'branch:edit', 'branch:delete',
   'supplier:view', 'supplier:create', 'supplier:edit', 'supplier:delete',
-  'receipt:view', 'receipt:create', 'receipt:edit', 'receipt:delete',
+  'receipt:view', 'receipt:create', 'receipt:edit', 'receipt:delete', 'receipt:supplier',
   'purchase:view', 'purchase:create', 'purchase:edit', 'purchase:delete', 'purchase:pay',
   'settings:view', 'settings:edit',
   'report:view',

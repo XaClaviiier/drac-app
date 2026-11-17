@@ -43,6 +43,12 @@ final class ReceiptZeroSourcePDO extends PDO {
         if(str_contains($q,'FOR UPDATE')&&!$this->transaction)throw new LogicException('Lock outside transaction');
         if(preg_match('/^(INSERT|UPDATE|DELETE) /',$q)&&!$this->transaction)throw new LogicException('Write outside transaction');
         $role=['id'=>'role','code'=>$this->input['roleCode']??'STAFF','name'=>$this->input['roleName']??'Staff','is_active'=>1,'permissions'=>json_encode($this->input['permissions']??['receipt:create','receipt:edit','receipt:delete'])];
+        if($this->transaction) {
+            if(isset($this->input['lockedRoleCode']))$role['code']=$this->input['lockedRoleCode'];
+            if(isset($this->input['lockedRoleName']))$role['name']=$this->input['lockedRoleName'];
+            if(isset($this->input['lockedRoleActive']))$role['is_active']=$this->input['lockedRoleActive'];
+            if(isset($this->input['lockedPermissions']))$role['permissions']=json_encode($this->input['lockedPermissions']);
+        }
         $receiver=['id'=>'receiver','name'=>'Receiver','branch_id'=>'DEST','role_id'=>'role','is_active'=>1,'is_owner'=>0];
         if(str_contains($q,'FROM information_schema.COLUMNS'))return [[1]];
         if(str_starts_with($q,'SELECT ')&&str_contains($q,' FROM roles WHERE'))return [$role];
@@ -62,7 +68,10 @@ final class ReceiptZeroSourcePDO extends PDO {
         if(str_starts_with($q,'SELECT id,branch_id')&&str_contains($q,'FROM warehouses WHERE id=?'))return isset($this->warehouses[$p[0]])?[$this->warehouses[$p[0]]]:[];
         if(str_starts_with($q,'SELECT received_by_id FROM goods_receipts'))return $this->state['receipt']&&in_array('DEST',array_slice($p,1),true)?[['received_by_id'=>'receiver']]:[];
         if($q==='SELECT * FROM goods_receipts WHERE id=? FOR UPDATE')return $this->state['receipt']?[$this->state['receipt']]:[];
-        if($q==='SELECT * FROM goods_receipt_items WHERE receipt_id = ?')return $this->state['lines'];
+        if($q==='SELECT * FROM goods_receipts ORDER BY date DESC, receipt_number DESC')return [$this->state['receipt']+['do_number'=>'','created_at'=>'2026-11-17']];
+        if($q==='SELECT * FROM goods_receipt_items WHERE receipt_id = ?')return ($this->input['method']??'PUT')==='GET'
+            ?array_map(static fn($line)=>$line+['id'=>'line','item_code'=>'ITEM','item_name'=>'Item','unit'=>'PCS'],$this->state['lines'])
+            :$this->state['lines'];
         if($q==='SELECT qty_invoiced FROM goods_receipt_items WHERE receipt_id=? FOR UPDATE')return $this->state['lines'];
         if(str_starts_with($q,'SELECT id,name FROM suppliers WHERE'))return !($this->input['invalidSupplier']??false)&&in_array($p[0],['S1','S2'],true)?[['id'=>$p[0],'name'=>'Supplier '.$p[0]]]:[];
         if(str_starts_with($q,'SELECT r.branch_id,r.source_type,r.status,r.supplier_id,ri.qty,ri.qty_invoiced'))return $this->state['receipt']?[array_merge($this->state['receipt'],$this->state['lines'][0])]:[];
@@ -112,5 +121,12 @@ if(($input['operation']??'')==='normalizePurchase') {
         $result=$normalizePurchaseLines($pdo,[['itemId'=>'item','receiptId'=>'receipt','qty'=>$input['invoiceQty']??2,'unitPrice'=>100]],$input['invoiceBranch']??'DEST',$input['invoiceSupplier']??'S1');
         $pdo->commit();respondSuccess($result);
     } catch(InvalidArgumentException $e) {$pdo->rollBack();respondError($e->getMessage(),422);}
+}
+if($input['supplierRouter']??false) {
+    // Run the actual shared route permission gate before dispatching the endpoint.
+    $resource='goods-receipts';
+    $router=file_get_contents(__DIR__.'/../../api/index.php');
+    $start=strpos($router,'$permissionByResource =');
+    eval(substr($router,$start,strpos($router,"if (\$requestUser && \$resource === 'settings')",$start)-$start));
 }
 require __DIR__.'/../../api/endpoints/goods-receipts.php';

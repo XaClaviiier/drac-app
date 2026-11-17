@@ -10,9 +10,8 @@ $actor = $requestUser ?? requireAuthenticatedUser($pdo);
 $pdo->beginTransaction();
 try {
     lockInventoryMutation($pdo);
-    $authorization = lockInventoryMutationAuthorization($pdo, $actor, 'receipt:edit');
+    $authorization = lockInventoryMutationAuthorization($pdo, $actor, 'receipt:supplier');
     $actor = $authorization['actor'];
-    if (!canSeeReceiptSupplier($pdo, $actor)) throw new DomainException('Pemetaan supplier hanya untuk Administrator atau Owner', 403);
 
     $receiptStmt = $pdo->prepare('SELECT * FROM goods_receipts WHERE id=? FOR UPDATE');
     $receiptStmt->execute([$id]);

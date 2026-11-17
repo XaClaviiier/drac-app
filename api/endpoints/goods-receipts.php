@@ -25,9 +25,7 @@ function nextManualTransferNumber(PDO $pdo,string $sourceBranchId,string $destin
     $prefix='TRF-'.$sourceLetter.'-'.$destinationLetter.'-'.date('ymd',strtotime($date)).'-';$seq=$pdo->prepare("SELECT transfer_number FROM goods_receipts WHERE transfer_number LIKE ? ORDER BY transfer_number DESC LIMIT 1 FOR UPDATE");$seq->execute([$prefix.'%']);$last=(string)$seq->fetchColumn();$number=$last?(int)substr($last,-4)+1:1;return $prefix.str_pad((string)$number,4,'0',STR_PAD_LEFT);
 }
 function canSeeReceiptSupplier(PDO $pdo,array $actor):bool{
-    if(!empty($actor['is_owner']))return true;
-    $stmt=$pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');$stmt->execute([(string)($actor['role_id']??'')]);$role=$stmt->fetch()?:[];
-    return strtoupper(trim((string)($role['code']??'')))==='ADM'||strtolower(trim((string)($role['name']??'')))==='administrator';
+    return authenticatedUserCanMapReceiptSupplier($pdo,$actor);
 }
 function normalizeGoodsReceiptDelivery(array $data,string $fallbackMethod='Diantar Supplier',string $fallbackOther=''):array{
     $method=trim((string)($data['deliveryMethod']??$fallbackMethod));
@@ -74,6 +72,7 @@ switch ($method) {
             $r['receiptNumber'] = $r['receipt_number'];
             $r['supplierId'] = $canSeeSuppliers ? $r['supplier_id'] : '';
             $r['supplierName'] = $canSeeSuppliers ? $r['supplier_name'] : '';
+            unset($r['supplier_id'], $r['supplier_name']);
             $r['doNumber'] = $r['do_number'];
             $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
             $r['deliveryOther'] = $r['delivery_other'] ?? '';

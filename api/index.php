@@ -124,7 +124,13 @@ if ($requestUser && isset($permissionByResource[$resource])) {
         if ($resource === 'items' && $method === 'POST' && !authenticatedUserHasPermission($pdo, $requestUser, $permission)) {
             $permission = 'receipt:create';
         }
-        requireAuthenticatedUserPermission($pdo, $requestUser, $permission);
+        if ($resource === 'goods-receipts' && $action === 'supplier') {
+            if (!authenticatedUserCanMapReceiptSupplier($pdo, $requestUser)) {
+                respondError('Anda tidak memiliki izin memetakan supplier penerimaan', 403);
+            }
+        } else {
+            requireAuthenticatedUserPermission($pdo, $requestUser, $permission);
+        }
     }
 }
 

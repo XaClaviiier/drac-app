@@ -72,17 +72,13 @@ try {
     $canUseInvoices = authenticatedUserIsOwnerOrAdministrator($pdo, $actor) || authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view');
     $canUseReceipts = authenticatedUserHasPermission($pdo, $actor, 'receipt:view');
     $canUsePurchases = authenticatedUserHasPermission($pdo, $actor, 'purchase:view');
-    $supplierRoleStmt = $pdo->prepare('SELECT code,name FROM roles WHERE id=? AND is_active=1 LIMIT 1');
-    $supplierRoleStmt->execute([(string)($actor['role_id'] ?? '')]);
-    $supplierRole = $supplierRoleStmt->fetch() ?: [];
-    $canSeeSuppliers = !empty($actor['is_owner'])
-        || strtoupper(trim((string)($supplierRole['code'] ?? ''))) === 'ADM'
-        || strtolower(trim((string)($supplierRole['name'] ?? ''))) === 'administrator';
+    $canSeeSuppliers = authenticatedUserCanMapReceiptSupplier($pdo, $actor);
     $data = [];
     // Selalu kirim akses efektif user aktif. Frontend memakai nilai ini untuk
     // menyegarkan sesi lama ketika role atau hak cabang diubah oleh owner.
     $data['currentAccess'] = [
         'permissions' => getUserPermissions($pdo, $actor),
+        'canMapReceiptSupplier' => $canSeeSuppliers,
         'branchId' => (string)($actor['branch_id'] ?? ''),
         'branchIds' => $allowedBranchIds,
     ];
@@ -527,6 +523,7 @@ try {
         $r['receiptNumber'] = $r['receipt_number'];
         $r['supplierId'] = $canSeeSuppliers ? $r['supplier_id'] : '';
         $r['supplierName'] = $canSeeSuppliers ? $r['supplier_name'] : '';
+        unset($r['supplier_id'], $r['supplier_name']);
         $r['doNumber'] = $r['do_number'];
         $r['deliveryMethod'] = $r['delivery_method'] ?? 'Diantar Supplier';
         $r['deliveryOther'] = $r['delivery_other'] ?? '';

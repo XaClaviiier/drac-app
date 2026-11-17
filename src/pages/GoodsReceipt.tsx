@@ -113,14 +113,15 @@ export default function GoodsReceiptPage() {
   });
   const [showSuccessMsg, setShowSuccessMsg] = useState('');
   const supplierRole = data.roles.find(role => role.id === currentUser?.roleId);
-  const canSeeSuppliers = Boolean(currentUser?.isOwner)
+  const canSeeSuppliers = currentUser?.canMapReceiptSupplier ?? (Boolean(currentUser?.isOwner)
     || supplierRole?.code.trim().toUpperCase() === 'ADM'
-    || (supplierRole?.name || currentUser?.roleName || '').trim().toLowerCase() === 'administrator';
+    || (supplierRole?.name || currentUser?.roleName || '').trim().toLowerCase() === 'administrator'
+    || hasPermission('receipt:supplier'));
   const activeSuppliers = useMemo(() => data.suppliers.filter(supplier => supplier.isActive)
     .sort((a, b) => a.name.localeCompare(b.name, 'id')), [data.suppliers]);
   const invoicedReceiptIds = useMemo(() => new Set(data.purchaseInvoices.flatMap(invoice => invoice.receiptIds)), [data.purchaseInvoices]);
   const supplierSelect = (receipt: GoodsReceipt) => <ReceiptSupplierSelect receipt={receipt} suppliers={activeSuppliers}
-    canEdit={hasPermission('receipt:edit')} linked={invoicedReceiptIds.has(receipt.id)}/>;
+    canEdit={canSeeSuppliers} linked={invoicedReceiptIds.has(receipt.id)}/>;
 
   const openInvoicePreview = (r: GoodsReceipt) => {
     if (r.sourceType === 'Transfer Gudang') { window.alert('Transfer antar gudang tidak membuat Faktur Pembelian.'); return; }
