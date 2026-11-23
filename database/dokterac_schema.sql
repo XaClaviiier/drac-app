@@ -260,6 +260,7 @@ CREATE TABLE IF NOT EXISTS `items` (
   `vehicle_brand_name` VARCHAR(100),
   `unit` VARCHAR(20),
   `stock` INT DEFAULT 0,
+  `minimum_stock` INT NOT NULL DEFAULT 0,
   `sellable_stock` INT DEFAULT 0,
   `purchase_price` DECIMAL(15,2) DEFAULT 0,
   `selling_price` DECIMAL(15,2) DEFAULT 0,

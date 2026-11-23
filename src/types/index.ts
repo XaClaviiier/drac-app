@@ -276,6 +276,7 @@ export interface Item {
   itemBrandId?: string;
   unit: string;
   stock: number;
+  minimumStock?: number;
   sellableStock: number;
   purchasePrice: number;
   sellingPrice: number;

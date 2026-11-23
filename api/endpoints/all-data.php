@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../auto-close-diagnosis.php';
+ensureItemMinimumStockSchema($pdo);
 runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260902_v3', static function(PDO $pdo): void {
 foreach ([
     ['vehicles','generation_id','VARCHAR(64) NULL AFTER model_id'],
@@ -332,6 +333,7 @@ try {
         $r['productTypeId'] = $r['product_type_id'] ?? null;
         $r['productTypeName'] = $r['product_type_name'] ?? '';
         $r['sellableStock'] = (int)$r['sellable_stock'];
+        $r['minimumStock'] = (int)$r['minimum_stock'];
         $r['purchasePrice'] = (float)$r['purchase_price'];
         $r['sellingPrice'] = (float)$r['selling_price'];
         $r['isActive'] = (bool)$r['is_active'];

@@ -319,6 +319,12 @@ function ensureTableColumn(PDO $pdo, string $table, string $column, string $defi
     $pdo->exec("ALTER TABLE `".$table."` ADD COLUMN `".$column."` ".$definition);
 }
 
+function ensureItemMinimumStockSchema(PDO $pdo): void {
+    runVersionedApiBootstrap($pdo, 'item_minimum_stock_v1', static function(PDO $pdo): void {
+        ensureTableColumn($pdo, 'items', 'minimum_stock', 'INT NOT NULL DEFAULT 0 AFTER stock');
+    });
+}
+
 function ensureOwnedStockOpnameColumn(PDO $pdo, string $table, string $column, string $definition): void {
     if(!preg_match('/^[A-Za-z0-9_]+$/',$table)||!preg_match('/^[A-Za-z0-9_]+$/',$column)){
         throw new InvalidArgumentException('Nama tabel atau kolom ownership tidak valid.');

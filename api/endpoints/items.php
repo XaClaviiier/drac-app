@@ -1,4 +1,5 @@
 <?php
+ensureItemMinimumStockSchema($pdo);
 function safeItemSchemaExec(PDO $pdo, string $sql, string $label): void {
     // Required schema must fail closed, not leave item writes partially bootstrapped.
     $pdo->exec($sql);
@@ -190,6 +191,7 @@ switch ($method) {
             $r['productTypeId'] = $r['product_type_id'] ?? null;
             $r['productTypeName'] = $r['product_type_name'] ?? '';
             $r['sellableStock'] = (int)$r['sellable_stock'];
+            $r['minimumStock'] = (int)$r['minimum_stock'];
             $r['purchasePrice'] = (float)$r['purchase_price'];
             $r['sellingPrice'] = (float)$r['selling_price'];
             $r['isActive'] = (bool)$r['is_active'];
@@ -296,12 +298,14 @@ switch ($method) {
             if($codeCheck->fetch())throw new InvalidArgumentException("Kode {$code} sudah digunakan");
             if($type==='Group'&&empty($d['groupMembers']))throw new InvalidArgumentException('Group/Paket wajib memiliki minimal satu komponen');
             $itemId = $d['id'] ?? generateId();
-            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, product_type_id, product_type_name, type, brand, item_brand_id, vehicle_brand_id, vehicle_brand_name, unit, stock, sellable_stock, purchase_price, selling_price, is_active, verification_status, created_by, verified_by, is_quick_service, description, receipt_description, barcode, oem_part_number, alternate_part_numbers, technical_notes, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $minimumStock = $type === 'Persediaan'
+                ? parseBoundedDecimalInteger($d['minimumStock'] ?? 0, '0', '2147483647', 'Stok minimum') : 0;
+            $stmt = $pdo->prepare("INSERT INTO items (id, code, name, category_id, category_name, product_type_id, product_type_name, type, brand, item_brand_id, vehicle_brand_id, vehicle_brand_name, unit, stock, sellable_stock, minimum_stock, purchase_price, selling_price, is_active, verification_status, created_by, verified_by, is_quick_service, description, receipt_description, barcode, oem_part_number, alternate_part_numbers, technical_notes, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $itemId, $code, $name,
                 $category['id'], $category['name'], $productType['id']??null, $productType['name']??null,
                 $type, $brand, $d['itemBrandId']??null, $primaryVehicleBrand['id'] ?? null, $primaryVehicleBrand['name'] ?? null, $unit,
-                0, 0,
+                0, 0, $minimumStock,
                 0, max(0, (float)($d['sellingPrice'] ?? 0)),
                 $d['isActive'] ?? 1, $isProvisional?'Pending':'Verified', $actor['id']??null, $isProvisional?null:($actor['id']??null), $quickService,
                 $d['description'] ?? '', $d['receiptDescription'] ?? '',
@@ -507,7 +511,9 @@ switch ($method) {
             }
             // Harga beli dan saldo stok hanya boleh berubah melalui transaksi
             // penerimaan, pembelian, atau penyesuaian persediaan.
-            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, product_type_id=?, product_type_name=?, type=?, brand=?, item_brand_id=?, vehicle_brand_id=?, vehicle_brand_name=?, unit=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=?, oem_part_number=?, alternate_part_numbers=?, technical_notes=? WHERE id=?");
+            $minimumStock = $type === 'Persediaan'
+                ? parseBoundedDecimalInteger(array_key_exists('minimumStock', $d) ? $d['minimumStock'] : $current['minimum_stock'], '0', '2147483647', 'Stok minimum') : 0;
+            $stmt = $pdo->prepare("UPDATE items SET code=?, name=?, category_id=?, category_name=?, product_type_id=?, product_type_name=?, type=?, brand=?, item_brand_id=?, vehicle_brand_id=?, vehicle_brand_name=?, unit=?, selling_price=?, is_active=?, is_quick_service=?, description=?, receipt_description=?, barcode=?, oem_part_number=?, alternate_part_numbers=?, technical_notes=?, minimum_stock=? WHERE id=?");
             $stmt->execute([
                 $current['code'], $name,
                 $category['id'], $category['name'], $productType['id']??null, $productType['name']??null,
@@ -519,6 +525,7 @@ switch ($method) {
                 trim((string)($d['oemPartNumber'] ?? '')) ?: null,
                 trim((string)($d['alternatePartNumbers'] ?? '')) ?: null,
                 trim((string)($d['technicalNotes'] ?? '')) ?: null,
+                $minimumStock,
                 $id
             ]);
             $pdo->prepare("DELETE FROM item_vehicle_brands WHERE item_id=?")->execute([$id]);

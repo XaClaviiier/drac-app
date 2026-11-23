@@ -16,6 +16,8 @@ import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import VehicleCompatibilityPicker, { type VehicleCatalogBrandOption } from '../components/VehicleCompatibilityPicker';
 import { ITEM_COMPATIBILITY_TEMPLATES } from '../lib/itemCompatibilityTemplates';
 import { stockMovementSource } from '../lib/stockMovementSource';
+import { isItemBelowMinimum, itemMinimumStock, itemStockForBranch } from '../lib/itemStock';
+import { defaultItemColumns, defaultItemColumnWidths, itemColumnLabels, restoreItemColumns, type ItemColumn } from '../lib/itemListColumns';
 
 const allItemTypes: ItemType[] = ['Persediaan', 'Jasa', 'Non Persediaan', 'Group'];
 const units = ['PCS', 'SET', 'CAN', 'BOTOL', 'LITER', 'JASA', 'UNIT', 'PAKET'];
@@ -55,6 +57,7 @@ const emptyItem = {
   itemBrandId: '',
   unit: 'PCS',
   stock: 0,
+  minimumStock: 0,
   purchasePrice: 0,
   sellingPrice: 0,
   isActive: true,
@@ -63,40 +66,6 @@ const emptyItem = {
   receiptDescription: '',
   barcode: '',
   groupMembers: [] as GroupMember[],
-};
-
-type ItemColumn = 'code' | 'name' | 'receiptDescription' | 'type' | 'category' | 'barcode' | 'price' | 'stock' | 'unit' | 'brand' | 'purchasePrice' | 'status' | 'actions';
-const defaultItemColumns: ItemColumn[] = ['code', 'name', 'stock', 'unit', 'category', 'brand', 'actions'];
-const itemColumnLabels: Record<ItemColumn, string> = {
-  code: 'Kode',
-  name: 'Nama Barang/Jasa',
-  receiptDescription: 'Deskripsi Nota',
-  type: 'Jenis',
-  category: 'Kategori',
-  barcode: 'Barcode',
-  price: 'Harga Jual',
-  stock: 'KTS/Stok',
-  unit: 'Satuan',
-  brand: 'Merek',
-  purchasePrice: 'Harga Beli',
-  status: 'Status Aktif',
-  actions: 'Aksi',
-};
-
-const defaultItemColumnWidths: Record<ItemColumn, number> = {
-  code: 140,
-  name: 360,
-  receiptDescription: 240,
-  type: 140,
-  category: 180,
-  barcode: 180,
-  price: 150,
-  stock: 100,
-  unit: 100,
-  brand: 150,
-  purchasePrice: 150,
-  status: 120,
-  actions: 100,
 };
 
 const emptyCategory = {
@@ -193,15 +162,20 @@ export default function ItemsAndServices() {
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ column: 'code' | 'name' | 'category'; direction: 'asc' | 'desc' }>({ column: 'code', direction: 'asc' });
   const [draggedColumn, setDraggedColumn] = useState<ItemColumn | null>(null);
-  const columnStorageKey = `dokterac_item_columns_accurate_v2_${currentUser?.id || currentUser?.username || 'default'}`;
+  const columnStorageKey = `dokterac_item_columns_accurate_v3_${currentUser?.id || currentUser?.username || 'default'}`;
   const columnWidthStorageKey = `dokterac_item_column_widths_${currentUser?.id || currentUser?.username || 'default'}`;
   const [visibleColumns, setVisibleColumns] = useState<ItemColumn[]>(() => {
     try {
-      const saved = localStorage.getItem(`dokterac_item_columns_accurate_v2_${currentUser?.id || currentUser?.username || 'default'}`);
-      if (saved) return JSON.parse(saved) as ItemColumn[];
+      const saved = localStorage.getItem(columnStorageKey);
+      if (saved) return restoreItemColumns(JSON.parse(saved));
+      const legacy = localStorage.getItem(`dokterac_item_columns_accurate_v2_${currentUser?.id || currentUser?.username || 'default'}`);
+      if (legacy) return restoreItemColumns(JSON.parse(legacy), true);
     } catch { /* gunakan default */ }
     return defaultItemColumns;
   });
+  useEffect(() => {
+    try { localStorage.setItem(columnStorageKey, JSON.stringify(visibleColumns)); } catch { /* penyimpanan browser tidak tersedia */ }
+  }, [columnStorageKey, visibleColumns]);
   const [columnWidths, setColumnWidths] = useState<Record<ItemColumn, number>>(() => {
     try {
       const saved = localStorage.getItem(`dokterac_item_column_widths_${currentUser?.id || currentUser?.username || 'default'}`);
@@ -316,13 +290,8 @@ export default function ItemsAndServices() {
   );
 
   // Master barang bersifat global. Hanya saldo stok yang mengikuti cabang aktif.
-  const displayStock = (item: Item) => {
-    const stock = currentBranchId === 'ALL'
-      ? item.stock
-      : (item.branchStocks?.[currentBranchId]?.stock ?? 0);
-    const numericStock = Number(stock);
-    return Number.isFinite(numericStock) ? numericStock : 0;
-  };
+  const displayStock = (item: Item) => itemStockForBranch(item, currentBranchId);
+  const stockColor = (item: Item) => isItemBelowMinimum(item, displayStock(item)) ? 'text-red-600' : 'text-black';
 
   const filteredItems = useMemo(() => {
     const parsedSearch = parseItemStockSearch(search);
@@ -412,6 +381,7 @@ export default function ItemsAndServices() {
         itemBrandId: item.itemBrandId || '',
         unit: item.unit,
         stock: item.stock,
+        minimumStock: itemMinimumStock(item),
         purchasePrice: item.purchasePrice,
         sellingPrice: item.sellingPrice,
         isActive: item.isActive,
@@ -480,6 +450,7 @@ export default function ItemsAndServices() {
       code: editingItem ? prev.code : '',
       unit: isGroup ? 'PAKET' : isJasa ? 'JASA' : prev.unit === 'JASA' || prev.unit === 'PAKET' ? 'PCS' : prev.unit,
       stock: isGroup || isJasa ? 0 : prev.stock,
+      minimumStock: type === 'Persediaan' ? prev.minimumStock : 0,
       purchasePrice: isGroup || isJasa ? 0 : prev.purchasePrice,
       brand: isGroup || isJasa ? '' : prev.brand,
       barcode: isGroup || isJasa ? '' : prev.barcode,
@@ -556,6 +527,11 @@ export default function ItemsAndServices() {
     }
 
     const category = data.itemCategories.find((cat) => cat.id === itemForm.categoryId);
+    if (itemForm.type === 'Persediaan' && (!Number.isInteger(itemForm.minimumStock) || itemForm.minimumStock < 0 || itemForm.minimumStock > 2147483647)) {
+      window.alert('Stok minimum harus bilangan bulat antara 0 dan 2.147.483.647.');
+      setItemFormTab('stock');
+      return;
+    }
     const isGroup = itemForm.type === 'Group';
     if (isGroup && itemForm.groupMembers.length === 0) {
       window.alert('Group/Paket wajib memiliki minimal satu barang atau jasa.');
@@ -585,7 +561,9 @@ export default function ItemsAndServices() {
       // Saldo stok dan harga beli dikelola oleh transaksi persediaan/pembelian,
       // bukan dari master Barang & Jasa.
       stock: editingItem?.stock ?? 0,
+      minimumStock: itemForm.type === 'Persediaan' ? itemForm.minimumStock : 0,
       sellableStock: editingItem?.sellableStock ?? 0,
+      branchStocks: editingItem?.branchStocks,
       purchasePrice: editingItem?.purchasePrice ?? 0,
       sellingPrice: itemForm.sellingPrice,
       isActive: itemForm.isActive,
@@ -681,12 +659,12 @@ export default function ItemsAndServices() {
 
   const exportCurrentData = () => {
     const processId = startSystemProcess('Export Barang & Jasa', `Menyiapkan ${data.items.length} item`);
-    const headers = ['kode', 'nama', 'deskripsi_nota', 'barcode', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
+    const headers = ['kode', 'nama', 'deskripsi_nota', 'barcode', 'jenis', 'kategori', 'merek', 'satuan', 'stok', 'stok_minimum', 'harga_beli', 'harga_jual', 'layanan_cepat', 'keterangan'];
     const rows = data.items
       .filter(i => i.type !== 'Group')
       .map(item => [
         item.code, item.name, item.receiptDescription || item.name, item.barcode || '', item.type, item.categoryName || '',
-        item.brand || '', item.unit || '', item.stock, item.purchasePrice,
+        item.brand || '', item.unit || '', item.stock, item.type === 'Persediaan' ? itemMinimumStock(item) : '', item.purchasePrice,
         item.sellingPrice, item.isQuickService ? 'ya' : 'tidak', item.description || ''
       ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
     const csv = [headers.join(','), ...rows].join('\n');
@@ -723,18 +701,19 @@ export default function ItemsAndServices() {
       if (column === 'barcode') return item.barcode || '—';
       if (column === 'price') return formatCurrency(item.sellingPrice);
       if (column === 'stock') return item.type === 'Persediaan' ? displayStock(item) : '—';
+      if (column === 'minimumStock') return item.type === 'Persediaan' ? itemMinimumStock(item) : '—';
       if (column === 'unit') return item.unit;
       if (column === 'brand') return item.brand || '—';
       if (column === 'purchasePrice') return formatCurrency(item.purchasePrice);
       if (column === 'status') return item.isActive ? 'Aktif' : 'Nonaktif';
       return '';
     };
-    const numericColumns = new Set<ItemColumn>(['stock', 'purchasePrice', 'price']);
+    const numericColumns = new Set<ItemColumn>(['stock', 'minimumStock', 'purchasePrice', 'price']);
     const headers = printableColumns.map(column => (
       `<th class="${numericColumns.has(column) ? 'numeric' : ''}">${escapeHtml(column === 'code' ? 'Kode Barang' : itemColumnLabels[column])}</th>`
     )).join('');
     const itemRow = (item: Item) => `<tr>${printableColumns.map(column => (
-      `<td class="${numericColumns.has(column) ? 'numeric' : ''}">${escapeHtml(columnValue(item, column))}</td>`
+      `<td class="${numericColumns.has(column) ? 'numeric' : ''}${column === 'stock' ? isItemBelowMinimum(item, displayStock(item)) ? ' stock-low' : ' stock-normal' : ''}">${escapeHtml(columnValue(item, column))}</td>`
     )).join('')}</tr>`;
     let rows = `<tr><td colspan="${printableColumns.length}" class="empty">Tidak ada barang/jasa yang sesuai dengan filter.</td></tr>`;
     if (filteredItems.length > 0 && printGroupByCategory) {
@@ -780,6 +759,7 @@ export default function ItemsAndServices() {
         .category-group{break-after:avoid}.category-group td{background:#dbe8f3!important;color:#29455f;font-size:11px;font-weight:700;padding:7px 9px;border-color:#9fb5c8}
         .category-group span{float:right;font-size:9px;font-weight:600;color:#526b82}
         .numeric{text-align:right;white-space:nowrap}.empty{text-align:center;padding:24px;color:#667085}
+        .stock-low{color:#dc2626;font-weight:700}.stock-normal{color:#000}
         @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
       </style></head><body>
       <h1>DOKTER AC MOBIL — Daftar Barang &amp; Jasa</h1>
@@ -1383,8 +1363,8 @@ export default function ItemsAndServices() {
           <div className="max-h-[calc(100vh-330px)] divide-y divide-slate-200 overflow-y-auto">
             {filteredItems.length === 0 ? <div className="px-4 py-16 text-center text-sm text-slate-500">Tidak ada barang/jasa ditemukan</div> : filteredItems.map((item, rowIndex) => (
               <div key={item.id} onClick={() => openItemModal(item)} className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 px-2 py-2.5 text-xs ${!item.isActive ? 'bg-red-50/60 opacity-75' : rowIndex % 2 ? 'bg-slate-50' : 'bg-white'}`}>
-                <div className="min-w-0"><p className="line-clamp-2 font-semibold leading-4 text-slate-900">{item.name}</p><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500">{item.code}</p></div>
-                <div className="text-center font-semibold tabular-nums text-slate-800"><span>{item.type === 'Persediaan' ? displayStock(item) : '—'}</span><span className="ml-1 text-[10px] font-normal text-slate-500">{item.unit}</span></div>
+                <div className="min-w-0"><p className="line-clamp-2 font-semibold leading-4 text-slate-900">{item.name}</p><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500">{item.code}</p>{itemTableColumns.includes('barcode') && <p className="truncate font-mono text-[10px] text-slate-600" title={item.barcode || 'Belum ada barcode'}>Barcode: {item.barcode || '—'}</p>}</div>
+                <div className="text-center font-semibold tabular-nums"><span className={stockColor(item)}>{item.type === 'Persediaan' ? displayStock(item) : '—'}</span><span className="ml-1 text-[10px] font-normal text-slate-500">{item.unit}</span>{itemTableColumns.includes('minimumStock') && <p className="text-[10px] font-normal text-slate-600">Min: {item.type === 'Persediaan' ? itemMinimumStock(item) : '—'}</p>}</div>
                 <div className="truncate text-[10px] text-slate-600" title={item.categoryName}>{item.categoryName}</div>
                 <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>{hasPermission('item:edit') && <button type="button" onClick={() => openItemModal(item)} aria-label={`Edit ${item.name}`} className="rounded p-1.5 text-blue-600 hover:bg-blue-100"><Edit className="h-4 w-4" /></button>}</div>
               </div>
@@ -1428,7 +1408,7 @@ export default function ItemsAndServices() {
                     {itemTableColumns.map(column => resizableHeader(
                       column,
                       column === 'code' ? 'Kode Barang' : column === 'name' ? 'Nama Barang' : itemColumnLabels[column],
-                      column === 'stock' || column === 'purchasePrice' || column === 'price' ? 'right' : column === 'status' || column === 'actions' ? 'center' : 'left'
+                      column === 'stock' || column === 'minimumStock' || column === 'purchasePrice' || column === 'price' ? 'right' : column === 'status' || column === 'actions' ? 'center' : 'left'
                     ))}
                   </div>
                 </th>
@@ -1462,8 +1442,9 @@ export default function ItemsAndServices() {
                           if (column === 'receiptDescription') return <div key={column} style={columnStyle(column)} className={`${base} truncate`} title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</div>;
                           if (column === 'type') return <div key={column} style={columnStyle(column)} className={base}><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>{item.type}</span></div>;
                           if (column === 'category') return <div key={column} style={columnStyle(column)} className={`${base} truncate`}>{item.categoryName}</div>;
-                          if (column === 'barcode') return <div key={column} style={columnStyle(column)} className={`${base} truncate font-mono`}>{item.barcode || '—'}</div>;
-                          if (column === 'stock') return <div key={column} style={columnStyle(column)} className={`${base} text-right font-semibold`}>{item.type === 'Persediaan' ? displayStock(item) : '—'}</div>;
+                          if (column === 'barcode') return <div key={column} style={columnStyle(column)} className={`${base} truncate font-mono`} title={item.barcode || 'Belum ada barcode'}>{item.barcode || '—'}</div>;
+                          if (column === 'stock') return <div key={column} style={columnStyle(column)} className={`${base} text-right font-semibold`}><span className={stockColor(item)} title={item.type === 'Persediaan' ? `Stok minimum: ${itemMinimumStock(item)} ${item.unit}` : undefined}>{item.type === 'Persediaan' ? displayStock(item) : '—'}</span></div>;
+                          if (column === 'minimumStock') return <div key={column} style={columnStyle(column)} className={`${base} text-right tabular-nums`}>{item.type === 'Persediaan' ? itemMinimumStock(item) : '—'}</div>;
                           if (column === 'unit') return <div key={column} style={columnStyle(column)} className={base}>{item.unit}</div>;
                           if (column === 'brand') return <div key={column} style={columnStyle(column)} className={`${base} truncate`}>{item.brand || '—'}</div>;
                           if (column === 'purchasePrice') return <div key={column} style={columnStyle(column)} className={`${base} text-right`}>{formatCurrency(item.purchasePrice)}</div>;
@@ -1601,6 +1582,11 @@ export default function ItemsAndServices() {
                 </div>
               </div>}
               {itemFormTab === 'stock' && <div className="min-h-[520px] rounded border border-slate-300 bg-white p-5 shadow-sm">
+                {itemForm.type === 'Persediaan' && <div className="mb-6 border-b border-slate-200 pb-5">
+                  <label htmlFor="item-minimum-stock" className="mb-2 block text-sm font-semibold text-slate-900">Stok Minimum</label>
+                  <div className="flex items-center gap-2"><input id="item-minimum-stock" type="number" min="0" max="2147483647" step="1" value={itemForm.minimumStock} onChange={event => setItemForm({ ...itemForm, minimumStock: event.target.value === '' ? 0 : Number(event.target.value) })} className="h-9 w-40 rounded border border-slate-300 bg-white px-3 text-right tabular-nums" /><span className="text-sm text-slate-600">{itemForm.unit}</span></div>
+                  <p className="mt-2 text-sm text-slate-600">Berlaku sama untuk semua cabang. Isi 0 jika barang tidak wajib tersedia. Angka stok berwarna merah jika di bawah minimum.</p>
+                </div>}
                 <h4 className="mb-2 border-b border-slate-300 pb-2 text-lg font-medium text-blue-600">Informasi Stok per Gudang</h4>
                 <p className="mb-5 text-sm text-slate-600">Stok hanya berubah melalui penerimaan barang, transfer gudang, pemakaian, dan penyesuaian stok. Nilai di bawah tidak dapat diedit dari master barang.</p>
                 {!editingItem && <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">Simpan barang terlebih dahulu untuk melihat stok per gudang.</div>}
