@@ -58,6 +58,13 @@ try {
             $rows[] = $row;
         }
         $payload['rows'] = $rows;
+    } elseif ($id === 'movements') {
+        require_once __DIR__.'/../inventory-movement-report.php';
+        $dateFrom = itemUsageDate($_GET['dateFrom'] ?? '');
+        $dateTo = itemUsageDate($_GET['dateTo'] ?? '');
+        if ($dateFrom > $dateTo) throw new InvalidArgumentException('Tanggal awal harus sebelum atau sama dengan tanggal akhir');
+        $payload += ['dateFrom' => $dateFrom, 'dateTo' => $dateTo,
+            'rows' => inventoryMovementReport($pdo, $warehouses, $warehouseId, $dateFrom, $dateTo)];
     } elseif ($id === 'stock-card') {
         $itemId = trim((string)($_GET['itemId'] ?? ''));
         $dateFrom = itemUsageDate($_GET['dateFrom'] ?? '');

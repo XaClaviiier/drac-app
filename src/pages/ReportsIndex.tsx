@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, BookOpen, Boxes, ClipboardList, Coins, Download, FileBarChart,
-  History, Landmark, Search, ShoppingCart, Star, Warehouse, Wrench, PackageX,
+  History, Landmark, Search, ShoppingCart, Star, Warehouse, Wrench, PackageX, ArrowLeftRight,
 } from 'lucide-react';
 
 type ReportCategory = 'memorize' | 'operasional' | 'gudang' | 'penjualan' | 'pembelian' | 'keuangan' | 'audit';
@@ -21,6 +21,7 @@ const reports: ReportDefinition[] = [
   { id: 'purchases', label: 'Laporan Pembelian', description: 'Pembelian, pembayaran pemasok, dan utang usaha.', category: 'pembelian', icon: ShoppingCart, path: '/reports/purchases' },
   { id: 'inventory', label: 'Stok per Gudang', description: 'Saldo barang dan nilai persediaan per gudang.', category: 'gudang', icon: Boxes, path: '/reports/inventory' },
   { id: 'stock-card', label: 'Kartu Stok', description: 'Saldo awal, barang masuk, barang keluar, dan saldo akhir per periode.', category: 'gudang', icon: History, path: '/reports/stock-card' },
+  { id: 'stock-movements', label: 'Mutasi per Gudang', description: 'Seluruh barang masuk dan keluar beserta tanggal dan dokumen sumber per periode.', category: 'gudang', icon: ArrowLeftRight, path: '/reports/stock-movements' },
   { id: 'inventory-attention', label: 'Stok Kosong / Minus', description: 'Pintasan filter stok nol dan negatif pada setiap gudang.', category: 'gudang', icon: PackageX, path: '/reports/inventory?availability=ATTENTION' },
   { id: 'stock-count-sheet', label: 'Lembar Penghitungan Stok', description: 'Lembar stok opname fisik yang dapat difilter dan dicetak.', category: 'gudang', icon: ClipboardList, path: '/reports/stock-count-sheet-print' },
   { id: 'cash-bank', label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, transfer, serta saldo setiap akun.', category: 'keuangan', icon: Landmark, path: '/reports/cash-bank' },
