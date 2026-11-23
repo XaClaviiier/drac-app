@@ -499,22 +499,21 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   const detail = source('src/pages/GoodsReceiptDetail.tsx');
   const list = source('src/pages/GoodsReceipt.tsx');
   const warehouseHeader = source('src/components/ActiveWarehouseHeader.tsx');
+  const columns = source('src/lib/goodsReceiptListPrint.ts');
   assert.match(detail, /receipt-notes-inline/);
-  assert.match(detail, /disabled=\{!editing\} value=\{form\.notes\}.*placeholder="Keterangan \(opsional\)"/);
+  assert.match(detail, /disabled=\{!editing\} value=\{editing\?form\.notes:description\}.*placeholder="Otomatis dari barang dan penerima jika kosong"/);
   assert.match(detail, /Edit Penerimaan/);
   assert.match(detail, /Simpan perubahan/);
   assert.match(detail, /ActiveWarehouseHeader/);
   assert.match(warehouseHeader, /receipt-active-warehouse/);
   assert.match(warehouseHeader, /Gudang Aktif/);
   assert.match(warehouseHeader, /hidden whitespace-nowrap font-medium sm:inline/);
-  assert.match(list, /'Nomor #','Tanggal','Keterangan','Diterima Oleh','Jumlah Barang','Gudang','Status'/);
-  assert.match(list, /\{r\.notes\|\|'-'\}/);
-  assert.match(list, /\{r\.items\.length\} item \(\{r\.items\.reduce/);
+  for (const label of ['Nomor #', 'Tanggal', 'Keterangan', 'Diterima Oleh', 'Jumlah Barang', 'Gudang', 'Status']) assert.ok(columns.includes(`'${label}'`), label);
+  assert.match(list, /receiptDescription\(r\)/);
+  assert.match(list, /\{r\.items\.length\} item \(\{receiptQuantitySummary\(r\.items\)\}/);
   assert.match(list, /space-y-2 px-2 py-2 lg:hidden/);
   assert.match(list, /hidden lg:block/);
-  assert.match(list, /const totalQuantity=/);
   assert.match(list, /\{r\.receivedBy\|\|'-'\}/);
-  assert.match(list, /\{r\.items\.length\} item \(\{totalQuantity\} pcs\)/);
   assert.match(list, /ariaLabel="Filter satu tanggal penerimaan"[\s\S]*title="Filter daftar penerimaan"[\s\S]*ActiveFilterResetButton active=\{receiptFiltersActive\}/);
 });
 

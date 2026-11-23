@@ -11,9 +11,11 @@ const receipt = { receiptNumber:'GR-SERVER-0099', date:'2026-11-12', deliveryMet
   ] };
 const location = { branchName:'CABANG PERINTIS', warehouseName:'GUDANG PERINTIS' };
 
-test('receipt sharing includes saved number, date, location, all quantities, shipping and receiver', () => {
+test('compact receipt sharing keeps the saved number, warehouse, items, shipping and receiver', () => {
   const text=buildGoodsReceiptShareText(receipt,location);
-  for(const value of ['GR-SERVER-0099','12 November 2026','CABANG PERINTIS','GUDANG PERINTIS','*Maxim*','*Rp25.000*','1. Kompresor','ITEM-1','*2 PCS*','2. Paket Seal','*1 SET*','Petugas A']) assert.ok(text.includes(value),value);
+  for(const value of ['GR-SERVER-0099','12/11/2026','GUDANG PERINTIS','Maxim · Ongkir *Rp25.000*','*2 PCS Kompresor*','*1 SET Paket Seal*','Diterima: *Petugas A*']) assert.ok(text.includes(value),value);
+  for(const value of ['CABANG PERINTIS','Cabang:','Kode:','ITEM-1','Rincian Barang','Sudah diterima']) assert.ok(!text.includes(value),value);
+  assert.equal(text.split('\n').length,7);
   assert.equal(buildGoodsReceiptShareText({...receipt,status:'Draft'},location),'');
   assert.equal(buildGoodsReceiptShareText({...receipt,status:'Batal'},location),'');
   assert.ok(buildGoodsReceiptShareText({...receipt,status:'Difakturkan'},location));
@@ -22,7 +24,15 @@ test('receipt sharing includes saved number, date, location, all quantities, shi
 test('unknown legacy shipping costs remain distinct from explicit free shipping', () => {
   assert.equal(receiptShippingCostLabel(0),'Rp0');
   for(const value of [undefined,null,NaN,-1]) assert.equal(receiptShippingCostLabel(value),'Belum dicatat');
-  assert.match(buildGoodsReceiptShareText({...receipt,deliveryMethod:'Diantar Supplier',shippingCost:null},location),/via: \*Supplier\*[\s\S]*Biaya kirim: \*Belum dicatat\*/);
+  assert.match(buildGoodsReceiptShareText({...receipt,deliveryMethod:'Diantar Supplier',shippingCost:null},location),/Supplier · Ongkir \*Belum dicatat\*/);
+});
+
+test('compact sharing includes manual notes while omitting legacy AI boilerplate', () => {
+  const manual=buildGoodsReceiptShareText({...receipt,notes:'Langsung pakai DD1546YC.'},location);
+  assert.ok(manual.endsWith('Catatan: Langsung pakai DD1546YC.'));
+  const legacy=buildGoodsReceiptShareText({...receipt,notes:'Dibuat via Asisten AI oleh Petugas A'},location);
+  assert.ok(!legacy.includes('Asisten AI'));
+  assert.ok(!legacy.includes('Catatan:'));
 });
 
 test('receipt drafts retain shipping through reload and reject invalid money', () => {

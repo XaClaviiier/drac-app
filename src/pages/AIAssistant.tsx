@@ -28,6 +28,7 @@ interface ChatMsg {
   actions?: Array<{ label: string; type: 'command' | 'select_vehicle' | 'select_receipt_item' | 'create_wo_vehicle' | 'open_workorders' | 'open_workorder' | 'open_invoice'; value?: string }>;
   shareText?: string;
   receiptShareText?: string;
+  receiptId?: string;
   vehicleSummary?: VehicleHistorySummary;
 }
 
@@ -1714,7 +1715,7 @@ ${buildSmartContext(userMsgText)}`;
       sourceType: 'Supplier',
       items,
       status: 'Diterima',
-      notes: `Dibuat via Asisten AI oleh ${currentUser?.name || 'System'}`,
+      notes: '',
       branchId,
       warehouseId: warehouse.id,
       receivedBy: currentUser?.name || 'System',
@@ -2297,6 +2298,13 @@ ${buildSmartContext(userMsgText)}`;
     }
   };
 
+  const receiptShareTextForMessage = (message: ChatMsg) => {
+    const stored = message.receiptShareText || '';
+    const number = /^No: ([^\r\n]+)$/m.exec(stored)?.[1] || /^\*([^*\r\n]+)\* ·/m.exec(stored)?.[1];
+    const receipt = data.goodsReceipts.find(row => message.receiptId ? row.id === message.receiptId : row.receiptNumber === number);
+    return receipt ? buildGoodsReceiptShareText(receipt, { warehouseName: data.warehouses.find(row => row.id === receipt.warehouseId)?.name || '-' }) : stored;
+  };
+
   const confirmAction = async () => {
     if (confirmActionLockRef.current || !pendingAction) return;
     if (pendingAction.action !== 'create_goods_receipt' && !pendingBranchId) return;
@@ -2311,6 +2319,7 @@ ${buildSmartContext(userMsgText)}`;
           role: 'assistant',
           time: now(),
           receiptShareText: buildGoodsReceiptShareText(r, r),
+          receiptId: r.id,
           content: `✅ **Penerimaan ${r.receiptNumber} berhasil disimpan**\n\n${r.items.map(item => `- ${item.itemCode} — ${item.itemName}: **${item.qty} ${item.unit}**`).join('\n')}\n\nCabang: **${r.branchName}**\nGudang: **${r.warehouseName}**\nPengiriman via: **${r.deliveryMethod}**\nBiaya kirim: **${receiptShippingCostLabel(r.shippingCost)}**\nStatus: **Diterima**\n\nBuka menu Penerimaan Barang untuk melihat transaksi.`,
         }]);
         completed = true;
@@ -2744,7 +2753,7 @@ ${buildSmartContext(userMsgText)}`;
                       })}
                     </div>
                   )}
-                  {msg.role === 'assistant' && msg.receiptShareText && <ReceiptShareButton text={msg.receiptShareText} className="mt-2 w-full" />}
+                  {msg.role === 'assistant' && msg.receiptShareText && <ReceiptShareButton text={receiptShareTextForMessage(msg)} className="mt-2 w-full" />}
                   {msg.role === 'assistant' && msg.shareText && (
                     <button type="button" onClick={() => void shareRegisterToWhatsApp(msg.shareText!)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-950/20 hover:bg-emerald-400 active:scale-[0.99]">
                       <Share2 className="h-5 w-5" /> Bagikan ke Grup WA
