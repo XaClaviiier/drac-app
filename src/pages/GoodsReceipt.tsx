@@ -12,7 +12,9 @@ import ReceiptSupplierSelect from '../components/ReceiptSupplierSelect';
 import { receiptDateLabel, receiptDescription, receiptQuantitySummary, receiptStatusLabel } from '../lib/goodsReceiptPresentation';
 import { buildGoodsReceiptListPrintHtml, defaultReceiptColumns, receiptColumnLabels, type ReceiptColumn } from '../lib/goodsReceiptListPrint';
 
-const receiptColumnStorageKey = 'drac.receipts.columnOrder.v1';
+const legacyReceiptColumnStorageKey = 'drac.receipts.columnOrder.v1';
+const validReceiptColumns = (value: unknown): ReceiptColumn[] => Array.isArray(value)
+  ? [...new Set(value.filter((column): column is ReceiptColumn => defaultReceiptColumns.includes(column)))] : [];
 
 export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt' | 'supplier-mapping' }) {
   const isSupplierMapping = mode === 'supplier-mapping';
@@ -23,6 +25,7 @@ export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt
     addPurchaseInvoice, generatePurchaseInvoiceNumber,
     currentBranchId, hasPermission, currentUser, addItem, refreshData,
   } = useApp();
+  const receiptColumnStorageKey = `drac.receipts.columns.v2.${currentUser?.id || currentUser?.username || 'default'}`;
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -73,10 +76,46 @@ export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt
   }, [showFilterPanel]);
   const [receiptColumns, setReceiptColumns] = useState<ReceiptColumn[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(receiptColumnStorageKey) || '[]') as ReceiptColumn[];
-      return saved.length === defaultReceiptColumns.length && defaultReceiptColumns.every(column => saved.includes(column)) ? saved : defaultReceiptColumns;
+      const saved = JSON.parse(localStorage.getItem(receiptColumnStorageKey) || 'null');
+      const order = validReceiptColumns(saved?.order ?? JSON.parse(localStorage.getItem(legacyReceiptColumnStorageKey) || 'null'));
+      return [...order, ...defaultReceiptColumns.filter(column => !order.includes(column))];
     } catch { return defaultReceiptColumns; }
   });
+  const [hiddenReceiptColumns, setHiddenReceiptColumns] = useState<ReceiptColumn[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(receiptColumnStorageKey) || 'null');
+      return validReceiptColumns(saved?.hidden).filter(column => column !== 'number');
+    } catch { return []; }
+  });
+  const visibleReceiptColumns = receiptColumns.filter(column => !hiddenReceiptColumns.includes(column));
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const columnSettingsRef = useRef<HTMLDivElement>(null);
+  const columnSettingsButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(receiptColumnStorageKey, JSON.stringify({ order: receiptColumns, hidden: hiddenReceiptColumns }));
+    } catch { /* Preferensi tetap berlaku selama halaman terbuka. */ }
+  }, [receiptColumnStorageKey, receiptColumns, hiddenReceiptColumns]);
+  useEffect(() => {
+    if (!showColumnSettings) return;
+    const closeFromOutside = (event: PointerEvent) => {
+      if (!columnSettingsRef.current?.contains(event.target as Node)) setShowColumnSettings(false);
+    };
+    document.addEventListener('pointerdown', closeFromOutside);
+    return () => document.removeEventListener('pointerdown', closeFromOutside);
+  }, [showColumnSettings]);
+  const closeColumnSettings = () => {
+    setShowColumnSettings(false);
+    columnSettingsButtonRef.current?.focus();
+  };
+  const setReceiptColumnVisible = (column: ReceiptColumn, visible: boolean) => {
+    if (column === 'number') return;
+    setHiddenReceiptColumns(current => visible ? current.filter(value => value !== column) : [...new Set([...current, column])]);
+  };
+  const resetReceiptColumns = () => {
+    setReceiptColumns([...defaultReceiptColumns]);
+    setHiddenReceiptColumns([]);
+  };
   const [draggedReceiptColumn, setDraggedReceiptColumn] = useState<ReceiptColumn | null>(null);
   const [receiptSort, setReceiptSort] = useState<{column:ReceiptColumn;direction:'asc'|'desc'}>({column:'date',direction:'desc'});
 
@@ -267,7 +306,7 @@ export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt
     setReceiptColumns(current=>{
       const next=[...current];const from=next.indexOf(source);const to=next.indexOf(target);
       if(from<0||to<0)return current;
-      next.splice(from,1);next.splice(to,0,source);localStorage.setItem(receiptColumnStorageKey,JSON.stringify(next));return next;
+      next.splice(from,1);next.splice(to,0,source);return next;
     });
   };
 
@@ -421,7 +460,7 @@ export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt
       search.trim() && `Pencarian: ${search.trim()}`,
     ].filter((value): value is string => Boolean(value));
     popup.opener = null;
-    popup.document.write(buildGoodsReceiptListPrintHtml({ receipts: filtered, warehouses: data.warehouses, periodLabel, filters, columns: receiptColumns, includeSupplier: canSeeSuppliers }));
+    popup.document.write(buildGoodsReceiptListPrintHtml({ receipts: filtered, warehouses: data.warehouses, periodLabel, filters, columns: visibleReceiptColumns, includeSupplier: canSeeSuppliers }));
     popup.document.close();
   };
 
@@ -505,7 +544,15 @@ export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt
             <div className="flex gap-2">{!isSupplierMapping&&hasPermission('receipt:create')&&<button onClick={openNewReceipt} className="rounded bg-blue-800 px-5 py-2 text-white" title="Penerimaan Baru"><Plus className="h-6 w-6"/></button>}<button onClick={()=>void refreshData()} className="rounded border border-blue-600 bg-white px-3 py-2 text-blue-700" title="Refresh"><RefreshCw className="h-5 w-5"/></button></div>
             <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
               <button onClick={printReceipts} className="shrink-0 rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Cetak daftar penerimaan"><Printer className="h-5 w-5"/></button>
-              {hasPermission('purchase:view')&&<button onClick={()=>navigate('/purchase-invoices')} className="shrink-0 rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Faktur Pembelian"><Settings2 className="h-5 w-5"/></button>}
+              <div ref={columnSettingsRef} className="relative shrink-0" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setShowColumnSettings(false); }} onKeyDown={event => { if (event.key === 'Escape' && showColumnSettings) { event.preventDefault(); closeColumnSettings(); } }}>
+                <button ref={columnSettingsButtonRef} type="button" onClick={() => { setShowColumnSettings(value => !value); setShowFilterPanel(false); }} className="rounded border border-blue-600 bg-white p-2.5 text-blue-700" title="Pengaturan Kolom" aria-label="Pengaturan Kolom" aria-expanded={showColumnSettings} aria-controls="receipt-column-settings"><Settings2 className="h-5 w-5"/></button>
+                {showColumnSettings && <div id="receipt-column-settings" role="region" aria-label="Kolom Ditampilkan" className="absolute -left-12 top-full z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded border border-slate-300 bg-white p-4 text-slate-800 shadow-xl sm:left-auto sm:right-0">
+                  <div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-bold">Kolom Ditampilkan</p><p className="text-[10px] text-slate-500">Tersimpan untuk pengguna ini</p></div><button type="button" onClick={closeColumnSettings} aria-label="Tutup pengaturan kolom" className="rounded p-1 hover:bg-slate-100"><X className="h-4 w-4"/></button></div>
+                  {receiptColumns.map(column => <label key={column} className="flex items-center justify-between gap-4 rounded px-2 py-1.5 text-sm hover:bg-slate-50"><span>{receiptColumnLabels[column]}</span><input type="checkbox" disabled={column === 'number'} checked={visibleReceiptColumns.includes(column)} onChange={event => setReceiptColumnVisible(column, event.target.checked)} className="h-4 w-4 rounded accent-blue-600"/></label>)}
+                  {canSeeSuppliers && <label className="flex items-center justify-between gap-4 px-2 py-1.5 text-sm"><span>Supplier</span><input type="checkbox" checked disabled className="h-4 w-4 rounded"/></label>}
+                  <button type="button" onClick={resetReceiptColumns} className="mt-3 w-full rounded border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50">Kembalikan Default</button>
+                </div>}
+              </div>
               <div className="relative min-w-0 flex-1 sm:flex-none"><input aria-label="Cari penerimaan barang" value={search} onChange={e=>setSearch(e.target.value)} placeholder={isSupplierMapping ? 'Cari nomor, barang, supplier...' : 'Cari nomor, barang, keterangan...'} className="w-full rounded border border-slate-300 bg-white px-3 py-2.5 pr-10 text-slate-900 placeholder:text-slate-400 focus:bg-white sm:w-64"/><Search className="absolute right-3 top-3 h-5 w-5"/></div>
               <span className="min-w-10 shrink-0 rounded border border-slate-300 bg-white px-2 py-2.5 text-center sm:min-w-16 sm:px-4">{filtered.length}</span>
             </div>
@@ -520,17 +567,17 @@ export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt
             const description=receiptDescription(r);
             const status=receiptStatusLabel(r.status);
             return <article key={r.id} role="button" tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="rounded border border-slate-300 bg-white px-3 py-2.5 shadow-sm active:bg-blue-50">
-              <div className="flex items-start justify-between gap-3"><time className="font-bold text-slate-900">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</time><span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${status==='Diterima'?'bg-green-100 text-green-700':status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{status}</span></div>
+              {(visibleReceiptColumns.includes('date') || visibleReceiptColumns.includes('status')) && <div className="flex items-start justify-between gap-3">{visibleReceiptColumns.includes('date') && <time className="font-bold text-slate-900">{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</time>}{visibleReceiptColumns.includes('status') && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${status==='Diterima'?'bg-green-100 text-green-700':status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{status}</span>}</div>}
               <div className="mt-0.5 font-mono text-[13px] font-semibold text-blue-700">{documentNumber}</div>
-              <div className="mt-2 grid grid-cols-[minmax(72px,auto)_1fr] gap-x-2 border-t border-slate-100 pt-2 text-xs text-slate-700"><span className="truncate font-medium">{r.receivedBy||'-'}</span><span className="line-clamp-2 break-words border-l border-slate-300 pl-2" title={description}>{description}</span></div>
-              <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs"><span className="font-semibold text-slate-800">{r.items.length} item ({receiptQuantitySummary(r.items)})</span><span className="text-slate-300">|</span><span className="truncate text-slate-600" title={warehouseName}>{warehouseName}</span></div>
+              {(visibleReceiptColumns.includes('receivedBy') || visibleReceiptColumns.includes('notes')) && <div className={`mt-2 grid ${visibleReceiptColumns.includes('receivedBy') && visibleReceiptColumns.includes('notes') ? 'grid-cols-[minmax(72px,auto)_1fr]' : 'grid-cols-1'} gap-x-2 border-t border-slate-100 pt-2 text-xs text-slate-700`}>{visibleReceiptColumns.includes('receivedBy') && <span className="truncate font-medium">{r.receivedBy||'-'}</span>}{visibleReceiptColumns.includes('notes') && <span className={`line-clamp-2 break-words ${visibleReceiptColumns.includes('receivedBy') ? 'border-l border-slate-300 pl-2' : ''}`} title={description}>{description}</span>}</div>}
+              {(visibleReceiptColumns.includes('itemCount') || visibleReceiptColumns.includes('warehouse')) && <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs">{visibleReceiptColumns.includes('itemCount') && <span className="font-semibold text-slate-800">{r.items.length} item ({receiptQuantitySummary(r.items)})</span>}{visibleReceiptColumns.includes('itemCount') && visibleReceiptColumns.includes('warehouse') && <span className="text-slate-300">|</span>}{visibleReceiptColumns.includes('warehouse') && <span className="truncate text-slate-600" title={warehouseName}>{warehouseName}</span>}</div>}
               {canSeeSuppliers && <div className="mt-2 border-t border-slate-100 pt-2"><p className="mb-1 text-[11px] font-medium text-slate-500">Supplier</p>{supplierSelect(r)}</div>}
             </article>
           })}
           {!filtered.length&&<div className="rounded border border-slate-200 bg-white py-14 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-10 w-10"/>Belum ada penerimaan barang.</div>}
         </div>
         <div className="app-fill-stack hidden lg:block">
-        <div className="app-table-scroll app-table-scroll--fill mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{receiptColumns.map(column=><th key={column} draggable onDragStart={()=>setDraggedReceiptColumn(column)} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedReceiptColumn)moveReceiptColumn(draggedReceiptColumn,column);setDraggedReceiptColumn(null)}} onDragEnd={()=>setDraggedReceiptColumn(null)} onClick={()=>setReceiptSort(current=>({column,direction:current.column===column&&current.direction==='asc'?'desc':'asc'}))} title="Klik untuk mengurutkan. Tarik untuk memindahkan kolom." className={`cursor-grab select-none whitespace-nowrap border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0 ${draggedReceiptColumn===column?'opacity-50':''}`}>{receiptColumnLabels[column]} {receiptSort.column===column&&<span className="text-[10px]">{receiptSort.direction==='asc'?'▲':'▼'}</span>}</th>)}{canSeeSuppliers && <th className="min-w-[240px] p-3 text-left">Supplier</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{receiptColumns.map(column=>{
+        <div className="app-table-scroll app-table-scroll--fill mx-3 mt-2 min-h-[440px] overflow-x-auto rounded-t-lg border border-[#d8d8d8] bg-white"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{visibleReceiptColumns.map(column=><th key={column} draggable onDragStart={()=>setDraggedReceiptColumn(column)} onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedReceiptColumn)moveReceiptColumn(draggedReceiptColumn,column);setDraggedReceiptColumn(null)}} onDragEnd={()=>setDraggedReceiptColumn(null)} onClick={()=>setReceiptSort(current=>({column,direction:current.column===column&&current.direction==='asc'?'desc':'asc'}))} title="Klik untuk mengurutkan. Tarik untuk memindahkan kolom." className={`cursor-grab select-none whitespace-nowrap border-r border-[#d8d8d8]/50 p-3 text-left last:border-r-0 ${draggedReceiptColumn===column?'opacity-50':''}`}>{receiptColumnLabels[column]} {receiptSort.column===column&&<span className="text-[10px]">{receiptSort.direction==='asc'?'▲':'▼'}</span>}</th>)}{canSeeSuppliers && <th className="min-w-[240px] p-3 text-left">Supplier</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{visibleReceiptColumns.map(column=>{
           const base='border-r border-[#d8d8d8] p-3 last:border-r-0';
           if(column==='number')return <td key={column} className={`${base} font-normal text-blue-700 underline-offset-2 hover:underline`}>{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td>;
           if(column==='date')return <td key={column} className={`${base} whitespace-nowrap`}>{new Date(`${r.date}T00:00:00`).toLocaleDateString('id-ID')}</td>;
