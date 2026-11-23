@@ -1,13 +1,13 @@
 import type { GoodsReceipt } from '../types';
 import { receiptDateLabel, receiptDescription, receiptDocumentNumber, receiptQuantitySummary, receiptStatusLabel } from './goodsReceiptPresentation.ts';
 
-export type ReceiptColumn = 'number' | 'date' | 'notes' | 'receivedBy' | 'itemCount' | 'warehouse' | 'status';
-export const defaultReceiptColumns: ReceiptColumn[] = ['number', 'date', 'notes', 'receivedBy', 'itemCount', 'warehouse', 'status'];
+export type ReceiptColumn = 'number' | 'date' | 'notes' | 'receivedBy' | 'itemCount' | 'warehouse' | 'status' | 'supplier';
+export const defaultReceiptColumns: ReceiptColumn[] = ['number', 'date', 'notes', 'receivedBy', 'itemCount', 'warehouse', 'status', 'supplier'];
 export const receiptColumnLabels: Record<ReceiptColumn, string> = {
   number: 'Nomor #', date: 'Tanggal', notes: 'Keterangan', receivedBy: 'Diterima Oleh',
-  itemCount: 'Jumlah Barang', warehouse: 'Gudang', status: 'Status',
+  itemCount: 'Jumlah Barang', warehouse: 'Gudang', status: 'Status', supplier: 'Supplier',
 };
-const columnWidths: Record<ReceiptColumn, number> = { number: 14, date: 8, notes: 32, receivedBy: 12, itemCount: 12, warehouse: 11, status: 8 };
+const columnWidths: Record<ReceiptColumn, number> = { number: 14, date: 8, notes: 32, receivedBy: 12, itemCount: 12, warehouse: 11, status: 8, supplier: 10 };
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 
 type ReceiptListPrintOptions = {
@@ -17,6 +17,7 @@ type ReceiptListPrintOptions = {
   filters: string[];
   columns?: ReceiptColumn[];
   includeSupplier?: boolean;
+  supplierMapped?: (receipt: GoodsReceipt) => boolean;
   printedAt?: Date;
 };
 
@@ -33,6 +34,7 @@ export function buildGoodsReceiptListPrintHtml(options: ReceiptListPrintOptions)
     if (column === 'receivedBy') return escapeHtml(receipt.receivedBy || '-');
     if (column === 'itemCount') return `${receipt.items.length} item<br><span>${escapeHtml(receiptQuantitySummary(receipt.items))}</span>`;
     if (column === 'warehouse') return escapeHtml(warehouseNames.get(receipt.warehouseId) || '-');
+    if (column === 'supplier') return options.supplierMapped?.(receipt) ? '✓' : receipt.sourceType === 'Transfer Gudang' ? '—' : 'X';
     return escapeHtml(receiptStatusLabel(receipt.status));
   };
   const rows = receipts.map((receipt, index) => `<tr><td class="sequence">${index + 1}</td>${columns.map(column => `<td class="${column}">${cell(receipt, column)}</td>`).join('')}${includeSupplier ? `<td>${escapeHtml(receipt.supplierName || 'Belum dipetakan')}</td>` : ''}</tr>`).join('');
