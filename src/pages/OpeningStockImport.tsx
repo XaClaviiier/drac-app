@@ -246,13 +246,13 @@ export default function OpeningStockImport() {
     setMessage(isHpp && hppAllWarehouses ? `Memuat stok ${item.code} di semua gudang…` : "");
     try {
       const previews = isHpp
-        ? await Promise.all(missingWarehouses.map(async warehouse => {
+        ? (await Promise.all(missingWarehouses.map(async warehouse => {
             const query = new URLSearchParams({valuationPreview:"1",itemId:item.id,warehouseId:warehouse.id,date});
             const response = await api.get<{stockBefore:number;unitCostBefore:number}>(`stock-adjustments?${query}`);
-            if (!response.success || !response.data) throw new Error(response.message || `HPP ${warehouse.name} belum dapat dimuat.`);
-            return {warehouse, snapshot:response.data};
-          }))
+            return {warehouse, snapshot:response.success && response.data ? response.data : null, message:response.message || ""};
+          }))).filter(result => result.snapshot && result.snapshot.stockBefore > 0)
         : missingWarehouses.map(warehouse => ({warehouse, snapshot:null}));
+      if (!previews.length) throw new Error("Penyesuaian HPP memerlukan stok tersedia lebih dari nol");
       const nextRows = previews.map(({warehouse,snapshot}, index) => ({
         row:rows.length + index + 1, code:item.code, itemName:item.name, itemId:item.id,
         warehouse:warehouse.name, warehouseId:warehouse.id, quantity:0, unit:item.unit,
