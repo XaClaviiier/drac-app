@@ -70,6 +70,12 @@ export default function StockMovementReport() {
   const canLoad = Boolean(options && validPeriod && (!warehouseId || options.warehouses.some(row => row.id === warehouseId)));
   const query = new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom, dateTo: effectiveDateTo }).toString();
   const report = canLoad && submittedQuery === query && result?.key === query ? result.data : null;
+  const buildQuery = (from: string, to: string) => new URLSearchParams({
+    branchId: currentBranchId,
+    warehouseId,
+    dateFrom: from,
+    dateTo: to || from,
+  }).toString();
   const changeFilter = (key: string, value: string) => {
     // A second filter can change before the router finishes rendering the first.
     // Preserve the latest URL so quick changes do not restore an older filter.
@@ -86,15 +92,22 @@ export default function StockMovementReport() {
       return next;
     }, { replace: true });
     if (value) {
-      setSubmittedQuery(new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom: value, dateTo: currentTo || value }).toString());
+      setSubmittedQuery(buildQuery(value, currentTo || value));
       setPage(1);
     } else setSubmittedQuery(null);
   };
   const changeDateTo = (value: string) => {
-    changeFilter('dateTo', value);
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (value) next.set('dateTo', value); else next.delete('dateTo');
+      return next;
+    }, { replace: true });
     if (dateFrom) {
-      setSubmittedQuery(new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom, dateTo: value || dateFrom }).toString());
+      // Date sampai is an active report parameter: choosing it immediately
+      // reloads the same report, just like pressing Refresh.
+      setSubmittedQuery(buildQuery(dateFrom, value || dateFrom));
       setPage(1);
+      setRefresh(current => current + 1);
     }
   };
 
@@ -107,7 +120,7 @@ export default function StockMovementReport() {
       else setOptionsError(response.message || 'Daftar gudang gagal dimuat.');
     });
     return () => { active = false; };
-  }, [currentBranchId, dataUpdatedAt, refresh]);
+  }, [currentBranchId, dataUpdatedAt]);
 
   useEffect(() => {
     if (options && warehouseId && !options.warehouses.some(row => row.id === warehouseId)) {
@@ -207,6 +220,12 @@ export default function StockMovementReport() {
     setSubmittedQuery(query);
     setPage(1);
   };
+  const refreshReport = () => {
+    if (!canLoad) return;
+    setSubmittedQuery(query);
+    setPage(1);
+    setRefresh(value => value + 1);
+  };
   const activeFilterCount = [warehouseId, direction !== 'ALL', type !== 'ALL', sort !== 'date', verification !== 'ALL', Boolean(search.trim())].filter(Boolean).length;
   const clearAdditionalFilters = () => {
     setParams(previous => {
@@ -259,7 +278,7 @@ export default function StockMovementReport() {
         {activeFilterCount > 0 && <button type="button" className="stock-movement-clear-button" onClick={clearAdditionalFilters} aria-label="Bersihkan filter tambahan" title="Bersihkan filter tambahan">×</button>}
       </div>
       <div className="stock-movement-action-row">
-        <div className="stock-movement-action-left"><button type="button" className="stock-movement-tool-button" aria-label="Perbarui mutasi" title="Perbarui mutasi" onClick={() => setRefresh(value => value + 1)} disabled={busy}><RefreshCw size={18}/></button></div>
+        <div className="stock-movement-action-left"><button type="button" className="stock-movement-tool-button" aria-label="Perbarui laporan mutasi" title="Perbarui laporan mutasi" onClick={refreshReport} disabled={busy || !canLoad}><RefreshCw size={18}/></button></div>
         <div className="stock-movement-table-tools">
           <button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
         <button type="button" className="stock-movement-tool-button" aria-label="Unduh CSV mutasi" title="Unduh CSV mutasi" onClick={() => downloadReportCsv(`mutasi-gudang-${dateFrom}-${effectiveDateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={18}/></button>
