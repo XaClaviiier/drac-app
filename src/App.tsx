@@ -13,6 +13,7 @@ import ItemsAndServices from './pages/ItemsAndServices';
 import UsersAndRoles from './pages/UsersAndRoles';
 import GoodsReceiptPage from './pages/GoodsReceipt';
 import GoodsReceiptEntry from './pages/GoodsReceiptEntry';
+import GoodsReceiptWorkspace from './pages/GoodsReceiptWorkspace';
 import GoodsReceiptDetail from './pages/GoodsReceiptDetail';
 import Suppliers from './pages/Suppliers';
 import PurchaseInvoicesPage from './pages/PurchaseInvoices';
@@ -121,10 +122,12 @@ function AppRoutes() {
         <Route path="performance-bonus" element={protectedAnyPage(['report:view', 'report:performance'], <PerformanceBonus />)} />
         <Route path="items" element={protectedPage('item:view', <ItemsAndServices />)} />
         <Route path="suppliers" element={protectedPage('supplier:view', <Suppliers />)} />
-        <Route path="receipts" element={protectedPage('receipt:view', <GoodsReceiptPage key="receipts" />)} />
+        <Route path="receipts" element={protectedAnyPage(['receipt:view', 'receipt:create'], <GoodsReceiptWorkspace />)}>
+          <Route index element={protectedPage('receipt:view', null)} />
+          <Route path="new" element={protectedPage('receipt:create', <GoodsReceiptEntry />)} />
+          <Route path="view/:id" element={protectedPage('receipt:view', <GoodsReceiptDetail />)} />
+        </Route>
         <Route path="receipt-supplier-mapping" element={protectedPage('receipt:supplier', <GoodsReceiptPage key="supplier-mapping" mode="supplier-mapping" />)} />
-        <Route path="receipts/new" element={protectedPage('receipt:create', <GoodsReceiptEntry />)} />
-        <Route path="receipts/view/:id" element={protectedPage('receipt:view', <GoodsReceiptDetail />)} />
         <Route path="purchase-invoices" element={protectedPage('purchase:view', <PurchaseInvoicesPage />)} />
         <Route path="categories" element={protectedPage('item:view', <Categories />)} />
         <Route path="ai" element={protectedPage('ai:view', <AIAssistant />)} />
