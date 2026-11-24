@@ -15,5 +15,5 @@ export default function DocumentTabBar({ label, activeKey, children }: { label: 
     else if (bounds.left < left) strip.scrollLeft += bounds.left - left;
     else if (bounds.right > viewport.right) strip.scrollLeft += bounds.right - viewport.right;
   }, [activeKey]);
-  return <div ref={bar} aria-label={label} className="app-child-bar inventory-list-tabs overflow-x-auto [scrollbar-width:none]">{children}</div>;
+  return <div ref={bar} aria-label={label} className="app-child-bar app-document-tab-bar inventory-list-tabs overflow-x-auto [scrollbar-width:none]">{children}</div>;
 }
