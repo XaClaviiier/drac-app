@@ -155,6 +155,15 @@ export default function StockMovementReport() {
     setSubmittedQuery(query);
     setPage(1);
   };
+  const activeFilterCount = [warehouseId, direction !== 'ALL', type !== 'ALL', sort !== 'date', verification !== 'ALL', Boolean(search.trim())].filter(Boolean).length;
+  const clearAdditionalFilters = () => {
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      ['warehouseId', 'direction', 'type', 'sort', 'verification', 'search'].forEach(key => next.delete(key));
+      return next;
+    }, { replace: true });
+    setFiltersOpen(false);
+  };
   const sortColumn = (key: MovementColumnKey) => setColumnSort(current => current?.key === key
     ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
   const moveColumn = (target: MovementColumnKey) => {
@@ -194,7 +203,8 @@ export default function StockMovementReport() {
       <div className="stock-movement-tabbar"><button type="button" className="stock-movement-tab active" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
       <div className="stock-movement-parameter-row">
         <div className="stock-movement-date-range"><IndonesianDateInput ariaLabel="Tanggal awal mutasi" className="inventory-report-date" value={dateFrom} onChange={value => changeFilter('dateFrom', value)}/><span>s/d</span><IndonesianDateInput ariaLabel="Tanggal akhir mutasi" className="inventory-report-date" value={dateTo} onChange={value => changeFilter('dateTo', value)}/></div>
-        <button type="button" className={`stock-movement-filter-button${filtersOpen ? ' active' : ''}`} onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen}><Filter size={16}/>Filter</button>
+        <button type="button" className={`stock-movement-filter-button${filtersOpen ? ' active' : ''}`} onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen}><Filter size={16}/>Filter{activeFilterCount > 0 && <span className="stock-movement-filter-badge">{activeFilterCount}</span>}</button>
+        {activeFilterCount > 0 && <button type="button" className="stock-movement-clear-button" onClick={clearAdditionalFilters} aria-label="Bersihkan filter tambahan" title="Bersihkan filter tambahan">×</button>}
       </div>
       <div className="stock-movement-action-row">
         <div className="stock-movement-action-left"><button type="button" className="stock-movement-tool-button" aria-label="Perbarui mutasi" title="Perbarui mutasi" onClick={() => setRefresh(value => value + 1)} disabled={busy}><RefreshCw size={18}/></button></div>
@@ -210,6 +220,7 @@ export default function StockMovementReport() {
         </div>
       </div>
       {filtersOpen && <div className="inventory-report-filters stock-movement-advanced-filters">
+        <div className="stock-movement-filter-heading"><b>Filter Mutasi Gudang</b><button type="button" onClick={clearAdditionalFilters}>Clear</button></div>
         <label>Gudang<select aria-label="Gudang mutasi" value={warehouseId} onChange={event => changeFilter('warehouseId', event.target.value)}><option value="">Semua Gudang</option>{options?.warehouses.map(row => <option key={row.id} value={row.id}>{row.branchName} · {row.name}</option>)}</select></label>
         <label>Arah<select aria-label="Arah mutasi" value={direction} onChange={event => changeFilter('direction', event.target.value)}>{movementDirections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Jenis transaksi<select aria-label="Jenis transaksi mutasi" value={type} onChange={event => changeFilter('type', event.target.value)}>{movementKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>

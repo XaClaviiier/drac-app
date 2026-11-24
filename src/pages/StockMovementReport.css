@@ -1,6 +1,6 @@
 .stock-movement-toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
 .stock-movement-toolbar > p { color:#64748b; font-size:13px; }
-.stock-movement-header-shell { overflow:visible; border:1px solid #cbd5e1; border-radius:4px; background:#f3f4f6; }
+.stock-movement-header-shell { position:relative; overflow:visible; border:1px solid #cbd5e1; border-radius:4px; background:#f3f4f6; }
 .stock-movement-tabbar { height:51px; border-bottom:1px solid #cbd5e1; background:#fff; }
 .stock-movement-tab { display:grid; place-items:center; width:56px; height:45px; margin:5px 0 0 8px; border:1px solid #cbd5e1; border-bottom-color:#fff; border-radius:5px 5px 0 0; color:#2563eb; background:#fff; }
 .stock-movement-parameter-row { display:flex; align-items:center; gap:12px; padding:12px 14px 8px; }
@@ -8,10 +8,15 @@
 .stock-movement-date-range .inventory-report-date { width:160px; }
 .stock-movement-filter-button { display:inline-flex; align-items:center; gap:7px; height:36px; border:1px solid #2563eb; border-radius:4px; padding:0 12px; color:#2563eb; background:#fff; font-size:12px; font-weight:600; }
 .stock-movement-filter-button:hover,.stock-movement-filter-button.active { background:#eff6ff; }
+.stock-movement-filter-badge { display:inline-grid; place-items:center; min-width:17px; height:17px; border-radius:999px; padding:0 4px; background:#1d4ed8; color:#fff; font-size:10px; }
+.stock-movement-clear-button { display:grid; place-items:center; width:36px; height:36px; border:1px solid #cbd5e1; border-radius:4px; color:#64748b; background:#fff; font-size:22px; line-height:1; }
+.stock-movement-clear-button:hover { color:#1e3a8a; background:#f8fafc; }
 .stock-movement-action-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:5px 14px 12px; }
 .stock-movement-action-left .stock-movement-tool-button { background:#1d4ed8; color:#fff; }
 .stock-movement-action-left .stock-movement-tool-button:hover:not(:disabled) { background:#1e40af; }
-.stock-movement-advanced-filters { margin:0 14px 12px; }
+.stock-movement-advanced-filters { position:absolute; top:104px; left:180px; z-index:30; display:grid; width:360px; gap:10px; margin:0; padding:14px 16px 16px; border:1px solid #dbe3ec; border-radius:0 0 10px 10px; background:#fff; box-shadow:0 10px 24px #0f172a2b; }
+.stock-movement-filter-heading { display:flex; align-items:center; justify-content:space-between; padding-bottom:10px; border-bottom:1px solid #e2e8f0; color:#334155; font-size:13px; }
+.stock-movement-filter-heading button { color:#2563eb; font-size:12px; }
 .stock-movement-report .inventory-report-filters { padding:12px; border:1px solid #dbe3ec; border-radius:5px; background:#f8fafc; }
 .stock-movement-report .inventory-report-filters input,.stock-movement-report .inventory-report-filters select { height:36px; }
 .stock-movement-summary { color:#475569; font-size:12px; }
@@ -78,4 +83,5 @@
   .stock-movement-filter-button { align-self:flex-start; }
   .stock-movement-action-row { align-items:flex-start; flex-direction:column; }
   .stock-movement-table-tools { width:100%; }
+  .stock-movement-advanced-filters { top:104px; right:8px; left:8px; width:auto; }
 }
