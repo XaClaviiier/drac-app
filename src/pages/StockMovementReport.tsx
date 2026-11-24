@@ -4,7 +4,6 @@ import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, Filter,
 import { useApp } from '../context/AppContext';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { api } from '../lib/apiClient';
-import { localDateKey } from '../lib/date';
 import { downloadReportCsv, movementLabels, reportDate, reportNumber, type InventoryReportOptions } from '../lib/inventoryReports';
 import { stockMovementSource } from '../lib/stockMovementSource';
 import {
@@ -26,9 +25,9 @@ const movementColumnLabels: Record<MovementColumnKey, string> = {
 export default function StockMovementReport() {
   const { currentBranchId, dataUpdatedAt, data, hasPermission } = useApp();
   const [params, setParams] = useSearchParams();
-  const [defaultToday] = useState(localDateKey);
-  const dateFrom = params.get('dateFrom') ?? defaultToday.slice(0, 8) + '01';
-  const dateTo = params.get('dateTo') ?? defaultToday;
+  const dateFrom = params.get('dateFrom') || '';
+  const dateTo = params.get('dateTo') || '';
+  const effectiveDateTo = dateTo || dateFrom;
   const warehouseId = params.get('warehouseId') || '';
   const search = params.get('search') || '';
   const direction = movementDirections.find(([value]) => value === params.get('direction'))?.[0] || 'ALL';
@@ -64,9 +63,9 @@ export default function StockMovementReport() {
     } catch { return defaultMovementColumns; }
   });
   const options = optionsResult?.branchId === currentBranchId ? optionsResult.data : null;
-  const validPeriod = Boolean(dateFrom && dateTo && dateFrom <= dateTo);
+  const validPeriod = Boolean(dateFrom && effectiveDateTo && dateFrom <= effectiveDateTo);
   const canLoad = Boolean(options && validPeriod && (!warehouseId || options.warehouses.some(row => row.id === warehouseId)));
-  const query = new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom, dateTo }).toString();
+  const query = new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom, dateTo: effectiveDateTo }).toString();
   const report = canLoad && submittedQuery === query && result?.key === query ? result.data : null;
   const changeFilter = (key: string, value: string) => {
     // A second filter can change before the router finishes rendering the first.
@@ -75,6 +74,13 @@ export default function StockMovementReport() {
     next.set(key, value);
     setParams(next, { replace: true });
   };
+  const changeDateFrom = (value: string) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (value) next.set('dateFrom', value); else next.delete('dateFrom');
+    const currentTo = next.get('dateTo') || '';
+    if (!value || (currentTo && currentTo < value)) next.delete('dateTo');
+    return next;
+  }, { replace: true });
 
   useEffect(() => {
     let active = true;
@@ -140,7 +146,7 @@ export default function StockMovementReport() {
   const branchLabel = currentBranchId === 'ALL' ? 'Semua Cabang' : data.branches.find(row => row.id === currentBranchId)?.name || '';
   const filterLabel = [movementDirections.find(([value]) => value === direction)?.[1], movementKinds.find(([value]) => value === type)?.[1],
     `Urutan: ${movementSorts.find(([value]) => value === sort)?.[1]}`, verification !== 'ALL' ? (verification === 'VERIFIED' ? 'Sudah Diverifikasi' : 'Belum Diverifikasi') : '', search.trim() ? `Pencarian: ${search.trim()}` : ''].filter(Boolean).join(' · ');
-  const heading = { company: data.settings.company.name || 'DOKTER AC MOBIL', dateFrom, dateTo, warehouse: `${warehouseLabel}${branchLabel ? ` · ${branchLabel}` : ''}`, filters: filterLabel };
+  const heading = { company: data.settings.company.name || 'DOKTER AC MOBIL', dateFrom, dateTo: effectiveDateTo, warehouse: `${warehouseLabel}${branchLabel ? ` · ${branchLabel}` : ''}`, filters: filterLabel };
   const printReport = () => {
     if (!report || !rows.length) return;
     const printWindow = window.open('', '_blank', 'width=1200,height=800');
@@ -202,7 +208,7 @@ export default function StockMovementReport() {
     <div className="stock-movement-header-shell">
       <div className="stock-movement-tabbar"><button type="button" className="stock-movement-tab active" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
       <div className="stock-movement-parameter-row">
-        <div className="stock-movement-date-range"><IndonesianDateInput ariaLabel="Tanggal awal mutasi" className="inventory-report-date" value={dateFrom} onChange={value => changeFilter('dateFrom', value)}/><span>s/d</span><IndonesianDateInput ariaLabel="Tanggal akhir mutasi" className="inventory-report-date" value={dateTo} onChange={value => changeFilter('dateTo', value)}/></div>
+        <div className="stock-movement-date-range"><IndonesianDateInput ariaLabel="Tanggal awal mutasi" className="inventory-report-date" value={dateFrom} onChange={changeDateFrom}/><span>s/d</span><IndonesianDateInput ariaLabel="Tanggal akhir mutasi" className="inventory-report-date" value={dateTo} min={dateFrom || undefined} disabled={!dateFrom} onChange={value => changeFilter('dateTo', value)}/></div>
         <button type="button" className={`stock-movement-filter-button${filtersOpen ? ' active' : ''}`} onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen}><Filter size={16}/>Filter{activeFilterCount > 0 && <span className="stock-movement-filter-badge">{activeFilterCount}</span>}</button>
         {activeFilterCount > 0 && <button type="button" className="stock-movement-clear-button" onClick={clearAdditionalFilters} aria-label="Bersihkan filter tambahan" title="Bersihkan filter tambahan">×</button>}
       </div>
@@ -210,7 +216,7 @@ export default function StockMovementReport() {
         <div className="stock-movement-action-left"><button type="button" className="stock-movement-tool-button" aria-label="Perbarui mutasi" title="Perbarui mutasi" onClick={() => setRefresh(value => value + 1)} disabled={busy}><RefreshCw size={18}/></button></div>
         <div className="stock-movement-table-tools">
           <button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
-          <button type="button" className="stock-movement-tool-button" aria-label="Unduh CSV mutasi" title="Unduh CSV mutasi" onClick={() => downloadReportCsv(`mutasi-gudang-${dateFrom}-${dateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={18}/></button>
+        <button type="button" className="stock-movement-tool-button" aria-label="Unduh CSV mutasi" title="Unduh CSV mutasi" onClick={() => downloadReportCsv(`mutasi-gudang-${dateFrom}-${effectiveDateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={18}/></button>
           <div className="stock-movement-column-settings">
             <button type="button" className="stock-movement-tool-button" aria-label="Atur kolom mutasi" title="Atur kolom yang ditampilkan" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(value => !value)}><SlidersHorizontal size={18}/></button>
             {columnsOpen && <div className="stock-movement-column-menu">{defaultMovementColumns.map(key => <label key={key}><input type="checkbox" checked={visibleColumns.includes(key)} disabled={visibleColumns.length === 1 && visibleColumns.includes(key)} onChange={event => setVisibleColumns(current => event.target.checked ? [...current, key] : current.filter(column => column !== key))}/><span>{movementColumnLabels[key]}</span></label>)}</div>}
@@ -229,7 +235,7 @@ export default function StockMovementReport() {
         <button type="button" className="stock-movement-run-button" onClick={runReport} disabled={!canLoad || busy}><Play size={15}/>Tampilkan Laporan</button>
       </div>}
     </div>
-    {(error || optionsError || !validPeriod) && <div role="alert" className="inventory-report-error">{optionsError || error || 'Isi periode yang valid. Tanggal awal harus sebelum atau sama dengan tanggal akhir.'}</div>}
+    {(error || optionsError || ((dateFrom || dateTo) && !validPeriod)) && <div role="alert" className="inventory-report-error">{optionsError || error || 'Isi periode yang valid. Tanggal awal harus sebelum atau sama dengan tanggal akhir.'}</div>}
     <div className="stock-movement-summary" role="status">{busy ? 'Memuat mutasi…' : report ? `${reportNumber(rows.length)} baris mutasi · ${reportNumber(new Set(rows.map(row => row.itemId)).size)} barang · ${reportNumber(new Set(rows.map(row => row.warehouseId)).size)} gudang` : 'Laporan belum tersedia.'}</div>
     <section className="inventory-report-table stock-movement-paper app-table-scroll" aria-busy={busy}>
       <table><thead><tr>{displayedColumns.map(key => { const active = columnSort?.key === key; return <th key={key} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''} draggable onDragStart={() => setDraggedColumn(key)} onDragOver={event => event.preventDefault()} onDrop={() => moveColumn(key)} onDoubleClick={() => sortColumn(key)} aria-sort={active ? columnSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button type="button" className="stock-movement-header-button" onClick={() => sortColumn(key)} title={`Urutkan berdasarkan ${movementColumnLabels[key]}`}><span>{movementColumnLabels[key]}</span>{active ? (columnSort.direction === 'asc' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>) : <ArrowDown size={13} className="stock-movement-sort-hint"/>}</button><GripVertical size={13} className="stock-movement-drag-hint" aria-hidden="true" /></th>; })}</tr></thead>
