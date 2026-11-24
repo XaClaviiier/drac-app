@@ -70,18 +70,29 @@ export default function StockMovementReport() {
   const canLoad = Boolean(options && validPeriod && (!warehouseId || options.warehouses.some(row => row.id === warehouseId)));
   const query = new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom, dateTo: effectiveDateTo }).toString();
   const report = canLoad && submittedQuery === query && result?.key === query ? result.data : null;
-  const buildQuery = (from: string, to: string) => new URLSearchParams({
+  const buildQuery = (from: string, to: string, selectedWarehouseId = warehouseId) => new URLSearchParams({
     branchId: currentBranchId,
-    warehouseId,
+    warehouseId: selectedWarehouseId,
     dateFrom: from,
     dateTo: to || from,
   }).toString();
+  const syncReportForParams = (next: URLSearchParams) => {
+    const nextDateFrom = next.get('dateFrom') || '';
+    const nextDateTo = next.get('dateTo') || nextDateFrom;
+    if (nextDateFrom && nextDateTo && nextDateFrom <= nextDateTo) {
+      setSubmittedQuery(buildQuery(nextDateFrom, nextDateTo, next.get('warehouseId') || ''));
+      setPage(1);
+    } else {
+      setSubmittedQuery(null);
+    }
+  };
   const changeFilter = (key: string, value: string) => {
     // A second filter can change before the router finishes rendering the first.
     // Preserve the latest URL so quick changes do not restore an older filter.
     const next = new URLSearchParams(window.location.search);
-    next.set(key, value);
+    if (value) next.set(key, value); else next.delete(key);
     setParams(next, { replace: true });
+    syncReportForParams(next);
   };
   const changeDateFrom = (value: string) => {
     const currentTo = dateTo && dateTo >= value ? dateTo : '';
@@ -228,11 +239,10 @@ export default function StockMovementReport() {
   };
   const activeFilterCount = [warehouseId, direction !== 'ALL', type !== 'ALL', sort !== 'date', verification !== 'ALL', Boolean(search.trim())].filter(Boolean).length;
   const clearAdditionalFilters = () => {
-    setParams(previous => {
-      const next = new URLSearchParams(previous);
-      ['warehouseId', 'direction', 'type', 'sort', 'verification', 'search'].forEach(key => next.delete(key));
-      return next;
-    }, { replace: true });
+    const next = new URLSearchParams(window.location.search);
+    ['warehouseId', 'direction', 'type', 'sort', 'verification', 'search'].forEach(key => next.delete(key));
+    setParams(next, { replace: true });
+    syncReportForParams(next);
     setFiltersOpen(false);
   };
   const sortColumn = (key: MovementColumnKey) => setColumnSort(current => current?.key === key
