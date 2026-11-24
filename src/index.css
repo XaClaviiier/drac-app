@@ -303,7 +303,6 @@ body {
 }
 
 @media screen and (min-width: 1024px) {
-  .goods-receipt-entry .receipt-items-viewport { scrollbar-gutter: auto; }
   .goods-receipt-entry .receipt-items-viewport > table > thead th {
     position: relative !important;
   }

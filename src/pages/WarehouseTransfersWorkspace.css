@@ -43,7 +43,11 @@
 .transfer-more-menu button { width: 100%; padding: 8px 12px; text-align: left; border-radius: 3px; }
 .transfer-more-menu button:hover, .transfer-more-menu button:focus-visible { background: #eff6ff; }
 @media (min-width: 1024px) {
-  .transfer-form { padding-right: 92px; min-height: 394px; }
+  .transfer-form { padding-right: var(--app-form-action-inset); min-height: 394px; }
+  .transfer-form-header,
+  .transfer-form-header .transfer-field:is(:nth-child(2), :nth-child(4)),
+  .transfer-info-panel { padding-right: 0; }
+  .transfer-document-shell > .transfer-panel { border-right: 0; }
 }
 @media (max-width: 1023px) {
   .transfer-form { padding-bottom: calc(11rem + env(safe-area-inset-bottom)); }

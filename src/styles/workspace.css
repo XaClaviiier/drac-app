@@ -7,9 +7,22 @@
   --app-panel-background: var(--app-canvas);
   --app-panel-border: #aeb4bc;
   --app-panel-gutter: 6px;
+  --app-form-action-gap: 24px;
+  /* Absolute rails are 72px wide and sit 16px from the form edge. */
+  --app-form-action-inset: calc(16px + 72px + var(--app-form-action-gap));
   --app-subtab-height: 41px;
   --app-table-header-background: #5c7287;
   --app-table-header-color: #fff;
+}
+
+@media screen and (min-width: 1024px) {
+  :root { --app-side-rail-visible: 1; }
+}
+@media screen and (min-width: 641px) {
+  .adjustment-entry, .opname-form { --app-side-rail-visible: 1; }
+}
+@media screen and (min-width: 801px) {
+  .usage-workspace { --app-side-rail-visible: 1; }
 }
 
 .app-workspace-bar {
@@ -464,6 +477,12 @@
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
     background: #fff;
+  }
+  .app-rail-table {
+    margin-right: calc(-1 * var(--app-side-rail-visible, 0) * var(--app-rail-table-outset, 0px));
+  }
+  @media (min-width: 1024px) {
+    .app-rail-table { scrollbar-gutter: auto; }
   }
   .app-table-scroll > table > thead {
     position: sticky !important;

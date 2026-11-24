@@ -1,3 +1,4 @@
+import { alignRailTable } from '../lib/alignRailTable';
 import DocumentTabBar from '../components/DocumentTabBar';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -783,7 +784,7 @@ export default function OpeningStockImport() {
                   <h2>{displayRows.length ? `${displayRows.length} Barang (${quantityTotal.toLocaleString("id-ID")})` : "Rincian Barang"} <span>*</span></h2>
                 </div>
                 {!selectedDocument && (errorRows.length > 0 || duplicateKeys.size > 0) && <div className="adjustment-message"><AlertTriangle size={16}/> {errorRows.length} baris bermasalah{duplicateKeys.size ? ` · ${duplicateKeys.size} barang/gudang duplikat` : ""}. Periksa rincian sebelum menyimpan.</div>}
-                <div className="app-table-scroll adjustment-table-scroll adjustment-items-table"><table>
+                <div className="app-table-scroll adjustment-table-scroll adjustment-items-table app-rail-table" ref={alignRailTable}><table>
                   <colgroup><col style={{width:"12%"}}/><col style={{width:"46%"}}/><col style={{width:"9%"}}/><col style={{width:"23%"}}/><col style={{width:"10%"}}/></colgroup>
                   <thead><tr><th>Kode #</th><th>Nama Barang</th><th>{isHpp ? "Stok Tetap" : "Kuantitas"}</th><th>Tipe</th><th>Satuan</th></tr></thead>
                   <tbody>{displayRows.map((row,index) => (!selectedDocument || `${row.code} ${row.itemName}`.toLowerCase().includes(detailSearch.toLowerCase())) && <tr key={`${row.row}-${index}`} className={`adjustment-clickable ${row.error ? "adjustment-row-error" : ""}`} onClick={() => setRowDialog({index,row:{...row},readOnly:!!selectedDocument})}>
