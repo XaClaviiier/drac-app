@@ -45,6 +45,68 @@ $normalizePurchaseLines = static function (PDO $pdo, array $lines, string $branc
     }
     return ['items' => $result, 'subtotal' => $subtotal];
 };
+
+// Penerimaan supplier hanya membawa qty. Setelah faktur diposting, harga
+// faktur menjadi biaya perolehan yang dibekukan pada mutasi penerimaan.
+// Hanya baris yang sudah seluruhnya difakturkan yang direvaluasi; penerimaan
+// sebagian tetap menunggu harga lengkap agar stok yang belum ditagih tidak
+// ikut dinilai dengan harga yang belum final.
+$syncReceiptCosts = static function (PDO $pdo, array $receiptIds, bool $clearUninvoiced = false): void {
+    $receiptIds = array_values(array_unique(array_filter(array_map('strval', $receiptIds))));
+    if (!$receiptIds) return;
+    $marks = implode(',', array_fill(0, count($receiptIds), '?'));
+    $lineStmt = $pdo->prepare("SELECT pii.receipt_id,pii.item_id,pii.qty,pii.subtotal,
+        pi.subtotal invoice_subtotal,pi.discount invoice_discount
+        FROM purchase_invoice_items pii
+        JOIN purchase_invoices pi ON pi.id=pii.invoice_id
+        WHERE pii.receipt_id IN ($marks)");
+    $lineStmt->execute($receiptIds);
+    $invoiced = [];
+    foreach ($lineStmt->fetchAll() as $line) {
+        $receiptId = (string)$line['receipt_id'];
+        $itemId = (string)$line['item_id'];
+        $qty = max(0, (int)$line['qty']);
+        $invoiceSubtotal = max(0, (float)$line['invoice_subtotal']);
+        $invoiceDiscount = max(0, (float)$line['invoice_discount']);
+        $lineSubtotal = max(0, (float)$line['subtotal']);
+        $allocatedDiscount = $invoiceSubtotal > 0
+            ? min($lineSubtotal, $invoiceDiscount * $lineSubtotal / $invoiceSubtotal)
+            : 0;
+        $key = $receiptId.'|'.$itemId;
+        $invoiced[$key] = [
+            'qty' => ($invoiced[$key]['qty'] ?? 0) + $qty,
+            'value' => ($invoiced[$key]['value'] ?? 0) + max(0, $lineSubtotal - $allocatedDiscount),
+        ];
+    }
+
+    $receiptLineStmt = $pdo->prepare("SELECT qty,qty_invoiced FROM goods_receipt_items WHERE receipt_id=? AND item_id=? FOR UPDATE");
+    $updateReceipt = $pdo->prepare('UPDATE goods_receipt_items SET unit_price=?,discount_percent=0,discount_amount=0,subtotal=? WHERE receipt_id=? AND item_id=?');
+    $updateMovement = $pdo->prepare("UPDATE stock_movements SET unit_cost=?
+        WHERE reference_type='goods_receipt' AND reference_id=? AND item_id=? AND movement_type='receipt' AND is_voided=0");
+    foreach ($receiptIds as $receiptId) {
+        $itemStmt = $pdo->prepare('SELECT item_id FROM goods_receipt_items WHERE receipt_id=?');
+        $itemStmt->execute([$receiptId]);
+        foreach ($itemStmt->fetchAll(PDO::FETCH_COLUMN) as $itemId) {
+            $receiptLineStmt->execute([$receiptId, $itemId]);
+            $receiptLine = $receiptLineStmt->fetch();
+            if (!$receiptLine) continue;
+            $key = $receiptId.'|'.(string)$itemId;
+            $summary = $invoiced[$key] ?? ['qty'=>0,'value'=>0];
+            if ((int)$receiptLine['qty_invoiced'] < (int)$receiptLine['qty'] || (int)$summary['qty'] < (int)$receiptLine['qty']) {
+                if ($clearUninvoiced && (int)$summary['qty'] === 0) {
+                    $updateReceipt->execute([0, 0, $receiptId, $itemId]);
+                    $updateMovement->execute([0, $receiptId, $itemId]);
+                }
+                continue;
+            }
+            $qty = (int)$receiptLine['qty'];
+            if ($qty <= 0) continue;
+            $unitCost = round(max(0, (float)$summary['value']) / $qty, 4);
+            $updateReceipt->execute([$unitCost, round($unitCost * $qty, 2), $receiptId, $itemId]);
+            $updateMovement->execute([$unitCost, $receiptId, $itemId]);
+        }
+    }
+};
 // Sub-aksi harus ditangani sebelum switch CRUD; jika tidak, POST pembayaran
 // akan keliru diproses sebagai pembuatan faktur pembelian baru.
 if ($action === 'payments') {
@@ -240,6 +302,8 @@ switch ($method) {
                 }
             }
 
+            $syncReceiptCosts($pdo, $normalized['items'] ? array_column($normalized['items'], 'receiptId') : []);
+
             // Update status penerimaan
             if (!empty($d['receiptIds'])) {
                 foreach ($d['receiptIds'] as $rid) {
@@ -314,6 +378,7 @@ switch ($method) {
             $pdo->prepare("UPDATE purchase_invoices SET date=?,due_date=?,supplier_invoice_number=?,subtotal=?,discount=?,tax=?,total=?,status=?,notes=? WHERE id=?")
                 ->execute([$d['date'],$d['dueDate'] ?? null,$d['supplierInvoiceNumber'] ?? '',$subtotal,$invoiceDiscount,$invoiceTax,$total,$status,$d['notes'] ?? '',$id]);
             foreach (array_keys($touchedReceipts) as $receiptId) $refreshReceiptStatus($pdo, $receiptId);
+            $syncReceiptCosts($pdo, array_keys($touchedReceipts), true);
             deleteOperationalJournal($pdo,'purchase_invoice',(string)$id,'PURCHASE');
             $accountDefaults=getDefaultAccountSettings($pdo,$branchId);
             $inventory=resolveDefaultCoaId($pdo,$accountDefaults,'inventoryCoaId','110401');
@@ -357,6 +422,7 @@ switch ($method) {
             }
             $pdo->prepare("DELETE FROM purchase_invoices WHERE id=?")->execute([$id]);
             foreach (array_keys($touchedReceipts) as $receiptId) $refreshReceiptStatus($pdo, $receiptId);
+            $syncReceiptCosts($pdo, array_keys($touchedReceipts), true);
             deleteOperationalJournal($pdo,'purchase_invoice',(string)$id,'PURCHASE');
             $pdo->commit();
             respondSuccess(null, 'Faktur pembelian dihapus');
