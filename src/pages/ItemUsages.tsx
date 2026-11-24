@@ -11,6 +11,7 @@ import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
 import './OpeningStockImport.css';
 import './ItemUsages.css';
+import { InventoryDocumentTable, InventoryListToolbar, matchesInventoryPeriod, useInventoryColumns, useInventoryPeriod } from '../components/InventoryList';
 
 type UsageLine = {
   itemId: string; code: string; itemName: string; unit: string; quantity: number;
@@ -28,6 +29,8 @@ type ExpenseAccount = { id: string; code: string; name: string };
 type Preview = { stock: number };
 const statusLabel = (status: UsageDocument['status']) => ({ Draft: 'Draft', Posted: 'Diposting', Cancelled: 'Dibatalkan' })[status];
 const number = (value: number) => value.toLocaleString('id-ID', { maximumFractionDigits: 4 });
+const usageLabels = {usageNumber: 'Nomor #', date: 'Tanggal', branchName: 'Cabang', purpose: 'Keperluan', status: 'Status'};
+const usageWidths = {usageNumber: 190, date: 120, branchName: 170, purpose: 280, status: 120};
 const displayDate = (date: string) => date.split('-').reverse().join('/');
 
 export default function ItemUsages() {
@@ -48,8 +51,8 @@ export default function ItemUsages() {
   const [formTab, setFormTab] = useState<'items' | 'info'>('items');
   const [itemSearch, setItemSearch] = useState('');
   const [search, setSearch] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const period = useInventoryPeriod();
+  const layout = useInventoryColumns('usage-list:' + (currentUser?.id || 'guest'), usageLabels, usageWidths);
   const [status, setStatus] = useState('');
   const [accounts, setAccounts] = useState<ExpenseAccount[]>([]);
   const [message, setMessage] = useState('');
@@ -76,8 +79,8 @@ export default function ItemUsages() {
   const canSave = hasPermission(form.id ? 'item_usage:edit' : 'item_usage:create');
   const accountLabel = accounts.find(a => a.id === shown.expenseAccountId);
   const selectedAccountName = document?.expenseAccountName || (accountLabel ? `[${accountLabel.code}] ${accountLabel.name}` : '') || (shown.expenseAccountId ? 'Akun biaya tersimpan' : '');
-  const filtered = documents.filter(doc => (!dateFrom || doc.date >= dateFrom) && (!dateTo || doc.date <= dateTo) && (!status || doc.status === status)
-    && `${doc.usageNumber} ${doc.purpose} ${doc.responsibleName} ${doc.branchName} ${doc.warehouseName}`.toLocaleLowerCase('id-ID').includes(search.toLocaleLowerCase('id-ID')));
+  const filtered = documents.filter(doc => matchesInventoryPeriod(doc.date, period.from, period.to) && (!status || doc.status === status)
+    && `${doc.usageNumber} ${doc.purpose} ${doc.responsibleName} ${doc.branchName} ${doc.warehouseName}`.toLocaleLowerCase('id-ID').includes(search.trim().toLocaleLowerCase('id-ID')));
   const suggestions = itemSearch.trim() ? data.items.filter(item => item.isActive && item.type === 'Persediaan'
     && itemSearch.toLocaleLowerCase('id-ID').trim().split(/\s+/).every(term => `${item.code} ${item.name}`.toLocaleLowerCase('id-ID').includes(term))).slice(0, 15) : [];
 
@@ -212,8 +215,8 @@ export default function ItemUsages() {
     finally { busyRef.current = false; setBusy(false); }
   }
 
-  return <div className="app-module-page adjustment-workspace usage-workspace">
-    <div className={ui.childBar}>
+  return <div className={view === 'list' ? 'app-module-page inventory-list-page' : 'app-module-page adjustment-workspace usage-workspace'}>
+    <div className={view === 'list' ? ui.childBar + ' inventory-list-tabs' : ui.childBar}>
       <button type="button" disabled={busy} title="Daftar Pemakaian Barang" className={`${ui.childListTab} ${view === 'list' ? 'app-child-list-tab--active' : ''}`} onClick={() => setView('list')}><List size={22}/></button>
       {entryOpen && <div className={childTabClass(view === 'entry')}><button type="button" disabled={busy} onClick={() => { setView('entry'); setRowDialog(null); }}>{form.id ? documents.find(doc => doc.id === form.id)?.usageNumber || 'Edit Draft' : 'Data Baru'}</button><button type="button" disabled={busy} title="Tutup Data Baru" onClick={() => form.rows.length || form.purpose ? setConfirmation('close') : (setEntryOpen(false), setView('list'))}><X size={16}/></button></div>}
       {detailTabs.map(tab => <div key={tab.id} className={childTabClass(view === 'detail' && selectedDocument?.id === tab.id)}><button type="button" disabled={busy} onClick={() => void openDocument(tab.id)}>{tab.usageNumber}</button><button type="button" disabled={busy} title="Tutup tab dokumen" onClick={() => { setDetailTabs(tabs => tabs.filter(doc => doc.id !== tab.id)); if (selectedDocument?.id === tab.id) setView('list'); }}><X size={16}/></button></div>)}
@@ -221,10 +224,20 @@ export default function ItemUsages() {
     </div>
     <div className="app-module-panel app-fill-stack">
       {message && <div role="status" className="adjustment-message">{message}<button type="button" className="ml-auto" aria-label="Tutup pesan" onClick={() => setMessage('')}><X size={15}/></button></div>}
-      {view === 'list' ? <section className="app-fill-stack adjustment-list">
-        <div className="adjustment-filter-row"><label className="usage-date-filter">Dari <IndonesianDateInput value={dateFrom} onChange={setDateFrom}/></label><label className="usage-date-filter">Sampai <IndonesianDateInput value={dateTo} onChange={setDateTo}/></label><select aria-label="Status pemakaian" value={status} onChange={e => setStatus(e.target.value)}><option value="">Semua Status</option><option value="Draft">Draft</option><option value="Posted">Diposting</option><option value="Cancelled">Dibatalkan</option></select>{(dateFrom || dateTo || status || search) && <button className="adjustment-outline" onClick={() => { setDateFrom(''); setDateTo(''); setStatus(''); setSearch(''); }}>Reset</button>}</div>
-        <div className="adjustment-list-toolbar"><button type="button" className="adjustment-add" title="Pemakaian Baru" disabled={busy || !hasPermission('item_usage:create')} onClick={requestNew}><Plus size={21}/></button><button className="adjustment-icon" title="Muat ulang pemakaian" disabled={loading || busy} onClick={() => void loadDocuments()}><RefreshCw size={18}/></button><label className="adjustment-search"><input aria-label="Cari pemakaian" placeholder="Cari nomor / keperluan..." value={search} onChange={e => setSearch(e.target.value)}/><Search size={17}/></label><span className="adjustment-count">{filtered.length} data</span></div>
-        <div className="app-table-scroll adjustment-table-scroll adjustment-list-table usage-list-table"><table><colgroup><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '18%' }}/><col style={{ width: '31%' }}/><col style={{ width: '14%' }}/></colgroup><thead><tr><th>Nomor #</th><th>Tanggal</th><th>Cabang</th><th>Keperluan</th><th>Status</th></tr></thead><tbody>{filtered.map(doc => <tr className="adjustment-clickable" key={doc.id} onClick={() => !busy && void openDocument(doc.id)}><td><button type="button" className="adjustment-document-link" disabled={busy}>{doc.usageNumber}</button></td><td>{displayDate(doc.date)}</td><td>{doc.branchName}</td><td title={doc.purpose}>{doc.purpose}</td><td><span className={`usage-status usage-status-${doc.status.toLowerCase()}`}>{statusLabel(doc.status)}</span></td></tr>)}</tbody></table>{!filtered.length && <div className="adjustment-empty">{loading ? 'Memuat pemakaian…' : 'Belum ada pemakaian barang'}</div>}</div>
+      {view === 'list' ? <section className="app-fill-stack">
+        <InventoryListToolbar name="Pemakaian Barang" {...period} search={search} onSearch={setSearch} placeholder="Cari nomor atau keperluan…" count={filtered.length}
+          filterCount={[status, search.trim()].filter(Boolean).length} clearFilters={() => { setStatus(''); setSearch(''); }}
+          filters={<label>Status<select aria-label="Status pemakaian" value={status} onChange={e => setStatus(e.target.value)}><option value="">Semua Status</option><option value="Draft">Draft</option><option value="Posted">Diposting</option><option value="Cancelled">Dibatalkan</option></select></label>} columns={layout.menu}
+          actions={<><button className="stock-movement-tool-button" title="Pemakaian Baru" disabled={busy || !hasPermission('item_usage:create')} onClick={requestNew}><Plus size={20}/></button>
+            <button className="stock-movement-tool-button" title="Muat ulang pemakaian" disabled={loading || busy} onClick={() => void loadDocuments()}><RefreshCw size={18}/></button></>}/>
+        <InventoryDocumentTable rows={filtered} layout={layout} filterKey={JSON.stringify([currentBranchId, period.from, period.to, status, search])}
+          empty={loading ? 'Memuat pemakaian…' : 'Tidak ada pemakaian barang sesuai filter.'} open={doc => { if (!busy) void openDocument(doc.id); }}
+          value={(doc, column) => column === 'status' ? statusLabel(doc.status) : doc[column]} render={(doc, column) => {
+            if (column === 'usageNumber') return <button className="adjustment-document-link" disabled={busy}>{doc.usageNumber}</button>;
+            if (column === 'date') return displayDate(doc.date);
+            if (column === 'status') return <span className={`usage-status usage-status-${doc.status.toLowerCase()}`}>{statusLabel(doc.status)}</span>;
+            return doc[column];
+          }}/>
       </section> : <section className="adjustment-form">
         <div className="adjustment-form-main">
           <div className="usage-form-header"><div className="usage-header-fields"><label>Tanggal <IndonesianDateInput value={shown.date} disabled={readOnly || busy} onChange={date => setForm(previous => ({ ...previous, date }))}/></label><label>Gudang {readOnly ? <input aria-label="Gudang" readOnly value={document?.warehouseName || currentWarehouse?.name || ''}/> : <select aria-label="Gudang pemakaian" disabled={busy} value={form.warehouseId} onChange={e => setForm(previous => ({ ...previous, warehouseId: e.target.value }))}><option value="">Pilih gudang...</option>{formWarehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}</label><span className="usage-branch">Cabang: <strong>{document?.branchName || currentWarehouse?.branchName || data.branches.find(branch => branch.id === currentWarehouse?.branchId)?.name || '—'}</strong></span></div><div className="usage-number-wrap"><label>No. Pemakaian #<input aria-label="Nomor pemakaian" readOnly value={document?.usageNumber || documents.find(doc => doc.id === form.id)?.usageNumber || 'Otomatis'}/></label><span className={`usage-status usage-status-${document?.status.toLowerCase() || 'draft'}`}>{statusLabel(document?.status || 'Draft')}</span></div></div>

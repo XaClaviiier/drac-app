@@ -8,6 +8,7 @@ import {ConfigurableTableHeaderCell, useConfigurableTable} from '../components/C
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import './OpeningStockImport.css';
 import './SimpleStockOpname.css';
+import { InventoryDocumentTable, InventoryListToolbar, matchesInventoryPeriod, useInventoryColumns, useInventoryPeriod } from '../components/InventoryList';
 
 type Row = { itemId:string;code:string;name:string;unit:string;categoryName:string;systemQuantity:number;movementIn?:number;movementOut?:number;editVersion:string;finalQuantity:number|null;count:string };
 type Document = {id:string;orderNumber:string;endDate:string;warehouseId:string;warehouseName:string;assignedUserName:string;notes:string;revision:number;entryMode:string;createdAt:string;lastUpdatedAt?:string;rows?:Row[];result?:{id?:string;resultNumber?:string;status?:string;adjustmentId?:string;adjustmentNumber?:string;notes?:string}};
@@ -21,7 +22,6 @@ type WorkspaceSnapshot = {
 const columns:Column[]=['name','code','systemQuantity','count','variance','unit'];
 const labels:Record<Column,string>={name:'Nama Barang',code:'Kode Barang',systemQuantity:'Stok Sistem',count:'Hitung Fisik',variance:'Selisih',unit:'Satuan'};
 const widths:Record<Column,number>={name:360,code:180,systemQuantity:130,count:140,variance:120,unit:85};
-const documentColumns:DocumentColumn[]=['orderNumber','endDate','warehouseName','notes','adjustment'];
 const documentLabels:Record<DocumentColumn,string>={orderNumber:'Nomor #',endDate:'Tanggal',warehouseName:'Gudang',notes:'Keterangan',adjustment:'Penyesuaian'};
 const documentWidths:Record<DocumentColumn,number>={orderNumber:180,endDate:130,warehouseName:220,notes:300,adjustment:190};
 const adjustmentLabel=(doc:Document)=>doc.result?.status==='Draft'?'Draf':doc.result?.adjustmentNumber||'Tanpa selisih';
@@ -59,7 +59,10 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   const [tab,setTab]=useState(snapshot?.tab||false),[list,setList]=useState(snapshot?.list??true),[info,setInfo]=useState(snapshot?.info||false);
   const [rows,setRows]=useState<Row[]>(snapshot?.rows||[]),[date,setDate]=useState(snapshot?.date||localDateKey()),[warehouse,setWarehouse]=useState(snapshot?.warehouse||''),[notes,setNotes]=useState(snapshot?.notes||'');
   const [requestKey,setRequestKey]=useState(snapshot?.requestKey||key),[dirty,setDirty]=useState(snapshot?.dirty||false),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
-  const [search,setSearch]=useState(''),[filter,setFilter]=useState('all'),[listSearch,setListSearch]=useState(''),[listDate,setListDate]=useState('');
+  const [search,setSearch]=useState(''),[filter,setFilter]=useState('all'),[listSearch,setListSearch]=useState('');
+  const period = useInventoryPeriod();
+  const [listWarehouse, setListWarehouse] = useState('');
+  useEffect(() => setListWarehouse(''), [currentBranchId]);
   const [importOpen,setImportOpen]=useState(false),[linked,setLinked]=useState<Adjustment|null>(null);
   const [catalog,setCatalog]=useState<Row[]>(snapshot?.catalog||[]),[addSearch,setAddSearch]=useState(''),[addOpen,setAddOpen]=useState(false),[tableSearchOpen,setTableSearchOpen]=useState(false);
   const [detailItemId,setDetailItemId]=useState('');
@@ -70,8 +73,8 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   const [categoryOpen,setCategoryOpen]=useState(false),[scope,setScope]=useState('activity'),[categorySearch,setCategorySearch]=useState('');
   const table=useConfigurableTable<Column>({storageKey:`opname-table-v1:${currentUser?.id||'guest'}`,defaultOrder:columns,defaultWidths:widths,sortableKeys:columns});
   const orderedColumns=table.isDesktop?table.order:columns;
-  const documentTable=useConfigurableTable<DocumentColumn>({storageKey:`opname-list-table-v1:${currentUser?.id||'guest'}`,defaultOrder:documentColumns,defaultWidths:documentWidths,sortableKeys:documentColumns});
-  const orderedDocumentColumns=documentTable.isDesktop?documentTable.order:documentColumns;
+  const documentTable = useInventoryColumns('opname-list-table-v1:' + (currentUser?.id || 'guest'), documentLabels, documentWidths);
+
   const applied=document?.result?.status==='Posted';
   const [saveMenuOpen,setSaveMenuOpen]=useState(false);
   const saveMenuRef=useRef<HTMLDivElement>(null);
@@ -195,12 +198,7 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
     return filter==='all'||(filter==='blank'?count===null:filter==='match'?variance===0:variance!==null&&variance!==0);
   });
   if(table.sort){const {key:sortKey,direction}=table.sort;const value=(row:Row):string|number|null=>sortKey==='count'?countValue(row.count):sortKey==='variance'?(row.count===''?null:Number(row.count)-row.systemQuantity):row[sortKey];visible.sort((a,b)=>{const x=value(a),y=value(b);if(x===null)return y===null?0:1;if(y===null)return -1;const cmp=typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'id',{numeric:true});return (direction==='asc'?cmp:-cmp)||a.itemId.localeCompare(b.itemId);});}
-  const visibleDocuments=documents.filter(doc=>doc.entryMode==='simple'&&(!listDate||doc.endDate===listDate)&&`${doc.orderNumber} ${doc.warehouseName} ${doc.notes}`.toLowerCase().includes(listSearch.toLowerCase()));
-  if(documentTable.sort){
-    const {key:sortKey,direction}=documentTable.sort;
-    const value=(doc:Document)=>sortKey==='adjustment'?adjustmentLabel(doc):doc[sortKey]||'';
-    visibleDocuments.sort((a,b)=>value(a).localeCompare(value(b),'id',{numeric:true,sensitivity:'base'})*(direction==='asc'?1:-1));
-  }
+  const visibleDocuments=documents.filter(doc=>doc.entryMode==='simple'&&matchesInventoryPeriod(doc.endDate, period.from, period.to) && (!listWarehouse || doc.warehouseId === listWarehouse)&&`${doc.orderNumber} ${doc.warehouseName} ${doc.notes}`.toLowerCase().includes(listSearch.trim().toLowerCase()));
   const categoryRows=catalog.filter(row=>scope==='all'||row.systemQuantity!==0||(scope==='activity'&&((row.movementIn||0)!==0||(row.movementOut||0)!==0)));
   const categories=[...new Set(catalog.map(row=>row.categoryName))].filter(name=>name.toLowerCase().includes(categorySearch.toLowerCase()));
   const selectedCategoryAvailable=catalog.filter(row=>selectedCategories.includes(row.categoryName)&&!rows.some(old=>old.itemId===row.itemId));
@@ -214,23 +212,26 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
     popup.document.write(`<!doctype html><html><head><title>${html(document?.orderNumber||'Lembar Stok Opname')}</title><style>@page{size:A4 landscape;margin:12mm}body{font:12px Arial}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:6px;text-align:left}thead{display:table-header-group}tr{break-inside:avoid}</style></head><body><h2>DOKTER AC MOBIL — Stok Opname</h2><p>${html(document?.orderNumber||'Belum disimpan')} · ${html(date)} · ${html(selectedWarehouse)}</p><p>${html(notes)}</p><table><thead><tr><th>Nama Barang</th><th>Kode</th><th>Stok Sistem</th><th>Hitung Fisik</th><th>Selisih</th><th>Satuan</th></tr></thead><tbody>${visible.map(row=>`<tr><td>${html(row.name)}</td><td>${html(row.code)}</td><td>${row.systemQuantity}</td><td>${html(row.count)}</td><td>${row.count===''?'':html(Number(row.count)-row.systemQuantity)}</td><td>${html(row.unit)}</td></tr>`).join('')}</tbody></table></body></html>`);popup.document.close();popup.focus();popup.print();
   };
   if(legacyOpen)return <><button className="adjustment-outline mb-3" onClick={()=>setLegacyOpen(false)}>Kembali ke Stok Opname</button>{legacy}</>;
-  return <div className="adjustment-workspace opname-workspace" aria-busy={busy}>
-    <div className="opname-tabs"><button aria-label="Daftar Stok Opname" className={list?'active-list':''} onClick={()=>setList(true)}><List size={23}/></button>{tab&&<div className={`opname-tab ${list?'':'selected'}`}><button onClick={()=>setList(false)}>{document?.orderNumber||'Data Baru'}{dirty?' *':''}</button><button aria-label="Tutup Data Baru" disabled={busy} onClick={close}><X size={17}/></button></div>}</div>
+  return <div className={list ? 'app-module-page inventory-list-page' : 'adjustment-workspace opname-workspace'} aria-busy={busy}>
+    <div className={list ? 'app-child-bar inventory-list-tabs' : 'opname-tabs'}><button aria-label="Daftar Stok Opname" className={list?'active-list':''} onClick={()=>setList(true)}><List size={23}/></button>{tab&&<div className={list ? 'app-child-tab' : 'opname-tab selected'}><button onClick={()=>setList(false)}>{document?.orderNumber||'Data Baru'}{dirty?' *':''}</button><button aria-label="Tutup Data Baru" disabled={busy} onClick={close}><X size={17}/></button></div>}</div>
     {message&&<div role="status" className="adjustment-message">{message}<button className="ml-auto" onClick={()=>setMessage('')} aria-label="Tutup pesan"><X size={16}/></button></div>}
-    {list?<div className="adjustment-list">
-      <div className="opname-list-tools"><label>Tanggal: <IndonesianDateInput value={listDate} onChange={setListDate}/></label><button className="adjustment-icon" title="Hapus filter tanggal" onClick={()=>setListDate('')}><X size={16}/></button><button className="adjustment-outline ml-auto" disabled={busy} onClick={()=>{if(discard())setLegacyOpen(true);}}>Dokumen Lama</button></div>
-      <div className="opname-list-tools"><button className="opname-add" aria-label="Tambah Stok Opname" disabled={!canCreate||busy} onClick={newDocument}><Plus/></button><button className="adjustment-icon" title="Muat ulang daftar" disabled={busy} onClick={()=>void run(loadList)}><RefreshCw size={19}/></button><button className="adjustment-outline" title="Reset kolom daftar opname" onClick={documentTable.resetLayout}>Reset Kolom</button><div className="opname-search ml-auto"><input aria-label="Cari opname" placeholder="Cari nomor, gudang, keterangan…" value={listSearch} onChange={e=>setListSearch(e.target.value)}/><Search size={18}/></div></div>
-      <div className="app-table-scroll adjustment-table-scroll opname-list-table">
-        <table style={{minWidth:Math.max(850,orderedDocumentColumns.reduce((sum,col)=>sum+(documentTable.isDesktop?documentTable.widths[col]:documentWidths[col]),0))}}>
-          <colgroup>{orderedDocumentColumns.map(col=><col key={col} style={{width:documentTable.isDesktop?documentTable.widths[col]:documentWidths[col]}}/>)}</colgroup>
-          <thead><tr>{orderedDocumentColumns.map(col=><ConfigurableTableHeaderCell key={col} columnKey={col} label={documentLabels[col]} sortable movable={documentTable.isDesktop} sort={documentTable.sort} onMove={documentTable.moveColumn} onSort={documentTable.toggleSort} onResize={documentTable.beginResize} onResetWidth={documentTable.resetWidth}/>)}</tr></thead>
-          <tbody>{visibleDocuments.map(doc=>{
-            const cells:Record<DocumentColumn,ReactNode>={orderNumber:<button disabled={busy} className="opname-link" onClick={()=>{if(discard())void run(()=>open(doc.id));}}>{doc.orderNumber}</button>,endDate:doc.endDate,warehouseName:doc.warehouseName,notes:doc.notes||'—',adjustment:adjustmentLabel(doc)};
-            return <tr key={doc.id}>{orderedDocumentColumns.map(col=><td key={col}>{cells[col]}</td>)}</tr>;
-          })}</tbody>
-        </table>
-        {!visibleDocuments.length&&<div className="adjustment-empty">{documents.some(doc=>doc.entryMode==='simple')?'Tidak ada opname yang sesuai filter.':'Belum ada Stok Opname. Klik + untuk mulai menghitung.'}</div>}
-      </div>
+    {list?<div className="app-fill-stack">
+      <InventoryListToolbar name="Stok Opname" {...period} search={listSearch} onSearch={setListSearch} placeholder="Cari nomor, gudang, keterangan…" count={visibleDocuments.length}
+        filterCount={[listWarehouse, listSearch.trim()].filter(Boolean).length} clearFilters={() => { setListWarehouse(''); setListSearch(''); }}
+        filters={<label>Gudang<select value={listWarehouse} onChange={event => setListWarehouse(event.target.value)}>
+          <option value="">Semua gudang</option>{Array.from(new Map(documents.filter(doc => doc.entryMode === 'simple').map(doc => [doc.warehouseId, doc.warehouseName]))).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select></label>}
+        actions={<><button className="stock-movement-tool-button" aria-label="Tambah Stok Opname" disabled={!canCreate || busy} onClick={newDocument}><Plus/></button>
+          <button className="stock-movement-tool-button" title="Muat ulang daftar" disabled={busy} onClick={() => void run(loadList)}><RefreshCw size={18}/></button></>}
+        tools={<button className="adjustment-outline" disabled={busy} onClick={() => { if (discard()) setLegacyOpen(true); }}>Dokumen Lama</button>} columns={documentTable.menu}/>
+      <InventoryDocumentTable rows={visibleDocuments} layout={documentTable} filterKey={JSON.stringify([currentBranchId, period.from, period.to, listWarehouse, listSearch])}
+        empty={documents.some(doc => doc.entryMode === 'simple') ? 'Tidak ada opname yang sesuai filter.' : 'Belum ada Stok Opname. Klik + untuk mulai menghitung.'}
+        value={(doc, column) => column === 'adjustment' ? adjustmentLabel(doc) : doc[column] || ''}
+        render={(doc, column) => {
+          if (column === 'orderNumber') return <button disabled={busy} className="opname-link" onClick={() => { if (discard()) void run(() => open(doc.id)); }}>{doc.orderNumber}</button>;
+          if (column === 'endDate') return doc.endDate.split('-').reverse().join('/');
+          return column === 'adjustment' ? adjustmentLabel(doc) : doc[column] || '—';
+        }}/>
     </div>:<div className="opname-form">
       <main><div className="opname-header"><label><span>Tanggal Opname <b>*</b></span><IndonesianDateInput value={date} max={localDateKey()} disabled={applied||busy} onChange={value=>changeHeader(warehouse,value)}/></label><label><span>No. Opname #</span><input value={document?.orderNumber||'Otomatis'} readOnly/></label><label><span>Gudang <b>*</b></span><select aria-label="Gudang" value={warehouse} disabled={applied||busy} onChange={e=>changeHeader(e.target.value,date)}><option value="">Pilih Gudang</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label><label><span>Penyesuaian</span>{document?.result?.adjustmentId?<button className="opname-link" disabled={busy} onClick={showAdjustment}>{document.result.adjustmentNumber}</button>:<span className="opname-muted">{document?.result?.status==='Draft'?'Draf · stok belum berubah':document?'Tanpa selisih':'Otomatis jika ada selisih'}</span>}</label></div>
       <div className="adjustment-body-wrap"><nav className="adjustment-side-tabs"><button title="Rincian Barang" className={!info?'active':''} onClick={()=>setInfo(false)}><FileText size={18}/></button><button title="Info Lainnya" className={info?'active':''} onClick={()=>setInfo(true)}><Info size={18}/></button></nav><section className={`adjustment-body opname-body ${info?'opname-body-info':''}`}>

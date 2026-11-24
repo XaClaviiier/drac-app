@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, Filter, GripVertical, List, Play, Printer, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Download, List, Printer, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import IndonesianDateInput from '../components/IndonesianDateInput';
+import { InventoryColumnHeader, InventoryListToolbar } from '../components/InventoryList';
 import { api } from '../lib/apiClient';
 import { downloadReportCsv, movementLabels, reportDate, reportNumber, type InventoryReportOptions } from '../lib/inventoryReports';
 import { stockMovementSource } from '../lib/stockMovementSource';
@@ -43,13 +43,7 @@ export default function StockMovementReport() {
   const [result, setResult] = useState<{ key: string; data: WarehouseMovementsReport } | null>(null);
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
   const [columnSort, setColumnSort] = useState<ColumnSort>(null);
-  const [draggedColumn, setDraggedColumn] = useState<MovementColumnKey | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [columnsOpen, setColumnsOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const filterPopupRef = useRef<HTMLDivElement>(null);
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
-  const columnPopupRef = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState<MovementColumnKey[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('drac_stock_movement_columns') || 'null');
@@ -155,36 +149,6 @@ export default function StockMovementReport() {
 
   useEffect(() => { localStorage.setItem('drac_stock_movement_columns', JSON.stringify(columns)); }, [columns]);
   useEffect(() => { localStorage.setItem('drac_stock_movement_visible_columns', JSON.stringify(visibleColumns)); }, [visibleColumns]);
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (filterPopupRef.current && !filterPopupRef.current.contains(target) && !filterButtonRef.current?.contains(target)) setFiltersOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setFiltersOpen(false); };
-    const closeOnFocusOutside = (event: FocusEvent) => {
-      const target = event.target as Node;
-      if (filterPopupRef.current && !filterPopupRef.current.contains(target) && !filterButtonRef.current?.contains(target)) setFiltersOpen(false);
-    };
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    document.addEventListener('keydown', closeOnEscape);
-    document.addEventListener('focusin', closeOnFocusOutside);
-    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); document.removeEventListener('focusin', closeOnFocusOutside); };
-  }, [filtersOpen]);
-  useEffect(() => {
-    if (!columnsOpen) return;
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (columnPopupRef.current && !columnPopupRef.current.contains(event.target as Node)) setColumnsOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setColumnsOpen(false); };
-    const closeOnFocusOutside = (event: FocusEvent) => {
-      if (columnPopupRef.current && !columnPopupRef.current.contains(event.target as Node)) setColumnsOpen(false);
-    };
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    document.addEventListener('keydown', closeOnEscape);
-    document.addEventListener('focusin', closeOnFocusOutside);
-    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); document.removeEventListener('focusin', closeOnFocusOutside); };
-  }, [columnsOpen]);
   const displayedColumns = columns.filter(key => visibleColumns.includes(key));
   const rows = useMemo(() => {
     const filtered = filterWarehouseMovements(report?.rows || [], { search, direction, type, sort })
@@ -243,17 +207,15 @@ export default function StockMovementReport() {
     ['warehouseId', 'direction', 'type', 'sort', 'verification', 'search'].forEach(key => next.delete(key));
     setParams(next, { replace: true });
     syncReportForParams(next);
-    setFiltersOpen(false);
   };
   const sortColumn = (key: MovementColumnKey) => setColumnSort(current => current?.key === key
     ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
-  const moveColumn = (target: MovementColumnKey) => {
-    if (!draggedColumn || draggedColumn === target) return;
+  const moveColumn = (source: MovementColumnKey, target: MovementColumnKey) => {
+    if (!defaultMovementColumns.includes(source) || source === target) return;
     setColumns(current => {
-      const next = [...current]; const from = next.indexOf(draggedColumn); const to = next.indexOf(target);
-      next.splice(from, 1); next.splice(to, 0, draggedColumn); return next;
+      const next = [...current]; const from = next.indexOf(source); const to = next.indexOf(target);
+      next.splice(from, 1); next.splice(to, 0, source); return next;
     });
-    setDraggedColumn(null);
   };
   const verifyMovement = async (row: WarehouseMovementsReport['rows'][number]) => {
     if (verifyingId) return;
@@ -279,47 +241,32 @@ export default function StockMovementReport() {
     return <td className={`numeric ${row[key === 'incoming' ? 'incoming' : 'outgoing'] ? `stock-movement-${key === 'incoming' ? 'in' : 'out'}` : ''}`}>{reportNumber(row[key === 'incoming' ? 'incoming' : 'outgoing'])}</td>;
   };
 
-  return <div className="inventory-report stock-movement-report app-fill-stack">
-    <div className="stock-movement-header-shell">
-      <div className="stock-movement-tabbar"><button type="button" className="stock-movement-tab active" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
-      <div className="stock-movement-parameter-row">
-        <div className="stock-movement-date-range"><IndonesianDateInput ariaLabel="Tanggal awal mutasi" className="inventory-report-date" value={dateFrom} onChange={changeDateFrom}/><span>s/d</span><IndonesianDateInput ariaLabel="Tanggal akhir mutasi" className="inventory-report-date" value={dateTo} min={dateFrom || undefined} disabled={!dateFrom} onChange={changeDateTo}/></div>
-        <button ref={filterButtonRef} type="button" className={`stock-movement-filter-button${filtersOpen ? ' active' : ''}`} onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen}><Filter size={16}/>Filter{activeFilterCount > 0 && <span className="stock-movement-filter-badge">{activeFilterCount}</span>}</button>
-        {activeFilterCount > 0 && <button type="button" className="stock-movement-clear-button" onClick={clearAdditionalFilters} aria-label="Bersihkan filter tambahan" title="Bersihkan filter tambahan">×</button>}
-      </div>
-      <div className="stock-movement-action-row">
-        <div className="stock-movement-action-left"><button type="button" className="stock-movement-tool-button" aria-label="Perbarui laporan mutasi" title="Perbarui laporan mutasi" onClick={refreshReport} disabled={busy || !canLoad}><RefreshCw size={18}/></button></div>
-        <div className="stock-movement-table-tools">
-          <button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
-        <button type="button" className="stock-movement-tool-button" aria-label="Unduh CSV mutasi" title="Unduh CSV mutasi" onClick={() => downloadReportCsv(`mutasi-gudang-${dateFrom}-${effectiveDateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={18}/></button>
-          <div ref={columnPopupRef} className="stock-movement-column-settings">
-            <button type="button" className="stock-movement-tool-button" aria-label="Atur kolom mutasi" title="Atur kolom yang ditampilkan" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(value => !value)}><SlidersHorizontal size={18}/></button>
-            {columnsOpen && <div className="stock-movement-column-menu">{defaultMovementColumns.map(key => <label key={key}><input type="checkbox" checked={visibleColumns.includes(key)} disabled={visibleColumns.length === 1 && visibleColumns.includes(key)} onChange={event => setVisibleColumns(current => event.target.checked ? [...current, key] : current.filter(column => column !== key))}/><span>{movementColumnLabels[key]}</span></label>)}</div>}
-          </div>
-          <label className="stock-movement-quick-search"><Search size={17}/><input aria-label="Cari mutasi" placeholder="Cari nomor, barang, keterangan…" value={search} onChange={event => changeFilter('search', event.target.value)}/></label>
-          <span className="stock-movement-record-count" aria-label="Jumlah record mutasi">{busy ? '—' : reportNumber(rows.length)}</span>
-        </div>
-      </div>
-      {filtersOpen && <div ref={filterPopupRef} className="inventory-report-filters stock-movement-advanced-filters">
-        <div className="stock-movement-filter-heading"><b>Filter Mutasi Gudang</b><button type="button" onClick={clearAdditionalFilters}>Clear</button></div>
-        <label>Gudang<select aria-label="Gudang mutasi" value={warehouseId} onChange={event => changeFilter('warehouseId', event.target.value)}><option value="">Semua Gudang</option>{options?.warehouses.map(row => <option key={row.id} value={row.id}>{row.branchName} · {row.name}</option>)}</select></label>
+  return <div className="app-module-page inventory-list-page inventory-report stock-movement-report">
+      <div className="app-child-bar inventory-list-tabs"><button type="button" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
+      <InventoryListToolbar name="Mutasi Gudang" from={dateFrom} to={dateTo} onFrom={changeDateFrom} onTo={changeDateTo}
+        search={search} onSearch={value => changeFilter('search', value)} placeholder="Cari nomor, barang, keterangan…" count={busy ? '—' : rows.length}
+        filterCount={activeFilterCount} clearFilters={clearAdditionalFilters} applyLabel="Tampilkan Laporan" onApply={runReport} applyDisabled={!canLoad || busy}
+        filters={<><label>Gudang<select aria-label="Gudang mutasi" value={warehouseId} onChange={event => changeFilter('warehouseId', event.target.value)}><option value="">Semua Gudang</option>{options?.warehouses.map(row => <option key={row.id} value={row.id}>{row.branchName} · {row.name}</option>)}</select></label>
         <label>Arah<select aria-label="Arah mutasi" value={direction} onChange={event => changeFilter('direction', event.target.value)}>{movementDirections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Jenis transaksi<select aria-label="Jenis transaksi mutasi" value={type} onChange={event => changeFilter('type', event.target.value)}>{movementKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Urutkan<select aria-label="Urutan mutasi" value={sort} onChange={event => changeFilter('sort', event.target.value)}>{movementSorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>Verifikasi<select aria-label="Status verifikasi mutasi" value={verification} onChange={event => changeFilter('verification', event.target.value)}><option value="ALL">Semua Status</option><option value="PENDING">Belum Diverifikasi</option><option value="VERIFIED">Sudah Diverifikasi</option></select></label>
-        <button type="button" className="stock-movement-run-button" onClick={runReport} disabled={!canLoad || busy}><Play size={15}/>Tampilkan Laporan</button>
-      </div>}
-    </div>
+        <label>Verifikasi<select aria-label="Status verifikasi mutasi" value={verification} onChange={event => changeFilter('verification', event.target.value)}><option value="ALL">Semua Status</option><option value="PENDING">Belum Diverifikasi</option><option value="VERIFIED">Sudah Diverifikasi</option></select></label></>}
+        actions={<button type="button" className="stock-movement-tool-button" aria-label="Perbarui laporan mutasi" title="Perbarui laporan mutasi" onClick={refreshReport} disabled={busy || !canLoad}><RefreshCw size={18}/></button>}
+        tools={<><button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
+        <button type="button" className="stock-movement-tool-button" aria-label="Unduh CSV mutasi" title="Unduh CSV mutasi" onClick={() => downloadReportCsv(`mutasi-gudang-${dateFrom}-${effectiveDateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={18}/></button></>} columns={<>{defaultMovementColumns.map(key => <label key={key}><input type="checkbox" checked={visibleColumns.includes(key)} disabled={visibleColumns.length === 1 && visibleColumns.includes(key)} onChange={event => setVisibleColumns(current => event.target.checked ? [...current, key] : current.filter(column => column !== key))}/><span>{movementColumnLabels[key]}</span></label>)}</>}/>
     {(error || optionsError || ((dateFrom || dateTo) && !validPeriod)) && <div role="alert" className="inventory-report-error">{optionsError || error || 'Isi periode yang valid. Tanggal awal harus sebelum atau sama dengan tanggal akhir.'}</div>}
-    <div className="stock-movement-summary" role="status">{busy ? 'Memuat mutasi…' : report ? `${reportNumber(rows.length)} baris mutasi · ${reportNumber(new Set(rows.map(row => row.itemId)).size)} barang · ${reportNumber(new Set(rows.map(row => row.warehouseId)).size)} gudang` : 'Laporan belum tersedia.'}</div>
-    <section className="inventory-report-table stock-movement-paper app-table-scroll" aria-busy={busy}>
-      <table><thead><tr>{displayedColumns.map(key => { const active = columnSort?.key === key; return <th key={key} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''} draggable onDragStart={() => setDraggedColumn(key)} onDragOver={event => event.preventDefault()} onDrop={() => moveColumn(key)} onDoubleClick={() => sortColumn(key)} aria-sort={active ? columnSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button type="button" className="stock-movement-header-button" onClick={() => sortColumn(key)} title={`Urutkan berdasarkan ${movementColumnLabels[key]}`}><span>{movementColumnLabels[key]}</span>{active ? (columnSort.direction === 'asc' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>) : <ArrowDown size={13} className="stock-movement-sort-hint"/>}</button><GripVertical size={13} className="stock-movement-drag-hint" aria-hidden="true" /></th>; })}</tr></thead>
+    <section className="inventory-report-table stock-movement-paper app-table-scroll app-table-scroll--fill inventory-list-report-table" aria-busy={busy}>
+      <table><thead><tr>{displayedColumns.map(key => <InventoryColumnHeader key={key} column={key} label={movementColumnLabels[key]} sort={columnSort} onSort={sortColumn} onMove={moveColumn} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''}/>)}</tr></thead>
         <tbody>{visibleRows.map(row => <tr key={`${row.id}:${row.warehouseId}`}>{displayedColumns.map(key => <Fragment key={key}>{renderCell(row, key)}</Fragment>)}</tr>)}</tbody>
       </table>
       {!rows.length && <p className="inventory-report-empty">{busy ? 'Memuat seluruh mutasi dalam periode ini…' : report ? 'Tidak ada mutasi sesuai periode dan filter yang dipilih.' : 'Pilih parameter lalu klik “Tampilkan Laporan” untuk menjalankan analisa.'}</p>}
     </section>
-    <div className="stock-movement-pagination">
-      <span>{rows.length ? `${reportNumber((currentPage - 1) * pageSize + 1)}–${reportNumber(Math.min(currentPage * pageSize, rows.length))} dari ${reportNumber(rows.length)} baris` : '0 baris'}<small>Cetak dan CSV mencakup seluruh hasil filter.</small></span>
+    <div className="stock-movement-pagination inventory-list-pagination">
+      <div>
+        <span>{rows.length ? `${reportNumber((currentPage - 1) * pageSize + 1)}–${reportNumber(Math.min(currentPage * pageSize, rows.length))} dari ${reportNumber(rows.length)} baris` : '0 baris'}</span>
+        <span className="stock-movement-summary" role="status"> · {busy ? 'Memuat mutasi…' : report ? `${reportNumber(new Set(rows.map(row => row.itemId)).size)} barang · ${reportNumber(new Set(rows.map(row => row.warehouseId)).size)} gudang` : 'Laporan belum tersedia.'}</span>
+        <small>Cetak dan CSV mencakup seluruh hasil filter.</small>
+      </div>
       <div className="inventory-report-actions"><button type="button" aria-label="Halaman sebelumnya" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={18}/></button><span>Halaman {currentPage} / {pageCount}</span><button type="button" aria-label="Halaman berikutnya" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight size={18}/></button></div>
     </div>
   </div>;

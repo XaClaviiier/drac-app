@@ -3,10 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ChevronDown,
-  ArrowUpDown,
   Info,
   FileText,
-  Filter,
   List,
   Lightbulb,
   Pencil,
@@ -25,6 +23,11 @@ import { childTabClass, ui } from "../components/ui/interfaceStandards";
 import IndonesianDateInput from "../components/IndonesianDateInput";
 import AccurateFormActionRail from "../components/AccurateFormActionRail";
 import "./OpeningStockImport.css";
+import { InventoryDocumentTable, InventoryListToolbar, matchesInventoryPeriod, useInventoryColumns, useInventoryPeriod } from '../components/InventoryList';
+import { flushSync } from 'react-dom';
+
+const adjustmentLabels = {adjustmentNumber: 'Nomor #', date: 'Tanggal', notes: 'Keterangan'};
+const adjustmentWidths = {adjustmentNumber: 220, date: 145, notes: 400};
 
 type PreviewRow = {
   unitCost?: number;
@@ -126,7 +129,16 @@ export default function OpeningStockImport() {
   const [entryTabOpen, setEntryTabOpen] = useState(true);
   const [viewMode, setViewMode] = useState<"list" | "entry">("list");
   const [documentSearch, setDocumentSearch] = useState("");
-  const [documentDate, setDocumentDate] = useState("");
+  const period = useInventoryPeriod();
+  const layout = useInventoryColumns('adjustment-list:' + (currentUser?.id || 'guest'), adjustmentLabels, adjustmentWidths, {key: 'date', direction: 'desc'});
+  const [printingList, setPrintingList] = useState(false);
+  useEffect(() => {
+    const before = () => flushSync(() => setPrintingList(true));
+    const after = () => setPrintingList(false);
+    window.addEventListener('beforeprint', before);
+    window.addEventListener('afterprint', after);
+    return () => { window.removeEventListener('beforeprint', before); window.removeEventListener('afterprint', after); };
+  }, []);
   const [itemSearch, setItemSearch] = useState("");
   const [editingId, setEditingId] = useState("");
   const [selectedDocument, setSelectedDocument] =
@@ -135,10 +147,7 @@ export default function OpeningStockImport() {
   const [notes, setNotes] = useState("");
   const [formTab, setFormTab] = useState<"items" | "info">("items");
   const [menu, setMenu] = useState<"import" | "settings" | "details" | null>(null);
-  const [showFilter, setShowFilter] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
-  const [sortKey, setSortKey] = useState<"adjustmentNumber" | "date" | "notes">("date");
-  const [sortAsc, setSortAsc] = useState(false);
   const [rowDialog, setRowDialog] = useState<{ index: number; row: PreviewRow; readOnly: boolean } | null>(null);
   const [detailSearch, setDetailSearch] = useState("");
   const [listAdjustmentType, setListAdjustmentType] = useState<"opening_balance" | "cost_adjustment">("opening_balance");
@@ -629,7 +638,7 @@ export default function OpeningStockImport() {
     const query = documentSearch.trim().toLowerCase();
     return (
       document.adjustmentType === listAdjustmentType &&
-      (!documentDate || document.date >= documentDate) &&
+      matchesInventoryPeriod(document.date, period.from, period.to) &&
       (!statusFilter || document.status === statusFilter) &&
       (!query ||
         `${document.adjustmentNumber} ${document.notes || ""} ${document.adjustmentType} ${document.status}`
@@ -679,14 +688,10 @@ export default function OpeningStockImport() {
     });
     setRowDialog(null);
   };
-  const orderedDocuments = [...filteredDocuments].sort((a,b) =>
-    String(a[sortKey] || "").localeCompare(String(b[sortKey] || ""), "id", { numeric: true }) * (sortAsc ? 1 : -1));
-  const orderBy = (key: typeof sortKey) => { setSortAsc(sortKey === key ? !sortAsc : true); setSortKey(key); };
-
   if (!canManageAdjustments) return <div className="adjustment-message">Penyesuaian Persediaan hanya tersedia untuk user yang memiliki izin edit barang.</div>;
   return (
-    <div className={`app-module-page adjustment-workspace ${isHpp ? "adjustment-hpp" : ""}`}>
-      <div className={ui.childBar}>
+    <div className={!showForm ? "app-module-page inventory-list-page" : `app-module-page adjustment-workspace ${isHpp ? "adjustment-hpp" : ""}`}>
+      <div className={!showForm ? ui.childBar + ' inventory-list-tabs' : ui.childBar}>
         <button type="button" title="Daftar Penyesuaian Persediaan" className={`${ui.childListTab} ${!showForm ? "app-child-list-tab--active" : ""}`} onClick={() => { setSelectedDocument(null); setViewMode("list"); setMenu(null); }}><List size={22}/></button>
         {entryTabOpen && <div className={childTabClass(!selectedDocument && viewMode === "entry")}>
           <button type="button" onClick={() => { setSelectedDocument(null); setViewMode("entry"); setMenu(null); }}>
@@ -704,40 +709,32 @@ export default function OpeningStockImport() {
         <div className="adjustment-tab-tools">
           <button className="adjustment-icon" title="Pengaturan tampilan" onClick={() => toggleMenu("settings")}><Settings size={17}/></button>
           <button className="adjustment-help" title="Panduan" onClick={() => window.open("/help?article=penyesuaian-stok", "_blank")}><Lightbulb size={18}/></button>
-          {menu === "settings" && <div className="adjustment-menu"><button onClick={() => { setDocumentDate(""); setDocumentSearch(""); setStatusFilter(""); setSortKey("date"); setSortAsc(false); setMenu(null); }}>Reset filter dan urutan</button><button onClick={() => { setMenu(null); void Promise.all([loadDocuments(),refreshData()]); }}>Muat ulang data</button></div>}
+          {menu === "settings" && <div className="adjustment-menu"><button onClick={() => { period.onFrom(""); setDocumentSearch(""); setStatusFilter(""); setListAdjustmentType("opening_balance"); layout.resetSort(); setMenu(null); }}>Reset filter dan urutan</button><button onClick={() => { setMenu(null); void Promise.all([loadDocuments(),refreshData()]); }}>Muat ulang data</button></div>}
         </div>
       </div>
       <div className="app-module-panel app-fill-stack">
       {message && <div role="status" className="adjustment-message">{message}</div>}
       <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={event => { void loadFile(event.target.files?.[0]); event.target.value = ""; }}/>
       <input ref={listImportRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={event => void importFromMainList(event.target.files?.[0])}/>
-      {!showForm ? <section className="app-fill-stack adjustment-list">
-        <div className="adjustment-filter-row">
-          <label className="adjustment-date-filter">Tanggal: <IndonesianDateInput value={documentDate} onChange={setDocumentDate}/></label>
-          <button className="adjustment-icon adjustment-filter" title="Tambah kriteria" onClick={() => setShowFilter(!showFilter)}><Filter size={16}/><ChevronDown size={12}/></button>
-          {showFilter && <div className="adjustment-filter-options"><label>Status <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="">Semua</option><option value="Draft">Draft</option><option value="Posted">Diposting</option><option value="Cancelled">Dibatalkan</option></select></label><button onClick={() => { setDocumentDate(""); setStatusFilter(""); }}>Bersihkan</button></div>}
-        </div>
-        <div className="adjustment-list-toolbar">
-          <button className="adjustment-add" title={`Data Baru: ${listAdjustmentType === "cost_adjustment" ? "Penyesuaian HPP" : "Penyesuaian Stok"}`} onClick={() => newDocument(listAdjustmentType)}><Plus size={23}/></button>
-          <label className="adjustment-kind adjustment-list-kind">Jenis Penyesuaian<select aria-label="Filter jenis penyesuaian" value={listAdjustmentType} onChange={event => setListAdjustmentType(event.target.value as "opening_balance" | "cost_adjustment")}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP</option>}</select></label>
-          <button className="adjustment-icon" title="Perbarui" disabled={loading} onClick={() => void Promise.all([loadDocuments(),refreshData()])}><RefreshCw size={16}/></button>
-          <div className="adjustment-list-tools">
-            <button className="adjustment-icon" title="Cetak daftar" onClick={() => window.print()}><Printer size={16}/></button>
-            <div className="adjustment-dropdown"><button className="adjustment-icon" title="Impor dan template" onClick={() => toggleMenu("import")}><Settings size={16}/><ChevronDown size={12}/></button>
+      {!showForm ? <section className="app-fill-stack">
+        <InventoryListToolbar name="Penyesuaian Stok" {...period} search={documentSearch} onSearch={setDocumentSearch} placeholder="Cari nomor atau keterangan…" count={filteredDocuments.length}
+          filterCount={[statusFilter, listAdjustmentType === 'cost_adjustment', documentSearch.trim()].filter(Boolean).length}
+          clearFilters={() => { setStatusFilter(''); setListAdjustmentType('opening_balance'); setDocumentSearch(''); }}
+          filters={<><label>Jenis penyesuaian<select aria-label="Filter jenis penyesuaian" value={listAdjustmentType} onChange={event => setListAdjustmentType(event.target.value as "opening_balance" | "cost_adjustment")}><option value="opening_balance">Penyesuaian Stok</option>{canHpp && <option value="cost_adjustment">Penyesuaian HPP</option>}</select></label>
+            <label>Status<select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="">Semua status</option><option value="Draft">Draft</option><option value="Posted">Diposting</option><option value="Cancelled">Dibatalkan</option></select></label></>}
+          actions={<><button className="stock-movement-tool-button" title={listAdjustmentType === 'cost_adjustment' ? 'Tambah Penyesuaian HPP' : 'Tambah Penyesuaian Stok'} onClick={() => newDocument(listAdjustmentType)}><Plus size={20}/></button>
+            <button className="stock-movement-tool-button" title="Perbarui" disabled={loading} onClick={() => void Promise.all([loadDocuments(), refreshData()])}><RefreshCw size={18}/></button></>}
+          tools={<><button className="stock-movement-tool-button" title="Cetak daftar" onClick={() => window.print()}><Printer size={18}/></button>
+            <div className="adjustment-dropdown"><button className="stock-movement-tool-button" title="Impor dan template" onClick={() => toggleMenu("import")}><Settings size={18}/></button>
               {menu === "import" && <div className="adjustment-menu"><button disabled={!isAdmin} onClick={() => { setMenu(null); listImportRef.current?.click(); }}>Impor Excel/CSV</button><button onClick={() => { setMenu(null); downloadTemplate(); }}>Unduh template</button></div>}
-            </div>
-            <label className="adjustment-search"><input aria-label="Cari penyesuaian" placeholder="Ketik dan [Enter]" value={documentSearch} onChange={event => setDocumentSearch(event.target.value)}/><Search size={18}/></label>
-            <output className="adjustment-count">{orderedDocuments.length}</output>
-          </div>
-        </div>
-        <div className="app-table-scroll app-table-scroll--fill adjustment-table-scroll adjustment-list-table"><table>
-          <colgroup><col style={{width:"38%"}}/><col style={{width:"23%"}}/><col/></colgroup>
-          <thead><tr>{([['adjustmentNumber','Nomor #'],['date','Tanggal'],['notes','Keterangan']] as const).map(([key,label]) => <th key={key}><button onClick={() => orderBy(key)}><ArrowUpDown size={12}/>{label}</button></th>)}</tr></thead>
-          <tbody>{orderedDocuments.map(document => <tr key={document.id} className="adjustment-clickable" onClick={() => openDocument(document)}>
-            <td><button className="adjustment-document-link" onClick={event => { event.stopPropagation(); openDocument(document); }}>{document.adjustmentNumber}</button></td>
-            <td>{formatDate(document.date)}</td><td>{document.adjustmentType === "cost_adjustment" && <span className="adjustment-hpp-tag">HPP</span>}{document.notes || ""}</td>
-          </tr>)}</tbody>
-        </table>{!orderedDocuments.length && <div className="adjustment-empty">{loading ? "Memuat data…" : "Belum ada data"}</div>}</div>
+            </div></>} columns={layout.menu}/>
+        <InventoryDocumentTable rows={filteredDocuments} layout={layout} printing={printingList} filterKey={JSON.stringify([currentBranchId, period.from, period.to, listAdjustmentType, statusFilter, documentSearch])}
+          empty={loading ? 'Memuat data…' : 'Tidak ada penyesuaian sesuai filter.'} open={openDocument} value={(doc, column) => doc[column] || ''}
+          render={(doc, column) => {
+            if (column === 'adjustmentNumber') return <button className="adjustment-document-link">{doc.adjustmentNumber}</button>;
+            if (column === 'date') return formatDate(doc.date);
+            return <>{doc.adjustmentType === 'cost_adjustment' && <span className="adjustment-hpp-tag">HPP</span>}{doc.notes}</>;
+          }}/>
       </section> : <section className="adjustment-form adjustment-entry">
         <div className="adjustment-form-main">
           <div className="adjustment-form-header">

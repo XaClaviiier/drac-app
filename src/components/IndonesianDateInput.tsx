@@ -12,6 +12,7 @@ type Props = {
  ariaLabel?:string;
  className?:string;
  lockedAppearance?:boolean;
+ clearable?:boolean;
 };
 
 const toDisplay=(value:string)=>{
@@ -28,11 +29,20 @@ const toStorage=(value:string)=>{
  return `${match[3]}-${match[2]}-${match[1]}`;
 };
 
-export default function IndonesianDateInput({value,onChange,disabled=false,required=false,min,max,title,ariaLabel='Tanggal (DD/MM/YYYY)',className='',lockedAppearance=false}:Props){
+export default function IndonesianDateInput({value,onChange,disabled=false,required=false,min,max,title,ariaLabel='Tanggal (DD/MM/YYYY)',className='',lockedAppearance=false,clearable=false}:Props){
  const[display,setDisplay]=useState(()=>toDisplay(value));
  const pickerRef=useRef<HTMLInputElement>(null);
  useEffect(()=>setDisplay(toDisplay(value)),[value]);
- const commit=()=>{const parsed=toStorage(display);if(parsed)onChange(parsed);else setDisplay(toDisplay(value))};
+ const commit=()=>{
+  const parsed=toStorage(display);
+  if(clearable && !display.trim()){
+   if(value)onChange('');
+  }else if(parsed && (!clearable || ((!min || parsed >= min) && (!max || parsed <= max)))){
+   if(!clearable || parsed!==value)onChange(parsed);
+   else setDisplay(toDisplay(value));
+  }
+  else setDisplay(toDisplay(value));
+ };
  const openPicker=()=>{
   const picker=pickerRef.current;
   if(!picker)return;

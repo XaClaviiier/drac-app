@@ -511,10 +511,14 @@ test('tampilan lihat penerimaan mengikuti header baru dan daftar menampilkan ket
   for (const label of ['Nomor #', 'Tanggal', 'Keterangan', 'Diterima Oleh', 'Jumlah Barang', 'Gudang', 'Status']) assert.ok(columns.includes(`'${label}'`), label);
   assert.match(list, /receiptDescription\(r\)/);
   assert.match(list, /\{r\.items\.length\} item \(\{receiptQuantitySummary\(r\.items\)\}/);
-  assert.match(list, /space-y-2 px-2 py-2 lg:hidden/);
+  assert.match(list, /inventory-list-cards space-y-2 lg:hidden/);
   assert.match(list, /hidden lg:block/);
   assert.match(list, /\{r\.receivedBy\|\|'-'\}/);
-  assert.match(list, /ariaLabel="Filter satu tanggal penerimaan"[\s\S]*title="Filter daftar penerimaan"[\s\S]*ActiveFilterResetButton active=\{receiptFiltersActive\}/);
+  const toolbar = source('src/components/InventoryList.tsx');
+  assert.match(list, /InventoryListToolbar name="Penerimaan Barang" \{\.\.\.period\}/);
+  assert.match(list, /clearFilters=\{resetReceiptFilters\}/);
+  assert.match(toolbar, /min=\{props.from \|\| undefined\} disabled=\{!props.from\}/);
+  assert.match(toolbar, /ActiveFilterResetButton active=\{props.filterCount > 0\}/);
 });
 
 test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak thermal', () => {
@@ -611,8 +615,7 @@ test('semua daftar utama memakai tombol X Clear Filter hanya saat filter aktif',
     'src/pages/WorkOrders.tsx',
     'src/pages/SalesInvoice.tsx',
     'src/pages/CustomerPayments.tsx',
-    'src/pages/ItemsAndServices.tsx',
-    'src/pages/GoodsReceipt.tsx',
+    'src/components/InventoryList.tsx',
     'src/pages/PurchaseInvoices.tsx',
     'src/pages/WorkOrderTimeline.tsx',
     'src/pages/Categories.tsx',
@@ -625,21 +628,15 @@ test('semua daftar utama memakai tombol X Clear Filter hanya saat filter aktif',
   ].forEach(file => assert.match(source(file), /ActiveFilterResetButton/, file));
 });
 
-test('toolbar Barang dan Jasa mengikuti ukuran baku Order Kerja', () => {
-  const workOrders = source('src/pages/WorkOrders.tsx');
-  const items = source('src/pages/ItemsAndServices.tsx');
-  assert.match(workOrders, /className="order-1 inline-flex h-9 w-11/);
-  assert.match(workOrders, /className="order-2 inline-flex h-9 w-11/);
-  assert.match(items, /title="Data Baru" className="flex h-9 w-14/);
-  assert.match(items, /title="Refresh" className="flex h-9 w-11/);
-  assert.match(items, /title="Download \/ Export" className="flex h-9 w-9/);
-  assert.match(items, /title="Cetak \/ Simpan PDF sesuai filter" className="flex h-9 w-9/);
-  assert.match(items, /title="Pengaturan Kolom" className="flex h-9 w-9/);
-  assert.match(items, /className="relative w-\[360px\]"/);
-  assert.match(items, /className=\{"app-fill-stack " \+ \(`\$\{ui\.tableShell\} mx-1 lg:mx-3 lg:mt-0\.5`\)\}/);
-  assert.match(items, /app-table-scroll app-table-scroll--fill hidden/);
-  assert.match(items, /<th colSpan=\{9\} className="!h-8 !p-0">/);
-  assert.match(items, /className="flex h-8 items-center text-xs font-semibold uppercase"/);
+test('daftar Barang dan Jasa mengikuti filter dan tabel persediaan', () => {
+  const page = source('src/pages/ItemsAndServices.tsx');
+  assert.match(page, /InventoryListToolbar name="Barang & Jasa"/);
+  assert.match(page, /clearFilters=\{resetItemFilters\}/);
+  assert.match(page, /InventoryColumnHeader key=\{column\}/);
+  assert.match(page, /onResize=\{beginColumnResize\}/);
+  assert.match(page, /itemPage.visibleRows.map/);
+  assert.match(page, /onClick=\{exportCurrentData\}/);
+  assert.match(page, /onClick=\{\(\) => setShowPrintOptions\(true\)\}/);
 });
 
 test('Master Merek Barang tersedia dari menu Barang dan Jasa serta menerima kode otomatis', () => {

@@ -15,16 +15,20 @@ export function useConfigurableTable<K extends string>({
   defaultWidths,
   sortableKeys,
   fixedRightKeys = [],
+  inventoryLayout = false,
+  defaultSort = null,
 }: {
   storageKey: string;
   defaultOrder: K[];
   defaultWidths: Record<K, number>;
   sortableKeys: K[];
   fixedRightKeys?: K[];
+  inventoryLayout?: boolean;
+  defaultSort?: TableSort<K>;
 }) {
   const [order, setOrder] = useState<K[]>(defaultOrder);
   const [widths, setWidths] = useState<Record<K, number>>(defaultWidths);
-  const [sort, setSort] = useState<TableSort<K>>(null);
+  const [sort, setSort] = useState<TableSort<K>>(defaultSort);
   const [isDesktop, setIsDesktop] = useState(() => typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches);
 
   useEffect(() => {
@@ -54,30 +58,30 @@ export function useConfigurableTable<K extends string>({
       if (!saved) {
         setOrder(defaultOrder);
         setWidths(defaultWidths);
-        setSort(null);
+        setSort(defaultSort);
         return;
       }
       const parsed = JSON.parse(saved) as StoredTableLayout<K>;
       const nextOrder = normalizeOrder(Array.isArray(parsed.order) ? parsed.order : defaultOrder);
       const nextWidths = { ...defaultWidths, ...(parsed.widths || {}) };
-      const nextSort = parsed.sort && sortableKeys.includes(parsed.sort.key) ? parsed.sort : null;
+      const nextSort = parsed.sort && sortableKeys.includes(parsed.sort.key) ? parsed.sort : defaultSort;
       setOrder(nextOrder);
       setWidths(nextWidths);
       setSort(nextSort);
     } catch {
       setOrder(defaultOrder);
       setWidths(defaultWidths);
-      setSort(null);
+      setSort(defaultSort);
     }
     // Konfigurasi modul berupa konstanta; storageKey adalah pemicu migrasi antar pengguna.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
 
   const moveColumn = (source: K, target: K) => {
-    if (source === target || fixedRightKeys.includes(source) || fixedRightKeys.includes(target)) return;
+    if (!defaultOrder.includes(source) || !defaultOrder.includes(target) || source === target || fixedRightKeys.includes(source) || fixedRightKeys.includes(target)) return;
     setOrder(current => {
       const next = current.filter(key => key !== source);
-      next.splice(next.indexOf(target), 0, source);
+      next.splice(inventoryLayout ? current.indexOf(target) : next.indexOf(target), 0, source);
       const normalized = normalizeOrder(next);
       persist(normalized, widths, sort);
       return normalized;
@@ -91,7 +95,7 @@ export function useConfigurableTable<K extends string>({
         ? { key, direction: 'asc' }
         : current.direction === 'asc'
           ? { key, direction: 'desc' }
-          : null;
+          : inventoryLayout ? { key, direction: 'asc' } : null;
       persist(order, widths, next);
       return next;
     });
@@ -127,11 +131,13 @@ export function useConfigurableTable<K extends string>({
   const resetLayout = () => {
     setOrder(defaultOrder);
     setWidths(defaultWidths);
-    setSort(null);
-    persist(defaultOrder, defaultWidths, null);
+    setSort(defaultSort);
+    persist(defaultOrder, defaultWidths, defaultSort);
   };
 
-  return { order, widths, sort, isDesktop, moveColumn, toggleSort, beginResize, resetWidth, resetLayout };
+  const resetSort = () => { setSort(defaultSort); persist(order, widths, defaultSort); };
+
+  return { order, widths, sort, resetSort, isDesktop, moveColumn, toggleSort, beginResize, resetWidth, resetLayout };
 }
 
 export function ConfigurableTableHeaderCell<K extends string>({

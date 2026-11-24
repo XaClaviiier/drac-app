@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Boxes, ChevronDown, ChevronUp, Download, Edit, Filter, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, Settings2, RefreshCw, Printer, Share2, List } from 'lucide-react';
+import { Boxes, ChevronDown, ChevronUp, Download, Edit, FolderTree, Layers, Plus, Save, Search, Trash2, Upload, X, AlertCircle, CheckCircle2, FileText, RefreshCw, Printer, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { Item, ItemCategory, ItemType, GroupMember, StockMovement, ItemVehicleCompatibility } from '../types';
 import { failSystemProcess, finishSystemProcess, startSystemProcess, updateSystemProcess } from '../lib/processQueue';
@@ -12,7 +12,7 @@ import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import { matchesStockSearch, parseItemStockSearch } from '../lib/itemSearchRules';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { useAccurateDocumentCanvas } from '../lib/useAccurateDocumentCanvas';
-import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
+import { InventoryColumnHeader, InventoryListToolbar, useInventoryPage } from '../components/InventoryList';
 import VehicleCompatibilityPicker, { type VehicleCatalogBrandOption } from '../components/VehicleCompatibilityPicker';
 import { ITEM_COMPATIBILITY_TEMPLATES } from '../lib/itemCompatibilityTemplates';
 import { stockMovementSource } from '../lib/stockMovementSource';
@@ -83,6 +83,62 @@ const typeColors: Record<string, string> = {
   Group: 'bg-purple-100 text-purple-800',
 };
 
+function ItemCategoryFilter({ categories, selected, onChange }: {
+  categories: ItemCategory[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: Event) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('focusin', closeOutside);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('focusin', closeOutside);
+    };
+  }, [open]);
+
+  const selectedCategories = selected.flatMap(id => {
+    const category = categories.find(option => option.id === id);
+    return category ? [category] : [];
+  });
+  const names = selectedCategories.map(category => category.name).join(', ');
+  return <div ref={container} className="item-category-filter" onKeyDown={event => {
+    if (open && event.key === 'Escape') { setOpen(false); trigger.current?.focus(); }
+  }}>
+    <span>Kategori</span>
+    <div className="item-category-control">
+      <button ref={trigger} type="button" className="item-category-trigger" aria-label={`Kategori: ${names || 'Semua kategori'}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ChevronDown size={15}/>
+      </button>
+      <div className="item-category-values">
+        {selectedCategories.length === 0 && <span>Semua kategori</span>}
+        {selectedCategories.map(category => <span key={category.id} className="item-category-chip">
+          <span>{category.name}</span>
+          <button type="button" aria-label={`Hapus filter kategori ${category.name}`} onClick={() => {
+            onChange(selected.filter(id => id !== category.id));
+            trigger.current?.focus();
+          }}><X size={13}/></button>
+        </span>)}
+      </div>
+    </div>
+    {open && <div className="item-category-options" role="group" aria-label="Pilihan kategori">
+      <button type="button" onClick={() => onChange([])}>Semua kategori</button>
+      {categories.map(category => <label key={category.id}>
+        <input type="checkbox" checked={selected.includes(category.id)} onChange={event =>
+          onChange(event.target.checked ? [...selected, category.id] : selected.filter(id => id !== category.id))}/>
+        {category.name}
+      </label>)}
+    </div>}
+  </div>;
+}
+
 export default function ItemsAndServices() {
   const [searchParams, setSearchParams] = useSearchParams();
   const stockCardMode = searchParams.get('mode') === 'stock-card';
@@ -102,18 +158,19 @@ export default function ItemsAndServices() {
 
   const [search, setSearch] = useState('');
   const [filterActive, setFilterActive] = useState('all');
-  const [filterCategory, setFilterCategory] = useState('');
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [filterType, setFilterType] = useState(stockCardMode ? 'Persediaan' : '');
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStock, setFilterStock] = useState('');
+  const [compactMobile, setCompactMobile] = useState(true);
   const [showPrintOptions, setShowPrintOptions] = useState(false);
   const [printGroupByCategory, setPrintGroupByCategory] = useState(false);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const itemFiltersActive = Boolean(filterActive !== 'all' || filterCategory || filterType || filterBrand || filterStock);
+  const activeFilterCount = [filterActive !== 'all', categoryIds.length > 0, filterType, filterBrand, filterStock, search.trim()].filter(Boolean).length;
   const resetItemFilters = () => {
+    setSearch('');
     setFilterActive('all');
     setFilterType('');
-    setFilterCategory('');
+    setCategoryIds([]);
     setFilterBrand('');
     setFilterStock('');
   };
@@ -159,9 +216,7 @@ export default function ItemsAndServices() {
   useEffect(()=>{void loadItemBrands();},[]);
   const [categoryForm, setCategoryForm] = useState(emptyCategory);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [showColumnSettings, setShowColumnSettings] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ column: 'code' | 'name' | 'category'; direction: 'asc' | 'desc' }>({ column: 'code', direction: 'asc' });
-  const [draggedColumn, setDraggedColumn] = useState<ItemColumn | null>(null);
+  const [sortConfig, setSortConfig] = useState<{key: ItemColumn; direction: 'asc' | 'desc'}>({key: 'code', direction: 'asc'});
   const columnStorageKey = `dokterac_item_columns_accurate_v3_${currentUser?.id || currentUser?.username || 'default'}`;
   const columnWidthStorageKey = `dokterac_item_column_widths_${currentUser?.id || currentUser?.username || 'default'}`;
   const [visibleColumns, setVisibleColumns] = useState<ItemColumn[]>(() => {
@@ -196,7 +251,7 @@ export default function ItemsAndServices() {
     [itemTableColumns, columnWidths]
   );
 
-  const beginColumnResize = (column: ItemColumn, event: ReactMouseEvent<HTMLSpanElement>) => {
+  const beginColumnResize = (event: ReactMouseEvent, column: ItemColumn) => {
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
@@ -221,8 +276,6 @@ export default function ItemsAndServices() {
     document.addEventListener('mouseup', onUp);
   };
 
-  const columnStyle = (column: ItemColumn) => ({ width: columnWidths[column], minWidth: columnWidths[column] });
-
   const setColumnVisible = (column: ItemColumn, visible: boolean) => {
     if (column === 'name' || column === 'actions') return;
     setVisibleColumns((current) => {
@@ -232,7 +285,14 @@ export default function ItemsAndServices() {
     });
   };
 
+  const resetColumnWidth = (column: ItemColumn) => {
+    const next = { ...columnWidths, [column]: defaultItemColumnWidths[column] };
+    setColumnWidths(next);
+    localStorage.setItem(columnWidthStorageKey, JSON.stringify(next));
+  };
+
   const resetColumns = () => {
+    setSortConfig({key: 'code', direction: 'asc'});
     setVisibleColumns(defaultItemColumns);
     setColumnWidths(defaultItemColumnWidths);
     localStorage.setItem(columnStorageKey, JSON.stringify(defaultItemColumns));
@@ -253,33 +313,6 @@ export default function ItemsAndServices() {
     });
   };
 
-  const resizableHeader = (column: ItemColumn, label: string, align: 'left' | 'center' | 'right' = 'left') => (
-    <div
-      key={column}
-      style={columnStyle(column)}
-      draggable
-      onDragStart={() => setDraggedColumn(column)}
-      onDragOver={event => event.preventDefault()}
-      onDrop={() => { if (draggedColumn) moveColumn(draggedColumn, column); setDraggedColumn(null); }}
-      onDragEnd={() => setDraggedColumn(null)}
-      onClick={() => {
-        if (column !== 'code' && column !== 'name' && column !== 'category') return;
-        setSortConfig(current => ({ column, direction: current.column === column && current.direction === 'asc' ? 'desc' : 'asc' }));
-      }}
-      title={`${column === 'code' || column === 'name' || column === 'category' ? 'Klik untuk urutkan. ' : ''}Tarik untuk memindahkan kolom.`}
-      className={`relative flex h-8 flex-shrink-0 cursor-grab select-none items-center gap-1 px-3 text-xs font-semibold uppercase ${draggedColumn === column ? 'opacity-50' : ''} ${align === 'right' ? 'justify-end text-right' : align === 'center' ? 'justify-center text-center' : 'justify-start text-left'}`}
-    >
-      <span className="block truncate">{label}</span>
-      {sortConfig.column === column && <span className="text-[10px]">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>}
-      <span
-        role="separator"
-        aria-label={`Ubah lebar kolom ${label}`}
-        onMouseDown={(event) => beginColumnResize(column, event)}
-        className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-white/30 hover:bg-white/30"
-      />
-    </div>
-  );
-
   // Group member picker state
   const [memberSearch, setMemberSearch] = useState('');
   const [isSavingItem, setIsSavingItem] = useState(false);
@@ -294,13 +327,26 @@ export default function ItemsAndServices() {
   const stockColor = (item: Item) => isItemBelowMinimum(item, displayStock(item)) ? 'text-red-600' : 'text-black';
 
   const filteredItems = useMemo(() => {
+    const sortValue = (item: Item): string | number => {
+      switch (sortConfig.key) {
+        case 'category': return item.categoryName;
+        case 'stock': return item.type === 'Persediaan' ? displayStock(item) : -Infinity;
+        case 'minimumStock': return item.type === 'Persediaan' ? itemMinimumStock(item) : -Infinity;
+        case 'price': return item.sellingPrice;
+        case 'purchasePrice': return item.purchasePrice;
+        case 'status': return item.isActive ? 'Aktif' : 'Nonaktif';
+        case 'receiptDescription': return item.receiptDescription || item.name;
+        case 'actions': return '';
+        default: return item[sortConfig.key] || '';
+      }
+    };
     const parsedSearch = parseItemStockSearch(search);
     const parsedStockFilter = filterStock ? parseItemStockSearch(filterStock) : parsedSearch;
     const selectedStocks = parsedStockFilter.stocks || (parsedStockFilter.stock ? [parsedStockFilter.stock] : []);
     const q = parsedSearch.text;
     return data.items.filter((item) => {
       const activeMatch = filterActive === 'all' || (filterActive === 'active' ? item.isActive : !item.isActive);
-      const categoryMatch = !filterCategory || item.categoryId === filterCategory;
+      const categoryMatch = categoryIds.length === 0 || categoryIds.includes(item.categoryId);
       const typeMatch = !filterType || item.type === filterType;
       const brandMatch = !filterBrand || item.brand === filterBrand;
       const stockMatch = selectedStocks.length === 0 || (
@@ -316,12 +362,16 @@ export default function ItemsAndServices() {
         (item.barcode || '').toLowerCase().includes(q);
       return activeMatch && categoryMatch && typeMatch && brandMatch && stockMatch && searchMatch;
     }).sort((a, b) => {
-      const left = sortConfig.column === 'category' ? a.categoryName : a[sortConfig.column];
-      const right = sortConfig.column === 'category' ? b.categoryName : b[sortConfig.column];
-      const result = String(left || '').localeCompare(String(right || ''), 'id', { numeric: true, sensitivity: 'base' });
+      const left = sortValue(a);
+      const right = sortValue(b);
+      const result = typeof left === 'number' && typeof right === 'number'
+        ? (left === right ? 0 : left - right)
+        : String(left).localeCompare(String(right), 'id', {numeric: true, sensitivity: 'base'});
       return sortConfig.direction === 'asc' ? result : -result;
     });
-  }, [data.items, search, filterActive, filterCategory, filterType, filterBrand, filterStock, sortConfig, currentBranchId]);
+  }, [data.items, search, filterActive, categoryIds, filterType, filterBrand, filterStock, sortConfig, currentBranchId]);
+
+  const itemPage = useInventoryPage(filteredItems, JSON.stringify([currentBranchId, search, filterActive, categoryIds, filterType, filterBrand, filterStock, sortConfig]));
 
   // Items available for group picking (exclude Groups and current item)
   const pickableItems = useMemo(() => {
@@ -734,7 +784,7 @@ export default function ItemsAndServices() {
     const activeFilters = [
       filterActive === 'active' ? 'Status: Aktif' : filterActive === 'inactive' ? 'Status: Nonaktif' : '',
       filterBrand ? `Merek: ${filterBrand}` : '',
-      filterCategory ? `Kategori: ${data.itemCategories.find(category => category.id === filterCategory)?.name || filterCategory}` : '',
+      categoryIds.length ? `Kategori: ${data.itemCategories.filter(category => categoryIds.includes(category.id)).map(category => category.name).join(', ')}` : '',
       filterType ? `Jenis: ${filterType}` : '',
       filterStock ? `Stok: ${filterStock.replace(/^stok\s*/i, '')}` : '',
       search.trim() ? `Pencarian: ${search.trim()}` : '',
@@ -1262,8 +1312,8 @@ export default function ItemsAndServices() {
   };
 
   return (
-    <div className="app-module-page">
-      <div className={ui.childBar}>
+    <div className={!showItemModal && itemListTab === 'list' ? 'app-module-page inventory-list-page' : 'app-module-page'}>
+      <div className={!showItemModal && itemListTab === 'list' ? ui.childBar + ' inventory-list-tabs' : ui.childBar}>
         <button type="button" onClick={() => { setShowItemModal(false); setItemListTab('list'); }} title="Daftar Barang & Jasa" className={ui.childListTab}>
           <List className="h-5 w-5" />
         </button>
@@ -1277,7 +1327,7 @@ export default function ItemsAndServices() {
         )}
       </div>
       <div className="app-module-panel app-fill-stack">
-      {!showItemModal && <div className="app-fill-stack space-y-3 px-1 lg:space-y-0 lg:px-0">
+      {!showItemModal && <div className={itemListTab === 'list' ? 'app-fill-stack' : 'app-fill-stack space-y-3 px-1 lg:space-y-0 lg:px-0'}>
       {itemListTab === 'verification' && <section className="min-h-[560px] border border-slate-300 bg-[#eeeeee] p-4">
         <div className="mb-4"><h3 className="text-lg font-semibold text-slate-900">Verifikasi Barang Baru</h3><p className="text-sm text-slate-600">Sahkan jika data benar, atau gabungkan ke master lama jika barang ternyata duplikat.</p></div>
         {verificationFeedback && <div role="status" aria-live="polite" className={`mb-3 flex items-center gap-2 rounded border px-3 py-2 text-sm font-medium ${verificationFeedback.type === 'success' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : verificationFeedback.type === 'error' ? 'border-red-300 bg-red-50 text-red-800' : 'border-blue-300 bg-blue-50 text-blue-800'}`}>{verificationFeedback.type === 'success' ? <CheckCircle2 className="h-5 w-5 shrink-0"/> : <AlertCircle className="h-5 w-5 shrink-0"/>}<span>{verificationFeedback.message}</span><button type="button" onClick={() => setVerificationFeedback(null)} className="ml-auto rounded p-1 hover:bg-black/5" aria-label="Tutup pemberitahuan"><X className="h-4 w-4"/></button></div>}
@@ -1291,77 +1341,50 @@ export default function ItemsAndServices() {
           {!pendingItems.length && <div className="py-24 text-center text-slate-500"><CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-400"/>Tidak ada barang yang menunggu verifikasi.</div>}
         </div>
       </section>}
-      <div className={"app-fill-stack " + (itemListTab === 'list' ? '' : 'hidden')}>
-      {/* Header */}
-      <div className="lg:hidden">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Barang & Jasa</h2>
-          <p className="mt-1 text-gray-500">Kelola master sparepart, bahan, jasa service, group, dan kategori.</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className={`${ui.toolbar} border p-3 shadow-sm lg:border-x-0 lg:border-y lg:border-gray-300 lg:px-3 lg:py-2 lg:shadow-sm`}>
-        <div className="space-y-2 lg:hidden">
-          <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari barang, kode, atau stok..." className={`${ui.search} w-full px-3 pr-9`} /><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" /></div>
-            {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Barang Baru" aria-label="Barang Baru" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded bg-blue-700 text-white hover:bg-blue-800"><Plus className="h-5 w-5" /></button>}
-            <button type="button" onClick={() => refreshData()} title="Refresh" aria-label="Refresh" className="flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border border-blue-600 bg-white text-blue-700"><RefreshCw className="h-5 w-5" /></button>
-            <ActiveFilterResetButton active={itemFiltersActive} onReset={resetItemFilters} className="h-10 w-11" />
-            <button type="button" onClick={() => setShowMobileFilters(value => !value)} title="Filter" aria-label="Filter" className={`relative flex h-10 w-11 flex-shrink-0 items-center justify-center rounded border ${showMobileFilters || itemFiltersActive ? 'border-blue-700 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}><Filter className="h-5 w-5" />{itemFiltersActive && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600" />}</button>
-            <span className="flex h-10 min-w-12 flex-shrink-0 items-center justify-center rounded border border-slate-300 bg-white px-2 text-xs font-medium text-slate-600">{filteredItems.length}</span>
-          </div>
-          {showMobileFilters && <div className="grid grid-cols-2 gap-2 rounded border border-slate-200 bg-slate-50 p-2">
-            <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="all">Semua status</option><option value="active">Aktif</option><option value="inactive">Nonaktif</option></select>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua jenis</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua kategori</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
-            <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua merek</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
-            <select value={filterStock} onChange={(e) => setFilterStock(e.target.value)} className="col-span-2 h-9 min-w-0 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Semua stok</option><option value="stok=0">Stok = 0</option><option value="stok!=0">Stok ≠ 0</option><option value="stok=1">Stok = 1</option><option value="stok>0">Stok &gt; 0</option><option value="stok<0">Stok &lt; 0</option><option value="stok<=1">Stok ≤ 1</option></select>
-            {hasPermission('item:create') && <button type="button" onClick={() => openCategoryModal()} className="flex h-9 items-center justify-center gap-1 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700"><FolderTree className="h-4 w-4" /> Kelola Kategori</button>}
-            <button type="button" onClick={resetItemFilters} className={`h-9 rounded border border-slate-300 bg-white text-xs font-medium text-blue-700 ${hasPermission('item:create') ? '' : 'col-span-2'}`}>Reset Filter</button>
-          </div>}
-        </div>
-        <div className="hidden flex-wrap items-center gap-2 lg:flex">
-          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)} className={`${ui.field} px-3`}>
-            <option value="all">Non Aktif: Semua</option><option value="active">Non Aktif: Tidak</option><option value="inactive">Non Aktif: Ya</option>
-          </select>
-          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className={`${ui.field} px-3`}><option value="">Merek Barang: Semua</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className={`${ui.field} px-3`}><option value="">Kategori Barang: Semua</option>{data.itemCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={`${ui.field} px-3`}><option value="">Jenis Barang: Semua</option>{allItemTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
-          <ActiveFilterResetButton active={itemFiltersActive} onReset={resetItemFilters} />
-          <button type="button" className="inline-flex h-9 items-center gap-2 rounded border border-blue-600 bg-white px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50" title="Filter lanjutan"><Filter className="h-4 w-4" /> Filter</button>
-        </div>
-        <div className="mt-2 hidden flex-wrap items-center justify-between gap-2 lg:flex">
-          <div className="flex gap-2">
-            {hasPermission('item:create') && <button onClick={() => openItemModal()} title="Data Baru" className="flex h-9 w-14 items-center justify-center rounded bg-blue-800 text-white shadow-sm hover:bg-blue-700"><Plus className="h-5 w-5" /></button>}
-            <button type="button" onClick={() => refreshData()} title="Refresh" className="flex h-9 w-11 items-center justify-center rounded border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"><RefreshCw className="h-4 w-4" /></button>
-          </div>
-          <div className="relative flex items-center gap-2">
-            <div className="relative w-[360px]"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari atau ketik stok=0, stok!=0, stok>0" title="Filter stok: stok=0, stok!=0 atau stok<>0, stok>=1 atau stok=>1. Pisahkan koma untuk kombinasi OR." className={`${ui.search} w-full px-3 pr-10`} /><Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-900" /></div>
-            <button type="button" onClick={exportCurrentData} title="Download / Export" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Download className="h-4 w-4" /></button>
-            {hasPermission('item:create') && <button type="button" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }} title="Import" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Share2 className="h-4 w-4" /></button>}
-            <button type="button" onClick={() => setShowPrintOptions(true)} title="Cetak / Simpan PDF sesuai filter" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Printer className="h-4 w-4" /></button>
-            <button type="button" onClick={() => setShowColumnSettings(value => !value)} title="Pengaturan Kolom" className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"><Settings2 className="h-4 w-4" /></button>
-            <span className="flex h-9 min-w-14 items-center justify-center rounded border border-gray-300 bg-white px-3 text-sm text-gray-700">{filteredItems.length}</span>
-            {showColumnSettings && (
-              <div className="absolute right-0 top-12 z-30 w-72 rounded border border-slate-300 bg-white p-4 shadow-xl">
-                <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-bold">Kolom Ditampilkan</p><p className="text-[10px] text-slate-500">Tersimpan untuk pengguna ini</p></div><button type="button" onClick={() => setShowColumnSettings(false)}><X className="h-4 w-4" /></button></div>
-                {(Object.keys(itemColumnLabels) as ItemColumn[]).map(column => { const required = column === 'name' || column === 'actions'; return <label key={column} className="flex items-center justify-between px-2 py-1.5 text-sm"><span>{itemColumnLabels[column]}</span><input type="checkbox" disabled={required} checked={required || visibleColumns.includes(column)} onChange={event => setColumnVisible(column, event.target.checked)} /></label>; })}
-                <button type="button" onClick={resetColumns} className="mt-2 w-full rounded border px-3 py-2 text-xs">Kembalikan Default</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className={"app-fill-stack " + (`${ui.tableShell} mx-1 lg:mx-3 lg:mt-0.5`)}>
-        <div className="lg:hidden">
-          <div className="grid grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 bg-[#2442a8] px-2 py-2 text-[10px] font-semibold uppercase text-white">
+      <div className={"app-fill-stack item-master-list " + (itemListTab === 'list' ? '' : 'hidden')}>
+      <InventoryListToolbar name="Barang & Jasa" search={search} onSearch={setSearch} placeholder="Cari nama, kode, barcode, stok…"
+        searchHint="Contoh pencarian stok: stok=0, stok!=0, stok>=1. Pisahkan dengan koma untuk mencari beberapa kondisi."
+        count={filteredItems.length} filterCount={activeFilterCount} clearFilters={resetItemFilters}
+        primaryFilters={<div className="item-master-primary-filters">
+          <label>Jenis
+            <select aria-label="Jenis" value={filterType} onChange={event => setFilterType(event.target.value)}>
+              <option value="">Semua jenis</option>
+              {allItemTypes.map(type => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <ItemCategoryFilter categories={data.itemCategories} selected={categoryIds} onChange={setCategoryIds}/>
+        </div>}
+        filters={<>
+            <label>Status<select aria-label="Status" value={filterActive} onChange={(e) => setFilterActive(e.target.value)}><option value="all">Semua status</option><option value="active">Aktif</option><option value="inactive">Nonaktif</option></select></label>
+            <label>Merek<select aria-label="Merek" value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}><option value="">Semua merek</option>{brands.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select></label>
+            <label>Stok<select aria-label="Stok" value={filterStock} onChange={(e) => setFilterStock(e.target.value)}><option value="">Semua stok</option><option value="stok=0">Stok = 0</option><option value="stok!=0">Stok ≠ 0</option><option value="stok=1">Stok = 1</option><option value="stok>0">Stok &gt; 0</option><option value="stok<0">Stok &lt; 0</option><option value="stok<=1">Stok ≤ 1</option></select></label>
+        </>}
+        actions={<>
+          {hasPermission('item:create') && <button type="button" className="stock-movement-tool-button" title="Barang Baru" onClick={() => openItemModal()}><Plus size={20}/></button>}
+          <button type="button" className="stock-movement-tool-button" title="Muat ulang daftar" onClick={() => void refreshData()}><RefreshCw size={18}/></button>
+        </>}
+        tools={<>
+          <button type="button" className="stock-movement-tool-button" title="Cetak / Simpan PDF sesuai filter" onClick={() => setShowPrintOptions(true)}><Printer size={18}/></button>
+          <button type="button" className="stock-movement-tool-button" title="Ekspor seluruh master barang dan jasa (CSV, tanpa paket)" onClick={exportCurrentData}><Download size={18}/></button>
+          {hasPermission('item:create') && <>
+            <button type="button" className="stock-movement-tool-button" title="Impor barang dan jasa" onClick={() => { setShowImportModal(true); setImportPreview([]); setImportErrors([]); setImportSuccess(''); }}><Upload size={18}/></button>
+            <button type="button" className="stock-movement-tool-button" title="Kelola kategori" onClick={() => openCategoryModal()}><FolderTree size={18}/></button>
+          </>}
+        </>}
+        columns={<>
+          <div className="lg:hidden"><label><input type="checkbox" checked={compactMobile} onChange={event => setCompactMobile(event.target.checked)}/>Tampilan ringkas di ponsel</label></div>
+          {(Object.keys(itemColumnLabels) as ItemColumn[]).map(column => <label key={column}>
+            <input type="checkbox" checked={itemTableColumns.includes(column)} disabled={column === 'name' || column === 'actions'} onChange={event => setColumnVisible(column, event.target.checked)}/>{itemColumnLabels[column]}
+          </label>)}
+          <button type="button" onClick={resetColumns}>Kembalikan default</button>
+        </>}/>
+      {compactMobile && (
+        <div className="inventory-list-cards lg:hidden">
+          <div className="grid grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 bg-[#60778e] px-2 py-2 text-[10px] font-semibold uppercase text-white">
             <span>Barang/Jasa</span><span className="text-center">Stok</span><span>Kategori</span><span className="text-center">Aksi</span>
           </div>
-          <div className="max-h-[calc(100vh-330px)] divide-y divide-slate-200 overflow-y-auto">
-            {filteredItems.length === 0 ? <div className="px-4 py-16 text-center text-sm text-slate-500">Tidak ada barang/jasa ditemukan</div> : filteredItems.map((item, rowIndex) => (
+          <div className="divide-y divide-slate-200">
+            {filteredItems.length === 0 ? <div className="px-4 py-16 text-center text-sm text-slate-500">Tidak ada barang/jasa ditemukan</div> : itemPage.visibleRows.map((item, rowIndex) => (
               <div key={item.id} onClick={() => openItemModal(item)} className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_62px_76px_36px] items-center gap-2 px-2 py-2.5 text-xs ${!item.isActive ? 'bg-red-50/60 opacity-75' : rowIndex % 2 ? 'bg-slate-50' : 'bg-white'}`}>
                 <div className="min-w-0"><p className="line-clamp-2 font-semibold leading-4 text-slate-900">{item.name}</p><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500">{item.code}</p>{itemTableColumns.includes('barcode') && <p className="truncate font-mono text-[10px] text-slate-600" title={item.barcode || 'Belum ada barcode'}>Barcode: {item.barcode || '—'}</p>}</div>
                 <div className="text-center font-semibold tabular-nums"><span className={stockColor(item)}>{item.type === 'Persediaan' ? displayStock(item) : '—'}</span><span className="ml-1 text-[10px] font-normal text-slate-500">{item.unit}</span>{itemTableColumns.includes('minimumStock') && <p className="text-[10px] font-normal text-slate-600">Min: {item.type === 'Persediaan' ? itemMinimumStock(item) : '—'}</p>}</div>
@@ -1371,92 +1394,56 @@ export default function ItemsAndServices() {
             ))}
           </div>
         </div>
-        <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Filter className="h-4 w-4" />
-            Menampilkan {filteredItems.length} dari {data.items.length} item
-          </div>
-          <div className="relative flex items-center gap-2">
-            <button type="button" onClick={() => setShowColumnSettings((value) => !value)} className="hidden items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 lg:inline-flex">
-              <Settings2 className="h-4 w-4" /> Atur Kolom
-            </button>
-            <span className="text-sm font-medium text-gray-600">{data.items.length}</span>
-            {showColumnSettings && (
-              <div className="absolute right-0 top-11 z-30 hidden w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-xl lg:block">
-                <div className="mb-3 flex items-center justify-between">
-                  <div><p className="text-sm font-bold text-gray-900">Kolom Ditampilkan</p><p className="text-[10px] text-gray-500">Tersimpan untuk pengguna ini</p></div>
-                  <button type="button" onClick={() => setShowColumnSettings(false)} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
-                </div>
-                <div className="max-h-72 space-y-1 overflow-y-auto">
-                  {(Object.keys(itemColumnLabels) as ItemColumn[]).map((column) => {
-                    const required = column === 'name' || column === 'actions';
-                    return <label key={column} className={`flex items-center justify-between rounded-lg px-2 py-2 text-sm ${required ? 'bg-gray-50 text-gray-500' : 'cursor-pointer hover:bg-blue-50'}`}><span>{itemColumnLabels[column]}</span><input type="checkbox" disabled={required} checked={required || visibleColumns.includes(column)} onChange={(event) => setColumnVisible(column, event.target.checked)} className="h-4 w-4 rounded text-blue-600" /></label>;
-                  })}
-                </div>
-                <button type="button" onClick={resetColumns} className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Kembalikan Default</button>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="app-table-scroll app-table-scroll--fill hidden max-h-[calc(100vh-420px)] overflow-auto lg:block lg:max-h-[calc(100vh-265px)]">
-          <table className="w-full table-fixed" style={{ minWidth: tableMinWidth }}>
-            <thead className="sticky top-0 z-10 bg-[#637c93] text-white">
-              <tr>
-                <th colSpan={9} className="!h-8 !p-0">
-                  <div className="flex h-8 items-center text-xs font-semibold uppercase" style={{ minWidth: tableMinWidth }}>
-                    <div className="h-8 w-10 flex-shrink-0 px-2"></div>
-                    {itemTableColumns.map(column => resizableHeader(
-                      column,
-                      column === 'code' ? 'Kode Barang' : column === 'name' ? 'Nama Barang' : itemColumnLabels[column],
-                      column === 'stock' || column === 'minimumStock' || column === 'purchasePrice' || column === 'price' ? 'right' : column === 'status' || column === 'actions' ? 'center' : 'left'
-                    ))}
-                  </div>
-                </th>
-              </tr>
-            </thead>
+      )}
+      <div className={`app-table-scroll app-table-scroll--fill inventory-report-table stock-movement-paper inventory-document-table${compactMobile ? ' hidden lg:block' : ''}`}>
+        <table style={{minWidth: tableMinWidth}}>
+          <colgroup><col style={{width: 40}}/>{itemTableColumns.map(column => <col key={column} style={{width: columnWidths[column]}}/>)}</colgroup>
+          <thead><tr><th scope="col" aria-label="Isi paket"/>
+            {itemTableColumns.map(column => <InventoryColumnHeader key={column} column={column} label={column === 'code' ? 'Kode Barang' : itemColumnLabels[column]}
+              className={['price', 'purchasePrice', 'stock', 'minimumStock'].includes(column) ? 'numeric' : undefined}
+              sort={sortConfig} onMove={moveColumn} onResize={beginColumnResize} onResetWidth={resetColumnWidth}
+              onSort={column === 'actions' ? undefined : key => setSortConfig(current => ({key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'}))}/>)}
+          </tr></thead>
             <tbody className="divide-y divide-gray-200">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={itemTableColumns.length + 1} className="px-6 py-12 text-center text-gray-500">
                     <Boxes className="mx-auto mb-3 h-12 w-12 text-gray-300" />
                     Tidak ada barang/jasa ditemukan
                   </td>
                 </tr>
-              ) : filteredItems.map((item, rowIndex) => {
+              ) : itemPage.visibleRows.map((item, rowIndex) => {
                 const isGroup = item.type === 'Group' && item.groupMembers && item.groupMembers.length > 0;
                 const expanded = expandedGroups.has(item.id);
                 return (
-                    <tr key={item.id} className={`group ${!item.isActive ? 'bg-red-50/50 opacity-75' : rowIndex % 2 ? 'bg-slate-50' : 'bg-white'}`}>
-                    <td colSpan={9} className="p-0">
-                      {/* Main row */}
-                      <div style={{ minWidth: tableMinWidth }} className="flex cursor-pointer items-center transition-colors hover:bg-blue-50/50" onClick={() => openItemModal(item)}>
-                        <div className="w-10 flex-shrink-0 px-2 py-3 text-center" onClick={event => { if (isGroup) { event.stopPropagation(); toggleGroup(item.id); } }}>
-                          {isGroup ? (
-                            expanded ? <ChevronUp className="mx-auto h-4 w-4 text-purple-500" /> : <ChevronDown className="mx-auto h-4 w-4 text-purple-500" />
-                          ) : null}
-                        </div>
+                  <Fragment key={item.id}>
+                    <tr tabIndex={0} onClick={() => openItemModal(item)} onKeyDown={event => {
+                      if (event.currentTarget === event.target && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openItemModal(item); }
+                    }} className={`cursor-pointer ${!item.isActive ? 'bg-red-50/50 opacity-75' : rowIndex % 2 ? 'bg-slate-50' : 'bg-white'}`}>
+                      <td>{isGroup && <button type="button" aria-label={`Isi paket ${item.name}`} aria-expanded={expanded} onClick={event => { event.stopPropagation(); toggleGroup(item.id); }}>
+                        {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                      </button>}</td>
                         {itemTableColumns.map(column => {
-                          const base = 'flex-shrink-0 px-3 py-2.5 text-[13px] leading-5 text-slate-800';
-                          if (column === 'code') return <div key={column} style={columnStyle(column)} className={`${base} truncate font-medium`} title={item.code}>{item.code}</div>;
-                          if (column === 'name') return <div key={column} style={columnStyle(column)} className={`${base} overflow-hidden`}><div className="flex items-center gap-2"><p className="truncate font-medium text-slate-900">{item.name}</p>{!item.isActive && <span className="rounded-full bg-red-100 px-2 text-[10px] font-bold text-red-700">NONAKTIF</span>}{item.verificationStatus === 'Pending' && <span className="rounded-full bg-amber-100 px-2 text-[10px] font-bold text-amber-800">MENUNGGU VERIFIKASI</span>}{isGroup && <span className="rounded bg-purple-100 px-1.5 text-[10px] text-purple-700">{item.groupMembers!.length} item</span>}</div></div>;
-                          if (column === 'receiptDescription') return <div key={column} style={columnStyle(column)} className={`${base} truncate`} title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</div>;
-                          if (column === 'type') return <div key={column} style={columnStyle(column)} className={base}><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>{item.type}</span></div>;
-                          if (column === 'category') return <div key={column} style={columnStyle(column)} className={`${base} truncate`}>{item.categoryName}</div>;
-                          if (column === 'barcode') return <div key={column} style={columnStyle(column)} className={`${base} truncate font-mono`} title={item.barcode || 'Belum ada barcode'}>{item.barcode || '—'}</div>;
-                          if (column === 'stock') return <div key={column} style={columnStyle(column)} className={`${base} text-right font-semibold`}><span className={stockColor(item)} title={item.type === 'Persediaan' ? `Stok minimum: ${itemMinimumStock(item)} ${item.unit}` : undefined}>{item.type === 'Persediaan' ? displayStock(item) : '—'}</span></div>;
-                          if (column === 'minimumStock') return <div key={column} style={columnStyle(column)} className={`${base} text-right tabular-nums`}>{item.type === 'Persediaan' ? itemMinimumStock(item) : '—'}</div>;
-                          if (column === 'unit') return <div key={column} style={columnStyle(column)} className={base}>{item.unit}</div>;
-                          if (column === 'brand') return <div key={column} style={columnStyle(column)} className={`${base} truncate`}>{item.brand || '—'}</div>;
-                          if (column === 'purchasePrice') return <div key={column} style={columnStyle(column)} className={`${base} text-right`}>{formatCurrency(item.purchasePrice)}</div>;
-                          if (column === 'status') return <div key={column} style={columnStyle(column)} className={`${base} text-center font-semibold ${item.isActive ? 'text-green-700' : 'text-red-700'}`}>{item.isActive ? 'Aktif' : 'Nonaktif'}</div>;
-                          if (column === 'price') return <div key={column} style={columnStyle(column)} className={`${base} text-right font-medium`}>{formatCurrency(item.sellingPrice)}</div>;
-                          return <div key={column} style={columnStyle(column)} className={`${base} flex justify-center gap-2`} onClick={event => event.stopPropagation()}>{hasPermission('item:edit') && <button onClick={() => openItemModal(item)} className="p-1 text-blue-600 hover:bg-blue-100" title="Edit"><Edit className="h-4 w-4" /></button>}{hasPermission('item:delete') && <button onClick={() => removeItem(item)} className="p-1 text-red-600 hover:bg-red-100" title="Hapus"><Trash2 className="h-4 w-4" /></button>}</div>;
+                          const base = 'text-[13px] leading-5 text-slate-800';
+                          if (column === 'code') return <td key={column} className={`${base} truncate font-medium`} title={item.code}>{item.code}</td>;
+                          if (column === 'name') return <td key={column} className={`${base} overflow-hidden`}><div className="flex items-center gap-2"><p className="truncate font-medium text-slate-900">{item.name}</p>{!item.isActive && <span className="rounded-full bg-red-100 px-2 text-[10px] font-bold text-red-700">NONAKTIF</span>}{item.verificationStatus === 'Pending' && <span className="rounded-full bg-amber-100 px-2 text-[10px] font-bold text-amber-800">MENUNGGU VERIFIKASI</span>}{isGroup && <span className="rounded bg-purple-100 px-1.5 text-[10px] text-purple-700">{item.groupMembers!.length} item</span>}</div></td>;
+                          if (column === 'receiptDescription') return <td key={column} className={`${base} truncate`} title={item.receiptDescription || item.name}>{item.receiptDescription || item.name}</td>;
+                          if (column === 'type') return <td key={column} className={base}><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-gray-100 text-gray-700'}`}>{item.type}</span></td>;
+                          if (column === 'category') return <td key={column} className={`${base} truncate`}>{item.categoryName}</td>;
+                          if (column === 'barcode') return <td key={column} className={`${base} truncate font-mono`} title={item.barcode || 'Belum ada barcode'}>{item.barcode || '—'}</td>;
+                          if (column === 'stock') return <td key={column} className={`${base} text-right font-semibold`}><span className={stockColor(item)} title={item.type === 'Persediaan' ? `Stok minimum: ${itemMinimumStock(item)} ${item.unit}` : undefined}>{item.type === 'Persediaan' ? displayStock(item) : '—'}</span></td>;
+                          if (column === 'minimumStock') return <td key={column} className={`${base} text-right tabular-nums`}>{item.type === 'Persediaan' ? itemMinimumStock(item) : '—'}</td>;
+                          if (column === 'unit') return <td key={column} className={base}>{item.unit}</td>;
+                          if (column === 'brand') return <td key={column} className={`${base} truncate`}>{item.brand || '—'}</td>;
+                          if (column === 'purchasePrice') return <td key={column} className={`${base} text-right`}>{formatCurrency(item.purchasePrice)}</td>;
+                          if (column === 'status') return <td key={column} className={`${base} text-center font-semibold ${item.isActive ? 'text-green-700' : 'text-red-700'}`}>{item.isActive ? 'Aktif' : 'Nonaktif'}</td>;
+                          if (column === 'price') return <td key={column} className={`${base} text-right font-medium`}>{formatCurrency(item.sellingPrice)}</td>;
+                          return <td key={column} className={`${base} text-center`} onClick={event => event.stopPropagation()}>{hasPermission('item:edit') && <button onClick={() => openItemModal(item)} className="p-1 text-blue-600 hover:bg-blue-100" title="Edit"><Edit className="h-4 w-4" /></button>}{hasPermission('item:delete') && <button onClick={() => removeItem(item)} className="p-1 text-red-600 hover:bg-red-100" title="Hapus"><Trash2 className="h-4 w-4" /></button>}</td>;
                         })}
-                      </div>
-
+                    </tr>
                       {/* Expanded group members */}
                       {isGroup && expanded && (
-                        <div className="border-t border-purple-100 bg-purple-50/40">
+                        <tr><td colSpan={itemTableColumns.length + 1} className="border-t border-purple-100 bg-purple-50/40">
                           <div className="app-table-scroll px-14 py-2">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-purple-600">Isi Group / Paket</p>
                             <table className="w-full text-sm">
@@ -1494,16 +1481,15 @@ export default function ItemsAndServices() {
                               </tfoot>
                             </table>
                           </div>
-                        </div>
+                        </td></tr>
                       )}
-                    </td>
-                  </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
-      </div>
+        {itemPage.navigation}
       </div>
       </div>}
 
