@@ -74,13 +74,19 @@ export default function StockMovementReport() {
     next.set(key, value);
     setParams(next, { replace: true });
   };
-  const changeDateFrom = (value: string) => setParams(previous => {
-    const next = new URLSearchParams(previous);
-    if (value) next.set('dateFrom', value); else next.delete('dateFrom');
-    const currentTo = next.get('dateTo') || '';
-    if (!value || (currentTo && currentTo < value)) next.delete('dateTo');
-    return next;
-  }, { replace: true });
+  const changeDateFrom = (value: string) => {
+    const currentTo = dateTo && dateTo >= value ? dateTo : '';
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (value) next.set('dateFrom', value); else next.delete('dateFrom');
+      if (value && currentTo) next.set('dateTo', currentTo); else next.delete('dateTo');
+      return next;
+    }, { replace: true });
+    if (value) {
+      setSubmittedQuery(new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom: value, dateTo: currentTo || value }).toString());
+      setPage(1);
+    } else setSubmittedQuery(null);
+  };
 
   useEffect(() => {
     let active = true;
