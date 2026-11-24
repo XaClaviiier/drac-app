@@ -1,13 +1,14 @@
-import { memo, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
-import { Outlet, useMatch, useNavigate, useOutletContext } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { Navigate, Outlet, useMatch, useNavigate, useOutletContext } from 'react-router-dom';
+import { List, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { localDateKey } from '../lib/date';
 import type { GoodsReceiptItem } from '../types';
 import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
 import { ui } from '../components/ui/interfaceStandards';
 import GoodsReceiptPage from './GoodsReceipt';
+import GoodsReceiptDetail from './GoodsReceiptDetail';
 
 const ReceiptList = memo(GoodsReceiptPage);
 
@@ -29,16 +30,42 @@ function restoreDraft(key: string, blank: ReceiptForm): ReceiptForm | null {
 type ReceiptSession = {
   form: ReceiptForm;
   setForm: Dispatch<SetStateAction<ReceiptForm>>;
-  closeDraft: () => void;
+  renderTabs: (tools?: ReactNode, busy?: boolean) => ReactNode;
   clearDraft: () => void;
 };
 
 export const useReceiptSession = () => useOutletContext<ReceiptSession>();
 
 export default function GoodsReceiptWorkspace() {
-  const { currentUser, currentBranchId } = useApp();
+  const { currentUser, currentBranchId, data } = useApp();
+  const previousBranch = useRef(currentBranchId);
+  const detailRoute = useMatch('/receipts/view/:id');
+  const branchChanged = previousBranch.current !== currentBranchId;
+  useLayoutEffect(() => { previousBranch.current = currentBranchId; }, [currentBranchId]);
+  if (branchChanged && detailRoute && currentBranchId !== 'ALL' &&
+    data.goodsReceipts.find(receipt => receipt.id === detailRoute.params.id)?.branchId !== currentBranchId) {
+    return <Navigate to="/receipts" replace/>;
+  }
   const storageKey = `goods-receipt-draft:${currentUser?.id || currentUser?.username || 'user'}:${currentBranchId}`;
   return <ReceiptWorkspaceSession key={storageKey} storageKey={storageKey}/>;
+}
+
+function ReceiptTabBar({ activeKey, children }: { activeKey: string; children: ReactNode }) {
+  const bar = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const strip = bar.current;
+    const selection = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!strip || !selection) return;
+    const tab = selection.closest('.app-child-tab') ?? selection;
+    const bounds = tab.getBoundingClientRect();
+    const viewport = strip.getBoundingClientRect();
+    const listWidth = strip.querySelector('.app-child-list-tab')?.getBoundingClientRect().width ?? 0;
+    const left = viewport.left + listWidth;
+    if (tab === selection) strip.scrollLeft = 0;
+    else if (bounds.left < left) strip.scrollLeft += bounds.left - left;
+    else if (bounds.right > viewport.right) strip.scrollLeft += bounds.right - viewport.right;
+  }, [activeKey]);
+  return <div ref={bar} aria-label="Tab Penerimaan Barang" className="app-child-bar inventory-list-tabs overflow-x-auto [scrollbar-width:none]">{children}</div>;
 }
 
 function ReceiptWorkspaceSession({ storageKey }: { storageKey: string }) {
@@ -87,16 +114,76 @@ function ReceiptWorkspaceSession({ storageKey }: { storageKey: string }) {
     else discard();
   };
 
-  const draftTab = isList && canCreate && draft && <div className={ui.childTab}>
-    <button type="button" onClick={() => navigate('/receipts/new')} title="Lanjutkan penerimaan">{generateReceiptNumber(currentBranchId, draft.date)}</button>
-    <button type="button" onClick={closeDraft} aria-label="Tutup penerimaan baru"><X className="h-4 w-4"/></button>
-  </div>;
+  const canView = hasPermission('receipt:view');
+  const detailRoute = useMatch('/receipts/view/:id');
+  const tabStorageKey = `receipt-document-tabs:${storageKey}`;
+  const [documentIds, setDocumentIds] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(sessionStorage.getItem(tabStorageKey) || '[]');
+      return Array.isArray(saved) ? [...new Set(saved.filter((id): id is string => typeof id === 'string'))] : [];
+    } catch { return []; }
+  });
+  const receiptsById = useMemo(() => new Map(data.goodsReceipts.map(receipt => [receipt.id, receipt])), [data.goodsReceipts]);
+  const activeId = canView && detailRoute?.params.id && receiptsById.has(detailRoute.params.id) ? detailRoute.params.id : '';
+  const [visited, setVisited] = useState<string[]>([]);
+  useLayoutEffect(() => {
+    if (!activeId) return;
+    setDocumentIds(ids => ids.includes(activeId) ? ids : [...ids, activeId]);
+    setVisited(ids => ids.includes(activeId) ? ids : [...ids, activeId]);
+  }, [activeId]);
+  useEffect(() => {
+    try { sessionStorage.setItem(tabStorageKey, JSON.stringify(documentIds)); } catch { /* Tabs still work in this workspace. */ }
+  }, [documentIds, tabStorageKey]);
+
+  const closeGuards = useRef(new Map<string, () => boolean>());
+  const registerCloseGuard = useCallback((id: string, guard: () => boolean) => {
+    closeGuards.current.set(id, guard);
+    return () => { closeGuards.current.delete(id); };
+  }, []);
+  const openDocument = (id: string, replace = false) => navigate(`/receipts/view/${encodeURIComponent(id)}`, { replace });
+  const closeDocument = (id: string, deleted = false) => {
+    if (!deleted && closeGuards.current.get(id)?.() === false) return;
+    const remaining = documentIds.filter(value => value !== id && receiptsById.has(value));
+    setDocumentIds(ids => ids.filter(value => value !== id));
+    setVisited(ids => ids.filter(value => value !== id));
+    if (detailRoute?.params.id !== id) return;
+    const adjacent = remaining[Math.min(documentIds.indexOf(id), remaining.length - 1)];
+    if (adjacent) openDocument(adjacent, true);
+    else navigate(canCreate && draft ? '/receipts/new' : '/receipts', { replace: true });
+  };
+  const renderTabs: ReceiptSession['renderTabs'] = (tools, busy = false) => <ReceiptTabBar activeKey={isNew ? 'new' : activeId || 'list'}>
+    {canView && <button type="button" className={`${ui.childListTab} !sticky left-0 !z-10`} title="Daftar Penerimaan" aria-label="Kembali ke daftar penerimaan"
+      aria-current={isList ? 'page' : undefined} disabled={busy} onClick={() => navigate('/receipts')}><List size={20}/></button>}
+    {canCreate && (draft || isNew) && <div className={isNew ? ui.childTabActive : ui.childTab}>
+      <button type="button" title="Lanjutkan penerimaan" aria-current={isNew ? 'page' : undefined} disabled={busy}
+        onClick={() => navigate('/receipts/new')}>{generateReceiptNumber(currentBranchId, draft?.date ?? blank.date)}</button>
+      <button type="button" disabled={busy} onClick={closeDraft} aria-label="Tutup penerimaan baru"><X size={16}/></button>
+    </div>}
+    {canView && documentIds.map(id => {
+      const receipt = receiptsById.get(id);
+      if (!receipt) return null;
+      const label = (receipt.sourceType === 'Transfer Gudang' && receipt.transferNumber) || receipt.receiptNumber;
+      return <div key={id} className={id === activeId ? ui.childTabActive : ui.childTab}>
+        <button type="button" title={label} disabled={busy} aria-current={id === activeId ? 'page' : undefined} onClick={() => openDocument(id)}>{label}</button>
+        <button type="button" disabled={busy} aria-label={`Tutup ${label}`} onClick={() => closeDocument(id)}><X size={16}/></button>
+      </div>;
+    })}
+    {tools}
+  </ReceiptTabBar>;
   return <>
-    {hasPermission('receipt:view') && <ReceiptList visible={isList} draftTab={draftTab}/>}
-    <Outlet context={{ form: draft ?? blank, setForm, closeDraft, clearDraft } satisfies ReceiptSession}/>
+    {canView && <ReceiptList visible={isList} tabs={isList ? renderTabs() : undefined}/>}
+    {canView && visited.map(id => {
+      const receipt = receiptsById.get(id);
+      return receipt && <GoodsReceiptDetail key={id} receipt={receipt} active={id === activeId}
+        renderTabs={id === activeId ? renderTabs : undefined} registerCloseGuard={registerCloseGuard} onDeleted={() => closeDocument(id, true)}/>;
+    })}
+    {canView && detailRoute && !activeId && <div className={ui.modulePage}>{renderTabs()}<div className={ui.modulePanel}>
+      <p className="p-6 text-center">Penerimaan tidak ditemukan di cabang ini.</p>
+    </div></div>}
+    <Outlet context={{ form: draft ?? blank, setForm, renderTabs, clearDraft } satisfies ReceiptSession}/>
     {confirmClose && createPortal(<AccurateNotificationDialog open title="Buang draf penerimaan?" destructive
       confirmLabel="Buang perubahan" cancelLabel="Lanjut mengisi" onConfirm={discard}
-      onClose={() => { setConfirmClose(false); if (isList) navigate('/receipts/new'); }}>
+      onClose={() => { setConfirmClose(false); if (!isNew) navigate('/receipts/new'); }}>
       Isian penerimaan ini akan dihapus dari draf cabang ini.
     </AccurateNotificationDialog>, document.body)}
   </>;

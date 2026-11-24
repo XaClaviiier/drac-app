@@ -15,7 +15,7 @@ const legacyReceiptColumnStorageKey = 'drac.receipts.columnOrder.v1';
 const validReceiptColumns = (value: unknown): ReceiptColumn[] => Array.isArray(value)
   ? [...new Set(value.filter((column): column is ReceiptColumn => defaultReceiptColumns.includes(column)))] : [];
 
-export default function GoodsReceiptPage({ mode = 'receipt', visible = true, draftTab }: { mode?: 'receipt' | 'supplier-mapping'; visible?: boolean; draftTab?: ReactNode }) {
+export default function GoodsReceiptPage({ mode = 'receipt', visible = true, tabs }: { mode?: 'receipt' | 'supplier-mapping'; visible?: boolean; tabs?: ReactNode }) {
   const isSupplierMapping = mode === 'supplier-mapping';
   const navigate = useNavigate();
   const {
@@ -427,7 +427,7 @@ export default function GoodsReceiptPage({ mode = 'receipt', visible = true, dra
 
   return (
     <div className={visible ? "app-module-page inventory-list-page" : "hidden"}>
-      <div className="app-child-bar inventory-list-tabs"><div className="app-child-list-tab" title="Daftar Penerimaan"><List size={20}/></div>{draftTab}</div>
+      {tabs ?? <div className="app-child-bar inventory-list-tabs"><div className="app-child-list-tab" title="Daftar Penerimaan"><List size={20}/></div></div>}
       <section className="app-fill-stack">
         <InventoryListToolbar name="Penerimaan Barang" {...period} search={search} onSearch={setSearch}
           placeholder={isSupplierMapping ? 'Cari nomor, barang, supplier…' : 'Cari nomor, barang, keterangan…'} count={filtered.length} filterCount={activeFilterCount} clearFilters={resetReceiptFilters}

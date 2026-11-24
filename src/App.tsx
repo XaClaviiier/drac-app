@@ -14,7 +14,6 @@ import UsersAndRoles from './pages/UsersAndRoles';
 import GoodsReceiptPage from './pages/GoodsReceipt';
 import GoodsReceiptEntry from './pages/GoodsReceiptEntry';
 import GoodsReceiptWorkspace from './pages/GoodsReceiptWorkspace';
-import GoodsReceiptDetail from './pages/GoodsReceiptDetail';
 import Suppliers from './pages/Suppliers';
 import PurchaseInvoicesPage from './pages/PurchaseInvoices';
 import AIAssistant from './pages/AIAssistant';
@@ -125,7 +124,7 @@ function AppRoutes() {
         <Route path="receipts" element={protectedAnyPage(['receipt:view', 'receipt:create'], <GoodsReceiptWorkspace />)}>
           <Route index element={protectedPage('receipt:view', null)} />
           <Route path="new" element={protectedPage('receipt:create', <GoodsReceiptEntry />)} />
-          <Route path="view/:id" element={protectedPage('receipt:view', <GoodsReceiptDetail />)} />
+          <Route path="view/:id" element={protectedPage('receipt:view', null)} />
         </Route>
         <Route path="receipt-supplier-mapping" element={protectedPage('receipt:supplier', <GoodsReceiptPage key="supplier-mapping" mode="supplier-mapping" />)} />
         <Route path="purchase-invoices" element={protectedPage('purchase:view', <PurchaseInvoicesPage />)} />
