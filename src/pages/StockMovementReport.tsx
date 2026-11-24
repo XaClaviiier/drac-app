@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, Filter, GripVertical, List, Play, Printer, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -47,6 +47,9 @@ export default function StockMovementReport() {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterPopupRef = useRef<HTMLDivElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const columnPopupRef = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState<MovementColumnKey[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('drac_stock_movement_columns') || 'null');
@@ -121,6 +124,27 @@ export default function StockMovementReport() {
 
   useEffect(() => { localStorage.setItem('drac_stock_movement_columns', JSON.stringify(columns)); }, [columns]);
   useEffect(() => { localStorage.setItem('drac_stock_movement_visible_columns', JSON.stringify(visibleColumns)); }, [visibleColumns]);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (filterPopupRef.current && !filterPopupRef.current.contains(target) && !filterButtonRef.current?.contains(target)) setFiltersOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setFiltersOpen(false); };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); };
+  }, [filtersOpen]);
+  useEffect(() => {
+    if (!columnsOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (columnPopupRef.current && !columnPopupRef.current.contains(event.target as Node)) setColumnsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setColumnsOpen(false); };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); };
+  }, [columnsOpen]);
   const displayedColumns = columns.filter(key => visibleColumns.includes(key));
   const rows = useMemo(() => {
     const filtered = filterWarehouseMovements(report?.rows || [], { search, direction, type, sort })
@@ -215,7 +239,7 @@ export default function StockMovementReport() {
       <div className="stock-movement-tabbar"><button type="button" className="stock-movement-tab active" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
       <div className="stock-movement-parameter-row">
         <div className="stock-movement-date-range"><IndonesianDateInput ariaLabel="Tanggal awal mutasi" className="inventory-report-date" value={dateFrom} onChange={changeDateFrom}/><span>s/d</span><IndonesianDateInput ariaLabel="Tanggal akhir mutasi" className="inventory-report-date" value={dateTo} min={dateFrom || undefined} disabled={!dateFrom} onChange={value => changeFilter('dateTo', value)}/></div>
-        <button type="button" className={`stock-movement-filter-button${filtersOpen ? ' active' : ''}`} onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen}><Filter size={16}/>Filter{activeFilterCount > 0 && <span className="stock-movement-filter-badge">{activeFilterCount}</span>}</button>
+        <button ref={filterButtonRef} type="button" className={`stock-movement-filter-button${filtersOpen ? ' active' : ''}`} onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen}><Filter size={16}/>Filter{activeFilterCount > 0 && <span className="stock-movement-filter-badge">{activeFilterCount}</span>}</button>
         {activeFilterCount > 0 && <button type="button" className="stock-movement-clear-button" onClick={clearAdditionalFilters} aria-label="Bersihkan filter tambahan" title="Bersihkan filter tambahan">×</button>}
       </div>
       <div className="stock-movement-action-row">
@@ -223,7 +247,7 @@ export default function StockMovementReport() {
         <div className="stock-movement-table-tools">
           <button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
         <button type="button" className="stock-movement-tool-button" aria-label="Unduh CSV mutasi" title="Unduh CSV mutasi" onClick={() => downloadReportCsv(`mutasi-gudang-${dateFrom}-${effectiveDateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={18}/></button>
-          <div className="stock-movement-column-settings">
+          <div ref={columnPopupRef} className="stock-movement-column-settings">
             <button type="button" className="stock-movement-tool-button" aria-label="Atur kolom mutasi" title="Atur kolom yang ditampilkan" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(value => !value)}><SlidersHorizontal size={18}/></button>
             {columnsOpen && <div className="stock-movement-column-menu">{defaultMovementColumns.map(key => <label key={key}><input type="checkbox" checked={visibleColumns.includes(key)} disabled={visibleColumns.length === 1 && visibleColumns.includes(key)} onChange={event => setVisibleColumns(current => event.target.checked ? [...current, key] : current.filter(column => column !== key))}/><span>{movementColumnLabels[key]}</span></label>)}</div>}
           </div>
@@ -231,7 +255,7 @@ export default function StockMovementReport() {
           <span className="stock-movement-record-count" aria-label="Jumlah record mutasi">{busy ? '—' : reportNumber(rows.length)}</span>
         </div>
       </div>
-      {filtersOpen && <div className="inventory-report-filters stock-movement-advanced-filters">
+      {filtersOpen && <div ref={filterPopupRef} className="inventory-report-filters stock-movement-advanced-filters">
         <div className="stock-movement-filter-heading"><b>Filter Mutasi Gudang</b><button type="button" onClick={clearAdditionalFilters}>Clear</button></div>
         <label>Gudang<select aria-label="Gudang mutasi" value={warehouseId} onChange={event => changeFilter('warehouseId', event.target.value)}><option value="">Semua Gudang</option>{options?.warehouses.map(row => <option key={row.id} value={row.id}>{row.branchName} · {row.name}</option>)}</select></label>
         <label>Arah<select aria-label="Arah mutasi" value={direction} onChange={event => changeFilter('direction', event.target.value)}>{movementDirections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>

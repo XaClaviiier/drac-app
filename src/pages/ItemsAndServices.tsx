@@ -1628,7 +1628,7 @@ export default function ItemsAndServices() {
                   <div className="relative w-full sm:ml-auto sm:w-72"><input value={movementSearch} onChange={event => setMovementSearch(event.target.value)} placeholder="Cari nomor sumber / keterangan…" className="h-9 w-full rounded border border-slate-300 bg-white px-3 pr-10 text-sm"/><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/></div>
                 </div>
                 <div className="app-table-scroll min-h-[340px] overflow-auto">
-                  <table className="min-w-[900px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="w-[96px] px-3 py-2.5 text-left">Tanggal</th><th className="w-[142px] px-3 py-2.5 text-left">No. Sumber</th><th className="w-[145px] px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="w-[145px] px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
+                  <table className="min-w-[900px] w-full border-collapse text-[13px]"><thead className="bg-[#637c93] text-white"><tr><th className="w-[96px] px-3 py-2.5 text-left">Tanggal</th><th className="w-[142px] px-3 py-2.5 text-left">No. Sumber</th><th className="w-[145px] px-3 py-2.5 text-left">Tipe Transaksi</th><th className="px-3 py-2.5 text-left">Keterangan</th><th className="w-[260px] min-w-[260px] px-3 py-2.5 text-left">Gudang</th><th className="px-3 py-2.5 text-right">Masuk</th><th className="px-3 py-2.5 text-right">Keluar</th><th className="px-3 py-2.5 text-right">Saldo</th></tr></thead>
                     <tbody>{itemMovementRows.map((movement, index) => {
                       const source = stockMovementSource(movement, data);
                       const sourceNumber = movement.referenceNumber || movement.id;
@@ -1650,7 +1650,7 @@ export default function ItemsAndServices() {
                           <p className="text-xs text-slate-600">{movement.valuation.quantity} {editingItem?.unit || 'unit'} · Jumlah stok tetap</p>
                           {!movement.valuation.complete && <p className="text-xs text-amber-700">Rincian pasangan HPP belum lengkap.</p>}
                         </div> : movementNotes}</td>
-                        <td className="px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td>
+                        <td className="w-[260px] min-w-[260px] whitespace-nowrap px-3 py-2.5">{movement.sourceName && movement.destinationName ? `${movement.sourceName} → ${movement.destinationName}` : movement.destinationName || movement.sourceName || '—'}</td>
                         <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{movement.valuation ? 0 : movement.incoming || '—'}</td>
                         <td className="px-3 py-2.5 text-right font-semibold text-red-700">{movement.valuation ? 0 : movement.outgoing || '—'}</td>
                         <td className="px-3 py-2.5 text-right font-semibold">{movement.balance ?? '—'}</td>
