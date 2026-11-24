@@ -90,6 +90,13 @@ export default function StockMovementReport() {
       setPage(1);
     } else setSubmittedQuery(null);
   };
+  const changeDateTo = (value: string) => {
+    changeFilter('dateTo', value);
+    if (dateFrom) {
+      setSubmittedQuery(new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom, dateTo: value || dateFrom }).toString());
+      setPage(1);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -131,9 +138,14 @@ export default function StockMovementReport() {
       if (filterPopupRef.current && !filterPopupRef.current.contains(target) && !filterButtonRef.current?.contains(target)) setFiltersOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setFiltersOpen(false); };
+    const closeOnFocusOutside = (event: FocusEvent) => {
+      const target = event.target as Node;
+      if (filterPopupRef.current && !filterPopupRef.current.contains(target) && !filterButtonRef.current?.contains(target)) setFiltersOpen(false);
+    };
     document.addEventListener('mousedown', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
-    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); };
+    document.addEventListener('focusin', closeOnFocusOutside);
+    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); document.removeEventListener('focusin', closeOnFocusOutside); };
   }, [filtersOpen]);
   useEffect(() => {
     if (!columnsOpen) return;
@@ -141,9 +153,13 @@ export default function StockMovementReport() {
       if (columnPopupRef.current && !columnPopupRef.current.contains(event.target as Node)) setColumnsOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setColumnsOpen(false); };
+    const closeOnFocusOutside = (event: FocusEvent) => {
+      if (columnPopupRef.current && !columnPopupRef.current.contains(event.target as Node)) setColumnsOpen(false);
+    };
     document.addEventListener('mousedown', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
-    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); };
+    document.addEventListener('focusin', closeOnFocusOutside);
+    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape); document.removeEventListener('focusin', closeOnFocusOutside); };
   }, [columnsOpen]);
   const displayedColumns = columns.filter(key => visibleColumns.includes(key));
   const rows = useMemo(() => {
@@ -238,7 +254,7 @@ export default function StockMovementReport() {
     <div className="stock-movement-header-shell">
       <div className="stock-movement-tabbar"><button type="button" className="stock-movement-tab active" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
       <div className="stock-movement-parameter-row">
-        <div className="stock-movement-date-range"><IndonesianDateInput ariaLabel="Tanggal awal mutasi" className="inventory-report-date" value={dateFrom} onChange={changeDateFrom}/><span>s/d</span><IndonesianDateInput ariaLabel="Tanggal akhir mutasi" className="inventory-report-date" value={dateTo} min={dateFrom || undefined} disabled={!dateFrom} onChange={value => changeFilter('dateTo', value)}/></div>
+        <div className="stock-movement-date-range"><IndonesianDateInput ariaLabel="Tanggal awal mutasi" className="inventory-report-date" value={dateFrom} onChange={changeDateFrom}/><span>s/d</span><IndonesianDateInput ariaLabel="Tanggal akhir mutasi" className="inventory-report-date" value={dateTo} min={dateFrom || undefined} disabled={!dateFrom} onChange={changeDateTo}/></div>
         <button ref={filterButtonRef} type="button" className={`stock-movement-filter-button${filtersOpen ? ' active' : ''}`} onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen}><Filter size={16}/>Filter{activeFilterCount > 0 && <span className="stock-movement-filter-badge">{activeFilterCount}</span>}</button>
         {activeFilterCount > 0 && <button type="button" className="stock-movement-clear-button" onClick={clearAdditionalFilters} aria-label="Bersihkan filter tambahan" title="Bersihkan filter tambahan">×</button>}
       </div>
