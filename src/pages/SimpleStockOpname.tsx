@@ -213,7 +213,7 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
   };
   if(legacyOpen)return <><button className="adjustment-outline mb-3" onClick={()=>setLegacyOpen(false)}>Kembali ke Stok Opname</button>{legacy}</>;
   return <div className={list ? 'app-module-page inventory-list-page' : 'adjustment-workspace opname-workspace'} aria-busy={busy}>
-    <div className={list ? 'app-child-bar inventory-list-tabs' : 'opname-tabs'}><button aria-label="Daftar Stok Opname" className={list?'active-list':''} onClick={()=>setList(true)}><List size={23}/></button>{tab&&<div className={list ? 'app-child-tab' : 'opname-tab selected'}><button onClick={()=>setList(false)}>{document?.orderNumber||'Data Baru'}{dirty?' *':''}</button><button aria-label="Tutup Data Baru" disabled={busy} onClick={close}><X size={17}/></button></div>}</div>
+    <div className={list ? 'app-child-bar inventory-list-tabs' : 'opname-tabs'}><button aria-label="Daftar Stok Opname" className={list?'app-child-list-tab':''} onClick={()=>setList(true)}><List size={23}/></button>{tab&&<div className={list ? 'app-child-tab' : 'opname-tab selected'}><button onClick={()=>setList(false)}>{document?.orderNumber||'Data Baru'}{dirty?' *':''}</button><button aria-label="Tutup Data Baru" disabled={busy} onClick={close}><X size={17}/></button></div>}</div>
     {message&&<div role="status" className="adjustment-message">{message}<button className="ml-auto" onClick={()=>setMessage('')} aria-label="Tutup pesan"><X size={16}/></button></div>}
     {list?<div className="app-fill-stack">
       <InventoryListToolbar name="Stok Opname" {...period} search={listSearch} onSearch={setListSearch} placeholder="Cari nomor, gudang, keterangan…" count={visibleDocuments.length}

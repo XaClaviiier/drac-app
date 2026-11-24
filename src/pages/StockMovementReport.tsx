@@ -242,7 +242,8 @@ export default function StockMovementReport() {
   };
 
   return <div className="app-module-page inventory-list-page inventory-report stock-movement-report">
-      <div className="app-child-bar inventory-list-tabs"><button type="button" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
+    <div className="app-child-bar inventory-list-tabs"><button type="button" className="app-child-list-tab" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
+    <div className="app-fill-stack">
       <InventoryListToolbar name="Mutasi Gudang" from={dateFrom} to={dateTo} onFrom={changeDateFrom} onTo={changeDateTo}
         search={search} onSearch={value => changeFilter('search', value)} placeholder="Cari nomor, barang, keterangan…" count={busy ? '—' : rows.length}
         filterCount={activeFilterCount} clearFilters={clearAdditionalFilters} applyLabel="Tampilkan Laporan" onApply={runReport} applyDisabled={!canLoad || busy}
@@ -254,20 +255,21 @@ export default function StockMovementReport() {
         actions={<button type="button" className="stock-movement-tool-button" aria-label="Perbarui laporan mutasi" title="Perbarui laporan mutasi" onClick={refreshReport} disabled={busy || !canLoad}><RefreshCw size={18}/></button>}
         tools={<><button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
         <button type="button" className="stock-movement-tool-button" aria-label="Unduh CSV mutasi" title="Unduh CSV mutasi" onClick={() => downloadReportCsv(`mutasi-gudang-${dateFrom}-${effectiveDateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={18}/></button></>} columns={<>{defaultMovementColumns.map(key => <label key={key}><input type="checkbox" checked={visibleColumns.includes(key)} disabled={visibleColumns.length === 1 && visibleColumns.includes(key)} onChange={event => setVisibleColumns(current => event.target.checked ? [...current, key] : current.filter(column => column !== key))}/><span>{movementColumnLabels[key]}</span></label>)}</>}/>
-    {(error || optionsError || ((dateFrom || dateTo) && !validPeriod)) && <div role="alert" className="inventory-report-error">{optionsError || error || 'Isi periode yang valid. Tanggal awal harus sebelum atau sama dengan tanggal akhir.'}</div>}
-    <section className="inventory-report-table stock-movement-paper app-table-scroll app-table-scroll--fill inventory-list-report-table" aria-busy={busy}>
-      <table><thead><tr>{displayedColumns.map(key => <InventoryColumnHeader key={key} column={key} label={movementColumnLabels[key]} sort={columnSort} onSort={sortColumn} onMove={moveColumn} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''}/>)}</tr></thead>
-        <tbody>{visibleRows.map(row => <tr key={`${row.id}:${row.warehouseId}`}>{displayedColumns.map(key => <Fragment key={key}>{renderCell(row, key)}</Fragment>)}</tr>)}</tbody>
-      </table>
-      {!rows.length && <p className="inventory-report-empty">{busy ? 'Memuat seluruh mutasi dalam periode ini…' : report ? 'Tidak ada mutasi sesuai periode dan filter yang dipilih.' : 'Pilih parameter lalu klik “Tampilkan Laporan” untuk menjalankan analisa.'}</p>}
-    </section>
-    <div className="stock-movement-pagination inventory-list-pagination">
-      <div>
-        <span>{rows.length ? `${reportNumber((currentPage - 1) * pageSize + 1)}–${reportNumber(Math.min(currentPage * pageSize, rows.length))} dari ${reportNumber(rows.length)} baris` : '0 baris'}</span>
-        <span className="stock-movement-summary" role="status"> · {busy ? 'Memuat mutasi…' : report ? `${reportNumber(new Set(rows.map(row => row.itemId)).size)} barang · ${reportNumber(new Set(rows.map(row => row.warehouseId)).size)} gudang` : 'Laporan belum tersedia.'}</span>
-        <small>Cetak dan CSV mencakup seluruh hasil filter.</small>
+      {(error || optionsError || ((dateFrom || dateTo) && !validPeriod)) && <div role="alert" className="inventory-report-error">{optionsError || error || 'Isi periode yang valid. Tanggal awal harus sebelum atau sama dengan tanggal akhir.'}</div>}
+      <section className="inventory-report-table stock-movement-paper app-table-scroll app-table-scroll--fill inventory-list-report-table" aria-busy={busy}>
+        <table><thead><tr>{displayedColumns.map(key => <InventoryColumnHeader key={key} column={key} label={movementColumnLabels[key]} sort={columnSort} onSort={sortColumn} onMove={moveColumn} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''}/>)}</tr></thead>
+          <tbody>{visibleRows.map(row => <tr key={`${row.id}:${row.warehouseId}`}>{displayedColumns.map(key => <Fragment key={key}>{renderCell(row, key)}</Fragment>)}</tr>)}</tbody>
+        </table>
+        {!rows.length && <p className="inventory-report-empty">{busy ? 'Memuat seluruh mutasi dalam periode ini…' : report ? 'Tidak ada mutasi sesuai periode dan filter yang dipilih.' : 'Pilih parameter lalu klik “Tampilkan Laporan” untuk menjalankan analisa.'}</p>}
+      </section>
+      <div className="stock-movement-pagination inventory-list-pagination">
+        <div>
+          <span>{rows.length ? `${reportNumber((currentPage - 1) * pageSize + 1)}–${reportNumber(Math.min(currentPage * pageSize, rows.length))} dari ${reportNumber(rows.length)} baris` : '0 baris'}</span>
+          <span className="stock-movement-summary" role="status"> · {busy ? 'Memuat mutasi…' : report ? `${reportNumber(new Set(rows.map(row => row.itemId)).size)} barang · ${reportNumber(new Set(rows.map(row => row.warehouseId)).size)} gudang` : 'Laporan belum tersedia.'}</span>
+          <small>Cetak dan CSV mencakup seluruh hasil filter.</small>
+        </div>
+        <div className="inventory-report-actions"><button type="button" aria-label="Halaman sebelumnya" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={18}/></button><span>Halaman {currentPage} / {pageCount}</span><button type="button" aria-label="Halaman berikutnya" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight size={18}/></button></div>
       </div>
-      <div className="inventory-report-actions"><button type="button" aria-label="Halaman sebelumnya" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={18}/></button><span>Halaman {currentPage} / {pageCount}</span><button type="button" aria-label="Halaman berikutnya" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight size={18}/></button></div>
     </div>
   </div>;
 }

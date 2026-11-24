@@ -427,8 +427,8 @@ export default function GoodsReceiptPage({ mode = 'receipt' }: { mode?: 'receipt
 
   return (
     <div className="app-module-page inventory-list-page">
+      <div className="app-child-bar inventory-list-tabs"><div className="app-child-list-tab" title="Daftar Penerimaan"><List size={20}/></div></div>
       <section className="app-fill-stack">
-        <div className="app-child-bar inventory-list-tabs"><div title="Daftar Penerimaan"><List size={19}/></div></div>
         <InventoryListToolbar name="Penerimaan Barang" {...period} search={search} onSearch={setSearch}
           placeholder={isSupplierMapping ? 'Cari nomor, barang, supplier…' : 'Cari nomor, barang, keterangan…'} count={filtered.length} filterCount={activeFilterCount} clearFilters={resetReceiptFilters}
           filters={<>{isSupplierMapping && <label>Status pemetaan supplier<select value={filterMapping} onChange={event => setFilterMapping(event.target.value)}>
