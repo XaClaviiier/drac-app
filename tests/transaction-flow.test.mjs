@@ -426,7 +426,7 @@ test('rail aksi penerimaan baru mengikuti ukuran dan split button Accurate', () 
   assert.match(rail, /Printer/);
   assert.doesNotMatch(rail, /FileText/);
   assert.match(rail, /tone="danger"/);
-  assert.match(page, /disabled:saving,onClick:\(\)=>void props\.submit\('Diterima'\)/);
+  assert.match(page, /save: \{ disabled: saving, onClick: \(\) => void props\.submit\('Diterima'\)/);
   assert.doesNotMatch(page, /disabled=\{saving\|\|!form\.items\.length\}/);
   assert.match(page, /Hapus tersedia setelah data disimpan/);
 });
@@ -529,9 +529,9 @@ test('tanda terima barang dapat disimpan sebagai gambar, dibagikan, dan dicetak 
   assert.match(detail, /Print Bluetooth 80 mm/);
   assert.match(detail, /menu === 'document' && !documentDisabled/);
   assert.match(detail, /menu === 'more'/);
-  assert.match(detail, /Simpan, bagikan, atau print tanda terima/);
-  assert.match(detail, /print=\{\{title: 'Simpan, bagikan, atau print tanda terima'/);
-  assert.match(detail, /<AccurateFormActionRail/);
+  assert.doesNotMatch(detail.slice(detail.indexOf("{menu === 'document'"), detail.indexOf("{menu === 'more'")), /ReceiptShareButton/);
+  assert.match(detail.slice(detail.indexOf("{menu === 'more'")), /shareText && <ReceiptShareButton/);
+  assert.match(detail, /actions=\{actions\} menu=\{actionMenu\}/);
   assert.match(detail, /receipt\.status!==['"]Draft['"]&&receipt\.status!==['"]Batal['"]/);
   assert.match(acknowledgement, /renderGoodsReceiptImage/);
   assert.match(acknowledgement, /navigator\.share/);

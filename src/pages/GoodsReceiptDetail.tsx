@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
-import { Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import type { GoodsReceipt } from '../types';
@@ -7,7 +6,6 @@ import { buildGoodsReceiptPrintHtml, canvasToPngBlob, downloadGoodsReceiptImage,
 import { validReceiptShippingCost, buildGoodsReceiptShareText, receiptDeliveryLabel } from '../lib/goodsReceiptSharing';
 import ReceiptShareButton from '../components/ReceiptShareButton';
 import { receiptDescription, receiptManualNotes } from '../lib/goodsReceiptPresentation';
-import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import { ReceiptDocumentForm } from './GoodsReceiptEntry';
 import type { ReceiptSession } from './GoodsReceiptWorkspace';
 
@@ -61,47 +59,44 @@ export default function GoodsReceiptDetail({receipt, active, renderTabs, registe
  const shareReceipt=async()=>{setMenu(null);setExporting('share');try{const blob=await canvasToPngBlob(renderGoodsReceiptImage(acknowledgement));const shared=await shareGoodsReceiptImage(blob,acknowledgement);if(!shared){downloadGoodsReceiptImage(blob,receipt.receiptNumber);alert('Menu berbagi gambar tidak tersedia di perangkat ini. Gambar sudah disimpan dan dapat dikirim lewat WhatsApp.')}}catch(error:any){if(error?.name!=='AbortError')alert(error?.message||'Gagal membagikan tanda terima.')}finally{setExporting('')}};
  const printBluetooth=()=>{setMenu(null);const popup=window.open('','_blank','width=420,height=760');if(!popup)return alert('Izinkan pop-up untuk membuka menu print Bluetooth.');popup.document.write(buildGoodsReceiptPrintHtml(acknowledgement));popup.document.close()};
  const closeMenu = () => setMenu(null);
- const primaryAction = () => { closeMenu(); if (editing) void save(); else if (canEdit) setEditing(true); };
  const cancel = () => { setForm(toForm(receipt)); setEditing(false); closeMenu(); };
  const showDocuments = () => setMenu(current => current === 'document' ? null : 'document');
  const showMore = () => setMenu(current => current === 'more' ? null : 'more');
  const canReceive = !editing && receipt.status === 'Draft' && hasPermission('receipt:edit');
  const canInvoice = !editing && receipt.status === 'Diterima' && receipt.sourceType !== 'Transfer Gudang' && hasPermission('purchase:view');
  const canDelete = !editing && hasPermission('receipt:delete');
- const moreDisabled = saving || !(editing || canReceive || canInvoice || canDelete);
+ const shareText = !editing && canIssueAcknowledgement ? buildGoodsReceiptShareText(receipt, {warehouseName: acknowledgement.warehouseName}) : '';
+ const moreDisabled = saving || !(shareText || canEdit || editing || canReceive || canInvoice || canDelete);
  const documentDisabled = editing || !canIssueAcknowledgement || Boolean(exporting);
  const menuButton = 'block w-full rounded px-3 py-2 text-left text-sm hover:bg-blue-50';
- const desktopActions = <AccurateFormActionRail className="absolute right-4 top-3 z-20"
-   save={{title: editing ? 'Simpan perubahan' : 'Edit Penerimaan', disabled: saving || !canEdit, onClick: primaryAction, icon: editing ? undefined : <Pencil size={24}/>}}
-   print={{title: 'Simpan, bagikan, atau print tanda terima', disabled: documentDisabled, onClick: showDocuments}}
-   more={{disabled: moreDisabled, onClick: showMore}} remove={{disabled: saving || !canDelete, onClick: remove}}/>;
- const mobileActions = <>
-   {menu && <>
+ const actions = {
+   save: { title: 'Simpan perubahan', disabled: !editing || !canEdit || saving, onClick: save },
+   print: { disabled: documentDisabled, onClick: showDocuments },
+   more: { disabled: moreDisabled, onClick: showMore },
+   remove: { disabled: saving || !canDelete, onClick: remove },
+ };
+ const actionMenu = menu && <>
      <button type="button" aria-label="Tutup menu aksi" onClick={closeMenu} className="fixed inset-0 z-30 cursor-default"/>
      <div className={'fixed bottom-[calc(140px+env(safe-area-inset-bottom))] right-3 z-40 w-60 rounded border bg-white p-1 shadow-xl lg:absolute lg:bottom-auto lg:right-[92px] ' + (menu === 'document' ? 'lg:top-[68px]' : 'lg:top-[202px]')}>
        {menu === 'document' && !documentDisabled && <>
-         <ReceiptShareButton text={buildGoodsReceiptShareText(receipt,{warehouseName:acknowledgement.warehouseName})} className="w-full"/>
+
          <button className={menuButton} onClick={saveReceiptImage}>Simpan Gambar</button>
          <button className={menuButton} onClick={shareReceipt}>Bagikan Gambar</button>
          <button className={menuButton} onClick={printBluetooth}>Print Bluetooth 80 mm</button>
        </>}
        {menu === 'more' && <>
+         {!editing && canEdit && <button className={menuButton} onClick={()=>{closeMenu();setEditing(true)}}>Edit Penerimaan</button>}
+         {shareText && <ReceiptShareButton text={shareText} variant="menu"/>}
          {editing && <button className={menuButton} onClick={cancel}>Batalkan edit</button>}
          {canReceive && <button className={menuButton} onClick={()=>{closeMenu();void accept()}}>Terima Barang</button>}
          {canInvoice && <button className={menuButton} onClick={()=>{closeMenu();navigate('/purchase-invoices')}}>Faktur Pembelian</button>}
          {canDelete && <button className={menuButton+' text-red-700'} onClick={()=>{closeMenu();void remove()}}>Hapus penerimaan</button>}
        </>}
      </div>
-   </>}
-   <nav aria-label="Aksi penerimaan barang" className="goods-receipt-mobile-actions fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-20 mx-auto grid max-w-md grid-cols-[1fr_auto_auto] gap-2 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-2xl lg:hidden">
-     <button disabled={saving || !canEdit} onClick={primaryAction} className="h-12 rounded-xl bg-[#0874c9] px-4 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Menyimpan...' : editing ? 'Simpan' : 'Edit'}</button>
-     <button disabled={documentDisabled} onClick={showDocuments} className="h-12 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 disabled:opacity-50">Dokumen</button>
-     <button aria-label="Pilihan lainnya" disabled={moreDisabled} onClick={showMore} className="h-12 w-12 rounded-xl border border-emerald-200 bg-emerald-50 text-lg font-bold text-emerald-700 disabled:opacity-50">•••</button>
-   </nav>
  </>;
  return <ReceiptDocumentForm active={active} key={editing ? 'edit' : 'view'} mode={editing && canEdit ? 'edit' : 'view'} receipt={receipt}
      receiptNumber={receipt.receiptNumber} branchId={receipt.branchId} form={form} setForm={setForm}
-     saving={saving} renderTabs={renderTabs ?? (() => null)} desktopActions={desktopActions} mobileActions={mobileActions}/>;
+     saving={saving} renderTabs={renderTabs ?? (() => null)} actions={actions} menu={actionMenu}/>;
 }
 
 function toForm(receipt:GoodsReceipt){return{date:receipt.date,doNumber:receipt.doNumber||'',warehouseId:receipt.warehouseId||'',supplierId:receipt.supplierId||'',deliveryMethod:receipt.deliveryMethod==='Diantar Supplier'?'Supplier':receipt.deliveryMethod||'',shippingCost:receipt.shippingCost??null,deliveryOther:receipt.deliveryOther||'',shippingNotes:receipt.shippingNotes||'',notes:receiptManualNotes(receipt.notes),receivedById:receipt.receivedById||'',items:receipt.items.map(item=>({...item}))}}
