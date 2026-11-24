@@ -11,7 +11,7 @@ export default function DocumentTabBar({ label, activeKey, children }: { label: 
     const viewport = strip.getBoundingClientRect();
     const listWidth = strip.querySelector('.app-child-list-tab')?.getBoundingClientRect().width ?? 0;
     const left = viewport.left + listWidth;
-    if (tab === selection) strip.scrollLeft = 0;
+    if (selection.matches('.app-child-list-tab')) strip.scrollLeft = 0;
     else if (bounds.left < left) strip.scrollLeft += bounds.left - left;
     else if (bounds.right > viewport.right) strip.scrollLeft += bounds.right - viewport.right;
   }, [activeKey]);

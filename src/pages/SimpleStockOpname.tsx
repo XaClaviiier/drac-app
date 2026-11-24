@@ -1,3 +1,5 @@
+import { childTabClass, ui } from '../components/ui/interfaceStandards';
+import DocumentTabBar from '../components/DocumentTabBar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, CircleEllipsis, FileText, Info, List, Paperclip, Plus, Printer, RefreshCw, Save, Search, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -211,11 +213,18 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
     const selectedWarehouse=data.warehouses.find(w=>w.id===warehouse)?.name||warehouse;
     popup.document.write(`<!doctype html><html><head><title>${html(document?.orderNumber||'Lembar Stok Opname')}</title><style>@page{size:A4 landscape;margin:12mm}body{font:12px Arial}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:6px;text-align:left}thead{display:table-header-group}tr{break-inside:avoid}</style></head><body><h2>DOKTER AC MOBIL — Stok Opname</h2><p>${html(document?.orderNumber||'Belum disimpan')} · ${html(date)} · ${html(selectedWarehouse)}</p><p>${html(notes)}</p><table><thead><tr><th>Nama Barang</th><th>Kode</th><th>Stok Sistem</th><th>Hitung Fisik</th><th>Selisih</th><th>Satuan</th></tr></thead><tbody>${visible.map(row=>`<tr><td>${html(row.name)}</td><td>${html(row.code)}</td><td>${row.systemQuantity}</td><td>${html(row.count)}</td><td>${row.count===''?'':html(Number(row.count)-row.systemQuantity)}</td><td>${html(row.unit)}</td></tr>`).join('')}</tbody></table></body></html>`);popup.document.close();popup.focus();popup.print();
   };
+  const notice = message&&<div role="status" className="adjustment-message">{message}<button className="ml-auto" onClick={()=>setMessage('')} aria-label="Tutup pesan"><X size={16}/></button></div>;
   if(legacyOpen)return <><button className="adjustment-outline mb-3" onClick={()=>setLegacyOpen(false)}>Kembali ke Stok Opname</button>{legacy}</>;
-  return <div className={list ? 'app-module-page inventory-list-page' : 'adjustment-workspace opname-workspace'} aria-busy={busy}>
-    <div className={list ? 'app-child-bar inventory-list-tabs' : 'opname-tabs'}><button aria-label="Daftar Stok Opname" className={list?'app-child-list-tab':''} onClick={()=>setList(true)}><List size={23}/></button>{tab&&<div className={list ? 'app-child-tab' : 'opname-tab selected'}><button onClick={()=>setList(false)}>{document?.orderNumber||'Data Baru'}{dirty?' *':''}</button><button aria-label="Tutup Data Baru" disabled={busy} onClick={close}><X size={17}/></button></div>}</div>
-    {message&&<div role="status" className="adjustment-message">{message}<button className="ml-auto" onClick={()=>setMessage('')} aria-label="Tutup pesan"><X size={16}/></button></div>}
+  return <div className={list ? 'app-module-page inventory-list-page' : 'app-module-page adjustment-workspace opname-workspace'} aria-busy={busy}>
+    <DocumentTabBar label="Tab Stok Opname" activeKey={list ? 'list' : document?.id ?? 'entry'}>
+      <button type="button" aria-label="Daftar Stok Opname" title="Daftar Stok Opname" aria-current={list ? 'page' : undefined} className={ui.childListTab} onClick={()=>setList(true)}><List size={20}/></button>
+      {tab && <div className={childTabClass(!list)}>
+        <button type="button" aria-current={!list ? 'page' : undefined} onClick={()=>setList(false)}>{document?.orderNumber||'Data Baru'}{dirty?' *':''}</button>
+        <button type="button" aria-label="Tutup Data Baru" disabled={busy} onClick={close}><X size={17}/></button>
+      </div>}
+    </DocumentTabBar>
     {list?<div className="app-fill-stack">
+      {notice}
       <InventoryListToolbar name="Stok Opname" {...period} search={listSearch} onSearch={setListSearch} placeholder="Cari nomor, gudang, keterangan…" count={visibleDocuments.length}
         filterCount={[listWarehouse, listSearch.trim()].filter(Boolean).length} clearFilters={() => { setListWarehouse(''); setListSearch(''); }}
         filters={<label>Gudang<select value={listWarehouse} onChange={event => setListWarehouse(event.target.value)}>
@@ -232,7 +241,9 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
           if (column === 'endDate') return doc.endDate.split('-').reverse().join('/');
           return column === 'adjustment' ? adjustmentLabel(doc) : doc[column] || '—';
         }}/>
-    </div>:<div className="opname-form">
+    </div>:<div className="app-module-panel !block !p-0">
+      {notice}
+      <div className="opname-form">
       <main><div className="opname-header"><label><span>Tanggal Opname <b>*</b></span><IndonesianDateInput value={date} max={localDateKey()} disabled={applied||busy} onChange={value=>changeHeader(warehouse,value)}/></label><label><span>No. Opname #</span><input value={document?.orderNumber||'Otomatis'} readOnly/></label><label><span>Gudang <b>*</b></span><select aria-label="Gudang" value={warehouse} disabled={applied||busy} onChange={e=>changeHeader(e.target.value,date)}><option value="">Pilih Gudang</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label><label><span>Penyesuaian</span>{document?.result?.adjustmentId?<button className="opname-link" disabled={busy} onClick={showAdjustment}>{document.result.adjustmentNumber}</button>:<span className="opname-muted">{document?.result?.status==='Draft'?'Draf · stok belum berubah':document?'Tanpa selisih':'Otomatis jika ada selisih'}</span>}</label></div>
       <div className="adjustment-body-wrap"><nav className="adjustment-side-tabs"><button title="Rincian Barang" className={!info?'active':''} onClick={()=>setInfo(false)}><FileText size={18}/></button><button title="Info Lainnya" className={info?'active':''} onClick={()=>setInfo(true)}><Info size={18}/></button></nav><section className={`adjustment-body opname-body ${info?'opname-body-info':''}`}>
         {info?<div className="opname-info">
@@ -260,6 +271,7 @@ export default function SimpleStockOpname({legacy}:{legacy:ReactNode}) {
         <footer className="opname-summary"><span>{checked} dihitung · {checked-differences} cocok · {differences} berselisih</span><span>Kosong = belum diperiksa · 0 = barang habis</span></footer></>}
       </section></div></main>
       <aside className="opname-rail"><div className="opname-save-split" ref={saveMenuRef}><button className="save" aria-label="Simpan" title="Simpan dan terapkan hasil opname" disabled={busy||!canApply||(!document&&!canCreate)||(!checked&&!applied)||(!dirty&&applied)} onClick={()=>save('apply')}><Save/><span>Simpan</span></button><button className="opname-save-arrow" aria-label="Pilihan simpan" aria-haspopup="menu" aria-expanded={saveMenuOpen} disabled={busy||applied||!canSave||(!document&&!canCreate)} onClick={()=>setSaveMenuOpen(!saveMenuOpen)}><ChevronDown size={15}/></button>{saveMenuOpen&&<div className="opname-save-menu" role="menu"><button role="menuitem" disabled={!warehouse||(!dirty&&!!document)} onClick={()=>save('draft')}>Simpan Draf</button></div>}</div><button title="Cetak" aria-label="Cetak" disabled={!rows.length||busy} onClick={print}><Printer/></button><button title="Lampiran belum diaktifkan" aria-label="Lampiran" disabled><Paperclip/></button><button title="Menu lainnya belum diaktifkan" aria-label="Menu lainnya" disabled><CircleEllipsis/></button>{document&&<button className="delete" title="Hapus Opname" aria-label="Hapus Opname" disabled={busy||!hasPermission('stock_opname:delete')} onClick={remove}><Trash2/></button>}</aside>
+      </div>
     </div>}
     {detailRow&&<dialog ref={detailDialog} className="opname-detail-dialog" aria-labelledby="opname-detail-title" onClose={()=>setDetailItemId('')} onClick={event=>{if(event.target===event.currentTarget){const rect=event.currentTarget.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)event.currentTarget.close();}}}>
       <header><h2 id="opname-detail-title">Rincian Barang</h2><button type="button" autoFocus aria-label="Tutup rincian barang" onClick={()=>detailDialog.current?.close()}><X size={20}/></button></header>

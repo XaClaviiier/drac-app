@@ -1,3 +1,4 @@
+import DocumentTabBar from '../components/DocumentTabBar';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, ChevronDown, FileText, Info, Lightbulb, List, Pencil, Plus, RefreshCw, Search, X } from 'lucide-react';
@@ -216,12 +217,12 @@ export default function ItemUsages() {
   }
 
   return <div className={view === 'list' ? 'app-module-page inventory-list-page' : 'app-module-page adjustment-workspace usage-workspace'}>
-    <div className={view === 'list' ? ui.childBar + ' inventory-list-tabs' : ui.childBar}>
-      <button type="button" disabled={busy} title="Daftar Pemakaian Barang" className={`${ui.childListTab} ${view === 'list' ? 'app-child-list-tab--active' : ''}`} onClick={() => setView('list')}><List size={22}/></button>
-      {entryOpen && <div className={childTabClass(view === 'entry')}><button type="button" disabled={busy} onClick={() => { setView('entry'); setRowDialog(null); }}>{form.id ? documents.find(doc => doc.id === form.id)?.usageNumber || 'Edit Draft' : 'Data Baru'}</button><button type="button" disabled={busy} title="Tutup Data Baru" onClick={() => form.rows.length || form.purpose ? setConfirmation('close') : (setEntryOpen(false), setView('list'))}><X size={16}/></button></div>}
-      {detailTabs.map(tab => <div key={tab.id} className={childTabClass(view === 'detail' && selectedDocument?.id === tab.id)}><button type="button" disabled={busy} onClick={() => void openDocument(tab.id)}>{tab.usageNumber}</button><button type="button" disabled={busy} title="Tutup tab dokumen" onClick={() => { setDetailTabs(tabs => tabs.filter(doc => doc.id !== tab.id)); if (selectedDocument?.id === tab.id) setView('list'); }}><X size={16}/></button></div>)}
+    <DocumentTabBar label="Tab Pemakaian Barang" activeKey={view === 'detail' ? selectedDocument?.id || 'detail' : view}>
+      <button type="button" disabled={busy} aria-current={view === 'list' ? 'page' : undefined} title="Daftar Pemakaian Barang" className={`${ui.childListTab} ${view === 'list' ? 'app-child-list-tab--active' : ''}`} onClick={() => setView('list')}><List size={22}/></button>
+      {entryOpen && <div className={childTabClass(view === 'entry')}><button aria-current={view === 'entry' ? 'page' : undefined} type="button" disabled={busy} onClick={() => { setView('entry'); setRowDialog(null); }}>{form.id ? documents.find(doc => doc.id === form.id)?.usageNumber || 'Edit Draft' : 'Data Baru'}</button><button type="button" disabled={busy} title="Tutup Data Baru" onClick={() => form.rows.length || form.purpose ? setConfirmation('close') : (setEntryOpen(false), setView('list'))}><X size={16}/></button></div>}
+      {detailTabs.map(tab => <div key={tab.id} className={childTabClass(view === 'detail' && selectedDocument?.id === tab.id)}><button aria-current={view === 'detail' && selectedDocument?.id === tab.id ? 'page' : undefined} type="button" disabled={busy} onClick={() => void openDocument(tab.id)}>{tab.usageNumber}</button><button type="button" disabled={busy} title="Tutup tab dokumen" onClick={() => { setDetailTabs(tabs => tabs.filter(doc => doc.id !== tab.id)); if (selectedDocument?.id === tab.id) setView('list'); }}><X size={16}/></button></div>)}
       <div className="adjustment-tab-tools"><button type="button" className="adjustment-help" title="Panduan Pemakaian Barang" onClick={() => navigate('/help?article=pemakaian-barang')}><Lightbulb size={18}/></button></div>
-    </div>
+    </DocumentTabBar>
     <div className="app-module-panel app-fill-stack">
       {message && <div role="status" className="adjustment-message">{message}<button type="button" className="ml-auto" aria-label="Tutup pesan" onClick={() => setMessage('')}><X size={15}/></button></div>}
       {view === 'list' ? <section className="app-fill-stack">

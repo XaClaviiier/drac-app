@@ -1,3 +1,4 @@
+import DocumentTabBar from '../components/DocumentTabBar';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PackageCheck, Plus, Search, Edit, Trash2, X, Save, CheckCircle2, AlertCircle, Package, Eye, ReceiptText, ArrowRight, Printer, RefreshCw, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -427,7 +428,7 @@ export default function GoodsReceiptPage({ mode = 'receipt', visible = true, tab
 
   return (
     <div className={visible ? "app-module-page inventory-list-page" : "hidden"}>
-      {tabs ?? <div className="app-child-bar inventory-list-tabs"><div className="app-child-list-tab" title="Daftar Penerimaan"><List size={20}/></div></div>}
+      {tabs ?? <DocumentTabBar label="Tab Daftar Penerimaan" activeKey="list"><div aria-current="page" className="app-child-list-tab" title="Daftar Penerimaan"><List size={20}/></div></DocumentTabBar>}
       <section className="app-fill-stack">
         <InventoryListToolbar name="Penerimaan Barang" {...period} search={search} onSearch={setSearch}
           placeholder={isSupplierMapping ? 'Cari nomor, barang, supplier…' : 'Cari nomor, barang, keterangan…'} count={filtered.length} filterCount={activeFilterCount} clearFilters={resetReceiptFilters}

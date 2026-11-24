@@ -1,3 +1,4 @@
+import DocumentTabBar from '../components/DocumentTabBar';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Check, ChevronLeft, ChevronRight, Download, List, Printer, RefreshCw } from 'lucide-react';
@@ -242,7 +243,7 @@ export default function StockMovementReport() {
   };
 
   return <div className="app-module-page inventory-list-page inventory-report stock-movement-report">
-    <div className="app-child-bar inventory-list-tabs"><button type="button" className="app-child-list-tab" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></div>
+    <DocumentTabBar label="Tab Mutasi Gudang" activeKey="list"><button type="button" aria-current="page" className="app-child-list-tab" aria-label="Daftar mutasi gudang" title="Daftar mutasi gudang"><List size={19}/></button></DocumentTabBar>
     <div className="app-fill-stack">
       <InventoryListToolbar name="Mutasi Gudang" from={dateFrom} to={dateTo} onFrom={changeDateFrom} onTo={changeDateTo}
         search={search} onSearch={value => changeFilter('search', value)} placeholder="Cari nomor, barang, keterangan…" count={busy ? '—' : rows.length}

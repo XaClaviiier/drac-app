@@ -372,18 +372,21 @@
   position: relative;
   z-index: 20;
   display: flex;
+  box-sizing: content-box;
   flex: 0 0 var(--app-subtab-height);
   min-height: var(--app-subtab-height);
   align-items: stretch;
   gap: 4px;
   background: var(--app-page-surround);
-}
-.app-document-tab-bar {
-  /* Keep the active tab's one-pixel overlap inside the horizontal scroll area. */
-  flex-basis: calc(var(--app-subtab-height) + 1px);
+  /* Let the active tab cover the panel border, including in a scrollable tab bar. */
   padding-bottom: 1px;
   margin-bottom: -1px;
   background-clip: content-box;
+}
+.app-document-tab-bar > .app-child-list-tab {
+  position: sticky;
+  left: 0;
+  z-index: 2;
 }
 .app-child-tab, .app-child-list-tab {
   position: relative;

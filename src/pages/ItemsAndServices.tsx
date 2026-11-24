@@ -1,3 +1,4 @@
+import DocumentTabBar from '../components/DocumentTabBar';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -1313,19 +1314,19 @@ export default function ItemsAndServices() {
 
   return (
     <div className={!showItemModal && itemListTab === 'list' ? 'app-module-page inventory-list-page' : 'app-module-page'}>
-      <div className={!showItemModal && itemListTab === 'list' ? ui.childBar + ' inventory-list-tabs' : ui.childBar}>
-        <button type="button" onClick={() => { setShowItemModal(false); setItemListTab('list'); }} title="Daftar Barang & Jasa" className={ui.childListTab}>
+      <DocumentTabBar label="Tab Barang & Jasa" activeKey={showItemModal ? editingItem?.id ?? 'entry' : itemListTab}>
+        <button type="button" onClick={() => { setShowItemModal(false); setItemListTab('list'); }} aria-current={!showItemModal && itemListTab === 'list' ? 'page' : undefined} title="Daftar Barang & Jasa" className={ui.childListTab}>
           <List className="h-5 w-5" />
         </button>
-        {!showItemModal && canVerifyItems && <button type="button" onClick={() => setItemListTab('verification')} className={`${childTabClass(itemListTab === 'verification')} gap-2 px-4 text-sm`}>Menunggu Verifikasi {pendingItems.length > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{pendingItems.length}</span>}</button>}
+        {!showItemModal && canVerifyItems && <button type="button" aria-current={itemListTab === 'verification' ? 'page' : undefined} onClick={() => setItemListTab('verification')} className={`${childTabClass(itemListTab === 'verification')} gap-2 px-4 text-sm`}>Menunggu Verifikasi {pendingItems.length > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{pendingItems.length}</span>}</button>}
         {!showItemModal && <button data-item-brand-master-trigger type="button" onClick={() => { setBrandForm({id:'',code:'',name:'',description:'',isActive:true}); setShowBrandModal(true); }} className={`${childTabClass(false)} gap-2 px-4 text-sm`}><Boxes className="h-4 w-4" />Merek Barang</button>}
         {showItemModal && (
           <div className={`${childTabClass(true)} gap-2 px-4 text-sm`}>
-            <span className="max-w-[340px] truncate" title={editingItem?.name}>{editingItem ? editingItem.name : 'Data Baru'}</span>
+            <span aria-current="page" className="max-w-[340px] truncate" title={editingItem?.name}>{editingItem ? editingItem.name : 'Data Baru'}</span>
             <button type="button" onClick={() => setShowItemModal(false)} className="ml-1 text-slate-500 hover:text-red-600"><X className="h-4 w-4" /></button>
           </div>
         )}
-      </div>
+      </DocumentTabBar>
       <div className="app-module-panel app-fill-stack">
       {!showItemModal && <div className={itemListTab === 'list' ? 'app-fill-stack' : 'app-fill-stack space-y-3 px-1 lg:space-y-0 lg:px-0'}>
       {itemListTab === 'verification' && <section className="min-h-[560px] border border-slate-300 bg-[#eeeeee] p-4">

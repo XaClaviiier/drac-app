@@ -1,3 +1,4 @@
+import DocumentTabBar from '../components/DocumentTabBar';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -691,10 +692,10 @@ export default function OpeningStockImport() {
   if (!canManageAdjustments) return <div className="adjustment-message">Penyesuaian Persediaan hanya tersedia untuk user yang memiliki izin edit barang.</div>;
   return (
     <div className={!showForm ? "app-module-page inventory-list-page" : `app-module-page adjustment-workspace ${isHpp ? "adjustment-hpp" : ""}`}>
-      <div className={!showForm ? ui.childBar + ' inventory-list-tabs' : ui.childBar}>
-        <button type="button" title="Daftar Penyesuaian Persediaan" className={`${ui.childListTab} ${!showForm ? "app-child-list-tab--active" : ""}`} onClick={() => { setSelectedDocument(null); setViewMode("list"); setMenu(null); }}><List size={22}/></button>
+      <DocumentTabBar label="Tab Penyesuaian Stok" activeKey={selectedDocument?.id ?? viewMode}>
+        <button type="button" aria-current={!showForm ? "page" : undefined} title="Daftar Penyesuaian Persediaan" className={`${ui.childListTab} ${!showForm ? "app-child-list-tab--active" : ""}`} onClick={() => { setSelectedDocument(null); setViewMode("list"); setMenu(null); }}><List size={22}/></button>
         {entryTabOpen && <div className={childTabClass(!selectedDocument && viewMode === "entry")}>
-          <button type="button" onClick={() => { setSelectedDocument(null); setViewMode("entry"); setMenu(null); }}>
+          <button type="button" aria-current={!selectedDocument && viewMode === "entry" ? "page" : undefined} onClick={() => { setSelectedDocument(null); setViewMode("entry"); setMenu(null); }}>
             {editingId ? documents.find(document => document.id === editingId)?.adjustmentNumber : "Data Baru"}
           </button>
           <button type="button" title="Tutup Data Baru" disabled={loading} onClick={() => {
@@ -703,15 +704,22 @@ export default function OpeningStockImport() {
           }}><X size={16}/></button>
         </div>}
         {detailTabs.map(tab => <div key={tab.id} className={childTabClass(selectedDocument?.id === tab.id)}>
-          <button type="button" onClick={() => { setSelectedDocument(tab); setFormTab("items"); setDetailSearch(""); setMenu(null); }}>{tab.adjustmentNumber}</button>
+          <button type="button" aria-current={selectedDocument?.id === tab.id ? "page" : undefined} onClick={() => { setSelectedDocument(tab); setFormTab("items"); setDetailSearch(""); setMenu(null); }}>{tab.adjustmentNumber}</button>
           <button type="button" title="Tutup tab" onClick={() => closeDetailTab(tab.id)}><X size={16}/></button>
         </div>)}
         <div className="adjustment-tab-tools">
-          <button className="adjustment-icon" title="Pengaturan tampilan" onClick={() => toggleMenu("settings")}><Settings size={17}/></button>
+          <button className="adjustment-icon" title="Pengaturan tampilan" aria-expanded={menu === "settings"} onClick={() => toggleMenu("settings")}><Settings size={17}/></button>
           <button className="adjustment-help" title="Panduan" onClick={() => window.open("/help?article=penyesuaian-stok", "_blank")}><Lightbulb size={18}/></button>
-          {menu === "settings" && <div className="adjustment-menu"><button onClick={() => { period.onFrom(""); setDocumentSearch(""); setStatusFilter(""); setListAdjustmentType("opening_balance"); layout.resetSort(); setMenu(null); }}>Reset filter dan urutan</button><button onClick={() => { setMenu(null); void Promise.all([loadDocuments(),refreshData()]); }}>Muat ulang data</button></div>}
         </div>
-      </div>
+      </DocumentTabBar>
+      {menu === "settings" && (
+        <div className="relative z-40 h-0 shrink-0 print:hidden">
+          <div className="adjustment-menu">
+            <button onClick={() => { period.onFrom(""); setDocumentSearch(""); setStatusFilter(""); setListAdjustmentType("opening_balance"); layout.resetSort(); setMenu(null); }}>Reset filter dan urutan</button>
+            <button onClick={() => { setMenu(null); void Promise.all([loadDocuments(),refreshData()]); }}>Muat ulang data</button>
+          </div>
+        </div>
+      )}
       <div className="app-module-panel app-fill-stack">
       {message && <div role="status" className="adjustment-message">{message}</div>}
       <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={event => { void loadFile(event.target.files?.[0]); event.target.value = ""; }}/>
