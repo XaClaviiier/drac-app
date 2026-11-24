@@ -143,6 +143,7 @@ export default function OpeningStockImport() {
   const [detailSearch, setDetailSearch] = useState("");
   const [listAdjustmentType, setListAdjustmentType] = useState<"opening_balance" | "cost_adjustment">("opening_balance");
   const [adjustmentType, setAdjustmentType] = useState("opening_balance");
+  const [hppAllWarehouses, setHppAllWarehouses] = useState(true);
   const [valuationAccountId, setValuationAccountId] = useState("");
   const [valuationAccounts, setValuationAccounts] = useState<Array<{id:string;code:string;name:string}>>([]);
   const [valuationRevision, setValuationRevision] = useState(0);
@@ -232,23 +233,41 @@ export default function OpeningStockImport() {
         )
         .slice(0, 12)
     : [];
-  const addManualItem = (item: (typeof data.items)[number]) => {
-    if (!defaultWarehouse)
+  const addManualItem = async (item: (typeof data.items)[number]) => {
+    const targetWarehouses = isHpp && hppAllWarehouses
+      ? data.warehouses.filter(warehouse => warehouse.isActive && !warehouse.isSystem && (currentBranchId === "ALL" || warehouse.branchId === currentBranchId))
+      : defaultWarehouse ? [defaultWarehouse] : [];
+    if (!targetWarehouses.length)
       return setMessage("Gudang aktif belum tersedia untuk cabang ini.");
-    if (
-      rows.some(
-        (row) =>
-          row.itemId === item.id && row.warehouseId === defaultWarehouse.id,
-      )
-    )
+    const missingWarehouses = targetWarehouses.filter(warehouse => !rows.some(row => row.itemId === item.id && row.warehouseId === warehouse.id));
+    if (!missingWarehouses.length)
       return setMessage(`${item.code} sudah ada dalam rincian.`);
-    setRowDialog({index:rows.length,readOnly:false,row:{
-      row:rows.length+1,code:item.code,itemName:item.name,itemId:item.id,
-      warehouse:defaultWarehouse.name,warehouseId:defaultWarehouse.id,
-      quantity:isHpp?0:1,unit:item.unit,unitCost:isHpp?undefined:0,error:"",
-    }});
-    setItemSearch("");
-    setMessage("");
+    setLoading(true);
+    setMessage(isHpp && hppAllWarehouses ? `Memuat stok ${item.code} di semua gudang…` : "");
+    try {
+      const previews = isHpp
+        ? await Promise.all(missingWarehouses.map(async warehouse => {
+            const query = new URLSearchParams({valuationPreview:"1",itemId:item.id,warehouseId:warehouse.id,date});
+            const response = await api.get<{stockBefore:number;unitCostBefore:number}>(`stock-adjustments?${query}`);
+            if (!response.success || !response.data) throw new Error(response.message || `HPP ${warehouse.name} belum dapat dimuat.`);
+            return {warehouse, snapshot:response.data};
+          }))
+        : missingWarehouses.map(warehouse => ({warehouse, snapshot:null}));
+      const nextRows = previews.map(({warehouse,snapshot}, index) => ({
+        row:rows.length + index + 1, code:item.code, itemName:item.name, itemId:item.id,
+        warehouse:warehouse.name, warehouseId:warehouse.id, quantity:0, unit:item.unit,
+        unitCost:isHpp ? snapshot?.unitCostBefore : 0, unitCostBefore:isHpp ? snapshot?.unitCostBefore : undefined,
+        stockBefore:isHpp ? snapshot?.stockBefore : undefined, error:"",
+      } as PreviewRow));
+      setRows(current => [...current, ...nextRows]);
+      setRowDialog({index:rows.length,readOnly:false,row:nextRows[0]});
+      setItemSearch("");
+      setMessage(isHpp && hppAllWarehouses ? `${item.code} dimuat untuk ${nextRows.length} gudang.` : "");
+    } catch (error: any) {
+      setMessage(error?.message || "Stok dan HPP semua gudang gagal dimuat.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadDocuments = async () => {
@@ -621,7 +640,7 @@ export default function OpeningStockImport() {
 
   const newDocument = (type = "opening_balance") => {
     setListAdjustmentType(type === "cost_adjustment" ? "cost_adjustment" : "opening_balance");
-    setAdjustmentType(type); setValuationRevision(0); setValuationAccountId(defaultValuationAccount.current); pendingValuationCreate.current = null;
+    setAdjustmentType(type); setHppAllWarehouses(type === "cost_adjustment"); setValuationRevision(0); setValuationAccountId(defaultValuationAccount.current); pendingValuationCreate.current = null;
     setSelectedDocument(null); setEditingId(""); setRows([]); setNotes("");
     setFileName(""); setDate(localDateKey()); setEntryTabOpen(true); setViewMode("entry"); setFormTab("items"); setMenu(null);
   };
@@ -653,7 +672,11 @@ export default function OpeningStockImport() {
     if (!row.itemId) { setRowMessage("Kode barang belum dikenali. Hapus baris ini lalu pilih barang yang terdaftar."); return; }
     if (!row.warehouseId) { setRowMessage("Pilih gudang untuk barang ini."); return; }
     if (rows.some((other, index) => index !== rowDialog.index && other.itemId === row.itemId && other.warehouseId === row.warehouseId)) { setRowMessage("Barang sudah ada pada gudang yang sama."); return; }
-    setRows(current => rowDialog.index === current.length ? [...current, {...row,error:""}] : current.map((other, index) => index === rowDialog.index ? { ...row, error: "" } : other));
+    setRows(current => {
+      const next = current.map((other, index) => index === rowDialog.index ? { ...row, error: "" } : other);
+      if (isHpp && hppAllWarehouses) return next.map(other => other.itemId === row.itemId ? {...other,unitCost:row.unitCost} : other);
+      return rowDialog.index === current.length ? [...current, {...row,error:""}] : next;
+    });
     setRowDialog(null);
   };
   const orderedDocuments = [...filteredDocuments].sort((a,b) =>
@@ -749,6 +772,7 @@ export default function OpeningStockImport() {
                   <div className="adjustment-item-search"><label className="adjustment-search"><input aria-label={selectedDocument ? "Cari rincian barang" : "Cari atau pilih barang"} value={selectedDocument ? detailSearch : itemSearch} onChange={event => selectedDocument ? setDetailSearch(event.target.value) : setItemSearch(event.target.value)} placeholder="Cari/Pilih Barang & Jasa..."/><Search size={18}/></label>
                     {!selectedDocument && itemSuggestions.length > 0 && <div className="adjustment-suggestions">{itemSuggestions.map(item => <button key={item.id} onClick={() => addManualItem(item)}><ItemSearchOption name={item.name} code={item.code}/></button>)}</div>}
                   </div>
+                  {!selectedDocument && isHpp && <label className="adjustment-hpp-scope"><input type="checkbox" checked={hppAllWarehouses} disabled={rows.length > 0 || loading} onChange={event => setHppAllWarehouses(event.target.checked)}/> Semua gudang</label>}
                   {!selectedDocument && !isHpp && <div className="adjustment-dropdown"><button className="adjustment-outline" onClick={() => toggleMenu("import")}>Ambil <ChevronDown size={12}/></button>{menu === "import" && <div className="adjustment-menu"><button disabled={!isAdmin} onClick={() => {setMenu(null); inputRef.current?.click();}}>Impor Excel/CSV</button><button onClick={() => {setMenu(null); downloadTemplate();}}>Unduh template</button></div>}</div>}
                   <div className="adjustment-dropdown"><button className="adjustment-outline" onClick={() => toggleMenu("details")}>Rincian <ChevronDown size={12}/></button>{menu === "details" && <div className="adjustment-menu"><button onClick={() => {setMenu(null); setFormTab("info");}}>Info lainnya</button><button disabled={!displayRows.length} onClick={() => {setMenu(null); setRowDialog({index:0,row:{...displayRows[0]},readOnly:!!selectedDocument});}}>Rincian barang pertama</button></div>}</div>
                   <h2>{displayRows.length ? `${displayRows.length} Barang (${quantityTotal.toLocaleString("id-ID")})` : "Rincian Barang"} <span>*</span></h2>
