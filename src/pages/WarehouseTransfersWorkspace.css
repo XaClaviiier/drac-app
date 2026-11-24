@@ -20,6 +20,21 @@
 .transfer-correction-panel{padding:12px 16px;border:1px solid #d5dce5;background:#f6f9fd;margin:10px 0;color:#24364b}.transfer-correction-panel>button{margin-left:16px}.transfer-correction-panel p{margin:6px 0}.transfer-correction-panel textarea{display:block;width:100%;max-width:640px;min-height:60px;background:white;border:1px solid #b5c2d1;padding:8px}.transfer-correction-panel details{padding:8px 0}.transfer-correction-panel summary{cursor:pointer}
 
 .transfer-form { padding: 8px 5px 20px; }
+.transfer-form-header .transfer-field:nth-child(2) { --transfer-field-width: 200px; }
+.transfer-form-header .transfer-field:nth-child(4) { --transfer-field-width: 160px; }
+.transfer-form-header .transfer-field:is(:nth-child(2), :nth-child(4)) {
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, var(--transfer-field-width));
+  gap: 8px;
+  padding-right: 6px;
+}
+.transfer-form-header .transfer-field:is(:nth-child(2), :nth-child(4)) > span:first-child {
+  text-align: right;
+}
+.transfer-form-header .transfer-number-field {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .transfer-more-menu {
   position: absolute; top: 202px; right: 92px; z-index: 50; width: 208px;
   padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; background: white;
