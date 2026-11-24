@@ -28,7 +28,7 @@ function restoreDraft(key: string, blank: ReceiptForm): ReceiptForm | null {
   } catch { return null; }
 }
 
-type ReceiptSession = {
+export type ReceiptSession = {
   form: ReceiptForm;
   setForm: Dispatch<SetStateAction<ReceiptForm>>;
   renderTabs: (tools?: ReactNode, busy?: boolean) => ReactNode;

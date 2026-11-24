@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { CircleEllipsis, Paperclip, Printer, Save, Trash2 } from 'lucide-react';
 import AccurateActionRailButton from './AccurateActionRailButton';
 
@@ -10,7 +11,7 @@ type RailAction = {
 };
 
 type AccurateFormActionRailProps = {
-  save: RailAction;
+  save: RailAction & { icon?: ReactNode };
   print?: RailAction;
   attachment?: RailAction;
   more?: RailAction;
@@ -43,7 +44,7 @@ export default function AccurateFormActionRail({
         type={save.type}
         form={save.form}
         tone="primary"
-        icon={<Save className="h-7 w-7" />}
+        icon={save.icon ?? <Save className="h-7 w-7" />}
       />
       <AccurateActionRailButton
         title={print?.title || 'Cetak'}
