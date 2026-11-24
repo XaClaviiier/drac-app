@@ -1,6 +1,9 @@
 <?php
 $actor = requireAuthenticatedUser($pdo);
 if ($method !== 'PUT') respondError('Method not allowed', 405);
+ensureTableColumn($pdo, 'stock_movements', 'verified_at', 'DATETIME NULL AFTER void_reason');
+ensureTableColumn($pdo, 'stock_movements', 'verified_by', 'VARCHAR(20) NULL AFTER verified_at');
+ensureTableColumn($pdo, 'stock_movements', 'verification_note', 'VARCHAR(255) NULL AFTER verified_by');
 if (!authenticatedUserIsOwnerOrAdministrator($pdo, $actor)) {
     respondError('Verifikasi mutasi hanya dapat dilakukan Owner atau Administrator', 403);
 }

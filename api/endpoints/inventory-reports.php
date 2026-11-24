@@ -3,6 +3,11 @@
 $actor = requireAuthenticatedUser($pdo);
 requireAuthenticatedUserPermission($pdo, $actor, 'report:view');
 if ($method !== 'GET') respondError('Method not allowed', 405);
+// Keep older production databases compatible when this endpoint is deployed
+// before the shared API bootstrap has run again.
+ensureTableColumn($pdo, 'stock_movements', 'verified_at', 'DATETIME NULL AFTER void_reason');
+ensureTableColumn($pdo, 'stock_movements', 'verified_by', 'VARCHAR(20) NULL AFTER verified_at');
+ensureTableColumn($pdo, 'stock_movements', 'verification_note', 'VARCHAR(255) NULL AFTER verified_by');
 
 try {
     $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
