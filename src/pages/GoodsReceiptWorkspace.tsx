@@ -8,6 +8,7 @@ import type { GoodsReceiptItem } from '../types';
 import AccurateNotificationDialog from '../components/AccurateNotificationDialog';
 import { ui } from '../components/ui/interfaceStandards';
 import GoodsReceiptPage from './GoodsReceipt';
+import DocumentTabBar from '../components/DocumentTabBar';
 import GoodsReceiptDetail from './GoodsReceiptDetail';
 
 const ReceiptList = memo(GoodsReceiptPage);
@@ -48,24 +49,6 @@ export default function GoodsReceiptWorkspace() {
   }
   const storageKey = `goods-receipt-draft:${currentUser?.id || currentUser?.username || 'user'}:${currentBranchId}`;
   return <ReceiptWorkspaceSession key={storageKey} storageKey={storageKey}/>;
-}
-
-function ReceiptTabBar({ activeKey, children }: { activeKey: string; children: ReactNode }) {
-  const bar = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const strip = bar.current;
-    const selection = strip?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!strip || !selection) return;
-    const tab = selection.closest('.app-child-tab') ?? selection;
-    const bounds = tab.getBoundingClientRect();
-    const viewport = strip.getBoundingClientRect();
-    const listWidth = strip.querySelector('.app-child-list-tab')?.getBoundingClientRect().width ?? 0;
-    const left = viewport.left + listWidth;
-    if (tab === selection) strip.scrollLeft = 0;
-    else if (bounds.left < left) strip.scrollLeft += bounds.left - left;
-    else if (bounds.right > viewport.right) strip.scrollLeft += bounds.right - viewport.right;
-  }, [activeKey]);
-  return <div ref={bar} aria-label="Tab Penerimaan Barang" className="app-child-bar inventory-list-tabs overflow-x-auto [scrollbar-width:none]">{children}</div>;
 }
 
 function ReceiptWorkspaceSession({ storageKey }: { storageKey: string }) {
@@ -151,7 +134,7 @@ function ReceiptWorkspaceSession({ storageKey }: { storageKey: string }) {
     if (adjacent) openDocument(adjacent, true);
     else navigate(canCreate && draft ? '/receipts/new' : '/receipts', { replace: true });
   };
-  const renderTabs: ReceiptSession['renderTabs'] = (tools, busy = false) => <ReceiptTabBar activeKey={isNew ? 'new' : activeId || 'list'}>
+  const renderTabs: ReceiptSession['renderTabs'] = (tools, busy = false) => <DocumentTabBar label="Tab Penerimaan Barang" activeKey={isNew ? 'new' : activeId || 'list'}>
     {canView && <button type="button" className={`${ui.childListTab} !sticky left-0 !z-10`} title="Daftar Penerimaan" aria-label="Kembali ke daftar penerimaan"
       aria-current={isList ? 'page' : undefined} disabled={busy} onClick={() => navigate('/receipts')}><List size={20}/></button>}
     {canCreate && (draft || isNew) && <div className={isNew ? ui.childTabActive : ui.childTab}>
@@ -169,7 +152,7 @@ function ReceiptWorkspaceSession({ storageKey }: { storageKey: string }) {
       </div>;
     })}
     {tools}
-  </ReceiptTabBar>;
+  </DocumentTabBar>;
   return <>
     {canView && <ReceiptList visible={isList} tabs={isList ? renderTabs() : undefined}/>}
     {canView && visited.map(id => {
