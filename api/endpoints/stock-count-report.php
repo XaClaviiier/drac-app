@@ -1,5 +1,6 @@
 <?php
 $actor = $requestUser ?? requireAuthenticatedUser($pdo);
+requireReportPermission($pdo, $actor, 'report:stock_opname');
 if ($method !== 'GET') respondError('Method not allowed', 405);
 
 $date = trim((string)($_GET['date'] ?? ''));

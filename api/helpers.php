@@ -1730,6 +1730,45 @@ function requireAuthenticatedUserPermission(PDO $pdo, array $user, string $permi
     respondError('Akun tidak memiliki izin ' . $permission, 403);
 }
 
+function requireReportPermission(PDO $pdo, array $user, string $permission): void {
+    if (authenticatedUserHasPermission($pdo, $user, 'report:view') || authenticatedUserHasPermission($pdo, $user, $permission)) return;
+    respondError('Akun tidak memiliki izin ' . $permission, 403);
+}
+
+function authenticatedUserHasAnyReportPermission(PDO $pdo, array $user, array $permissions): bool {
+    if (authenticatedUserHasPermission($pdo, $user, 'report:view')) return true;
+    foreach ($permissions as $permission) if (authenticatedUserHasPermission($pdo, $user, (string)$permission)) return true;
+    return false;
+}
+
+function requireAnyReportPermission(PDO $pdo, array $user, array $permissions): void {
+    if (authenticatedUserHasAnyReportPermission($pdo, $user, $permissions)) return;
+    respondError('Akun tidak memiliki izin laporan yang diminta', 403);
+}
+
+function grantInitialReportPermissions(PDO $pdo): void {
+    if (!$pdo->query("SHOW TABLES LIKE 'roles'")->fetch()) return;
+    $marker = 'api_support_20261124_report_permissions_v1';
+    $pdo->exec("CREATE TABLE IF NOT EXISTS app_schema_migrations (migration_key VARCHAR(100) NOT NULL PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->beginTransaction();
+    try {
+        $check = $pdo->prepare('SELECT migration_key FROM app_schema_migrations WHERE migration_key=? FOR UPDATE');
+        $check->execute([$marker]);
+        if ($check->fetchColumn() !== false) { $pdo->commit(); return; }
+        $all = ['report:workorders','report:sales','report:purchases','report:inventory','report:stock_card','report:stock_movements','report:stock_opname','report:financial','report:performance','report:audit'];
+        $rows = $pdo->query('SELECT id,permissions FROM roles FOR UPDATE')->fetchAll();
+        $update = $pdo->prepare('UPDATE roles SET permissions=? WHERE id=?');
+        foreach ($rows as $row) {
+            $permissions = json_decode((string)($row['permissions'] ?? '[]'), true);
+            if (!is_array($permissions) || !in_array('report:view', $permissions, true)) continue;
+            $next = array_values(array_unique(array_merge($permissions, $all)));
+            if ($next !== $permissions) $update->execute([json_encode($next), $row['id']]);
+        }
+        $pdo->prepare('INSERT INTO app_schema_migrations (migration_key) VALUES (?)')->execute([$marker]);
+        $pdo->commit();
+    } catch (Throwable $error) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $error; }
+}
+
 function getAccessibleBranchIds(PDO $pdo, array $user): array {
     if (!empty($user['is_owner']) || authenticatedUserHasPermission($pdo, $user, 'all_branches')) {
         return array_map('strval', array_column($pdo->query("SELECT id FROM branches ORDER BY id")->fetchAll(), 'id'));

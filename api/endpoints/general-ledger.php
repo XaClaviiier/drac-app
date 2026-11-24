@@ -1,5 +1,7 @@
 <?php
 /** Buku Besar: laporan transaksi per akun dari jurnal yang sudah diposting. */
+$actor = $requestUser ?? requireAuthenticatedUser($pdo);
+requireReportPermission($pdo, $actor, 'report:financial');
 function ensureGeneralLedgerTables(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS journal_entries (
         id VARCHAR(64) PRIMARY KEY,

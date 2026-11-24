@@ -31,7 +31,7 @@ const permissionModules: PermissionModule[] = [
   { id: 'user', name: 'Pengguna', description: 'Akun pengguna', permissions: ['user:view', 'user:create', 'user:edit', 'user:delete'] },
   { id: 'role', name: 'Role & Hak Akses', description: 'Grup akses pengguna', permissions: ['role:view', 'role:create', 'role:edit', 'role:delete'] },
   { id: 'branch', name: 'Cabang', description: 'Master cabang', permissions: ['branch:view', 'branch:create', 'branch:edit', 'branch:delete', 'all_branches'] },
-  { id: 'report', name: 'Laporan', description: 'Laporan operasional', permissions: ['report:view'] },
+  { id: 'report', name: 'Laporan', description: 'Akses laporan per jenis', permissions: ['report:view', 'report:workorders', 'report:sales', 'report:purchases', 'report:inventory', 'report:stock_card', 'report:stock_movements', 'report:stock_opname', 'report:financial', 'report:performance', 'report:audit'] },
   { id: 'settings', name: 'Pengaturan', description: 'Konfigurasi sistem', permissions: ['settings:view', 'settings:edit'] },
 ];
 
@@ -59,7 +59,7 @@ const permLabels: Record<string, string> = {
   'receipt:supplier': 'Petakan Supplier Penerimaan',
   'purchase:view': 'Lihat Pembelian', 'purchase:create': 'Buat Pembelian', 'purchase:edit': 'Edit Pembelian', 'purchase:delete': 'Hapus Pembelian', 'purchase:pay': 'Bayar Pembelian',
   'settings:view': 'Lihat Pengaturan', 'settings:edit': 'Edit Pengaturan',
-  'report:view': 'Lihat Laporan',
+  'report:view': 'Lihat Semua Laporan (umum)', 'report:workorders': 'Laporan Order Kerja', 'report:sales': 'Laporan Penjualan', 'report:purchases': 'Laporan Pembelian', 'report:inventory': 'Stok per Gudang', 'report:stock_card': 'Kartu Stok', 'report:stock_movements': 'Mutasi per Gudang', 'report:stock_opname': 'Laporan Stok Opname', 'report:financial': 'Laporan Keuangan', 'report:performance': 'Kinerja & Bonus', 'report:audit': 'Audit Log',
   'all_branches': 'Akses Semua Cabang',
 };
 

@@ -96,29 +96,29 @@ function AppRoutes() {
         <Route path="vehicles" element={protectedPage('vehicle:view', <VehicleRegister />)} />
         <Route path="invoices" element={protectedPage('invoice:view', <SalesInvoice />)} />
         <Route path="customer-payments" element={protectedPage('payment:view', <CustomerPayments />)} />
-        <Route path="branch-deposits" element={protectedPage('report:view', <BranchDeposits />)} />
-        <Route path="cash-accounts" element={protectedPage('report:view', <CashAccounts mode="cash" />)} />
-        <Route path="bank-accounts" element={protectedPage('report:view', <CashAccounts mode="bank" />)} />
+        <Route path="branch-deposits" element={protectedAnyPage(['report:view', 'report:financial'], <BranchDeposits />)} />
+        <Route path="cash-accounts" element={protectedAnyPage(['report:view', 'report:financial'], <CashAccounts mode="cash" />)} />
+        <Route path="bank-accounts" element={protectedAnyPage(['report:view', 'report:financial'], <CashAccounts mode="bank" />)} />
         <Route path="chart-of-accounts" element={protectedPage('settings:view', <ChartOfAccounts />)} />
-        <Route path="general-ledger" element={protectedPage('report:view', <GeneralLedger />)} />
-        <Route path="general-journal" element={protectedPage('report:view', <GeneralJournal />)} />
+        <Route path="general-ledger" element={protectedAnyPage(['report:view', 'report:financial'], <GeneralLedger />)} />
+        <Route path="general-journal" element={protectedAnyPage(['report:view', 'report:financial'], <GeneralJournal />)} />
         <Route path="opening-balances" element={protectedPage('settings:edit', <OpeningBalances />)} />
         <Route path="customers" element={protectedPage('customer:view', <Customers />)} />
         <Route path="customers/import" element={protectedPage('customer:create', <CustomerImportPage />)} />
         <Route path="workorders" element={protectedPage('wo:view', <WorkOrders />)} />
         <Route path="workorders/timeline" element={protectedPage('wo:view', <WorkOrderTimeline />)} />
         <Route path="historical-entry" element={protectedPage('invoice:create', <HistoricalQuickEntry />)} />
-        <Route path="reports/workorders" element={protectedPage('report:view', <WorkOrderReport />)} />
-        <Route path="reports/sales" element={protectedPage('report:view', <SalesReport />)} />
-        <Route path="reports/purchases" element={protectedPage('report:view', <PurchaseReport />)} />
-        <Route path="reports/inventory" element={protectedPage('report:view', <InventoryReport />)} />
-        <Route path="reports/stock-card" element={protectedPage('report:view', <StockCardReport />)} />
-        <Route path="reports/stock-movements" element={protectedPage('report:view', <StockMovementReport />)} />
+        <Route path="reports/workorders" element={protectedAnyPage(['report:view', 'report:workorders'], <WorkOrderReport />)} />
+        <Route path="reports/sales" element={protectedAnyPage(['report:view', 'report:sales'], <SalesReport />)} />
+        <Route path="reports/purchases" element={protectedAnyPage(['report:view', 'report:purchases'], <PurchaseReport />)} />
+        <Route path="reports/inventory" element={protectedAnyPage(['report:view', 'report:inventory'], <InventoryReport />)} />
+        <Route path="reports/stock-card" element={protectedAnyPage(['report:view', 'report:stock_card'], <StockCardReport />)} />
+        <Route path="reports/stock-movements" element={protectedAnyPage(['report:view', 'report:stock_movements'], <StockMovementReport />)} />
         <Route path="reports/stock-count-sheet" element={protectedPage('stock_opname:view', <StockCountSheetReport />)} />
-        <Route path="reports/stock-count-sheet-print" element={protectedPage('report:view', <StockCountSheetPrintReport />)} />
-        <Route path="reports/cash-bank" element={protectedPage('report:view', <CashBankReport />)} />
-        <Route path="reports" element={protectedPage('report:view', <ReportsIndex />)} />
-        <Route path="performance-bonus" element={protectedPage('report:view', <PerformanceBonus />)} />
+        <Route path="reports/stock-count-sheet-print" element={protectedAnyPage(['report:view', 'report:stock_opname'], <StockCountSheetPrintReport />)} />
+        <Route path="reports/cash-bank" element={protectedAnyPage(['report:view', 'report:financial'], <CashBankReport />)} />
+        <Route path="reports" element={protectedAnyPage(['report:view', 'report:workorders', 'report:sales', 'report:purchases', 'report:inventory', 'report:stock_card', 'report:stock_movements', 'report:stock_opname', 'report:financial', 'report:performance', 'report:audit'], <ReportsIndex />)} />
+        <Route path="performance-bonus" element={protectedAnyPage(['report:view', 'report:performance'], <PerformanceBonus />)} />
         <Route path="items" element={protectedPage('item:view', <ItemsAndServices />)} />
         <Route path="suppliers" element={protectedPage('supplier:view', <Suppliers />)} />
         <Route path="receipts" element={protectedPage('receipt:view', <GoodsReceiptPage key="receipts" />)} />

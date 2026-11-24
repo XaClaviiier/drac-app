@@ -1,4 +1,5 @@
 <?php
+requireReportPermission($pdo, $requestUser ?? requireAuthenticatedUser($pdo), 'report:financial');
 if($method!=='GET')respondError('Method not allowed',405);
 $from=trim((string)($_GET['from']??date('Y-m-01')));
 $to=trim((string)($_GET['to']??date('Y-m-d')));

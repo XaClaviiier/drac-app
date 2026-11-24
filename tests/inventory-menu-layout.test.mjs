@@ -78,7 +78,7 @@ test('deep-link laporan stok menggunakan halaman laporan tanpa mengubah Barang &
   assert.match(inventoryReport, /useSearchParams\(\)/);
   assert.match(inventoryReport, /matchesStockAvailability/);
   assert.match(inventoryReport, /inventory-reports\/balances/);
-  assert.match(app, /reports\/stock-card" element=\{protectedPage\('report:view'/);
+  assert.match(app, /reports\/stock-card" element=\{protectedAnyPage\(\['report:view', 'report:stock_card'\]/);
   assert.match(dashboard, /to="\/reports\/inventory\?availability=ATTENTION"/);
   assert.doesNotMatch(dashboard, /to="\/inventory-report"/);
 });

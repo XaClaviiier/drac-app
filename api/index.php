@@ -28,6 +28,7 @@ try {
     runVersionedApiBootstrap($pdo, 'api_support_20261116_item_usage_permissions_v2', 'grantInitialItemUsagePermissions');
     runVersionedApiBootstrap($pdo, 'api_support_20261116_inventory_revaluation_v1', 'ensureInventoryRevaluationSchema');
     runVersionedApiBootstrap($pdo, 'api_support_20261117_billing_treatment_v1', 'ensureBillingTreatmentSchema');
+    runVersionedApiBootstrap($pdo, 'api_support_20261124_report_permissions_v1', 'grantInitialReportPermissions');
     runVersionedApiBootstrap($pdo, 'api_support_20260915_customer_import_v1', static function(PDO $pdo): void {
         ensureCustomerImportSchema($pdo);
     });
@@ -108,7 +109,7 @@ $permissionByResource = [
     'customers' => 'customer', 'customer-people' => 'customer', 'vehicles' => 'vehicle',
     'suppliers' => 'supplier', 'items' => 'item',
     'item-categories' => 'item', 'item-brands' => 'item', 'warehouses' => 'item', 'stock-movements' => 'item', 'stock-adjustments' => 'item',
-    'warehouse-transfers' => 'item', 'stock-count-report' => 'report',
+    'warehouse-transfers' => 'item',
     'work-orders' => 'wo', 'sales-invoices' => 'invoice',
     'goods-receipts' => 'receipt', 'purchase-invoices' => 'purchase',
 ];
@@ -156,7 +157,7 @@ if ($requestUser && $resource === 'historical-entries') {
 if ($requestUser && $resource === 'receipt-ocr') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'invoice:create');
 }
-if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits', 'performance-bonus'], true)) {
+if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', 'branch-account-settings', 'branch-deposits'], true)) {
     if ($method === 'GET' && in_array($resource, ['cash-accounts','branch-account-settings'], true)) {
         // Pengguna pembayaran perlu membaca akun kas/bank untuk mengisi penerimaan,
         // meskipun tidak diberi akses ke laporan keuangan.
@@ -172,9 +173,6 @@ if ($requestUser && in_array($resource, ['chart-of-accounts', 'cash-accounts', '
     } else {
         requireAuthenticatedUserPermission($pdo, $requestUser, $method === 'GET' ? 'report:view' : 'settings:edit');
     }
-}
-if ($requestUser && in_array($resource, ['general-ledger','cash-bank-report'], true)) {
-    requireAuthenticatedUserPermission($pdo, $requestUser, 'report:view');
 }
 if ($requestUser && $resource === 'opening-balances') {
     requireAuthenticatedUserPermission($pdo, $requestUser, 'settings:edit');

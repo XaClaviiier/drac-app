@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
+import type { Permission } from '../types';
 import {
   BarChart3, BookOpen, Boxes, ClipboardList, Coins, Download, FileBarChart,
   History, Landmark, Search, ShoppingCart, Star, Warehouse, Wrench, PackageX, ArrowLeftRight,
@@ -13,20 +15,21 @@ type ReportDefinition = {
   category: Exclude<ReportCategory, 'memorize'>;
   icon: typeof FileBarChart;
   path?: string;
+  permission: Permission;
 };
 
 const reports: ReportDefinition[] = [
-  { id: 'workorders', label: 'Laporan Order Kerja', description: 'Status, nilai, pelanggan, kendaraan, layanan, dan cabang.', category: 'operasional', icon: Wrench, path: '/reports/workorders' },
-  { id: 'sales', label: 'Laporan Penjualan', description: 'Faktur, pembayaran, pendapatan, dan piutang pelanggan.', category: 'penjualan', icon: BarChart3, path: '/reports/sales' },
-  { id: 'purchases', label: 'Laporan Pembelian', description: 'Pembelian, pembayaran pemasok, dan utang usaha.', category: 'pembelian', icon: ShoppingCart, path: '/reports/purchases' },
-  { id: 'inventory', label: 'Stok per Gudang', description: 'Saldo barang dan nilai persediaan per gudang.', category: 'gudang', icon: Boxes, path: '/reports/inventory' },
-  { id: 'stock-card', label: 'Kartu Stok', description: 'Saldo awal, barang masuk, barang keluar, dan saldo akhir per periode.', category: 'gudang', icon: History, path: '/reports/stock-card' },
-  { id: 'stock-movements', label: 'Mutasi per Gudang', description: 'Seluruh barang masuk dan keluar beserta tanggal dan dokumen sumber per periode.', category: 'gudang', icon: ArrowLeftRight, path: '/reports/stock-movements' },
-  { id: 'inventory-attention', label: 'Stok Kosong / Minus', description: 'Pintasan filter stok nol dan negatif pada setiap gudang.', category: 'gudang', icon: PackageX, path: '/reports/inventory?availability=ATTENTION' },
-  { id: 'stock-count-sheet', label: 'Lembar Penghitungan Stok', description: 'Lembar stok opname fisik yang dapat difilter dan dicetak.', category: 'gudang', icon: ClipboardList, path: '/reports/stock-count-sheet-print' },
-  { id: 'cash-bank', label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, transfer, serta saldo setiap akun.', category: 'keuangan', icon: Landmark, path: '/reports/cash-bank' },
-  { id: 'performance-bonus', label: 'Kinerja & Bonus', description: 'Kehadiran, produktivitas teknisi, aturan, dan pembayaran bonus.', category: 'operasional', icon: Coins, path: '/performance-bonus' },
-  { id: 'audit-log', label: 'Audit Log', description: 'Riwayat aktivitas dan perubahan data oleh pengguna.', category: 'audit', icon: History },
+  { id: 'workorders', label: 'Laporan Order Kerja', description: 'Status, nilai, pelanggan, kendaraan, layanan, dan cabang.', category: 'operasional', icon: Wrench, path: '/reports/workorders', permission: 'report:workorders' },
+  { id: 'sales', label: 'Laporan Penjualan', description: 'Faktur, pembayaran, pendapatan, dan piutang pelanggan.', category: 'penjualan', icon: BarChart3, path: '/reports/sales', permission: 'report:sales' },
+  { id: 'purchases', label: 'Laporan Pembelian', description: 'Pembelian, pembayaran pemasok, dan utang usaha.', category: 'pembelian', icon: ShoppingCart, path: '/reports/purchases', permission: 'report:purchases' },
+  { id: 'inventory', label: 'Stok per Gudang', description: 'Saldo barang dan nilai persediaan per gudang.', category: 'gudang', icon: Boxes, path: '/reports/inventory', permission: 'report:inventory' },
+  { id: 'stock-card', label: 'Kartu Stok', description: 'Saldo awal, barang masuk, barang keluar, dan saldo akhir per periode.', category: 'gudang', icon: History, path: '/reports/stock-card', permission: 'report:stock_card' },
+  { id: 'stock-movements', label: 'Mutasi per Gudang', description: 'Seluruh barang masuk dan keluar beserta tanggal dan dokumen sumber per periode.', category: 'gudang', icon: ArrowLeftRight, path: '/reports/stock-movements', permission: 'report:stock_movements' },
+  { id: 'inventory-attention', label: 'Stok Kosong / Minus', description: 'Pintasan filter stok nol dan negatif pada setiap gudang.', category: 'gudang', icon: PackageX, path: '/reports/inventory?availability=ATTENTION', permission: 'report:inventory' },
+  { id: 'stock-count-sheet', label: 'Lembar Penghitungan Stok', description: 'Lembar stok opname fisik yang dapat difilter dan dicetak.', category: 'gudang', icon: ClipboardList, path: '/reports/stock-count-sheet-print', permission: 'report:stock_opname' },
+  { id: 'cash-bank', label: 'Laporan Kas & Bank', description: 'Penerimaan, pengeluaran, transfer, serta saldo setiap akun.', category: 'keuangan', icon: Landmark, path: '/reports/cash-bank', permission: 'report:financial' },
+  { id: 'performance-bonus', label: 'Kinerja & Bonus', description: 'Kehadiran, produktivitas teknisi, aturan, dan pembayaran bonus.', category: 'operasional', icon: Coins, path: '/performance-bonus', permission: 'report:performance' },
+  { id: 'audit-log', label: 'Audit Log', description: 'Riwayat aktivitas dan perubahan data oleh pengguna.', category: 'audit', icon: History, permission: 'report:audit' },
 ];
 
 const categories: Array<{ id: ReportCategory; label: string; icon: typeof FileBarChart }> = [
@@ -52,6 +55,7 @@ function loadMemorizedReports() {
 
 export default function ReportsIndex() {
   const navigate = useNavigate();
+  const { hasPermission } = useApp();
   const [activeCategory, setActiveCategory] = useState<ReportCategory>('gudang');
   const [search, setSearch] = useState('');
   const [memorizedIds, setMemorizedIds] = useState<string[]>(loadMemorizedReports);
@@ -60,10 +64,11 @@ export default function ReportsIndex() {
   const visibleReports = useMemo(() => {
     const keyword = search.trim().toLocaleLowerCase('id-ID');
     return reports.filter(report => {
+      if (!hasPermission('report:view') && !hasPermission(report.permission)) return false;
       const matchesCategory = activeCategory === 'memorize' ? memorizedIds.includes(report.id) : report.category === activeCategory;
       return matchesCategory && (!keyword || `${report.label} ${report.description}`.toLocaleLowerCase('id-ID').includes(keyword));
     });
-  }, [activeCategory, memorizedIds, search]);
+  }, [activeCategory, memorizedIds, search, hasPermission]);
 
   const toggleMemorized = (reportId: string) => {
     setMemorizedIds(current => {

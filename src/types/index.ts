@@ -370,7 +370,9 @@ export type Permission =
   | 'receipt:supplier'
   | 'purchase:view' | 'purchase:create' | 'purchase:edit' | 'purchase:delete' | 'purchase:pay'
   | 'settings:view' | 'settings:edit'
-  | 'report:view'
+  | 'report:view' | 'report:workorders' | 'report:sales' | 'report:purchases'
+  | 'report:inventory' | 'report:stock_card' | 'report:stock_movements' | 'report:stock_opname'
+  | 'report:financial' | 'report:performance' | 'report:audit'
   | 'all_branches';
 
 export interface Role {

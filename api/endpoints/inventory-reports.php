@@ -1,8 +1,14 @@
 <?php
 // Dedicated read-only reports. Cost fields are added server-side only for administrators.
 $actor = requireAuthenticatedUser($pdo);
-requireAuthenticatedUserPermission($pdo, $actor, 'report:view');
 if ($method !== 'GET') respondError('Method not allowed', 405);
+$reportPermission = match ($id) {
+    'movements' => 'report:stock_movements',
+    'stock-card' => 'report:stock_card',
+    default => 'report:inventory',
+};
+if ($id === 'options') requireAnyReportPermission($pdo, $actor, ['report:inventory', 'report:stock_card', 'report:stock_movements', 'report:stock_opname']);
+else requireReportPermission($pdo, $actor, $reportPermission);
 // Keep older production databases compatible when this endpoint is deployed
 // before the shared API bootstrap has run again.
 ensureTableColumn($pdo, 'stock_movements', 'verified_at', 'DATETIME NULL AFTER void_reason');

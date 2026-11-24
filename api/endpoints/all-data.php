@@ -70,11 +70,11 @@ try {
     $canUseAi = authenticatedUserHasPermission($pdo, $actor, 'ai:view');
     $canUseCustomers = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'customer:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create');
     $canUseVehicles = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'vehicle:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create');
-    $canUseItems = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'item:view') || authenticatedUserHasPermission($pdo, $actor, 'item_usage:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create') || authenticatedUserHasPermission($pdo, $actor, 'invoice:create');
-    $canUseWorkOrders = authenticatedUserHasPermission($pdo, $actor, 'wo:view');
-    $canUseInvoices = authenticatedUserIsOwnerOrAdministrator($pdo, $actor) || authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view');
+    $canUseItems = $canUseAi || authenticatedUserHasPermission($pdo, $actor, 'item:view') || authenticatedUserHasPermission($pdo, $actor, 'item_usage:view') || authenticatedUserHasPermission($pdo, $actor, 'wo:create') || authenticatedUserHasPermission($pdo, $actor, 'invoice:create') || authenticatedUserHasAnyReportPermission($pdo, $actor, ['report:inventory','report:stock_card','report:stock_movements','report:stock_opname']);
+    $canUseWorkOrders = authenticatedUserHasPermission($pdo, $actor, 'wo:view') || authenticatedUserHasPermission($pdo, $actor, 'report:workorders') || authenticatedUserHasPermission($pdo, $actor, 'report:view');
+    $canUseInvoices = authenticatedUserIsOwnerOrAdministrator($pdo, $actor) || authenticatedUserHasPermission($pdo, $actor, 'invoice:view') || authenticatedUserHasPermission($pdo, $actor, 'payment:view') || authenticatedUserHasPermission($pdo, $actor, 'report:sales') || authenticatedUserHasPermission($pdo, $actor, 'report:view');
     $canUseReceipts = authenticatedUserHasPermission($pdo, $actor, 'receipt:view');
-    $canUsePurchases = authenticatedUserHasPermission($pdo, $actor, 'purchase:view');
+    $canUsePurchases = authenticatedUserHasPermission($pdo, $actor, 'purchase:view') || authenticatedUserHasPermission($pdo, $actor, 'report:purchases') || authenticatedUserHasPermission($pdo, $actor, 'report:view');
     $canSeeSuppliers = authenticatedUserCanMapReceiptSupplier($pdo, $actor);
     $data = [];
     // Selalu kirim akses efektif user aktif. Frontend memakai nilai ini untuk

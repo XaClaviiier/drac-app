@@ -1,5 +1,6 @@
 <?php
-$actor = requireUserPermission($pdo, 'report:view');
+$actor = $requestUser ?? requireAuthenticatedUser($pdo);
+requireReportPermission($pdo, $actor, 'report:performance');
 
 function bonusPeriodRange(string $period): array {
     if (!preg_match('/^\d{4}-\d{2}$/', $period)) throw new InvalidArgumentException('Periode bonus tidak valid.');
