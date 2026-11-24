@@ -16,6 +16,9 @@
 .stock-movement-quick-search input { width:100%; height:42px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; padding:8px 12px 8px 35px; color:#334155; outline:none; }
 .stock-movement-quick-search input:focus { border-color:#2563eb; box-shadow:0 0 0 1px #2563eb; }
 .stock-movement-record-count { display:grid; place-items:center; min-width:64px; height:42px; margin-left:auto; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#334155; font-size:14px; font-variant-numeric:tabular-nums; }
+.stock-movement-run-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:36px; border-radius:4px; padding:0 12px; background:#2563eb; color:#fff; font-size:12px; font-weight:600; white-space:nowrap; }
+.stock-movement-run-button:hover:not(:disabled) { background:#1d4ed8; }
+.stock-movement-run-button:disabled { cursor:not-allowed; opacity:.5; }
 .stock-movement-paper { padding:20px 24px 8px; }
 .stock-movement-heading { text-align:center; margin-bottom:16px; }
 .stock-movement-heading > p { color:#475569; font-size:13px; margin:5px 0; }

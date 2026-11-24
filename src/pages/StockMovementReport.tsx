@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, GripVertical, Printer, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, GripVertical, Play, Printer, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { api } from '../lib/apiClient';
@@ -42,6 +42,7 @@ export default function StockMovementReport() {
   const [page, setPage] = useState(1);
   const [optionsResult, setOptionsResult] = useState<{ branchId: string; data: InventoryReportOptions } | null>(null);
   const [result, setResult] = useState<{ key: string; data: WarehouseMovementsReport } | null>(null);
+  const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
   const [columnSort, setColumnSort] = useState<ColumnSort>(null);
   const [draggedColumn, setDraggedColumn] = useState<MovementColumnKey | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -65,7 +66,7 @@ export default function StockMovementReport() {
   const validPeriod = Boolean(dateFrom && dateTo && dateFrom <= dateTo);
   const canLoad = Boolean(options && validPeriod && (!warehouseId || options.warehouses.some(row => row.id === warehouseId)));
   const query = new URLSearchParams({ branchId: currentBranchId, warehouseId, dateFrom, dateTo }).toString();
-  const report = canLoad && result?.key === query ? result.data : null;
+  const report = canLoad && submittedQuery === query && result?.key === query ? result.data : null;
   const changeFilter = (key: string, value: string) => {
     // A second filter can change before the router finishes rendering the first.
     // Preserve the latest URL so quick changes do not restore an older filter.
@@ -93,15 +94,17 @@ export default function StockMovementReport() {
 
   useEffect(() => {
     let active = true;
-    setResult(null); setError(''); setLoading(canLoad);
-    if (canLoad) void api.get<WarehouseMovementsReport>(`inventory-reports/movements?${query}`).then(response => {
+    setResult(null); setError('');
+    if (!submittedQuery || submittedQuery !== query || !canLoad) { setLoading(false); return () => { active = false; }; }
+    setLoading(true);
+    void api.get<WarehouseMovementsReport>(`inventory-reports/movements?${query}`).then(response => {
       if (!active) return;
       if (response.success && response.data) setResult({ key: query, data: response.data });
       else setError(response.message || 'Laporan mutasi gagal dimuat.');
       setLoading(false);
     });
     return () => { active = false; };
-  }, [query, canLoad, refresh, dataUpdatedAt]);
+  }, [query, canLoad, refresh, dataUpdatedAt, submittedQuery]);
 
   useEffect(() => { localStorage.setItem('drac_stock_movement_columns', JSON.stringify(columns)); }, [columns]);
   useEffect(() => { localStorage.setItem('drac_stock_movement_visible_columns', JSON.stringify(visibleColumns)); }, [visibleColumns]);
@@ -145,6 +148,11 @@ export default function StockMovementReport() {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+  };
+  const runReport = () => {
+    if (!canLoad) return;
+    setSubmittedQuery(query);
+    setPage(1);
   };
   const sortColumn = (key: MovementColumnKey) => setColumnSort(current => current?.key === key
     ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
@@ -197,6 +205,7 @@ export default function StockMovementReport() {
       <label>Jenis transaksi<select aria-label="Jenis transaksi mutasi" value={type} onChange={event => changeFilter('type', event.target.value)}>{movementKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Urutkan<select aria-label="Urutan mutasi" value={sort} onChange={event => changeFilter('sort', event.target.value)}>{movementSorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Verifikasi<select aria-label="Status verifikasi mutasi" value={verification} onChange={event => changeFilter('verification', event.target.value)}><option value="ALL">Semua Status</option><option value="PENDING">Belum Diverifikasi</option><option value="VERIFIED">Sudah Diverifikasi</option></select></label>
+      <button type="button" className="stock-movement-run-button" onClick={runReport} disabled={!canLoad || busy}><Play size={15}/>Tampilkan Laporan</button>
     </div>
     <div className="stock-movement-table-tools">
       <button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
@@ -214,7 +223,7 @@ export default function StockMovementReport() {
       <table><thead><tr>{displayedColumns.map(key => { const active = columnSort?.key === key; return <th key={key} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''} draggable onDragStart={() => setDraggedColumn(key)} onDragOver={event => event.preventDefault()} onDrop={() => moveColumn(key)} onDoubleClick={() => sortColumn(key)} aria-sort={active ? columnSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button type="button" className="stock-movement-header-button" onClick={() => sortColumn(key)} title={`Urutkan berdasarkan ${movementColumnLabels[key]}`}><span>{movementColumnLabels[key]}</span>{active ? (columnSort.direction === 'asc' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>) : <ArrowDown size={13} className="stock-movement-sort-hint"/>}</button><GripVertical size={13} className="stock-movement-drag-hint" aria-hidden="true" /></th>; })}</tr></thead>
         <tbody>{visibleRows.map(row => <tr key={`${row.id}:${row.warehouseId}`}>{displayedColumns.map(key => <Fragment key={key}>{renderCell(row, key)}</Fragment>)}</tr>)}</tbody>
       </table>
-      {!rows.length && <p className="inventory-report-empty">{busy ? 'Memuat seluruh mutasi dalam periode ini…' : report ? 'Tidak ada mutasi sesuai periode dan filter yang dipilih.' : 'Laporan belum tersedia. Periksa periode atau perbarui laporan.'}</p>}
+      {!rows.length && <p className="inventory-report-empty">{busy ? 'Memuat seluruh mutasi dalam periode ini…' : report ? 'Tidak ada mutasi sesuai periode dan filter yang dipilih.' : 'Pilih parameter lalu klik “Tampilkan Laporan” untuk menjalankan analisa.'}</p>}
     </section>
     <div className="stock-movement-pagination">
       <span>{rows.length ? `${reportNumber((currentPage - 1) * pageSize + 1)}–${reportNumber(Math.min(currentPage * pageSize, rows.length))} dari ${reportNumber(rows.length)} baris` : '0 baris'}<small>Cetak dan CSV mencakup seluruh hasil filter.</small></span>

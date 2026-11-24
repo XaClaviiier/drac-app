@@ -258,7 +258,7 @@ const pageTitles: Record<string, string> = {
   "/reports/purchases": "Laporan Pembelian",
   "/reports/inventory": "Stok per Gudang",
   "/reports/stock-card": "Kartu Stok",
-  "/reports/stock-movements": "Mutasi per Gudang",
+  "/reports/stock-movements": "Mutasi Gudang",
   "/reports/stock-count-sheet": "Stok Opname",
   "/reports/stock-count-sheet-print": "Lembar Penghitungan Stok",
   "/opening-stock": "Penyesuaian Stok",
@@ -517,6 +517,7 @@ const desktopGroups = [
         tone: "green",
       },
       { label: "Stok Opname", path: "/reports/stock-count-sheet", icon: ClipboardCheck, perm: "stock_opname:view", tone: "green" },
+      { label: "Mutasi Gudang", path: "/reports/stock-movements", icon: ArrowLeftRight, perm: "report:stock_movements", tone: "green" },
       { label: "Permintaan Barang", icon: FilePlus2, tone: "green" },
       {
         label: "Barang & Jasa",
