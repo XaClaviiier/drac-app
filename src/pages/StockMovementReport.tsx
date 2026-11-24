@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Download, Printer, RefreshCw, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, GripVertical, Printer, RefreshCw, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { api } from '../lib/apiClient';
@@ -15,6 +15,13 @@ import './InventoryReports.css';
 import './StockMovementReport.css';
 
 const pageSize = 100;
+type MovementColumnKey = 'code' | 'item' | 'document' | 'date' | 'description' | 'warehouse' | 'incoming' | 'outgoing' | 'verification';
+type ColumnSort = { key: MovementColumnKey; direction: 'asc' | 'desc' } | null;
+const defaultMovementColumns: MovementColumnKey[] = ['code', 'item', 'document', 'date', 'description', 'warehouse', 'incoming', 'outgoing', 'verification'];
+const movementColumnLabels: Record<MovementColumnKey, string> = {
+  code: 'Kode Barang', item: 'Nama Barang', document: 'Nomor Dokumen', date: 'Tanggal',
+  description: 'Deskripsi', warehouse: 'Gudang', incoming: 'Masuk', outgoing: 'Keluar', verification: 'Verifikasi',
+};
 
 export default function StockMovementReport() {
   const { currentBranchId, dataUpdatedAt, data, hasPermission } = useApp();
@@ -26,6 +33,7 @@ export default function StockMovementReport() {
   const search = params.get('search') || '';
   const direction = movementDirections.find(([value]) => value === params.get('direction'))?.[0] || 'ALL';
   const type = movementKinds.find(([value]) => value === params.get('type'))?.[0] || 'ALL';
+  const verification = ['ALL', 'PENDING', 'VERIFIED'].includes(params.get('verification') || '') ? params.get('verification') || 'ALL' : 'ALL';
   const sort = movementSorts.find(([value]) => value === params.get('sort'))?.[0] || 'date';
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -34,6 +42,17 @@ export default function StockMovementReport() {
   const [page, setPage] = useState(1);
   const [optionsResult, setOptionsResult] = useState<{ branchId: string; data: InventoryReportOptions } | null>(null);
   const [result, setResult] = useState<{ key: string; data: WarehouseMovementsReport } | null>(null);
+  const [columnSort, setColumnSort] = useState<ColumnSort>(null);
+  const [draggedColumn, setDraggedColumn] = useState<MovementColumnKey | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [columns, setColumns] = useState<MovementColumnKey[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('drac_stock_movement_columns') || 'null');
+      return Array.isArray(saved) && saved.length === defaultMovementColumns.length
+        && saved.every((key: unknown) => defaultMovementColumns.includes(key as MovementColumnKey))
+        ? saved as MovementColumnKey[] : defaultMovementColumns;
+    } catch { return defaultMovementColumns; }
+  });
   const options = optionsResult?.branchId === currentBranchId ? optionsResult.data : null;
   const validPeriod = Boolean(dateFrom && dateTo && dateFrom <= dateTo);
   const canLoad = Boolean(options && validPeriod && (!warehouseId || options.warehouses.some(row => row.id === warehouseId)));
@@ -76,8 +95,29 @@ export default function StockMovementReport() {
     return () => { active = false; };
   }, [query, canLoad, refresh, dataUpdatedAt]);
 
-  const rows = useMemo(() => filterWarehouseMovements(report?.rows || [], { search, direction, type, sort }), [report, search, direction, type, sort]);
-  useEffect(() => { setPage(1); }, [query, search, direction, type, sort, report]);
+  useEffect(() => { localStorage.setItem('drac_stock_movement_columns', JSON.stringify(columns)); }, [columns]);
+  const rows = useMemo(() => {
+    const filtered = filterWarehouseMovements(report?.rows || [], { search, direction, type, sort })
+      .filter(row => verification === 'ALL' || (verification === 'VERIFIED' ? Boolean(row.verifiedAt) : !row.verifiedAt));
+    if (!columnSort) return filtered;
+    const value = (row: WarehouseMovementsReport['rows'][number], key: MovementColumnKey): string | number => {
+      if (key === 'code') return row.itemCode;
+      if (key === 'item') return `${row.itemName} ${row.itemCode}`;
+      if (key === 'document') return row.referenceNumber || row.id;
+      if (key === 'date') return row.occurredAt || row.createdAt;
+      if (key === 'description') return row.notes || movementLabels[row.movementType] || row.movementType;
+      if (key === 'warehouse') return `${row.warehouseName} ${row.branchName}`;
+      if (key === 'verification') return row.verifiedAt ? 1 : 0;
+      return key === 'incoming' ? row.incoming : row.outgoing;
+    };
+    return [...filtered].sort((a, b) => {
+      const left = value(a, columnSort.key); const right = value(b, columnSort.key);
+      const compared = typeof left === 'number' && typeof right === 'number'
+        ? left - right : String(left).localeCompare(String(right), 'id-ID', { numeric: true, sensitivity: 'base' });
+      return columnSort.direction === 'asc' ? compared : -compared;
+    });
+  }, [report, search, direction, type, sort, verification, columnSort]);
+  useEffect(() => { setPage(1); }, [query, search, direction, type, sort, verification, report]);
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const visibleRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -85,7 +125,7 @@ export default function StockMovementReport() {
   const warehouseLabel = warehouseId ? options?.warehouses.find(row => row.id === warehouseId)?.name || '—' : 'Semua Gudang';
   const branchLabel = currentBranchId === 'ALL' ? 'Semua Cabang' : data.branches.find(row => row.id === currentBranchId)?.name || '';
   const filterLabel = [movementDirections.find(([value]) => value === direction)?.[1], movementKinds.find(([value]) => value === type)?.[1],
-    `Urutan: ${movementSorts.find(([value]) => value === sort)?.[1]}`, search.trim() ? `Pencarian: ${search.trim()}` : ''].filter(Boolean).join(' · ');
+    `Urutan: ${movementSorts.find(([value]) => value === sort)?.[1]}`, verification !== 'ALL' ? (verification === 'VERIFIED' ? 'Sudah Diverifikasi' : 'Belum Diverifikasi') : '', search.trim() ? `Pencarian: ${search.trim()}` : ''].filter(Boolean).join(' · ');
   const heading = { company: data.settings.company.name || 'DOKTER AC MOBIL', dateFrom, dateTo, warehouse: `${warehouseLabel}${branchLabel ? ` · ${branchLabel}` : ''}`, filters: filterLabel };
   const printReport = () => {
     if (!report || !rows.length) return;
@@ -95,6 +135,39 @@ export default function StockMovementReport() {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+  };
+  const sortColumn = (key: MovementColumnKey) => setColumnSort(current => current?.key === key
+    ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
+  const moveColumn = (target: MovementColumnKey) => {
+    if (!draggedColumn || draggedColumn === target) return;
+    setColumns(current => {
+      const next = [...current]; const from = next.indexOf(draggedColumn); const to = next.indexOf(target);
+      next.splice(from, 1); next.splice(to, 0, draggedColumn); return next;
+    });
+    setDraggedColumn(null);
+  };
+  const verifyMovement = async (row: WarehouseMovementsReport['rows'][number]) => {
+    if (verifyingId) return;
+    setVerifyingId(row.id);
+    try {
+      const response = await api.update('stock-movement-verifications', row.id, {});
+      if (!response.success) { setError(response.message || 'Mutasi gagal diverifikasi.'); return; }
+      const verifiedAt = response.data?.verifiedAt || new Date().toISOString();
+      const verifiedBy = response.data?.verifiedBy || null;
+      setResult(current => current ? { ...current, data: { ...current.data, rows: current.data.rows.map(item => item.id === row.id ? { ...item, verifiedAt, verifiedBy } : item) } } : current);
+    } finally { setVerifyingId(null); }
+  };
+  const renderCell = (row: WarehouseMovementsReport['rows'][number], key: MovementColumnKey) => {
+    const source = stockMovementSource(row, data); const number = row.referenceNumber || row.id;
+    const label = movementLabels[row.movementType] || row.movementType;
+    if (key === 'code') return <td className="stock-movement-code">{row.itemCode}</td>;
+    if (key === 'item') return <td className="stock-movement-item">{row.itemName}<small>{row.unit}</small></td>;
+    if (key === 'document') return <td className="stock-movement-document">{source && hasPermission(source.permission) ? <Link to={source.path}>{number}</Link> : number}</td>;
+    if (key === 'date') return <td className="stock-movement-date">{reportDate(row.occurredAt || row.createdAt)}</td>;
+    if (key === 'description') return <td className="stock-movement-description">{row.notes || label}{row.notes && <small>{label}</small>}</td>;
+    if (key === 'warehouse') return <td className="stock-movement-warehouse">{row.warehouseName}<small>{row.branchName}</small></td>;
+    if (key === 'verification') return <td className="stock-movement-verification">{row.verifiedAt ? <span className="stock-movement-verified" title={`Diverifikasi ${row.verifiedBy || ''} · ${row.verifiedAt}`}><Check size={15}/> V</span> : report && options?.canVerifyMovements ? <button type="button" className="stock-movement-verify-button" disabled={verifyingId === row.id || Boolean(verifyingId)} title="Tandai mutasi sebagai sudah diverifikasi" onClick={event => { event.stopPropagation(); void verifyMovement(row); }}>{verifyingId === row.id ? 'Menyimpan…' : 'Verifikasi'}</button> : <span className="stock-movement-unverified">—</span>}</td>;
+    return <td className={`numeric ${row[key === 'incoming' ? 'incoming' : 'outgoing'] ? `stock-movement-${key === 'incoming' ? 'in' : 'out'}` : ''}`}>{reportNumber(row[key === 'incoming' ? 'incoming' : 'outgoing'])}</td>;
   };
 
   return <div className="inventory-report stock-movement-report app-fill-stack">
@@ -114,28 +187,15 @@ export default function StockMovementReport() {
       <label>Arah<select aria-label="Arah mutasi" value={direction} onChange={event => changeFilter('direction', event.target.value)}>{movementDirections.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Jenis transaksi<select aria-label="Jenis transaksi mutasi" value={type} onChange={event => changeFilter('type', event.target.value)}>{movementKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Urutkan<select aria-label="Urutan mutasi" value={sort} onChange={event => changeFilter('sort', event.target.value)}>{movementSorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label>Verifikasi<select aria-label="Status verifikasi mutasi" value={verification} onChange={event => changeFilter('verification', event.target.value)}><option value="ALL">Semua Status</option><option value="PENDING">Belum Diverifikasi</option><option value="VERIFIED">Sudah Diverifikasi</option></select></label>
       <label className="inventory-report-search"><Search size={17}/><input aria-label="Cari mutasi" placeholder="Cari kode, barang, nomor dokumen, deskripsi…" value={search} onChange={event => changeFilter('search', event.target.value)}/></label>
     </div>
     {(error || optionsError || !validPeriod) && <div role="alert" className="inventory-report-error">{optionsError || error || 'Isi periode yang valid. Tanggal awal harus sebelum atau sama dengan tanggal akhir.'}</div>}
     <div className="stock-movement-summary" role="status">{busy ? 'Memuat mutasi…' : report ? `${reportNumber(rows.length)} baris mutasi · ${reportNumber(new Set(rows.map(row => row.itemId)).size)} barang · ${reportNumber(new Set(rows.map(row => row.warehouseId)).size)} gudang` : 'Laporan belum tersedia.'}</div>
     <section className="inventory-report-table stock-movement-paper app-table-scroll" aria-busy={busy}>
       <header className="stock-movement-heading"><p>{heading.company}</p><h1>Mutasi per Gudang</h1><p>Dari {reportDate(dateFrom)} s/d {reportDate(dateTo)}</p><div className="stock-movement-meta"><span><b>Gudang:</b> {heading.warehouse}</span><span>{filterLabel}</span></div></header>
-      <table><thead><tr><th>Kode Barang</th><th>Nama Barang</th><th>Nomor Dokumen</th><th>Tanggal</th><th>Deskripsi</th><th>Gudang</th><th className="numeric">Masuk</th><th className="numeric">Keluar</th></tr></thead>
-        <tbody>{visibleRows.map(row => {
-          const source = stockMovementSource(row, data);
-          const number = row.referenceNumber || row.id;
-          const label = movementLabels[row.movementType] || row.movementType;
-          return <tr key={`${row.id}:${row.warehouseId}`}>
-            <td className="stock-movement-code">{row.itemCode}</td>
-            <td className="stock-movement-item">{row.itemName}<small>{row.unit}</small></td>
-            <td className="stock-movement-document">{source && hasPermission(source.permission) ? <Link to={source.path}>{number}</Link> : number}</td>
-            <td className="stock-movement-date">{reportDate(row.occurredAt || row.createdAt)}</td>
-            <td className="stock-movement-description">{row.notes || label}{row.notes && <small>{label}</small>}</td>
-            <td className="stock-movement-warehouse">{row.warehouseName}<small>{row.branchName}</small></td>
-            <td className={`numeric ${row.incoming ? 'stock-movement-in' : ''}`}>{reportNumber(row.incoming)}</td>
-            <td className={`numeric ${row.outgoing ? 'stock-movement-out' : ''}`}>{reportNumber(row.outgoing)}</td>
-          </tr>;
-        })}</tbody>
+      <table><thead><tr>{columns.map(key => { const active = columnSort?.key === key; return <th key={key} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''} draggable onDragStart={() => setDraggedColumn(key)} onDragOver={event => event.preventDefault()} onDrop={() => moveColumn(key)} onDoubleClick={() => sortColumn(key)} aria-sort={active ? columnSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button type="button" className="stock-movement-header-button" onClick={() => sortColumn(key)} title={`Urutkan berdasarkan ${movementColumnLabels[key]}`}><span>{movementColumnLabels[key]}</span>{active ? (columnSort.direction === 'asc' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>) : <ArrowDown size={13} className="stock-movement-sort-hint"/>}</button><GripVertical size={13} className="stock-movement-drag-hint" aria-hidden="true" /></th>; })}</tr></thead>
+        <tbody>{visibleRows.map(row => <tr key={`${row.id}:${row.warehouseId}`}>{columns.map(key => <Fragment key={key}>{renderCell(row, key)}</Fragment>)}</tr>)}</tbody>
       </table>
       {!rows.length && <p className="inventory-report-empty">{busy ? 'Memuat seluruh mutasi dalam periode ini…' : report ? 'Tidak ada mutasi sesuai periode dan filter yang dipilih.' : 'Laporan belum tersedia. Periksa periode atau perbarui laporan.'}</p>}
     </section>

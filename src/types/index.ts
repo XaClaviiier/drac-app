@@ -457,6 +457,9 @@ export interface StockMovement {
   incoming?: number;
   outgoing?: number;
   balance?: number;
+  verifiedAt?: string | null;
+  verifiedBy?: string | null;
+  verificationNote?: string | null;
 }
 
 export interface Supplier {

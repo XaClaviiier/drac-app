@@ -11,6 +11,7 @@ function inventoryMovementReport(PDO $pdo, array $warehouses, string $warehouseI
     $query = $pdo->prepare("SELECT m.id,m.movement_sequence,m.item_id,i.code,i.name,i.unit,
         m.source_warehouse_id,m.destination_warehouse_id,m.quantity,m.movement_type,
         m.reference_type,m.reference_id,m.reference_number,m.notes,
+        m.verified_at,m.verified_by,m.verification_note,
         COALESCE(m.occurred_at,m.created_at) effective_at
         FROM stock_movements m JOIN items i ON i.id=m.item_id COLLATE utf8mb4_unicode_ci
         WHERE m.is_voided=0 AND i.type='Persediaan' AND m.quantity<>0
@@ -43,6 +44,8 @@ function inventoryMovementReport(PDO $pdo, array $warehouses, string $warehouseI
                 'movementType' => $type, 'referenceType' => $movement['reference_type'],
                 'referenceId' => $movement['reference_id'], 'referenceNumber' => $movement['reference_number'],
                 'notes' => $movement['notes'] ?? '', 'quantity' => abs($quantity),
+                'verifiedAt' => $movement['verified_at'], 'verifiedBy' => $movement['verified_by'],
+                'verificationNote' => $movement['verification_note'],
                 'occurredAt' => $movement['effective_at'], 'createdAt' => $movement['effective_at'],
                 'incoming' => $incoming, 'outgoing' => $outgoing,
             ];

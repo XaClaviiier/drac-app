@@ -2,7 +2,7 @@ import type { StockMovement } from '../types';
 
 export type ReportWarehouse = { id: string; name: string; branchId: string; branchName: string };
 export type ReportItem = { id: string; code: string; name: string; unit: string; categoryName: string };
-export type InventoryReportOptions = { warehouses: ReportWarehouse[]; items: ReportItem[]; canViewCosts: boolean; asOf: string };
+export type InventoryReportOptions = { warehouses: ReportWarehouse[]; items: ReportItem[]; canViewCosts: boolean; canVerifyMovements?: boolean; asOf: string };
 export type InventoryBalance = {
   itemId: string; code: string; name: string; unit: string; categoryName: string;
   warehouseId: string; warehouseName: string; branchId: string; branchName: string;

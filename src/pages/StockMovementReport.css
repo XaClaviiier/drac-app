@@ -11,6 +11,18 @@
 .stock-movement-meta > span:last-child { text-align:right; }
 .stock-movement-paper table { min-width:1120px; }
 .stock-movement-paper th { background:white; color:#164e63; font-weight:600; border-bottom:1px solid #64748b; z-index:1; }
+.stock-movement-paper th { cursor:grab; user-select:none; white-space:nowrap; }
+.stock-movement-paper th:active { cursor:grabbing; }
+.stock-movement-header-button { display:inline-flex; align-items:center; gap:5px; color:inherit; font:inherit; text-align:inherit; }
+.stock-movement-header-button:hover { color:#0f766e; }
+.stock-movement-sort-hint { opacity:.28; }
+.stock-movement-drag-hint { display:inline-block; margin-left:4px; vertical-align:middle; opacity:.35; }
+.stock-movement-verification { min-width:112px; text-align:center; white-space:nowrap; }
+.stock-movement-verified { display:inline-flex; align-items:center; justify-content:center; gap:3px; color:#15803d; font-weight:700; }
+.stock-movement-unverified { color:#94a3b8; }
+.stock-movement-verify-button { border:1px solid #93c5fd; border-radius:4px; padding:4px 7px; color:#1d4ed8; background:#eff6ff; font-size:11px; font-weight:600; }
+.stock-movement-verify-button:hover { background:#dbeafe; }
+.stock-movement-verify-button:disabled { cursor:wait; opacity:.55; }
 .stock-movement-paper td { vertical-align:top; overflow-wrap:anywhere; }
 .stock-movement-paper small,.stock-movement-pagination small { display:block; color:#64748b; font-size:11px; margin-top:4px; }
 .stock-movement-code { min-width:120px; }

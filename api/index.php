@@ -227,6 +227,9 @@ if ($requestUser && $resource === 'transaction-backup' && empty($requestUser['is
         case 'stock-movements':
             require 'endpoints/stock-movements.php';
             break;
+        case 'stock-movement-verifications':
+            require 'endpoints/stock-movement-verifications.php';
+            break;
         case 'inventory-reports':
             require 'endpoints/inventory-reports.php';
             break;

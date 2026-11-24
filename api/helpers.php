@@ -812,6 +812,9 @@ function ensureApiSupportTables(PDO $pdo): void {
     ensureTableColumn($pdo,'stock_movements','voided_at','DATETIME NULL AFTER is_voided');
     ensureTableColumn($pdo,'stock_movements','voided_by','VARCHAR(20) NULL AFTER voided_at');
     ensureTableColumn($pdo,'stock_movements','void_reason','VARCHAR(255) NULL AFTER voided_by');
+    ensureTableColumn($pdo,'stock_movements','verified_at','DATETIME NULL AFTER void_reason');
+    ensureTableColumn($pdo,'stock_movements','verified_by','VARCHAR(20) NULL AFTER verified_at');
+    ensureTableColumn($pdo,'stock_movements','verification_note','VARCHAR(255) NULL AFTER verified_by');
     $voidIndex=$pdo->query("SHOW INDEX FROM stock_movements WHERE Key_name='idx_stock_movements_active'")->fetch();
     if(!$voidIndex)$pdo->exec("CREATE INDEX idx_stock_movements_active ON stock_movements(is_voided,reference_type,reference_id)");
     $pdo->exec("

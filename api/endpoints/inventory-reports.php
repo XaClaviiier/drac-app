@@ -25,7 +25,8 @@ try {
     $itemQuery = $pdo->query("SELECT i.id,i.code,i.name,i.unit,i.category_name categoryName,i.is_active isActive FROM items i
         WHERE i.type='Persediaan' ORDER BY i.name,i.code");
     $items = $itemQuery->fetchAll();
-    $payload = ['warehouses' => $warehouses, 'items' => $items, 'canViewCosts' => $canViewCosts, 'asOf' => date('c')];
+    $payload = ['warehouses' => $warehouses, 'items' => $items, 'canViewCosts' => $canViewCosts,
+        'canVerifyMovements' => authenticatedUserIsOwnerOrAdministrator($pdo, $actor), 'asOf' => date('c')];
 
     if ($id === 'options') {
         $pdo->commit();

@@ -4,6 +4,7 @@ import { movementLabels, reportDate, reportNumber, type InventoryReportOptions }
 export type WarehouseMovement = StockMovement & {
   itemCode: string; unit: string; warehouseId: string; warehouseName: string;
   branchId: string; branchName: string; incoming: number; outgoing: number;
+  verifiedAt?: string | null; verifiedBy?: string | null; verificationNote?: string | null;
 };
 export type WarehouseMovementsReport = InventoryReportOptions & {
   dateFrom: string; dateTo: string; rows: WarehouseMovement[];
@@ -38,9 +39,9 @@ export function warehouseMovementCsv(rows: WarehouseMovement[], heading: Movemen
   return [
     [heading.company], ['Mutasi per Gudang'], ['Periode', reportDate(heading.dateFrom), reportDate(heading.dateTo)],
     ['Gudang', heading.warehouse], ['Filter', heading.filters], [],
-    ['Kode Barang', 'Nama Barang', 'Nomor Dokumen', 'Tanggal', 'Jenis Transaksi', 'Deskripsi', 'Cabang', 'Gudang', 'Masuk', 'Keluar', 'Satuan'],
+    ['Kode Barang', 'Nama Barang', 'Nomor Dokumen', 'Tanggal', 'Jenis Transaksi', 'Deskripsi', 'Cabang', 'Gudang', 'Masuk', 'Keluar', 'Satuan', 'Verifikasi'],
     ...rows.map(row => [row.itemCode, row.itemName, row.referenceNumber || row.id, reportDate(row.occurredAt || row.createdAt),
-      movementLabels[row.movementType] || row.movementType, row.notes, row.branchName, row.warehouseName, row.incoming, row.outgoing, row.unit]),
+      movementLabels[row.movementType] || row.movementType, row.notes, row.branchName, row.warehouseName, row.incoming, row.outgoing, row.unit, row.verifiedAt ? 'V' : 'Belum']),
   ];
 }
 
@@ -53,9 +54,9 @@ export function warehouseMovementPrintHtml(rows: WarehouseMovement[], heading: M
     .meta{display:flex;justify-content:space-between;gap:20px;margin:12px 0}.meta p{margin:0}table{width:100%;border-collapse:collapse;table-layout:fixed}
     th{text-align:left;color:#164e63;border-bottom:1px solid #334155;padding:7px 6px}td{padding:6px;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid #e2e8f0}
     thead{display:table-header-group}tr{break-inside:avoid}.number{text-align:right;font-variant-numeric:tabular-nums}small{display:block;color:#64748b;margin-top:3px}
-    footer{margin-top:12px;color:#475569}.code{width:11%}.item{width:20%}.document{width:13%}.date{width:9%}.description{width:21%}.warehouse{width:13%}.quantity{width:6.5%}
+    footer{margin-top:12px;color:#475569}.code{width:11%}.item{width:20%}.document{width:13%}.date{width:9%}.description{width:21%}.warehouse{width:13%}.quantity{width:6.5%}.verification{width:7%}
   </style></head><body><header><p>${escapeHtml(heading.company)}</p><h1>Mutasi per Gudang</h1><p>Dari ${escapeHtml(reportDate(heading.dateFrom))} s/d ${escapeHtml(reportDate(heading.dateTo))}</p></header>
   <div class="meta"><p><b>Gudang:</b> ${escapeHtml(heading.warehouse)}</p><p>${escapeHtml(heading.filters)}</p></div>
-  <table><thead><tr><th class="code">Kode Barang</th><th class="item">Nama Barang</th><th class="document">Nomor Dokumen</th><th class="date">Tanggal</th><th class="description">Deskripsi</th><th class="warehouse">Gudang</th><th class="number quantity">Masuk</th><th class="number quantity">Keluar</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escapeHtml(row.itemCode)}</td><td>${escapeHtml(row.itemName)}<small>${escapeHtml(row.unit)}</small></td><td>${escapeHtml(row.referenceNumber || row.id)}</td><td>${escapeHtml(reportDate(row.occurredAt || row.createdAt))}</td><td>${escapeHtml(row.notes || movementLabels[row.movementType] || row.movementType)}<small>${escapeHtml(movementLabels[row.movementType] || row.movementType)}</small></td><td>${escapeHtml(row.warehouseName)}<small>${escapeHtml(row.branchName)}</small></td><td class="number">${reportNumber(row.incoming)}</td><td class="number">${reportNumber(row.outgoing)}</td></tr>`).join('')}</tbody></table>
+  <table><thead><tr><th class="code">Kode Barang</th><th class="item">Nama Barang</th><th class="document">Nomor Dokumen</th><th class="date">Tanggal</th><th class="description">Deskripsi</th><th class="warehouse">Gudang</th><th class="number quantity">Masuk</th><th class="number quantity">Keluar</th><th class="verification">Verifikasi</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escapeHtml(row.itemCode)}</td><td>${escapeHtml(row.itemName)}<small>${escapeHtml(row.unit)}</small></td><td>${escapeHtml(row.referenceNumber || row.id)}</td><td>${escapeHtml(reportDate(row.occurredAt || row.createdAt))}</td><td>${escapeHtml(row.notes || movementLabels[row.movementType] || row.movementType)}<small>${escapeHtml(movementLabels[row.movementType] || row.movementType)}</small></td><td>${escapeHtml(row.warehouseName)}<small>${escapeHtml(row.branchName)}</small></td><td class="number">${reportNumber(row.incoming)}</td><td class="number">${reportNumber(row.outgoing)}</td><td>${row.verifiedAt ? 'V' : 'Belum'}</td></tr>`).join('')}</tbody></table>
   <footer>${rows.length.toLocaleString('id-ID')} baris mutasi · ${new Set(rows.map(row => row.itemId)).size.toLocaleString('id-ID')} barang</footer></body></html>`;
 }
