@@ -31,7 +31,7 @@ test('menu Persediaan memakai grid kotak enam kolom model Accurate', () => {
 
 test('menu Persediaan berisi transaksi dan master; laporan berada di Daftar Laporan', () => {
   const inventory = sectionBetween(layout, 'id: "inventory"', 'id: "reports"');
-  for (const label of ['Penerimaan Barang', 'Transfer Gudang', 'Penyesuaian Stok', 'Stok Opname', 'Permintaan Barang']) {
+  for (const label of ['Penerimaan Barang', 'Transfer Antar Gudang', 'Penyesuaian Stok', 'Stok Opname', 'Permintaan Barang']) {
     assert.match(inventory, new RegExp(`label: "${label}"[\\s\\S]*?tone: "green"`), label);
   }
   for (const label of ['Barang & Jasa', 'Gudang', 'Kategori Barang', 'Merek Barang']) {
@@ -51,7 +51,7 @@ test('ikon Persediaan profesional tetap mengikuti route dan permission yang ada'
   }
   const routesAndPermissions = [
     ['Penerimaan Barang', '/receipts', 'receipt:view'],
-    ['Transfer Gudang', '/warehouse-transfers', 'item:view'],
+    ['Transfer Antar Gudang', '/warehouse-transfers', 'item:view'],
     ['Penyesuaian Stok', '/opening-stock', 'item:edit'],
     ['Stok Opname', '/reports/stock-count-sheet', 'stock_opname:view'],
     ['Barang & Jasa', '/items', 'item:view'],
