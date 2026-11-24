@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, GripVertical, Printer, RefreshCw, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Download, GripVertical, Printer, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import IndonesianDateInput from '../components/IndonesianDateInput';
 import { api } from '../lib/apiClient';
@@ -45,12 +45,20 @@ export default function StockMovementReport() {
   const [columnSort, setColumnSort] = useState<ColumnSort>(null);
   const [draggedColumn, setDraggedColumn] = useState<MovementColumnKey | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [columns, setColumns] = useState<MovementColumnKey[]>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('drac_stock_movement_columns') || 'null');
       return Array.isArray(saved) && saved.length === defaultMovementColumns.length
         && saved.every((key: unknown) => defaultMovementColumns.includes(key as MovementColumnKey))
         ? saved as MovementColumnKey[] : defaultMovementColumns;
+    } catch { return defaultMovementColumns; }
+  });
+  const [visibleColumns, setVisibleColumns] = useState<MovementColumnKey[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('drac_stock_movement_visible_columns') || 'null');
+      return Array.isArray(saved) && saved.length > 0 && saved.every((key: unknown) => defaultMovementColumns.includes(key as MovementColumnKey))
+        ? defaultMovementColumns.filter(key => saved.includes(key)) : defaultMovementColumns;
     } catch { return defaultMovementColumns; }
   });
   const options = optionsResult?.branchId === currentBranchId ? optionsResult.data : null;
@@ -96,6 +104,8 @@ export default function StockMovementReport() {
   }, [query, canLoad, refresh, dataUpdatedAt]);
 
   useEffect(() => { localStorage.setItem('drac_stock_movement_columns', JSON.stringify(columns)); }, [columns]);
+  useEffect(() => { localStorage.setItem('drac_stock_movement_visible_columns', JSON.stringify(visibleColumns)); }, [visibleColumns]);
+  const displayedColumns = columns.filter(key => visibleColumns.includes(key));
   const rows = useMemo(() => {
     const filtered = filterWarehouseMovements(report?.rows || [], { search, direction, type, sort })
       .filter(row => verification === 'ALL' || (verification === 'VERIFIED' ? Boolean(row.verifiedAt) : !row.verifiedAt));
@@ -176,7 +186,6 @@ export default function StockMovementReport() {
       <div className="inventory-report-actions">
         <Link className="inventory-report-button" to="/reports">Daftar Laporan</Link>
         <button type="button" aria-label="Perbarui mutasi" onClick={() => setRefresh(value => value + 1)} disabled={busy}><RefreshCw size={17}/></button>
-        <button type="button" onClick={printReport} disabled={!report || !rows.length}><Printer size={17}/>Cetak</button>
         <button type="button" onClick={() => downloadReportCsv(`mutasi-per-gudang-${dateFrom}-${dateTo}.csv`, warehouseMovementCsv(rows, heading))} disabled={!report || !rows.length}><Download size={17}/>CSV</button>
       </div>
     </div>
@@ -188,14 +197,22 @@ export default function StockMovementReport() {
       <label>Jenis transaksi<select aria-label="Jenis transaksi mutasi" value={type} onChange={event => changeFilter('type', event.target.value)}>{movementKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Urutkan<select aria-label="Urutan mutasi" value={sort} onChange={event => changeFilter('sort', event.target.value)}>{movementSorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Verifikasi<select aria-label="Status verifikasi mutasi" value={verification} onChange={event => changeFilter('verification', event.target.value)}><option value="ALL">Semua Status</option><option value="PENDING">Belum Diverifikasi</option><option value="VERIFIED">Sudah Diverifikasi</option></select></label>
-      <label className="inventory-report-search"><Search size={17}/><input aria-label="Cari mutasi" placeholder="Cari kode, barang, nomor dokumen, deskripsi…" value={search} onChange={event => changeFilter('search', event.target.value)}/></label>
+    </div>
+    <div className="stock-movement-table-tools">
+      <button type="button" className="stock-movement-tool-button" aria-label="Cetak mutasi" title="Cetak mutasi" onClick={printReport} disabled={!report || !rows.length}><Printer size={18}/></button>
+      <div className="stock-movement-column-settings">
+        <button type="button" className="stock-movement-tool-button" aria-label="Atur kolom mutasi" title="Atur kolom yang ditampilkan" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(value => !value)}><SlidersHorizontal size={18}/></button>
+        {columnsOpen && <div className="stock-movement-column-menu">{defaultMovementColumns.map(key => <label key={key}><input type="checkbox" checked={visibleColumns.includes(key)} disabled={visibleColumns.length === 1 && visibleColumns.includes(key)} onChange={event => setVisibleColumns(current => event.target.checked ? [...current, key] : current.filter(column => column !== key))}/><span>{movementColumnLabels[key]}</span></label>)}</div>}
+      </div>
+      <label className="stock-movement-quick-search"><Search size={17}/><input aria-label="Cari mutasi" placeholder="Cari nomor, barang, keterangan…" value={search} onChange={event => changeFilter('search', event.target.value)}/></label>
+      <span className="stock-movement-record-count" aria-label="Jumlah record mutasi">{busy ? '—' : reportNumber(rows.length)}</span>
     </div>
     {(error || optionsError || !validPeriod) && <div role="alert" className="inventory-report-error">{optionsError || error || 'Isi periode yang valid. Tanggal awal harus sebelum atau sama dengan tanggal akhir.'}</div>}
     <div className="stock-movement-summary" role="status">{busy ? 'Memuat mutasi…' : report ? `${reportNumber(rows.length)} baris mutasi · ${reportNumber(new Set(rows.map(row => row.itemId)).size)} barang · ${reportNumber(new Set(rows.map(row => row.warehouseId)).size)} gudang` : 'Laporan belum tersedia.'}</div>
     <section className="inventory-report-table stock-movement-paper app-table-scroll" aria-busy={busy}>
       <header className="stock-movement-heading"><p>{heading.company}</p><h1>Mutasi per Gudang</h1><p>Dari {reportDate(dateFrom)} s/d {reportDate(dateTo)}</p><div className="stock-movement-meta"><span><b>Gudang:</b> {heading.warehouse}</span><span>{filterLabel}</span></div></header>
-      <table><thead><tr>{columns.map(key => { const active = columnSort?.key === key; return <th key={key} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''} draggable onDragStart={() => setDraggedColumn(key)} onDragOver={event => event.preventDefault()} onDrop={() => moveColumn(key)} onDoubleClick={() => sortColumn(key)} aria-sort={active ? columnSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button type="button" className="stock-movement-header-button" onClick={() => sortColumn(key)} title={`Urutkan berdasarkan ${movementColumnLabels[key]}`}><span>{movementColumnLabels[key]}</span>{active ? (columnSort.direction === 'asc' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>) : <ArrowDown size={13} className="stock-movement-sort-hint"/>}</button><GripVertical size={13} className="stock-movement-drag-hint" aria-hidden="true" /></th>; })}</tr></thead>
-        <tbody>{visibleRows.map(row => <tr key={`${row.id}:${row.warehouseId}`}>{columns.map(key => <Fragment key={key}>{renderCell(row, key)}</Fragment>)}</tr>)}</tbody>
+      <table><thead><tr>{displayedColumns.map(key => { const active = columnSort?.key === key; return <th key={key} className={key === 'incoming' || key === 'outgoing' ? 'numeric' : ''} draggable onDragStart={() => setDraggedColumn(key)} onDragOver={event => event.preventDefault()} onDrop={() => moveColumn(key)} onDoubleClick={() => sortColumn(key)} aria-sort={active ? columnSort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button type="button" className="stock-movement-header-button" onClick={() => sortColumn(key)} title={`Urutkan berdasarkan ${movementColumnLabels[key]}`}><span>{movementColumnLabels[key]}</span>{active ? (columnSort.direction === 'asc' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>) : <ArrowDown size={13} className="stock-movement-sort-hint"/>}</button><GripVertical size={13} className="stock-movement-drag-hint" aria-hidden="true" /></th>; })}</tr></thead>
+        <tbody>{visibleRows.map(row => <tr key={`${row.id}:${row.warehouseId}`}>{displayedColumns.map(key => <Fragment key={key}>{renderCell(row, key)}</Fragment>)}</tr>)}</tbody>
       </table>
       {!rows.length && <p className="inventory-report-empty">{busy ? 'Memuat seluruh mutasi dalam periode ini…' : report ? 'Tidak ada mutasi sesuai periode dan filter yang dipilih.' : 'Laporan belum tersedia. Periksa periode atau perbarui laporan.'}</p>}
     </section>

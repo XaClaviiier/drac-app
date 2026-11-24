@@ -3,6 +3,19 @@
 .stock-movement-report .inventory-report-filters { padding:12px; border:1px solid #dbe3ec; border-radius:5px; background:#f8fafc; }
 .stock-movement-report .inventory-report-filters input,.stock-movement-report .inventory-report-filters select { height:36px; }
 .stock-movement-summary { color:#475569; font-size:12px; }
+.stock-movement-table-tools { display:flex; align-items:center; gap:8px; min-height:58px; padding:10px 13px; border:1px solid #dbe3ec; border-radius:5px; background:#f8fafc; }
+.stock-movement-tool-button { display:grid; place-items:center; width:42px; height:42px; border:1px solid #2563eb; border-radius:4px; color:#2563eb; background:#fff; }
+.stock-movement-tool-button:hover:not(:disabled) { background:#eff6ff; }
+.stock-movement-tool-button:disabled { cursor:not-allowed; opacity:.45; }
+.stock-movement-column-settings { position:relative; }
+.stock-movement-column-menu { position:absolute; top:calc(100% + 6px); left:0; z-index:20; display:grid; min-width:210px; gap:2px; padding:8px; border:1px solid #cbd5e1; border-radius:5px; background:#fff; box-shadow:0 8px 20px #0f172a22; }
+.stock-movement-column-menu label { display:flex; align-items:center; gap:8px; padding:6px 7px; color:#334155; font-size:12px; white-space:nowrap; }
+.stock-movement-column-menu label:hover { background:#eff6ff; }
+.stock-movement-quick-search { position:relative; display:flex; align-items:center; flex:1; max-width:420px; color:#64748b; }
+.stock-movement-quick-search svg { position:absolute; left:11px; pointer-events:none; }
+.stock-movement-quick-search input { width:100%; height:42px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; padding:8px 12px 8px 35px; color:#334155; outline:none; }
+.stock-movement-quick-search input:focus { border-color:#2563eb; box-shadow:0 0 0 1px #2563eb; }
+.stock-movement-record-count { display:grid; place-items:center; min-width:64px; height:42px; margin-left:auto; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#334155; font-size:14px; font-variant-numeric:tabular-nums; }
 .stock-movement-paper { padding:20px 24px 8px; }
 .stock-movement-heading { text-align:center; margin-bottom:16px; }
 .stock-movement-heading > p { color:#475569; font-size:13px; margin:5px 0; }
@@ -41,4 +54,7 @@
   .stock-movement-meta > span:last-child { text-align:left; }
   .stock-movement-report .inventory-report-filters { padding:10px; }
   .stock-movement-heading h1 { font-size:22px; }
+  .stock-movement-table-tools { flex-wrap:wrap; }
+  .stock-movement-quick-search { order:3; flex-basis:calc(100% - 76px); max-width:none; }
+  .stock-movement-record-count { margin-left:0; }
 }
