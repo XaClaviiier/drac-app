@@ -218,6 +218,38 @@ function cancelItemUsage(PDO $pdo, array $doc, array $actor, string $reason): vo
     itemUsageAudit($pdo,$actor,$doc,'cancel',$reason,['document'=>$doc,'rows'=>$lines]);
 }
 
+function deleteItemUsage(PDO $pdo, array $doc, array $actor, string $reason): void {
+    if (!in_array($doc['status'], ['Draft', 'Posted'], true)) {
+        throw new DomainException('Hanya Draft atau Posted yang dapat dihapus', 409);
+    }
+    $stmt = $pdo->prepare('SELECT * FROM item_usage_items WHERE usage_id=? ORDER BY item_id FOR UPDATE');
+    $stmt->execute([$doc['id']]);
+    $lines = $stmt->fetchAll();
+    if (!$lines) throw new DomainException('Rincian pemakaian tidak ditemukan', 409);
+
+    $movementRows = [];
+    if ($doc['status'] === 'Posted') {
+        foreach ($lines as $line) {
+            $movementId = (string)($line['movement_id'] ?? '');
+            if ($movementId === '') throw new DomainException('Mutasi pemakaian tidak ditemukan', 409);
+            $movement = $pdo->prepare("SELECT * FROM stock_movements WHERE id=? AND reference_type='item_usage' AND reference_id=? AND movement_type='usage' AND is_voided=0 FOR UPDATE");
+            $movement->execute([$movementId, $doc['id']]);
+            $row = $movement->fetch();
+            if (!$row || (int)$row['quantity'] !== (int)$line['quantity'] || (string)$row['source_warehouse_id'] !== (string)$doc['warehouse_id']) {
+                throw new DomainException('Mutasi pemakaian tidak sesuai dengan rincian dokumen', 409);
+            }
+            $movementRows[] = $row;
+            adjustWarehouseStockAllowNegative($pdo,$doc['warehouse_id'],$doc['branch_id'],$line['item_id'],(int)$line['quantity']);
+        }
+    }
+
+    itemUsageAudit($pdo,$actor,$doc,'delete',$reason ?: 'Pemakaian dihapus',['document'=>$doc,'rows'=>$lines,'movements'=>$movementRows]);
+    foreach ($movementRows as $movement) $pdo->prepare('DELETE FROM stock_movements WHERE id=?')->execute([$movement['id']]);
+    if ($doc['status'] === 'Posted') deleteOperationalJournal($pdo,'item_usage',(string)$doc['id'],'USAGE');
+    $pdo->prepare('DELETE FROM item_usage_items WHERE usage_id=?')->execute([$doc['id']]);
+    $pdo->prepare('DELETE FROM item_usages WHERE id=?')->execute([$doc['id']]);
+}
+
 function mapItemUsage(array $row): array {
     // Dokumen operasional tidak menampilkan nilai persediaan kepada petugas.
     // HPP dan total nilai tetap tersimpan untuk pembukuan dan laporan administrator.

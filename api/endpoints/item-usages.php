@@ -144,12 +144,10 @@ try {
             $reason = itemUsageText($input['reason'] ?? '',1000,'Alasan pembatalan',true);
             cancelItemUsage($pdo,$doc,$actor,$reason);
         } else {
-            if ($doc['status'] !== 'Draft') throw new DomainException('Hanya Draft yang dapat dihapus. Gunakan Batalkan untuk pemakaian Diposting.',409);
-            $lines = $pdo->prepare('SELECT * FROM item_usage_items WHERE usage_id=?'); $lines->execute([$id]);
-            itemUsageAudit($pdo,$actor,$doc,'delete','Hapus Draft',['document'=>$doc,'rows'=>$lines->fetchAll()]);
-            $pdo->prepare('DELETE FROM item_usage_items WHERE usage_id=?')->execute([$id]);
-            $pdo->prepare('DELETE FROM item_usages WHERE id=?')->execute([$id]);
-            $pdo->commit(); respondSuccess(null,'Draft pemakaian dihapus');
+            if (!in_array($doc['status'], ['Draft','Posted'], true)) throw new DomainException('Hanya Draft atau Posted yang dapat dihapus',409);
+            $reason = itemUsageText($input['reason'] ?? '',1000,'Alasan penghapusan',$doc['status'] === 'Posted');
+            deleteItemUsage($pdo,$doc,$actor,$reason);
+            $pdo->commit(); respondSuccess(null,$doc['status'] === 'Posted' ? 'Pemakaian dan transaksi terkait dihapus' : 'Draft pemakaian dihapus');
         }
     }
     $stmt = $pdo->prepare('SELECT * FROM item_usages WHERE id=?'); $stmt->execute([$id]); $result=mapItemUsage($stmt->fetch());
