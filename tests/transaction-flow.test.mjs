@@ -559,7 +559,7 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.match(styles, /\.app-control,[\s\S]*height: 36px/);
   assert.match(workspace, /\.app-table-scroll > table > thead\s*\{[^}]*position: sticky !important;[^}]*top: 0 !important;/);
   assert.match(page, /className=\{`\$\{ui\.search\} w-full pl-9 pr-3`\}/);
-  assert.match(page, /className="h-9 min-w-0 w-full text-xs sm:text-sm lg:w-40"/);
+  assert.match(page, /className="h-9 min-w-0 w-full text-xs sm:text-sm lg:w-36"/);
   assert.match(page, /className=\{"app-fill-stack " \+ \(`\$\{ui\.tableShell\} mx-3 mt-0\.5 hidden shadow-sm lg:block`\)\}/);
   assert.match(page, /className="app-module-page"/);
   assert.match(page, /app-workorder-mobile-toolbar border-y/);
@@ -579,14 +579,16 @@ test('daftar Order Kerja memakai kepadatan desktop dan field standar Accurate', 
   assert.doesNotMatch(styles, /\.app-brand-header\s*\{[^}]*position:\s*relative/);
 });
 
-test('filter daftar WO memakai satu tanggal dan clear mengembalikan semua filter', () => {
+test('filter daftar WO memakai rentang tanggal di luar menu filter', () => {
   const page = source('src/pages/WorkOrders.tsx');
-  assert.match(page, /selectedWorkOrderDate/);
-  assert.match(page, /Filter satu tanggal WO/);
+  assert.match(page, /Tanggal awal Order Kerja/);
+  assert.match(page, /Tanggal akhir Order Kerja/);
   assert.match(page, /absolute right-0 top-\[calc\(100%\+6px\)\] z-40 w-\[min\(360px,calc\(100vw-16px\)\)\]/);
   assert.match(page, /ActiveFilterResetButton active=\{activeFilterCount > 0\} onReset=\{resetWorkOrderFilters\}/);
-  assert.match(page, /Kosongkan tanggal untuk menampilkan semua tanggal/);
+  assert.match(page, /to: dateTo \|\| dateFrom/);
   const toolbar = page.slice(page.indexOf('{\/\* Filters \*\/}'), page.indexOf('<div className="hidden px-3 py-0.5">'));
+  const filterPanel = toolbar.slice(toolbar.indexOf('Filter Order Kerja'), toolbar.indexOf('</div>}\n          </div>'));
+  assert.doesNotMatch(filterPanel, /Tanggal|Dari Tanggal|Sampai Tanggal/);
   assert.doesNotMatch(toolbar, /Status: Semua/);
   assert.doesNotMatch(toolbar, /Tanggal: Semua/);
   assert.match(toolbar, /grid-cols-\[auto_auto_minmax\(0,1fr\)_auto\]/);
