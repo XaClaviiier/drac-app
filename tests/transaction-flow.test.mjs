@@ -337,8 +337,10 @@ test('penerimaan dapat membuat dan langsung memilih barang dengan kecocokan mobi
   assert.match(page, /api\.get<QuickItemBrand\[]>\('item-brands'\)/);
   assert.match(page, /setLineDraft\(\{id:`L-\$\{Date\.now\(\)\}`/);
   assert.match(page, /Rincian Barang<\/button>.*Info lainnya<\/button>.*Penangguhan<\/button>/s);
-  assert.match(page, /@Harga/);
-  assert.match(page, /Total Harga/);
+  assert.doesNotMatch(page, /<label>@Harga<\/label>/);
+  assert.doesNotMatch(page, /<label>Diskon<\/label>/);
+  assert.doesNotMatch(page, /<label>Total Harga<\/label>/);
+  assert.doesNotMatch(page, /<label>Penjual \/ Teknisi<\/label>/);
   assert.match(page, /max-w-xl flex-col/);
   assert.match(page, /grid-cols-\[32%_minmax\(0,1fr\)\]/);
   assert.match(page, /grid-cols-\[minmax\(0,1fr\)_96px\]/);
