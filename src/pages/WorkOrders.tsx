@@ -447,6 +447,23 @@ export default function WorkOrders() {
       && canAccessBranch;
   };
 
+  const canDeleteWorkOrderInActiveBranch = (wo: WorkOrder) => {
+    const activeBranch = data.branches.find(branch => branch.id === currentBranchId && branch.isActive);
+    const assignedBranchIds = new Set([
+      currentUser?.branchId,
+      ...(currentUser?.branchIds || []),
+    ].filter((branchId): branchId is string => Boolean(branchId && branchId !== 'ALL')));
+    const canAccessBranch = Boolean(
+      currentUser?.isOwner
+      || hasPermission('all_branches')
+      || assignedBranchIds.has(wo.branchId)
+    );
+    return Boolean(activeBranch)
+      && currentBranchId !== 'ALL'
+      && wo.branchId === currentBranchId
+      && canAccessBranch;
+  };
+
   const requireEditableWorkOrder = (wo: WorkOrder) => {
     if (canEditWorkOrderInActiveBranch(wo)) return true;
     showAccurateNotice(wo.invoiceId && !hasPermission('invoice:edit')
@@ -1195,7 +1212,7 @@ export default function WorkOrders() {
     canShowAdminRowActions
     && hasPermission('wo:delete')
     && editingWO
-    && canEditWorkOrderInActiveBranch(editingWO)
+    && canDeleteWorkOrderInActiveBranch(editingWO)
     && !editingWO.invoiceId
     && isDeletableWorkOrderStatus(editingWO.status)
   );
