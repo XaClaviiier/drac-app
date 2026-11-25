@@ -1173,10 +1173,16 @@ export default function WorkOrders() {
     setFilterStatus('');
     setFilterAttention('all');
     setSearchTerm('');
+    setPeriodFilter('all');
+    setDateFrom('');
+    setDateTo('');
     setSearchParams(params => {
       const next = new URLSearchParams(params);
+      next.delete('date');
       next.delete('attention');
       next.delete('status');
+      next.delete('from');
+      next.delete('to');
       next.delete('attentionKind');
       return next;
     }, { replace: true });
