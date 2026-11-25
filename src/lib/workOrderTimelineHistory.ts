@@ -87,7 +87,13 @@ export function workOrderDay(wo: WorkOrder, selectedDate: string, now: Date, sch
   const last = events[events.length - 1];
   if ((finalStage === 'done' || finalStage === 'lost') && last?.stage !== finalStage) {
     const end = timestamp(wo.updatedAt);
-    events.push({ time: Math.max(start, last?.time || start, Number.isFinite(end) ? end : start), stage: finalStage });
+    const updatedOnTransactionDay = Number.isFinite(end)
+      && end >= start
+      && witaDate(new Date(end)) === wo.date.slice(0, 10);
+    events.push({
+      time: Math.max(start, last?.time || start, updatedOnTransactionDay ? end : start),
+      stage: finalStage,
+    });
     approximate = true;
   } else if (finalStage === 'working' && last && !activeStage(last.stage)) {
     const restart = timestamp(wo.workStartedAt);

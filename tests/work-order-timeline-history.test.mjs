@@ -74,8 +74,9 @@ test('midnight transitions belong to the next day, and future dates do not show 
 
 test('legacy completed rows with missing final audit do not remain active forever', () => {
   const order = wo({ status: 'Selesai', updatedAt: time(2, '11:00'), statusLog: [log(1,'09:00','Register','Proses')] });
-  assert.equal(view(order, 2).stage, 'done');
-  assert.equal(view(order, 2).approximate, true);
+  assert.equal(view(order, 1).stage, 'done');
+  assert.equal(view(order, 1).approximate, true);
+  assert.equal(view(order, 2).visible, false);
   assert.equal(view(order, 3).visible, false);
 });
 
