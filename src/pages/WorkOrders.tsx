@@ -37,6 +37,8 @@ const DEFAULT_WORK_ORDER_DOCUMENT_TAB: AccurateDocumentTab = 'details';
 // Kontrak UI WO ini disengaja: tampilan WO baru, buka, dan edit memakai satu
 // kanvas baku. Ubah versinya hanya jika perubahan standar WO memang disetujui.
 const WORK_ORDER_UI_STANDARD_VERSION = 'wo-canonical-2026-08-29';
+const DELETABLE_WORK_ORDER_STATUSES = ['Register', 'Selesai', 'Closed'] as const;
+const isDeletableWorkOrderStatus = (status: string) => (DELETABLE_WORK_ORDER_STATUSES as readonly string[]).includes(status);
 const WO_ENTRY_GUIDANCE_ISSUES = ['Pelanggan harus diisi', 'Kendaraan harus diisi', 'Keluhan pelanggan harus diisi'] as const;
 const DEFAULT_PENDING_REASONS = [
   { id: 'think', label: 'Pikir-pikir', isActive: true },
@@ -1195,7 +1197,7 @@ export default function WorkOrders() {
     && editingWO
     && canEditWorkOrderInActiveBranch(editingWO)
     && !editingWO.invoiceId
-    && ['Register', 'Selesai'].includes(editingWO.status)
+    && isDeletableWorkOrderStatus(editingWO.status)
   );
   const serviceEditorReadOnly = Boolean(
     workOrderViewOnly
@@ -1928,7 +1930,7 @@ export default function WorkOrders() {
       });
       return;
     }
-    if (!['Register', 'Selesai'].includes(wo.status)) {
+    if (!isDeletableWorkOrderStatus(wo.status)) {
       setDeleteNotice({
         title: 'WO Tidak Dapat Dihapus',
         message: `WO ${wo.woNumber} berstatus ${wo.continuedToWoId ? 'Dilanjutkan' : statusLabel(wo.status)} dan tidak dapat dihapus permanen. Gunakan pembatalan atau arsip agar histori tetap tersimpan.`,
@@ -3240,7 +3242,7 @@ export default function WorkOrders() {
                             <Edit className="h-4 w-4" />
                           </button>
                         )}
-                        {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                        {canShowAdminRowActions && hasPermission('wo:delete') && isDeletableWorkOrderStatus(wo.status) && !wo.invoiceId && (
                           <button onClick={() => void handleDelete(wo)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -3337,7 +3339,7 @@ export default function WorkOrders() {
                 {canShowAdminRowActions && canEditWorkOrderInActiveBranch(wo) && !wo.invoiceId && (
                   <button type="button" onClick={() => handleOpenModal(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-white text-blue-600" aria-label={`Edit ${wo.woNumber}`}><Edit className="h-4 w-4" /></button>
                 )}
-                {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                {canShowAdminRowActions && hasPermission('wo:delete') && isDeletableWorkOrderStatus(wo.status) && !wo.invoiceId && (
                   <button type="button" onClick={() => void handleDelete(wo)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600" aria-label={`Hapus ${wo.woNumber}`}><Trash2 className="h-4 w-4" /></button>
                 )}
                 </div>
@@ -3498,7 +3500,7 @@ export default function WorkOrders() {
                         <Edit className="w-4 h-4" />
                       </button>
                     )}
-                    {canShowAdminRowActions && hasPermission('wo:delete') && ['Register', 'Selesai'].includes(wo.status) && !wo.invoiceId && (
+                    {canShowAdminRowActions && hasPermission('wo:delete') && isDeletableWorkOrderStatus(wo.status) && !wo.invoiceId && (
                       <button
                         onClick={() => void handleDelete(wo)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
@@ -3970,7 +3972,7 @@ export default function WorkOrders() {
                     ? 'Register WO terlebih dahulu'
                     : editingWO.invoiceId
                       ? 'Hapus faktur terlebih dahulu'
-                      : !['Register', 'Selesai'].includes(editingWO.status)
+                      : !isDeletableWorkOrderStatus(editingWO.status)
                         ? `WO berstatus ${editingWO.continuedToWoId ? 'Dilanjutkan' : statusLabel(editingWO.status)} tidak dapat dihapus`
                         : 'Hapus Work Order',
                 } : undefined}
