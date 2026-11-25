@@ -77,7 +77,11 @@ export function workOrderDay(wo: WorkOrder, selectedDate: string, now: Date, sch
     if (Number.isFinite(workStart) && workStart >= start) events.push({ time: workStart, stage: 'working' });
     if (finalStage === 'done' || finalStage === 'lost') {
       const end = timestamp(wo.updatedAt);
-      events.push({ time: Number.isFinite(end) && end >= start ? end : start, stage: finalStage });
+      const transactionDay = wo.date.slice(0, 10);
+      const updatedOnTransactionDay = Number.isFinite(end)
+        && end >= start
+        && witaDate(new Date(end)) === transactionDay;
+      events.push({ time: updatedOnTransactionDay ? end : start, stage: finalStage });
     } else if (!events.length && finalStage !== 'diagnosis') events.push({ time: start, stage: finalStage });
   }
   const last = events[events.length - 1];

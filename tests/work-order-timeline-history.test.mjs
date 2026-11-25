@@ -79,6 +79,12 @@ test('legacy completed rows with missing final audit do not remain active foreve
   assert.equal(view(order, 3).visible, false);
 });
 
+test('legacy completed rows updated by later administration stay on their transaction day', () => {
+  const order = wo({ status: 'Selesai', updatedAt: time(9, '11:00'), statusLog: [] });
+  assert.equal(view(order, 1).stage, 'done');
+  assert.equal(view(order, 9).visible, false);
+});
+
 test('operating time supports closed days, holidays, and breaks without depending on computer timezone', () => {
   const start = new Date(time(1,'08:00')).getTime(), end = new Date(time(3,'17:30')).getTime();
   assert.equal(operatingMilliseconds(start, end, WORKSHOP_HOURS) / HOUR, 28.5);
