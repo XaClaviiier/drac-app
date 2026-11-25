@@ -58,11 +58,18 @@ export function workOrderDay(wo: WorkOrder, selectedDate: string, now: Date, sch
   const dayEnd = dayStart + DAY;
   const cutoff = Math.min(dayEnd, now.getTime());
   const start = at(wo.date.slice(0, 10), wo.transactionTime || '08:00').getTime();
+  const transactionDay = wo.date.slice(0, 10);
+  const createdAt = timestamp(wo.createdAt);
+  // Input historis dibuat hari ini tetap menjadi kunjungan pada tanggal transaksi.
+  // Audit Register/Proses/Selesai yang tercatat saat input tidak boleh membuatnya
+  // muncul di papan hari ini.
+  const isBackdatedEntry = Number.isFinite(createdAt) && witaDate(new Date(createdAt)) !== transactionDay;
   const events: Array<{ time: number; stage: HistoryStage }> = [];
   let approximate = false;
   for (const log of wo.statusLog || []) {
     const time = timestamp(log.at);
     if (!Number.isFinite(time) || time < start) continue;
+    if (isBackdatedEntry && witaDate(new Date(time)) !== transactionDay) continue;
     const marker = log.reason?.match(/\[WO_TIMELINE_STAGE:(diagnosis|working|parts|approval)\]/i)?.[1]?.toLowerCase() as HistoryStage | undefined;
     const next = marker || (log.from !== log.to ? coreStage(log.to) : null);
     if (next) events.push({ time, stage: next });
@@ -77,7 +84,6 @@ export function workOrderDay(wo: WorkOrder, selectedDate: string, now: Date, sch
     if (Number.isFinite(workStart) && workStart >= start) events.push({ time: workStart, stage: 'working' });
     if (finalStage === 'done' || finalStage === 'lost') {
       const end = timestamp(wo.updatedAt);
-      const transactionDay = wo.date.slice(0, 10);
       const updatedOnTransactionDay = Number.isFinite(end)
         && end >= start
         && witaDate(new Date(end)) === transactionDay;

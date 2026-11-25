@@ -86,6 +86,18 @@ test('legacy completed rows updated by later administration stay on their transa
   assert.equal(view(order, 9).visible, false);
 });
 
+test('backdated WO entered today does not appear on the entry day', () => {
+  const order = wo({
+    date: '2026-11-01',
+    createdAt: time(9, '10:00'),
+    updatedAt: time(9, '10:05'),
+    status: 'Selesai',
+    statusLog: [log(9, '10:00', 'Register', 'Register'), log(9, '10:04', 'Register', 'Selesai')],
+  });
+  assert.equal(view(order, 9).visible, false);
+  assert.equal(view(order, 1).stage, 'done');
+});
+
 test('operating time supports closed days, holidays, and breaks without depending on computer timezone', () => {
   const start = new Date(time(1,'08:00')).getTime(), end = new Date(time(3,'17:30')).getTime();
   assert.equal(operatingMilliseconds(start, end, WORKSHOP_HOURS) / HOUR, 28.5);
