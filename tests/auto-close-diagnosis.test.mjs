@@ -13,6 +13,7 @@ test('expired Register diagnoses auto-close as audited Lost Sales with a require
   assert.match(helper, /invoice_id IS NULL OR invoice_id=''/);
   assert.match(helper, /invoice_number IS NULL OR invoice_number=''/);
   assert.match(helper, /date<=\?/);
+  assert.match(helper, /created_at IS NULL|DATE\(created_at\)/);
   assert.match(helper, /17:30:00/);
   assert.match(helper, /status='Closed',cancel_reason=\?,status_log=\?/);
   assert.match(helper, /Diagnosa tidak dikerjakan sampai akhir hari/);

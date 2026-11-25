@@ -1964,6 +1964,8 @@ export default function WorkOrders() {
     try {
       await deleteWorkOrder(wo.id);
       setDeleteDialogWO(null);
+      closeDetailTab(wo.id);
+      if (editingWO?.id === wo.id) handleCloseModal();
       setSuccessMsg(`${wo.woNumber} berhasil dihapus.`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {

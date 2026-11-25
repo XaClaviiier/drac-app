@@ -10,8 +10,14 @@ function autoCloseExpiredDiagnoses(PDO $pdo): int {
     $actorName = 'System · Auto Lost Sales';
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare("SELECT id,status,date,status_log FROM work_orders WHERE status='Register' AND (invoice_id IS NULL OR invoice_id='') AND (invoice_number IS NULL OR invoice_number='') AND (continued_to_wo_id IS NULL OR continued_to_wo_id='') AND date<=? FOR UPDATE");
-        $stmt->execute([$expiredBefore]);
+        // WO yang baru dibuat hari ini boleh memakai tanggal transaksi mundur.
+        // Jangan langsung mengubahnya menjadi Lost Sales hanya karena tanggal
+        // dokumennya historis; tunggu sampai WO tersebut melewati hari inputnya.
+        $createdBeforeTodaySql = $cutoff >= '17:30:00'
+            ? '(date=? OR created_at IS NULL OR DATE(created_at)<?)'
+            : '(created_at IS NULL OR DATE(created_at)<?)';
+        $stmt = $pdo->prepare("SELECT id,status,date,status_log FROM work_orders WHERE status='Register' AND (invoice_id IS NULL OR invoice_id='') AND (invoice_number IS NULL OR invoice_number='') AND (continued_to_wo_id IS NULL OR continued_to_wo_id='') AND date<=? AND {$createdBeforeTodaySql} FOR UPDATE");
+        $stmt->execute($cutoff >= '17:30:00' ? [$expiredBefore, $today, $today] : [$expiredBefore, $today]);
         $update = $pdo->prepare("UPDATE work_orders SET status='Closed',cancel_reason=?,status_log=?,updated_at=CURRENT_TIMESTAMP(6) WHERE id=? AND status='Register'");
         $count = 0;
         foreach ($stmt->fetchAll() as $row) {
