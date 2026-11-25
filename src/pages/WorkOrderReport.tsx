@@ -74,7 +74,11 @@ export default function WorkOrderReport() {
       active: rows.filter(wo => ['Register', 'Proses'].includes(wo.status)).length,
       completed: rows.filter(wo => wo.status === 'Selesai').length,
       cancelled: rows.filter(wo => wo.status === 'Closed').length,
-      recovered: rows.filter(wo => (wo.statusLog || []).some(log => log.from === 'Closed' && log.to === 'Proses')).length,
+      recovered: rows.filter(wo => {
+        const logs = wo.statusLog || [];
+        return logs.some(log => log.from === 'Closed' && log.to === 'Proses')
+          || (logs.some(log => log.lostSalesReturnIssue === 'same') && logs.some(log => log.to === 'Proses'));
+      }).length,
     };
   }, [rows]);
 

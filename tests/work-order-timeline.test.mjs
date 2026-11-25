@@ -256,10 +256,11 @@ test('item pekerjaan membentang di bawah timeline pada desktop dan mobile', () =
   assert.match(page, /wo\.services\.map\(service => service\.name\.trim\(\)\)/);
 });
 
-test('WO yang sudah dilanjutkan tidak masuk lagi ke papan Lost Sales', () => {
+test('papan memakai riwayat harian WO Lost Sales yang memiliki kunjungan baru', () => {
   const page = source('src/pages/WorkOrderTimeline.tsx');
 
-  assert.match(page, /\.filter\(wo => !wo\.continuedToWoId &&/);
+  assert.match(page, /\.filter\(wo => !isTransferredWorkOrder\(wo\) &&/);
+  assert.match(source('src/lib/workOrderStatus.ts'), /Boolean\(wo\.continuedToWoId\) && !isLostSalesStatus\(wo\.status\)/);
   assert.match(page, /history: workOrderDay\(wo, date, clock\)/);
   assert.match(page, /\.filter\(\(\{ history \}\) => history\.visible\)/);
 });

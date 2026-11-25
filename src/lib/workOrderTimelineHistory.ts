@@ -66,38 +66,51 @@ export function workOrderDay(wo: WorkOrder, selectedDate: string, now: Date, sch
   const isBackdatedEntry = Number.isFinite(createdAt) && witaDate(new Date(createdAt)) !== transactionDay;
   const events: Array<{ time: number; stage: HistoryStage }> = [];
   let approximate = false;
-  for (const log of wo.statusLog || []) {
-    const time = timestamp(log.at);
-    if (!Number.isFinite(time) || time < start) continue;
-    if (isBackdatedEntry && witaDate(new Date(time)) !== transactionDay) continue;
+  let originalEndUnknown = false;
+  let resumedVisit = false;
+  const logs = (wo.statusLog || []).map(log => ({ log, time: timestamp(log.at) }))
+    .filter(({ time }) => Number.isFinite(time) && time >= start)
+    .sort((a, b) => a.time - b.time);
+  for (const { log, time } of logs) {
     const marker = log.reason?.match(/\[WO_TIMELINE_STAGE:(diagnosis|working|parts|approval)\]/i)?.[1]?.toLowerCase() as HistoryStage | undefined;
     const next = marker || (log.from !== log.to ? coreStage(log.to) : null);
-    if (next) events.push({ time, stage: next });
+    if (!next) continue;
+    if (isBackdatedEntry && witaDate(new Date(time)) !== transactionDay && !resumedVisit) {
+      // Older returns reopened the same WO. An explicit reopening starts a real visit.
+      const previous = coreStage(log.from);
+      if (log.from === log.to || !previous || activeStage(previous) || !activeStage(next)) continue;
+      const last = events[events.length - 1];
+      if (last?.stage !== previous) {
+        events.push({ time: last?.time ?? start, stage: previous });
+        originalEndUnknown = true;
+      }
+      resumedVisit = true;
+    }
+    events.push({ time, stage: next });
   }
-  events.sort((a, b) => a.time - b.time);
   // Older records may have no status audit. Use the recorded work start/last update,
   // never project today's final status backwards over an audited earlier visit.
   const finalStage = coreStage(wo.status) || 'diagnosis';
+  const updated = finalStage === 'lost' && wo.continuedToWoId ? NaN : timestamp(wo.updatedAt);
+  const updatedOnTransactionDay = Number.isFinite(updated) && updated >= start && witaDate(new Date(updated)) === transactionDay;
   if (!events.length) {
     approximate = true;
     const workStart = timestamp(wo.workStartedAt);
-    if (Number.isFinite(workStart) && workStart >= start) events.push({ time: workStart, stage: 'working' });
+    const workStartedOnTransactionDay = Number.isFinite(workStart)
+      && witaDate(new Date(workStart)) === transactionDay;
+    if (Number.isFinite(workStart) && workStart >= start && (!isBackdatedEntry || workStartedOnTransactionDay)) {
+      events.push({ time: workStart, stage: 'working' });
+    }
     if (finalStage === 'done' || finalStage === 'lost') {
-      const end = timestamp(wo.updatedAt);
-      const updatedOnTransactionDay = Number.isFinite(end)
-        && end >= start
-        && witaDate(new Date(end)) === transactionDay;
-      events.push({ time: updatedOnTransactionDay ? end : start, stage: finalStage });
+      const lastKnownTime = events[events.length - 1]?.time ?? start;
+      if (!updatedOnTransactionDay) originalEndUnknown = true;
+      events.push({ time: Math.max(lastKnownTime, updatedOnTransactionDay ? updated : start), stage: finalStage });
     } else if (!events.length && finalStage !== 'diagnosis') events.push({ time: start, stage: finalStage });
   }
   const last = events[events.length - 1];
   if ((finalStage === 'done' || finalStage === 'lost') && last?.stage !== finalStage) {
-    const end = timestamp(wo.updatedAt);
-    const updatedOnTransactionDay = Number.isFinite(end)
-      && end >= start
-      && witaDate(new Date(end)) === wo.date.slice(0, 10);
     events.push({
-      time: Math.max(start, last?.time || start, updatedOnTransactionDay ? end : start),
+      time: Math.max(last?.time ?? start, updatedOnTransactionDay ? updated : start),
       stage: finalStage,
     });
     approximate = true;
@@ -106,7 +119,8 @@ export function workOrderDay(wo: WorkOrder, selectedDate: string, now: Date, sch
     if (Number.isFinite(restart) && restart > last.time) { events.push({ time: restart, stage: 'working' }); approximate = true; }
   }
   const continued = timestamp(wo.continuedAt);
-  if (wo.continuedToWoId && Number.isFinite(continued)) events.push({ time: continued, stage: 'done' });
+  const transferred = wo.continuedToWoId && finalStage !== 'lost';
+  if (transferred && Number.isFinite(continued)) events.push({ time: continued, stage: 'done' });
   events.sort((a, b) => a.time - b.time);
   let stage: HistoryStage = 'diagnosis';
   let cursor = start;
@@ -159,8 +173,10 @@ export function workOrderDay(wo: WorkOrder, selectedDate: string, now: Date, sch
     visitEnd = event.time;
   }
   append(cutoff, true);
-  if (wo.continuedToWoId && !Number.isFinite(continued)) visible = false;
+  if (transferred && !Number.isFinite(continued)) visible = false;
   if (cutoff < start || selectedDate > witaDate(now)) visible = false;
   const visitDay = Math.max(1, Math.round((at(witaDate(new Date(Math.max(visitStart, visitEnd - 1)))).getTime() - at(witaDate(new Date(visitStart))).getTime()) / DAY) + 1);
-  return { visible, stage, segments, visitDay, visitStart: new Date(visitStart), workingMs, overtimeMs, overtimeActive: overtime.active, presenceMs, ageDays: Math.max(0, Math.floor((dayStart - at(wo.date.slice(0, 10)).getTime()) / DAY)), approximate };
+  approximate ||= originalEndUnknown && visitStart === start;
+  const durationUnknown = visitStart === start && approximate && (isBackdatedEntry || originalEndUnknown) && workingMs === 0 && overtimeMs === 0;
+  return { visible, stage, segments, visitDay, visitStart: new Date(visitStart), workingMs, overtimeMs, overtimeActive: overtime.active, presenceMs, ageDays: Math.max(0, Math.floor((dayStart - at(wo.date.slice(0, 10)).getTime()) / DAY)), approximate, durationUnknown };
 }

@@ -119,6 +119,7 @@ export interface WOStatusLog {
   byUserId: string;
   byUserName: string;
   reason?: string;         // wajib untuk Closed atau perubahan mundur
+  lostSalesReturnIssue?: 'same' | 'different';
 }
 
 export interface WorkOrder {

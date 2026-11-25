@@ -91,11 +91,51 @@ test('backdated WO entered today does not appear on the entry day', () => {
     date: '2026-11-01',
     createdAt: time(9, '10:00'),
     updatedAt: time(9, '10:05'),
+    workStartedAt: time(9, '10:02'),
     status: 'Selesai',
     statusLog: [log(9, '10:00', 'Register', 'Register'), log(9, '10:04', 'Register', 'Selesai')],
   });
   assert.equal(view(order, 9).visible, false);
   assert.equal(view(order, 1).stage, 'done');
+  assert.equal(view(order, 1).durationUnknown, true);
+});
+
+test('linked returns keep the original Lost Sales on its visit and start the new WO on day one', () => {
+  const original = wo({
+    status: 'Closed', continuedToWoId: 'W2', continuedAt: time(5, '10:00'),
+    statusLog: [log(1, '09:00', 'Register', 'Closed')],
+  });
+  const returned = wo({
+    id: 'W2', date: '2026-11-05', transactionTime: '10:00', continuedFromWoId: 'W1',
+    createdAt: time(5, '10:00'), statusLog: [log(5, '10:00', 'Register', 'Proses')],
+  });
+  const lateEntry = { ...original, createdAt: time(4, '08:00'), statusLog: [log(4, '08:05', 'Register', 'Closed')] };
+  const missingClosureLog = { ...original, workStartedAt: time(1, '08:30'), updatedAt: original.continuedAt, statusLog: [] };
+  for (const source of [original, lateEntry, missingClosureLog]) {
+    assert.equal(view(source, 1).visible, true);
+    assert.equal(view(source, 1).stage, 'lost');
+    assert.equal(view(returned, 1).visible, false);
+    for (const day of [2, 3, 4, 5, 6]) assert.equal(view(source, day).visible, false);
+  }
+  assert.equal(view(returned, 5).visible, true);
+  assert.equal(view(returned, 5).stage, 'working');
+  assert.equal(view(returned, 5).visitDay, 1);
+  assert.equal(view(returned, 6).visitDay, 2);
+});
+
+test('backdated legacy WO reopened under its original number retains both visits', () => {
+  const order = wo({
+    status: 'Selesai', createdAt: time(4, '11:00'),
+    statusLog: [log(4, '11:01', 'Register', 'Closed'), log(5, '09:00', 'Closed', 'Proses'), log(6, '10:00', 'Proses', 'Selesai')],
+  });
+  assert.equal(view(order, 1).stage, 'lost');
+  assert.equal(view(order, 4).visible, false);
+  assert.equal(view(order, 5).visible, true);
+  assert.equal(view(order, 5).stage, 'working');
+  assert.equal(view(order, 5).visitDay, 1);
+  assert.equal(view(order, 5).approximate, false);
+  assert.equal(view(order, 6).stage, 'done');
+  assert.equal(view(order, 7).visible, false);
 });
 
 test('operating time supports closed days, holidays, and breaks without depending on computer timezone', () => {

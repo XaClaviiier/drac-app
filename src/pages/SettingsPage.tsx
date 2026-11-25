@@ -686,7 +686,7 @@ function SystemGuide() {
     ['Cabang transaksi', 'Saat posisi Semua Cabang, pembuatan transaksi diblokir sampai cabang dipilih secara jelas.'],
     ['Persetujuan pelanggan', 'Setuju hanya dapat dipilih bila ada layanan dan total estimasi lebih dari Rp0. Daftar serta harga yang disetujui disimpan sebagai histori audit.'],
     ['Perubahan pekerjaan', 'Tambahan pekerjaan setelah persetujuan diperbolehkan. Estimasi awal tetap tersimpan; rincian invoice menjadi pekerjaan/barang final.'],
-    ['Lost Sales', 'Gunakan bila pelanggan tidak melanjutkan. Masalah yang sama dapat dilanjutkan dari WO lama; masalah berbeda harus dibuatkan WO baru.'],
+    ['Lost Sales', 'Jika pelanggan kembali, gunakan Tindak Lanjut untuk membuat WO baru yang terhubung ke WO asal. Untuk keluhan yang sama, diagnosa dan estimasi sebelumnya dapat digunakan kembali.'],
     ['Stok', 'WO hanya mencatat estimasi dan tidak memotong stok. Stok baru berkurang ketika invoice final dibuat.'],
     ['Status WO', 'Status operasional hanya Register, Dikerjakan, Selesai, dan Lost Sales. Invoice serta pembayaran adalah indikator administrasi terpisah, bukan status WO.'],
     ['Invoice & pembayaran', 'Invoice dari WO mengunci pelanggan dan kendaraan. Menghapus pembayaran membuat invoice terutang lagi; menghapus invoice tetap menyisakan WO pada status Selesai.'],

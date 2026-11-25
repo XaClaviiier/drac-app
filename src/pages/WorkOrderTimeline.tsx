@@ -9,7 +9,7 @@ import { useApp } from '../context/AppContext';
 import type { SalesInvoice, WorkOrder, WorkOrderTimelineStage } from '../types';
 import { localDateKey } from '../lib/date';
 import IndonesianDateInput from '../components/IndonesianDateInput';
-import { workOrderStatusLabel } from '../lib/workOrderStatus';
+import { isTransferredWorkOrder, workOrderStatusLabel } from '../lib/workOrderStatus';
 import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import {
   timelineFinancialSummary, type TimelineStageKey,
@@ -93,7 +93,7 @@ export default function WorkOrderTimeline() {
     data.invoices.filter(invoice => invoice.woId).map(invoice => [invoice.woId!, invoice]),
   ), [data.invoices]);
   const dayRows = useMemo<TimelineRow[]>(() => data.workOrders
-    .filter(wo => !wo.continuedToWoId && (currentBranchId === 'ALL' || wo.branchId === currentBranchId))
+    .filter(wo => !isTransferredWorkOrder(wo) && (currentBranchId === 'ALL' || wo.branchId === currentBranchId))
     .map(wo => ({ wo, history: workOrderDay(wo, date, clock) }))
     .filter(({ history }) => history.visible)
     .map<TimelineRow>(({ wo, history }) => ({ wo, history, invoice: invoicesByWo.get(wo.id), stage: history.stage, segments: history.segments }))
@@ -304,10 +304,10 @@ export default function WorkOrderTimeline() {
     .join(', ') || workDescription(wo);
 
   const renderDuration = (row: TimelineRow) => <p className="mt-1 text-[10px] leading-4 text-slate-600" title={`WO dibuat ${row.wo.date} · umur WO ${row.history.ageDays} hari. Jam normal setiap hari 08.00–17.30 WITA. Durasi berstatus Dikerjakan, bukan jam kerja teknisi.`}>
-    Kunjungan hari ke-{row.history.visitDay} · Dikerjakan {durationLabel(row.history.workingMs)}
+    Kunjungan hari ke-{row.history.visitDay} · {row.history.durationUnknown ? 'Durasi tidak tercatat' : `Dikerjakan ${durationLabel(row.history.workingMs)}`}
     {row.history.overtimeMs > 0 && <> · Over Time {durationLabel(row.history.overtimeMs)}</>}
     {row.history.overtimeActive && <strong className="ml-1 text-orange-700"> · Over Time aktif</strong>}
-    {row.history.approximate && <span className="ml-1 text-gray-400">(perkiraan)</span>}
+    {row.history.approximate && !row.history.durationUnknown && <span className="ml-1 text-gray-400">(perkiraan)</span>}
   </p>;
   const toggleOverTime = async () => {
     if (!selected || actionBusy) return;

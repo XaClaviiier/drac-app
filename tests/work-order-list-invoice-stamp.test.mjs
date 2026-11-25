@@ -17,6 +17,9 @@ const stampModule = { exports: {} };
 const stampCode = buildSync({ entryPoints: [fileURLToPath(stampPath)], bundle: true, write: false, platform: 'node', format: 'cjs', packages: 'external', jsx: 'automatic' }).outputFiles[0].text;
 new Function('require', 'module', 'exports', stampCode)(require, stampModule, stampModule.exports);
 const WorkOrderPaidStamp = stampModule.exports.default;
+const statusSource = readFileSync(new URL('../src/lib/workOrderStatus.ts', import.meta.url), 'utf8');
+const statusCode = transformSync(statusSource, { loader: 'ts', format: 'esm' }).code;
+const { isTransferredWorkOrder, workOrderDocumentStatus } = await import(`data:text/javascript;base64,${Buffer.from(statusCode).toString('base64')}`);
 const paidInvoice = { id: 'INV-1', invoiceNumber: 'C262027', woId: 'WO-1', branchId: 'BR-1', total: 100, payment: 100, status: 'Lunas' };
 const mobileList = page.slice(page.indexOf('{/* Ringkasan WO mobile:'), page.indexOf('{/* Layout kartu lama'));
 const mobileHeader = mobileList.slice(mobileList.indexOf('<div className="flex items-start justify-between gap-3">'), mobileList.indexOf('<WorkOrderCustomerVehicleIdentity')).trim();
@@ -28,7 +31,8 @@ function renderNumberCell(workOrder = wo, invoices = [], markup = numberCell) {
     return ${markup};
   }`, { loader: 'tsx', jsx: 'automatic', format: 'cjs' }).code;
   const module = { exports: {} };
-  new Function('require', 'module', 'exports', 'WorkOrderPaidStamp', code)(require, module, module.exports, WorkOrderPaidStamp);
+  new Function('require', 'module', 'exports', 'WorkOrderPaidStamp', 'isTransferredWorkOrder', 'workOrderDocumentStatus', code)(
+    require, module, module.exports, WorkOrderPaidStamp, isTransferredWorkOrder, workOrderDocumentStatus);
   return renderToStaticMarkup(React.createElement(module.exports.default, { wo: workOrder, data: { ...data, invoices } }));
 }
 
@@ -58,4 +62,11 @@ test('mobile adds paid stamp below status without duplicating its existing invoi
   assert.doesNotMatch(renderNumberCell(wo, [], mobileHeader), />LUNAS</);
   assert.equal(mobileList.match(/Faktur /g)?.length, 1);
   assert.match(mobileList, /\{branchName\}<\/span>\s*\{wo.invoiceId && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-\[10px\] font-bold text-emerald-700">Faktur \{wo.invoiceNumber \|\| 'tersedia'\}/);
+});
+
+test('a Lost Sales source keeps its status badge after a linked return on both layouts', () => {
+  for (const markup of [numberCell, mobileHeader]) {
+    assert.match(renderNumberCell({ ...wo, status: 'Closed', continuedToWoId: 'WO-2' }, [], markup), />Lost Sales</);
+    assert.match(renderNumberCell({ ...wo, status: 'Register', continuedToWoId: 'WO-2' }, [], markup), />Dilanjutkan</);
+  }
 });

@@ -75,8 +75,8 @@ export const helpArticles: HelpArticle[] = [
     route: "/workorders",
     updatedAt: "20 Agustus 2026",
     sections: [
-      { title: "Cara pakai", steps: ["Buka WO yang tidak dilanjutkan.", "Pilih Batalkan atau Lost Sales.", "Pilih alasan dan isi catatan jika diwajibkan.", "Untuk masalah yang sama di kemudian hari, gunakan tindakan Lanjutkan dari WO lama."] },
-      { title: "Aturan", rules: ["WO yang sudah mempunyai faktur tidak dapat dijadikan Lost Sales sebelum faktur terkait dihapus.", "Masalah berbeda dibuat sebagai WO baru.", "Histori Lost Sales dipertahankan untuk analisis konversi penjualan."] },
+      { title: "Cara pakai", steps: ["Buka WO yang tidak dilanjutkan.", "Pilih Batalkan atau Lost Sales.", "Pilih alasan dan isi catatan jika diwajibkan.", "Saat pelanggan kembali, pilih Tindak Lanjut pada WO asal untuk membuat WO baru. Nomor kedua WO dapat dibuka dari Timeline WO."] },
+      { title: "Aturan", rules: ["WO yang sudah mempunyai faktur tidak dapat dijadikan Lost Sales sebelum faktur terkait dihapus.", "Untuk keluhan yang sama, WO baru membawa diagnosa dan estimasi sebelumnya. Untuk keluhan berbeda, masukkan keluhan baru.", "Kunjungan awal tetap tercatat sebagai Lost Sales."] },
     ],
   },
   {

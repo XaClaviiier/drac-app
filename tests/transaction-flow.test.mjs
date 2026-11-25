@@ -850,7 +850,7 @@ test('form WO memakai header Accurate, keluhan multi pilih, dan tab dokumen samp
   assert.match(source('src/components/CustomerPicker.tsx'), /placeholder="Ketik nama, HP, atau nopol\.\.\."/);
   assert.match(source('src/components/CustomerPicker.tsx'), /onVehicleSelect\?\.\(vehicle\.id\)/);
   assert.match(source('src/components/CustomerPicker.tsx'), /getSelectedCustomerLabel/);
-  assert.match(source('src/components/CustomerPicker.tsx'), /customer\.phone\.trim\(\)/);
+  assert.match(source('src/components/CustomerPicker.tsx'), /customer\.phone\?\.trim\(\)/);
   assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /border-blue-400 bg-blue-50 font-medium/);
   assert.match(source('src/components/CustomerPicker.tsx'), /app-locked-field cursor-default border-gray-400 bg-white font-normal text-gray-900/);
   assert.doesNotMatch(source('src/components/CustomerPicker.tsx'), /border-blue-400 bg-blue-50 font-normal text-blue-900/);
@@ -1158,7 +1158,7 @@ test('lonceng, filter, dan kolom Perhatian memakai aturan tindak lanjut WO yang 
   assert.match(workOrders, /const WorkOrderEstimateAmount/);
   assert.match(workOrders, /line-through decoration-gray-400 decoration-1/);
   assert.match(workOrders, />Estimasi Lost Sales</);
-  assert.match(workOrders, /<WorkOrderEstimateAmount amount=\{wo\.total\} isLostSales=\{!wo\.continuedToWoId && statusLabel\(wo\.status\) === 'Lost Sales'\}/);
+  assert.match(workOrders, /<WorkOrderEstimateAmount amount=\{wo\.total\} isLostSales=\{isLostSalesStatus\(wo\.status\)\}/);
   assert.doesNotMatch(workOrders, /listMode === 'attention'/);
   assert.match(help, /Register hanya antrean sementara pada hari transaksi/);
 });

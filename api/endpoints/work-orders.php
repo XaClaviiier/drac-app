@@ -201,6 +201,7 @@ $resolveWorkOrderContinuations = static function (
     return [
         'fromId' => $fromWoId,
         'fromNumber' => isset($loaded['from']) ? (string)$loaded['from']['wo_number'] : null,
+        'fromStatus' => isset($loaded['from']) ? $normalizeSourceStatus($loaded['from']['status']) : null,
         'fromBranchName' => isset($loaded['from']) ? (string)$loaded['from']['branch_name'] : null,
         'toId' => $toWoId,
         'toNumber' => isset($loaded['to']) ? (string)$loaded['to']['wo_number'] : null,
@@ -575,6 +576,13 @@ switch ($method) {
                 'byUserName' => $actor['name'] ?? 'System',
                 'reason' => '[WO_TIMELINE_STAGE:diagnosis] WO diregister',
             ]];
+            $returnIssue = $d['lostSalesReturnIssue'] ?? null;
+            if ($returnIssue !== null) {
+                if (!in_array($returnIssue, ['same', 'different'], true) || $continuation['fromStatus'] !== 'Closed') {
+                    throw new DomainException('Tindak lanjut ini memerlukan WO asal berstatus Lost Sales.');
+                }
+                $statusLog[0]['lostSalesReturnIssue'] = $returnIssue;
+            }
             if ($isInitialWorking) {
                 $statusLog[] = [
                     'from' => 'Register',
@@ -657,6 +665,7 @@ switch ($method) {
                 'id' => $woId,
                 'woNumber' => $woNumber,
                 'status' => $initialStatus,
+                'statusLog' => $statusLog,
                 'estimatedDurationMinutes' => $estimatedDurationMinutes,
                 'workStartedAt' => formatWitaTimestamp($workStartedAt),
                 'estimatedCompletionAt' => formatWitaTimestamp($estimatedCompletionAt),
@@ -848,9 +857,12 @@ switch ($method) {
                 'Register' => ['Register', 'Proses', 'Closed'],
                 'Proses' => ['Proses', 'Selesai', 'Closed'],
                 'Selesai' => ['Selesai', 'Proses', 'Closed'],
-                'Closed' => ['Closed', 'Proses'],
+                'Closed' => ['Closed'],
             ];
             if (!isset($allowedTransitions[$currentStatus]) || !in_array($nextStatus, $allowedTransitions[$currentStatus], true)) {
+                if ($currentStatus === 'Closed' && $nextStatus === 'Proses') {
+                    throw new InvalidArgumentException('Gunakan Tindak Lanjut pada WO Lost Sales untuk membuat WO kunjungan baru.');
+                }
                 throw new InvalidArgumentException("Perubahan status {$currentStatus} ke {$nextStatus} tidak diizinkan.");
             }
             $hasPositiveEstimate = !empty($normalizedServices['services']) && validBillingTotal($normalizedServices['total'], $billingTreatment);
@@ -977,7 +989,7 @@ switch ($method) {
                     'reason' => $statusReason ?: null,
                 ];
             }
-            $isApproval = $nextStatus === 'Proses' && in_array($currentStatus, ['Register', 'Closed'], true);
+            $isApproval = $nextStatus === 'Proses' && $currentStatus === 'Register';
             if ($billingTreatment !== ($currentWorkOrder['billing_treatment'] ?? 'normal')) {
                 $statusLog[] = [
                     'from' => $currentStatus, 'to' => $nextStatus, 'at' => date('c'),

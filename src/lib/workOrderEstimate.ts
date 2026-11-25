@@ -1,4 +1,8 @@
-import type { WorkOrder, WOStatus } from '../types';
+import type { Item, WorkOrder, WorkOrderService, WOStatus } from '../types';
+
+export function canReuseEstimateService(service: WorkOrderService, items: Item[]) {
+  return !service.itemId || items.some(item => item.id === service.itemId && item.isActive);
+}
 
 export function applyDemoWorkOrderEstimateClock(
   workOrder: WorkOrder,

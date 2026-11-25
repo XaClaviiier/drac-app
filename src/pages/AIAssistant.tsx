@@ -703,7 +703,7 @@ export default function AIAssistant() {
       lines.push(
         '',
         `ℹ️ WO terakhir **${latestClosedWO.woNumber}** berstatus **Lost Sales**.`,
-        'Masalah yang sama dapat dilanjutkan dari WO tersebut; masalah berbeda dibuat sebagai WO baru.',
+        'Pilih Tindak Lanjut pada WO asal untuk mencatat kunjungan baru. Jika keluhannya sama, diagnosa dan estimasi sebelumnya bisa dipakai kembali.',
       );
     }
 

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const source = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -24,4 +26,14 @@ test('expired Register diagnoses auto-close as audited Lost Sales with a require
   assert.match(workOrders, /autoCloseExpiredDiagnoses\(\$pdo\)/);
   assert.match(helpArticles, /otomatis ditutup menjadi Lost Sales setelah pukul 17\.30/);
   assert.doesNotMatch(helpArticles, /Sistem tidak mengubah Register menjadi Lost Sales secara otomatis/);
+});
+
+test('kunjungan datang setelah tutup baru ditutup pada akhir hari bengkel berikutnya', { skip: !process.env.WORK_ORDER_TEST_PORT }, () => {
+  const fixture = fileURLToPath(new URL('./fixtures/work-order-diagnosis-cutoff.php', import.meta.url));
+  const result = execFileSync(process.env.PHP_BINARY || 'php', [fixture], { encoding: 'utf8' });
+  assert.deepEqual(JSON.parse(result), [
+    ['Closed', 'Register', 'Register', 'Register'],
+    ['Closed', 'Register', 'Register', 'Closed'],
+    ['Closed', 'Closed', 'Closed', 'Closed'],
+  ]);
 });

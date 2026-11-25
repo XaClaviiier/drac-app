@@ -30,7 +30,7 @@ const getVehicleLabel = (vehicle: Vehicle) => {
 };
 
 const getSelectedCustomerLabel = (customer: Customer) =>
-  [customer.name.trim(), customer.phone.trim()].filter(Boolean).join(' - ');
+  [customer.name.trim(), customer.phone?.trim()].filter(Boolean).join(' - ');
 
 export default function CustomerPicker({ value, onChange, onVehicleSelect, onNewCustomerCreated, disabled = false, selectedAction }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();

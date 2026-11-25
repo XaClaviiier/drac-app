@@ -1,4 +1,4 @@
-import type { LegacyWOStatus, WOStatus } from '../types';
+import type { LegacyWOStatus, WorkOrder, WOStatus } from '../types';
 
 export type DisplayWorkOrderStatus = WOStatus | LegacyWOStatus | string;
 
@@ -21,3 +21,9 @@ export const workOrderStatusTone = (status: DisplayWorkOrderStatus): string => {
 
 export const isLostSalesStatus = (status: DisplayWorkOrderStatus): boolean =>
   status === 'Closed' || status === 'Batal';
+
+export const isTransferredWorkOrder = (wo: WorkOrder) =>
+  Boolean(wo.continuedToWoId) && !isLostSalesStatus(wo.status);
+
+export const workOrderDocumentStatus = (wo: WorkOrder) =>
+  isTransferredWorkOrder(wo) ? 'Dilanjutkan' : workOrderStatusLabel(wo.status);

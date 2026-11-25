@@ -162,8 +162,8 @@ test('semua pintu masuk Dikerjakan meminta estimasi dan tabel memakai kolom Perh
   assert.match(context, /Estimasi lama pekerjaan wajib diisi/);
   assert.match(workOrders, /key: 'attention', label: 'Perhatian'/);
   assert.match(workOrders, /Dikerjakan Terlambat/);
-  assert.match(workOrders, /sameIssueEstimatedDuration/);
-  assert.match(workOrders, /Pelanggan kembali dengan masalah yang sama[\s\S]*?Number\(sameIssueEstimatedDuration\)/);
+  assert.match(workOrders, /issue === 'same' && canStartReturnWork\(sourceWO\)/);
+  assert.match(workOrders, /estimatedDurationMinutes = Number\(entered\)[\s\S]*?estimatedDurationMinutes < 15 \|\| estimatedDurationMinutes > 1440/);
   assert.match(workOrders, /data-wo-estimated-deadline/);
   assert.match(workOrders, /data-wo-attention-label/);
 });
@@ -265,15 +265,15 @@ test('jalur WO lanjutan hanya langsung Dikerjakan bila membawa estimasi valid', 
   const context = source('src/context/AppContext.tsx');
   const page = source('src/pages/WorkOrders.tsx');
   const continuation = context.slice(context.indexOf('const continueWorkOrder ='), context.indexOf('const createInvoiceFromWO'));
-  assert.match(continuation, /estimatedDurationMinutes\?: number/);
-  assert.match(continuation, /canStartImmediately/);
-  assert.match(continuation, /Boolean\(src\.technicianId\)/);
+  assert.match(continuation, /requestedDuration = followUp\?\.estimatedDurationMinutes/);
+  assert.match(continuation, /canStartImmediately && \(resetJob \|\| !src\.technicianId/);
+  assert.match(continuation, /!Number\.isInteger\(requestedDuration\) \|\| requestedDuration < 15 \|\| requestedDuration > 1440/);
   assert.match(continuation, /estimatedDurationMinutes: canStartImmediately/);
   assert.match(continuation, /workStartedAt: canStartImmediately/);
   assert.match(continuation, /estimatedCompletionAt: canStartImmediately/);
   assert.match(continuation, /technicianId: canStartImmediately/);
-  assert.match(page, /Pelanggan kembali dengan masalah yang sama[\s\S]*?Number\(sameIssueEstimatedDuration\)/);
-  assert.match(page, /shouldProcessNew \|\| shouldProcessEditing \|\| resumeLostSalesAfterEstimate \|\| shouldCreateInvoice/);
+  assert.match(page, /continueWorkOrder\(sourceWO\.id, activeBranchId, \{ issue, complaint, estimatedDurationMinutes \}\)/);
+  assert.match(page, /shouldProcessNew \|\| shouldProcessEditing \|\| shouldCreateInvoice/);
   assert.match(page, /continueWorkOrder\(continueWO\.id, activeBranchId\)/);
 });
 

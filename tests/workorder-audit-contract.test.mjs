@@ -125,10 +125,11 @@ test('perubahan status WO yang sama bersifat idempoten tanpa PUT atau log duplik
   assert.match(statusConfirm, /data\.workOrders\.find\(item\s*=>\s*item\.id\s*===\s*dialogWorkOrder\.id\)/);
   assert.match(statusConfirm, /wo\.status\s*!==\s*dialogWorkOrder\.status/);
   assert.match(statusConfirm, /result\.changed\s*===\s*false/);
-  const continueLostSales = sectionBetween(page, 'const continueLostSalesSameIssue =', 'const continueLostSalesDifferentIssue =');
+  const continueLostSales = sectionBetween(page, 'const createLostSalesReturn =', 'const entryGuidanceOnly =');
   assert.match(continueLostSales, /data\.workOrders\.find\(item\s*=>\s*item\.id\s*===\s*lostSalesFollowUp\.id\)/);
-  assert.match(continueLostSales, /sourceWO\.status\s*!==\s*'Closed'\s*&&\s*sourceWO\.status\s*!==\s*'Proses'/);
-  assert.match(continueLostSales, /result\.changed\s*===\s*false/);
+  assert.match(continueLostSales, /sourceWO\.status !== 'Closed' \|\| sourceWO\.continuedToWoId/);
+  assert.match(continueLostSales, /if \(!lostSalesFollowUp \|\| isFollowingUpLostSales\) return/);
+  assert.doesNotMatch(continueLostSales, /changeWorkOrderStatus\(/);
 });
 
 test('menu proses hanya tersedia dengan izin edit dan aksi yang relevan', () => {
@@ -216,7 +217,7 @@ test('aksi edit WO dibatasi izin dan cabang aktif yang dapat diakses', () => {
   const completionSave = sectionBetween(page, 'const completeWorkOrder =', 'const closeWorkResultEditor =');
   const workResultSave = sectionBetween(page, 'const saveWorkResult =', 'const confirmStatusChange =');
   const reopen = sectionBetween(page, 'const handleReopenCompletedWorkOrder =', 'const handleOpenInvoiceModal =');
-  const continueLostSales = sectionBetween(page, 'const continueLostSalesSameIssue =', 'const continueLostSalesDifferentIssue =');
+  const continueLostSales = sectionBetween(page, 'const createLostSalesReturn =', 'const entryGuidanceOnly =');
 
   assert.match(handleSubmit, /editingWO\s*&&\s*!requireEditableWorkOrder\(editingWO\)/);
   assert.match(statusRequest, /requireEditableWorkOrder\(canonicalWorkOrder\)/);
@@ -230,9 +231,10 @@ test('aksi edit WO dibatasi izin dan cabang aktif yang dapat diakses', () => {
   assert.match(reopen, /result\.changed\s*===\s*false/);
   assert.match(reopen, /setIsChangingStatus\(true\)[\s\S]*?finally[\s\S]*?setIsChangingStatus\(false\)/);
   assert.match(continueLostSales, /requireEditableWorkOrder\(sourceWO\)/);
-  assert.match(continueLostSales, /setResumeLostSalesAfterEstimate\(true\)/);
-  assert.match(continueLostSales, /handleOpenModal\(sourceWO, true\)/);
-  assert.doesNotMatch(continueLostSales, /handleOpenDiagnosis\(sourceWO\)/);
+  assert.match(continueLostSales, /hasPermission\('wo:create'\)/);
+  assert.match(continueLostSales, /continueWorkOrder\(sourceWO\.id, activeBranchId/);
+  assert.match(continueLostSales, /handleOpenModal\(created\)/);
+  assert.doesNotMatch(continueLostSales, /handleOpenModal\(sourceWO|updateWorkOrder\(sourceWO/);
 });
 
 test('editor melindungi draft dan memakai versi WO terbaru sebelum membuka faktur', () => {
@@ -268,8 +270,7 @@ test('aksi status mempertahankan editor sedangkan Simpan dan Tutup menutup WO', 
   const page = source('src/pages/WorkOrders.tsx');
   const submit = sectionBetween(page, 'const handleSubmit =', 'const handleDelete =');
 
-  assert.match(submit, /const keepEditorOpenAfterStatusChange = Boolean\(/);
-  assert.match(submit, /shouldProcessEditing \|\| shouldMarkLostSales \|\| resumeLostSalesAfterEstimate/);
+  assert.match(submit, /const keepEditorOpenAfterStatusChange = shouldProcessEditing \|\| shouldMarkLostSales/);
   assert.match(submit, /if \(!keepEditorOpenAfterStatusChange\) handleCloseModal\(\)/);
   assert.match(page, /'Simpan & Tutup Work Order'/);
   assert.match(page, /'Simpan & Tutup'/);
