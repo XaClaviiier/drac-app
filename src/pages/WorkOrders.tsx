@@ -4199,13 +4199,20 @@ export default function WorkOrders() {
                       >
                         <Star className={`h-5 w-5 ${showQuickServices ? 'fill-amber-400' : ''}`} />
                       </button>
-                      <div className="relative flex-1">
+                      <div
+                        className="relative flex-1"
+                        onBlur={(event) => {
+                          if (!event.currentTarget.contains(event.relatedTarget)) setServiceSearchFocused(false);
+                        }}
+                      >
                       <input
                         type="text"
                         value={serviceSearch}
-                        onChange={(event) => setServiceSearch(event.target.value)}
+                        onChange={(event) => {
+                          setServiceSearch(event.target.value);
+                          setServiceSearchFocused(true);
+                        }}
                         onFocus={() => setServiceSearchFocused(true)}
-                        onBlur={() => window.setTimeout(() => setServiceSearchFocused(false), 150)}
                         onKeyDown={(event) => {
                           if (event.key !== 'Enter' || !serviceSearch.trim()) return;
                           event.preventDefault();
@@ -4250,6 +4257,7 @@ export default function WorkOrders() {
                                 key={item.id}
                                 type="button"
                                 disabled={added}
+                                onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => {
                                   if (added) return;
                                   handleUseItem(item.id);
