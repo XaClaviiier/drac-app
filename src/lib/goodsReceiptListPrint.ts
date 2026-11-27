@@ -5,7 +5,7 @@ export type ReceiptColumn = 'number' | 'date' | 'notes' | 'receivedBy' | 'itemCo
 export const defaultReceiptColumns: ReceiptColumn[] = ['number', 'date', 'notes', 'receivedBy', 'itemCount', 'warehouse', 'status', 'supplier'];
 export const receiptColumnLabels: Record<ReceiptColumn, string> = {
   number: 'Nomor #', date: 'Tanggal', notes: 'Keterangan', receivedBy: 'Diterima Oleh',
-  itemCount: 'Jumlah Barang', warehouse: 'Gudang', status: 'Status', supplier: 'Supplier',
+  itemCount: 'Jumlah Barang', warehouse: 'Gudang', status: 'Status', supplier: 'Status Supplier',
 };
 const columnWidths: Record<ReceiptColumn, number> = { number: 14, date: 8, notes: 32, receivedBy: 12, itemCount: 12, warehouse: 11, status: 8, supplier: 10 };
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));

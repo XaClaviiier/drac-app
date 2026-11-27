@@ -12,6 +12,11 @@ import ReceiptSupplierSelect from '../components/ReceiptSupplierSelect';
 import { receiptDateLabel, receiptDescription, receiptQuantitySummary, receiptStatusLabel } from '../lib/goodsReceiptPresentation';
 import { buildGoodsReceiptListPrintHtml, defaultReceiptColumns, receiptColumnLabels, type ReceiptColumn } from '../lib/goodsReceiptListPrint';
 
+const receiptListWidths: Record<ReceiptColumn, number> = {
+  number: 138, date: 102, notes: 200, receivedBy: 142, itemCount: 142, warehouse: 145, status: 94, supplier: 142,
+};
+const supplierSelectWidth = 224;
+
 const legacyReceiptColumnStorageKey = 'drac.receipts.columnOrder.v1';
 const validReceiptColumns = (value: unknown): ReceiptColumn[] => Array.isArray(value)
   ? [...new Set(value.filter((column): column is ReceiptColumn => defaultReceiptColumns.includes(column)))] : [];
@@ -114,6 +119,7 @@ export default function GoodsReceiptPage({ mode = 'receipt', visible = true, tab
   const canSeeSuppliers = isSupplierMapping && hasPermission('receipt:supplier');
   const canViewSupplierColumn = hasPermission('purchase:view') || hasPermission('receipt:supplier');
   const displayedReceiptColumns = visibleReceiptColumns.filter(column => column !== 'supplier' || canViewSupplierColumn);
+  const receiptListMinWidth = displayedReceiptColumns.reduce((width, column) => width + receiptListWidths[column], canSeeSuppliers ? supplierSelectWidth : 0);
   const activeSuppliers = useMemo(() => data.suppliers.filter(supplier => supplier.isActive)
     .sort((a, b) => a.name.localeCompare(b.name, 'id')), [data.suppliers]);
   const invoicedReceiptIds = useMemo(() => new Set(data.purchaseInvoices.flatMap(invoice => invoice.receiptIds)), [data.purchaseInvoices]);
@@ -479,25 +485,30 @@ export default function GoodsReceiptPage({ mode = 'receipt', visible = true, tab
               <div className="mt-0.5 font-mono text-[13px] font-semibold text-blue-700">{documentNumber}</div>
               {(visibleReceiptColumns.includes('receivedBy') || visibleReceiptColumns.includes('notes')) && <div className={`mt-2 grid ${visibleReceiptColumns.includes('receivedBy') && visibleReceiptColumns.includes('notes') ? 'grid-cols-[minmax(72px,auto)_1fr]' : 'grid-cols-1'} gap-x-2 border-t border-slate-100 pt-2 text-xs text-slate-700`}>{visibleReceiptColumns.includes('receivedBy') && <span className="truncate font-medium">{r.receivedBy||'-'}</span>}{visibleReceiptColumns.includes('notes') && <span className={`line-clamp-2 break-words ${visibleReceiptColumns.includes('receivedBy') ? 'border-l border-slate-300 pl-2' : ''}`} title={description}>{description}</span>}</div>}
               {(visibleReceiptColumns.includes('itemCount') || visibleReceiptColumns.includes('warehouse')) && <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs">{visibleReceiptColumns.includes('itemCount') && <span className="font-semibold text-slate-800">{r.items.length} item ({receiptQuantitySummary(r.items)})</span>}{visibleReceiptColumns.includes('itemCount') && visibleReceiptColumns.includes('warehouse') && <span className="text-slate-300">|</span>}{visibleReceiptColumns.includes('warehouse') && <span className="truncate text-slate-600" title={warehouseName}>{warehouseName}</span>}</div>}
-              {displayedReceiptColumns.includes('supplier') && <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-700"><span className="font-medium text-slate-500">Supplier: </span><span className={supplierMapped(r) ? 'font-semibold text-green-700' : 'font-semibold text-red-600'} title={supplierMapped(r) ? 'Supplier sudah dipetakan' : 'Supplier belum dipetakan'}>{supplierMapped(r) ? '✓' : r.sourceType === 'Transfer Gudang' ? '—' : 'X'}</span></div>}
+              {displayedReceiptColumns.includes('supplier') && <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-700"><span className="font-medium text-slate-500">{receiptColumnLabels.supplier}: </span><span className={supplierMapped(r) ? 'font-semibold text-green-700' : 'font-semibold text-red-600'} title={supplierMapped(r) ? 'Supplier sudah dipetakan' : 'Supplier belum dipetakan'}>{supplierMapped(r) ? '✓' : r.sourceType === 'Transfer Gudang' ? '—' : 'X'}</span></div>}
               {canSeeSuppliers && <div className="mt-2 border-t border-slate-100 pt-2"><p className="mb-1 text-[11px] font-medium text-slate-500">Supplier</p>{supplierSelect(r)}</div>}
             </article>
           })}
           {!filtered.length&&<div className="rounded border border-slate-200 bg-white py-14 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-10 w-10"/>Belum ada penerimaan barang.</div>}
         </div>
         <div className="app-fill-stack hidden lg:block">
-        <div className="app-table-scroll app-table-scroll--fill inventory-report-table stock-movement-paper inventory-document-table"><table className="w-full min-w-[980px] text-[13px] font-normal text-[#111827]"><thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{displayedReceiptColumns.map(column => <InventoryColumnHeader key={column} column={column} label={receiptColumnLabels[column]} className="p-3 text-left"
-          sort={{key: receiptSort.column, direction: receiptSort.direction}} onMove={moveReceiptColumn} onSort={key => setReceiptSort(current => ({column: key, direction: current.column === key && current.direction === 'asc' ? 'desc' : 'asc'}))}/>)}{canSeeSuppliers && <th className="min-w-[240px] p-3 text-left">Supplier</th>}</tr></thead><tbody>{receiptPage.visibleRows.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{displayedReceiptColumns.map(column=>{
+        <div className="app-table-scroll app-table-scroll--fill inventory-report-table stock-movement-paper inventory-document-table"><table className="w-full text-[13px] font-normal text-[#111827]" style={{ minWidth: receiptListMinWidth }}>
+          <colgroup>
+            {displayedReceiptColumns.map(column => <col key={column} style={{ width: column === 'notes' ? undefined : receiptListWidths[column] }}/>)}
+            {canSeeSuppliers && <col style={{ width: supplierSelectWidth }}/>}
+          </colgroup>
+          <thead className="bg-slate-600 text-[12px] font-semibold text-white"><tr>{displayedReceiptColumns.map(column => <InventoryColumnHeader key={column} column={column} label={receiptColumnLabels[column]} className="p-3 text-left"
+          sort={{key: receiptSort.column, direction: receiptSort.direction}} onMove={moveReceiptColumn} onSort={key => setReceiptSort(current => ({column: key, direction: current.column === key && current.direction === 'asc' ? 'desc' : 'asc'}))}/>)}{canSeeSuppliers && <th className="p-3 text-left">Supplier</th>}</tr></thead><tbody>{receiptPage.visibleRows.map(r=><tr key={r.id} tabIndex={0} onClick={()=>navigate(`/receipts/view/${encodeURIComponent(r.id)}`)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigate(`/receipts/view/${encodeURIComponent(r.id)}`)}}} className="cursor-pointer border-b border-[#d8d8d8] odd:bg-white even:bg-[#f3f3f3] hover:!bg-[#eaf3ff] focus:!bg-[#d6e8ff] focus:outline-none focus:shadow-[inset_4px_0_0_#2563eb]">{displayedReceiptColumns.map(column=>{
           const base='border-r border-[#d8d8d8] p-3 last:border-r-0';
           if(column==='number')return <td key={column} className={`${base} font-normal text-blue-700 underline-offset-2 hover:underline`}>{r.sourceType==='Transfer Gudang'?(r.transferNumber||r.receiptNumber):r.receiptNumber}</td>;
           if(column==='date')return <td key={column} className={`${base} whitespace-nowrap`}>{receiptDateLabel(r.date)}</td>;
-          if(column==='notes')return <td key={column} className={`${base} max-w-[280px] truncate`} title={receiptDescription(r)}>{receiptDescription(r)}</td>;
+          if(column==='notes')return <td key={column} className={`${base} whitespace-pre-wrap`} title={receiptDescription(r)}>{receiptDescription(r)}</td>;
           if(column==='receivedBy')return <td key={column} className={base}>{r.receivedBy||'-'}</td>;
           if(column==='itemCount')return <td key={column} className={base}>{r.items.length} item ({receiptQuantitySummary(r.items)})</td>;
           if(column==='warehouse')return <td key={column} className={base}>{data.warehouses.find(w=>w.id===r.warehouseId)?.name||'-'}</td>;
           if(column==='supplier')return <td key={column} className={`${base} text-center font-semibold ${supplierMapped(r) ? 'text-green-700' : 'text-red-600'}`} title={supplierMapped(r) ? 'Supplier sudah dipetakan' : 'Supplier belum dipetakan'}>{supplierMapped(r) ? '✓' : r.sourceType === 'Transfer Gudang' ? '—' : 'X'}</td>;
           return <td key={column} className={base}><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${receiptStatusLabel(r.status)==='Diterima'?'bg-green-100 text-green-700':r.status==='Batal'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{receiptStatusLabel(r.status)}</span></td>;
-        })}{canSeeSuppliers && <td className="min-w-[240px] p-3">{supplierSelect(r)}</td>}</tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
+        })}{canSeeSuppliers && <td className="p-3">{supplierSelect(r)}</td>}</tr>)}</tbody></table>{!filtered.length&&<div className="py-20 text-center text-slate-400"><PackageCheck className="mx-auto mb-3 h-12 w-12"/>Belum ada penerimaan barang.</div>}</div>
         </div>
         {receiptPage.navigation}
       </section>
