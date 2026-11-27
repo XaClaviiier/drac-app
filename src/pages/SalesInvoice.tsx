@@ -4,6 +4,7 @@ import { Plus, Search, Edit, Trash2, FileText, X, Save, Filter, Download, Printe
 import { useApp } from '../context/AppContext';
 import BillingTreatmentSelect from '../components/BillingTreatmentSelect';
 import { isGoodwill, validBillingTotal, invoiceStatusLabel } from '../lib/billingTreatment';
+import { buildSalesInvoicePrintHtml, type SalesInvoicePrintFormat } from '../lib/salesInvoicePrint';
 import type { BillingTreatment, SalesInvoice } from '../types';
 import CustomerPicker from '../components/CustomerPicker';
 import VehiclePicker from '../components/VehiclePicker';
@@ -17,6 +18,22 @@ import ActiveFilterResetButton from '../components/ActiveFilterResetButton';
 import AccurateFormActionRail from '../components/AccurateFormActionRail';
 import AccurateDocumentSideTabs, { type AccurateDocumentTab } from '../components/AccurateDocumentSideTabs';
 import { ConfigurableTableHeaderCell, useConfigurableTable } from '../components/ConfigurableTable';
+
+const printFormats: { value: SalesInvoicePrintFormat; label: string }[] = [
+  { value: 'a4', label: 'Faktur A4 · Tanda tangan' },
+  { value: 'thermal80', label: 'Struk thermal 80 mm' },
+];
+
+function MobileInvoicePrint({ onPrint }: { onPrint: (format: SalesInvoicePrintFormat) => void }) {
+  return <select className="h-9 w-20 rounded border border-gray-300 bg-white px-2 text-sm font-semibold lg:hidden"
+    aria-label="Pilih format cetak faktur" value="" onChange={event => {
+      const choice = printFormats.find(format => format.value === event.target.value);
+      if (choice) onPrint(choice.value);
+    }}>
+    <option value="" disabled>Cetak</option>
+    {printFormats.map(format => <option key={format.value} value={format.value}>{format.label}</option>)}
+  </select>;
+}
 
 const formatPaymentInput = (value: number) => value ? value.toLocaleString('id-ID') : '';
 const parsePaymentInput = (value: string) => Number(value.replace(/\D/g, '')) || 0;
@@ -57,6 +74,7 @@ const SALES_INVOICE_COLUMN_WIDTHS: Record<InvoiceColumnKey, number> = {
 export default function SalesInvoice() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, addInvoice, updateInvoice, deleteInvoice, createInvoiceFromWO, hasPermission, currentUser, currentBranchId, resolveBranchId, generateDocumentNumber, refreshData, isLoading, hasLoadedData } = useApp();
+  const printTemplateStorageKey = `dokterac_sales_invoice_print_template_${currentUser?.id || currentUser?.username || 'default'}`;
   const [showModal, setShowModal] = useState(false);
   useAccurateDocumentCanvas(showModal);
   const [editingInvoice, setEditingInvoice] = useState<SalesInvoice | null>(null);
@@ -107,6 +125,20 @@ export default function SalesInvoice() {
   const [invoiceDocumentTab, setInvoiceDocumentTab] = useState<AccurateDocumentTab>('details');
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
   const [invoiceRailMenu, setInvoiceRailMenu] = useState<'print' | 'more' | ''>('');
+  const [selectedPrintFormat, setSelectedPrintFormat] = useState<SalesInvoicePrintFormat>(() => {
+    try {
+      const saved = localStorage.getItem(`dokterac_sales_invoice_print_template_${currentUser?.id || currentUser?.username || 'default'}`);
+      return printFormats.some(format => format.value === saved) ? saved as SalesInvoicePrintFormat : 'a4';
+    } catch {
+      return 'a4';
+    }
+  });
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(printTemplateStorageKey);
+      if (printFormats.some(format => format.value === saved)) setSelectedPrintFormat(saved as SalesInvoicePrintFormat);
+    } catch { /* Gunakan A4 saat preferensi tidak tersedia. */ }
+  }, [printTemplateStorageKey]);
   const [transactionBranchId, setTransactionBranchId] = useState('');
   const activeFilterCount = [filterCustomer, filterStatus, filterDate || filterDateFrom || filterDateTo, filterMinAge].filter(Boolean).length;
   const resetInvoiceFilters = () => {
@@ -435,48 +467,41 @@ export default function SalesInvoice() {
     return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )${invoice.manualReceiptNumber ? `\nNO. NOTA FISIK: ${invoice.manualReceiptNumber}` : ''}\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoiceStatusLabel(invoice)}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
   };
 
-  const printInvoiceDetail = (invoice: SalesInvoice, items: InvoiceItem[], branch: string, subtotal: number, discount: number) => {
+  type PrintableInvoice = Pick<SalesInvoice,
+    'invoiceNumber' | 'branchId' | 'date' | 'customerName' | 'vehicleInfo' | 'woNumber'
+    | 'manualReceiptNumber' | 'total' | 'payment' | 'billingTreatment'
+  > & Partial<Pick<SalesInvoice, 'description' | 'status'>>;
+  const printInvoice = (
+    format: SalesInvoicePrintFormat, invoice: PrintableInvoice,
+    items: InvoiceItem[], subtotal: number, discount: number, draft = false,
+  ) => {
     const popup = window.open('', '_blank', 'width=900,height=750');
     if (!popup) {
       window.alert('Izinkan pop-up untuk mencetak faktur.');
       return;
     }
+    const lines = items.flatMap((item, index) => isPackageMemberItem(item) ? [] : [{
+      name: invoiceItemReceiptName(item), qty: item.qty, price: item.price,
+      members: packageMembersAfter(items, index).map(member => ({ name: invoiceItemReceiptName(member), qty: member.qty })),
+    }]);
     popup.opener = null;
-    const doc = popup.document;
-    doc.title = `Faktur Penjualan ${invoice.invoiceNumber}`;
-    const style = doc.createElement('style');
-    style.textContent = 'body{font:14px/1.5 Arial,sans-serif;margin:2rem;color:#172033}h1{font-size:22px}p,td{white-space:pre-line}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px;border-bottom:1px solid #ccc}th:nth-child(n+2),td:nth-child(n+2){text-align:right}tr{break-inside:avoid}';
-    doc.head.append(style);
-    const addText = (tag: 'h1' | 'p', value: string) => {
-      const element = doc.createElement(tag);
-      element.textContent = value;
-      doc.body.append(element);
-    };
-    addText('h1', doc.title);
-    addText('p', [
-      `DOKTER AC MOBIL · ${branch}`, formatBusinessDate(invoice.date), invoice.customerName,
-      invoice.vehicleInfo, invoice.woNumber, invoice.manualReceiptNumber && `Nota fisik: ${invoice.manualReceiptNumber}`,
-    ].filter(Boolean).join('\n'));
-    const table = doc.createElement('table');
-    doc.body.append(table);
-    const header = table.createTHead().insertRow();
-    for (const label of ['Barang / Jasa', 'Qty', 'Harga (Rp)', 'Jumlah (Rp)']) {
-      const cell = doc.createElement('th');
-      cell.textContent = label;
-      header.append(cell);
+    popup.document.open();
+    popup.document.write(buildSalesInvoicePrintHtml({
+      company: data.settings.company, branch: data.branches.find(branch => branch.id === invoice.branchId),
+      number: invoice.invoiceNumber, date: formatBusinessDate(invoice.date), draft,
+      customer: invoice.customerName, vehicle: invoice.vehicleInfo, workOrder: invoice.woNumber,
+      receipt: invoice.manualReceiptNumber, description: invoice.description, lines,
+      subtotal, discount, total: invoice.total, payment: invoice.payment,
+      status: invoiceStatusLabel({ ...invoice, status: invoice.status ?? (invoice.total > 0 && invoice.payment >= invoice.total ? 'Lunas' : 'Belum Lunas') }),
+    }, format));
+    popup.document.close();
+    if (format === 'thermal80') {
+      // Set an explicit roll length so Save as PDF also uses the 80 mm paper size.
+      const heightMm = Math.ceil(popup.document.body.getBoundingClientRect().height * 25.4 / 96) + 1;
+      const paper = popup.document.createElement('style');
+      paper.textContent = `@page { size:80mm ${heightMm}mm; margin:0 }`;
+      popup.document.head.append(paper);
     }
-    const body = table.createTBody();
-    items.forEach((item, index) => {
-      if (isPackageMemberItem(item)) return;
-      const name = [invoiceItemReceiptName(item), ...packageMembersAfter(items, index).map(member => `  • ${invoiceItemReceiptName(member)} × ${member.qty}`)].join('\n');
-      const row = body.insertRow();
-      for (const value of [name, item.qty, item.price, item.qty * item.price]) row.insertCell().textContent = value.toLocaleString('id-ID');
-    });
-    if (!items.length) addText('p', invoice.description || 'Rincian barang/jasa tidak tersedia.');
-    addText('p', [
-      `Subtotal: Rp ${subtotal.toLocaleString('id-ID')}`, `Diskon: Rp ${discount.toLocaleString('id-ID')}`,
-      `Total: Rp ${invoice.total.toLocaleString('id-ID')}`, `Pembayaran: Rp ${invoice.payment.toLocaleString('id-ID')}`, invoiceStatusLabel(invoice),
-    ].join('\n'));
     popup.focus();
     popup.print();
   };
@@ -743,6 +768,7 @@ export default function SalesInvoice() {
   const woDraftTotal = woDraftItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const handleOpenWOPicker = () => {
+    setInvoiceRailMenu('');
     setShowModal(false);
     setEditingInvoice(null);
     setViewingInvoice(null);
@@ -992,10 +1018,35 @@ export default function SalesInvoice() {
     }
   };
 
-  const invoiceActionMenus = (invoice: SalesInvoice | null, print: () => void, compact = false) => (
+  const printForm = (format: SalesInvoicePrintFormat) => printInvoice(format, {
+    ...formData, invoiceNumber: editingInvoice?.invoiceNumber || '', branchId: transactionBranchId,
+    woNumber: editingInvoice?.woNumber || (formFromWO ? selectedWO?.woNumber : undefined),
+    status: undefined, total: formGrandTotal, payment: formFromWO ? woPayment : editingInvoice?.payment || 0,
+  }, formItems, formItemsTotal, formDiscount, true);
+
+  const printFromWO = (format: SalesInvoicePrintFormat) => selectedWO && printInvoice(format, {
+    ...selectedWO, invoiceNumber: '', date: woInvoiceDate, manualReceiptNumber: woManualReceiptNumber,
+    status: undefined, total: woDraftTotal, payment: woPayment,
+  }, woDraftItems, woDraftTotal, 0, true);
+
+  const choosePrintTemplate = (format: SalesInvoicePrintFormat, print: (value: SalesInvoicePrintFormat) => void) => {
+    setSelectedPrintFormat(format);
+    try { localStorage.setItem(printTemplateStorageKey, format); } catch { /* Preferensi hanya berlaku selama sesi. */ }
+    setInvoiceRailMenu('');
+    print(format);
+  };
+
+  const invoiceActionMenus = (invoice: SalesInvoice | null, print: (format: SalesInvoicePrintFormat) => void, compact = false) => (
     <>
       {invoiceRailMenu && <button type="button" aria-label="Tutup menu aksi faktur" onClick={() => setInvoiceRailMenu('')} className="fixed inset-0 z-[55] cursor-default" />}
-      {invoiceRailMenu === 'print' && <div className="absolute right-[104px] top-[74px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl"><button type="button" onClick={() => { setInvoiceRailMenu(''); print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Cetak Faktur Penjualan</button><button type="button" onClick={() => { setInvoiceRailMenu(''); print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Simpan sebagai PDF</button>{invoice && <button type="button" onClick={() => { setInvoiceRailMenu(''); shareInvoiceToWhatsApp(invoice); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Bagikan Faktur</button>}</div>}
+      {invoiceRailMenu === 'print' && <div className="absolute right-[104px] top-[74px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl">
+        <p className="border-b border-slate-200 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Template cetak</p>
+        {printFormats.map(format => <button key={format.value} type="button" onClick={() => choosePrintTemplate(format.value, print)}
+          className={`flex w-full items-center justify-between px-3 py-2 text-left hover:bg-blue-50 ${selectedPrintFormat === format.value ? 'bg-blue-50 font-semibold text-blue-700' : ''}`}>
+          <span>{format.label}</span><span aria-hidden="true" className="ml-3 text-base">{selectedPrintFormat === format.value ? '✓' : ''}</span>
+        </button>)}
+        {invoice && <button type="button" onClick={() => { setInvoiceRailMenu(''); shareInvoiceToWhatsApp(invoice); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Bagikan Faktur</button>}
+      </div>}
       {invoiceRailMenu === 'more' && <div className={`absolute right-[104px] ${compact ? 'top-[140px]' : 'top-[196px]'} z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl`}><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button></div>}
     </>
   );
@@ -1398,6 +1449,7 @@ export default function SalesInvoice() {
         const itemsSubtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
         const displayedSubtotal = itemsSubtotal > 0 ? itemsSubtotal : invoice.total;
         const displayedDiscount = Math.max(0, displayedSubtotal - invoice.total);
+        const printDetail = (format: SalesInvoicePrintFormat) => printInvoice(format, invoice, items, displayedSubtotal, displayedDiscount);
         const historyTotal = invoicePaymentHistory.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
         const legacyPaymentAmount = Math.max(0, Number(invoice.payment || 0) - historyTotal);
         const displayedPaymentHistory: InvoicePaymentHistory[] = legacyPaymentAmount > 0
@@ -1436,7 +1488,7 @@ export default function SalesInvoice() {
                     title: !hasPermission('invoice:delete') ? 'Hapus faktur (akses terbatas)' : invoice.payment > 0 ? 'Hapus pembayaran terlebih dahulu' : 'Hapus faktur',
                   }}
                 />
-                {invoiceActionMenus(invoice, () => printInvoiceDetail(invoice, items, branchName, displayedSubtotal, displayedDiscount), true)}
+                {invoiceActionMenus(invoice, printDetail, true)}
                 <div data-invoice-view-summary className="flex flex-wrap items-center justify-end gap-1.5">
                   <div className="order-first mr-auto flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
                     <span>Nomor: <strong className="text-gray-800">{invoice.invoiceNumber}</strong></span>
@@ -1587,6 +1639,7 @@ export default function SalesInvoice() {
               </div>
 
               <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 lg:hidden">
+                <MobileInvoicePrint onPrint={format => choosePrintTemplate(format, printDetail)}/>
                 <button type="button" onClick={() => void copyInvoice(invoice)} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Copy className="h-4 w-4" /> Salin</button>
                 <button type="button" onClick={() => shareInvoiceToWhatsApp(invoice)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><MessageCircle className="h-4 w-4" /> WhatsApp</button>
                 {hasPermission('invoice:edit') && <button type="button" onClick={() => { setViewingInvoice(null); handleOpenModal(invoice); }} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"><Edit className="h-4 w-4" /> Edit</button>}
@@ -1626,7 +1679,7 @@ export default function SalesInvoice() {
                 more={{ onClick: () => setInvoiceRailMenu(invoiceRailMenu === 'more' ? '' : 'more'), title: 'Lain-lain' }}
                 remove={{ onClick: selectedFormItemId ? () => removeFormItem(selectedFormItemId) : undefined, disabled: !selectedFormItemId, title: selectedFormItemId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu' }}
               />
-              {invoiceActionMenus(editingInvoice, () => window.print())}
+              {invoiceActionMenus(editingInvoice, printForm)}
               <section className="bg-transparent p-1 lg:p-0">
                 <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
                   <label className="flex h-10 items-center text-sm font-medium text-gray-700">Pelanggan <span className="ml-1 text-red-500">*</span></label>
@@ -1740,7 +1793,8 @@ export default function SalesInvoice() {
                 {invoiceDocumentTab === 'payment' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Pembayaran / Saldo</h4><div className="mt-4 grid max-w-2xl gap-3 sm:grid-cols-2"><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sudah dibayar</span><strong className="mt-1 block text-lg">Rp {(editingInvoice?.payment || 0).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sisa tagihan</span><strong className="mt-1 block text-lg">Rp {Math.max(0, formGrandTotal - (editingInvoice?.payment || 0)).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Status</span><strong className="mt-1 block">{isGoodwill(formData) ? 'Gratis / Goodwill' : editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 ? 'Lunas' : 'Belum Lunas'}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Metode terakhir</span><strong className="mt-1 block">{editingInvoice?.paymentMethod || '-'}</strong></div></div></div>}
               </section>
 
-              <div className="flex items-center justify-end gap-3 border-t border-gray-300 bg-gray-100 px-4 py-2 lg:hidden">
+              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-gray-300 bg-gray-100 px-4 py-2 lg:hidden">
+                <MobileInvoicePrint onPrint={format => choosePrintTemplate(format, printForm)}/>
                 <button
                   type="button"
                   onClick={handleCloseModal}
@@ -1829,11 +1883,12 @@ export default function SalesInvoice() {
               ariaLabel="Aksi Faktur Penjualan dari Order Kerja"
               className="absolute bottom-4 right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
               save={{ onClick: handleCreateFromWO, disabled: !selectedWO || !woDraftItems.length || isCreatingFromWO, title: 'Buat faktur dari WO' }}
-              print={{ onClick: () => window.print(), title: 'Cetak / simpan sebagai' }}
+              print={{ disabled: !selectedWO, onClick: () => setInvoiceRailMenu('print'), title: 'Cetak / simpan sebagai' }}
               attachment={{ disabled: true, title: 'Lampiran belum tersedia untuk Faktur Penjualan' }}
               more={{ disabled: true, title: 'Pilihan lainnya' }}
               remove={{ disabled: true, title: 'Hapus barang/jasa terpilih' }}
             />
+            {selectedWO && invoiceActionMenus(null, printFromWO)}
             <div className="flex items-center justify-between bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-3 lg:hidden">
               <div className="flex items-center gap-3 text-white">
                 <Wrench className="w-6 h-6" />
@@ -2002,7 +2057,8 @@ export default function SalesInvoice() {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-gray-300 bg-gray-50 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-gray-300 bg-gray-50 px-4 py-3">
+              {selectedWO && <MobileInvoicePrint onPrint={format => choosePrintTemplate(format, printFromWO)}/>}
               <button
                 type="button"
                 onClick={() => selectedWO ? setSelectedWOId('') : setShowWOPicker(false)}
