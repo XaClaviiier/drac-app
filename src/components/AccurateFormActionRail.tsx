@@ -12,7 +12,7 @@ type RailAction = {
 type AccurateFormActionRailProps = {
   save: RailAction;
   print?: RailAction;
-  attachment?: RailAction;
+  attachment?: RailAction | null;
   more?: RailAction;
   remove?: RailAction;
   className?: string;
@@ -51,12 +51,14 @@ export default function AccurateFormActionRail({
         onClick={action(print)}
         icon={<Printer className="h-7 w-7" />}
       />
-      <AccurateActionRailButton
-        title={attachment?.title || 'Lampiran'}
-        disabled={!attachment?.onClick || attachment.disabled}
-        onClick={action(attachment)}
-        icon={<Paperclip className="h-7 w-7" />}
-      />
+      {attachment !== null && (
+        <AccurateActionRailButton
+          title={attachment?.title || 'Lampiran'}
+          disabled={!attachment?.onClick || attachment.disabled}
+          onClick={action(attachment)}
+          icon={<Paperclip className="h-7 w-7" />}
+        />
+      )}
       <AccurateActionRailButton
         title={more?.title || 'Pilihan lainnya'}
         disabled={!more?.onClick || more.disabled}

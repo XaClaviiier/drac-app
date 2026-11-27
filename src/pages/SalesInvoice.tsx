@@ -105,6 +105,7 @@ export default function SalesInvoice() {
   const [detailFormRowId, setDetailFormRowId] = useState('');
   const [selectedFormItemId, setSelectedFormItemId] = useState('');
   const [invoiceDocumentTab, setInvoiceDocumentTab] = useState<AccurateDocumentTab>('details');
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
   const [invoiceRailMenu, setInvoiceRailMenu] = useState<'print' | 'more' | ''>('');
   const [transactionBranchId, setTransactionBranchId] = useState('');
   const activeFilterCount = [filterCustomer, filterStatus, filterDate || filterDateFrom || filterDateTo, filterMinAge].filter(Boolean).length;
@@ -203,6 +204,7 @@ export default function SalesInvoice() {
 
   useEffect(() => {
     if (viewingInvoice?.id) setInvoiceDocumentTab('details');
+    setInvoiceRailMenu('');
   }, [viewingInvoice?.id]);
 
   const [formData, setFormData] = useState({
@@ -433,6 +435,52 @@ export default function SalesInvoice() {
     return `INVOICE ${invoice.invoiceNumber} ( ${formatShareDate(invoice.date)} )${invoice.manualReceiptNumber ? `\nNO. NOTA FISIK: ${invoice.manualReceiptNumber}` : ''}\n👤 ${invoice.customerName}\n🚗 ${invoice.vehicleInfo || '-'}${invoice.woNumber ? `\nWO: ${invoice.woNumber}` : ''}\n\nRincian:\n${itemLines}\n\nTotal: Rp ${invoice.total.toLocaleString('id-ID')}\nBayar: Rp ${invoice.payment.toLocaleString('id-ID')}\nStatus: ${invoiceStatusLabel(invoice)}\nMetode: ${invoice.paymentMethod || 'Tunai'}\n\nDOKTER AC MOBIL — ${branch}`;
   };
 
+  const printInvoiceDetail = (invoice: SalesInvoice, items: InvoiceItem[], branch: string, subtotal: number, discount: number) => {
+    const popup = window.open('', '_blank', 'width=900,height=750');
+    if (!popup) {
+      window.alert('Izinkan pop-up untuk mencetak faktur.');
+      return;
+    }
+    popup.opener = null;
+    const doc = popup.document;
+    doc.title = `Faktur Penjualan ${invoice.invoiceNumber}`;
+    const style = doc.createElement('style');
+    style.textContent = 'body{font:14px/1.5 Arial,sans-serif;margin:2rem;color:#172033}h1{font-size:22px}p,td{white-space:pre-line}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px;border-bottom:1px solid #ccc}th:nth-child(n+2),td:nth-child(n+2){text-align:right}tr{break-inside:avoid}';
+    doc.head.append(style);
+    const addText = (tag: 'h1' | 'p', value: string) => {
+      const element = doc.createElement(tag);
+      element.textContent = value;
+      doc.body.append(element);
+    };
+    addText('h1', doc.title);
+    addText('p', [
+      `DOKTER AC MOBIL · ${branch}`, formatBusinessDate(invoice.date), invoice.customerName,
+      invoice.vehicleInfo, invoice.woNumber, invoice.manualReceiptNumber && `Nota fisik: ${invoice.manualReceiptNumber}`,
+    ].filter(Boolean).join('\n'));
+    const table = doc.createElement('table');
+    doc.body.append(table);
+    const header = table.createTHead().insertRow();
+    for (const label of ['Barang / Jasa', 'Qty', 'Harga (Rp)', 'Jumlah (Rp)']) {
+      const cell = doc.createElement('th');
+      cell.textContent = label;
+      header.append(cell);
+    }
+    const body = table.createTBody();
+    items.forEach((item, index) => {
+      if (isPackageMemberItem(item)) return;
+      const name = [invoiceItemReceiptName(item), ...packageMembersAfter(items, index).map(member => `  • ${invoiceItemReceiptName(member)} × ${member.qty}`)].join('\n');
+      const row = body.insertRow();
+      for (const value of [name, item.qty, item.price, item.qty * item.price]) row.insertCell().textContent = value.toLocaleString('id-ID');
+    });
+    if (!items.length) addText('p', invoice.description || 'Rincian barang/jasa tidak tersedia.');
+    addText('p', [
+      `Subtotal: Rp ${subtotal.toLocaleString('id-ID')}`, `Diskon: Rp ${discount.toLocaleString('id-ID')}`,
+      `Total: Rp ${invoice.total.toLocaleString('id-ID')}`, `Pembayaran: Rp ${invoice.payment.toLocaleString('id-ID')}`, invoiceStatusLabel(invoice),
+    ].join('\n'));
+    popup.focus();
+    popup.print();
+  };
+
   const copyInvoice = async (invoice: SalesInvoice) => {
     try {
       await navigator.clipboard.writeText(invoiceShareText(invoice));
@@ -641,17 +689,22 @@ export default function SalesInvoice() {
   };
 
   const handleDelete = async (invoice: SalesInvoice) => {
+    if (deletingInvoiceId || !hasPermission('invoice:delete')) return;
     if (invoice.payment > 0) {
       window.alert('Invoice masih memiliki pembayaran. Hapus pembayaran terlebih dahulu.');
       return;
     }
     if (window.confirm(`Hapus ${invoice.invoiceNumber}? Stok akan dikembalikan dan WO terkait kembali berstatus Selesai.`)) {
       try {
+        setDeletingInvoiceId(invoice.id);
         await deleteInvoice(invoice.id);
+        setViewingInvoice(current => current?.id === invoice.id ? null : current);
         setSuccessMsg(`${invoice.invoiceNumber} dihapus. Stok dikembalikan dan WO terkait dibuka kembali.`);
         setTimeout(() => setSuccessMsg(''), 4000);
       } catch (error: any) {
         window.alert(`Gagal menghapus invoice: ${error?.message || 'terjadi kesalahan'}`);
+      } finally {
+        setDeletingInvoiceId(null);
       }
     }
   };
@@ -938,6 +991,14 @@ export default function SalesInvoice() {
       }
     }
   };
+
+  const invoiceActionMenus = (invoice: SalesInvoice | null, print: () => void, compact = false) => (
+    <>
+      {invoiceRailMenu && <button type="button" aria-label="Tutup menu aksi faktur" onClick={() => setInvoiceRailMenu('')} className="fixed inset-0 z-[55] cursor-default" />}
+      {invoiceRailMenu === 'print' && <div className="absolute right-[104px] top-[74px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl"><button type="button" onClick={() => { setInvoiceRailMenu(''); print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Cetak Faktur Penjualan</button><button type="button" onClick={() => { setInvoiceRailMenu(''); print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Simpan sebagai PDF</button>{invoice && <button type="button" onClick={() => { setInvoiceRailMenu(''); shareInvoiceToWhatsApp(invoice); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Bagikan Faktur</button>}</div>}
+      {invoiceRailMenu === 'more' && <div className={`absolute right-[104px] ${compact ? 'top-[140px]' : 'top-[196px]'} z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl`}><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button></div>}
+    </>
+  );
 
   return (
     <div className="app-module-page">
@@ -1361,7 +1422,21 @@ export default function SalesInvoice() {
                 </button>
               </header>
 
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-3 sm:p-4 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
+              <div className="relative grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-3 sm:p-4 lg:overflow-visible lg:bg-[var(--app-canvas)] lg:p-2 lg:pr-[104px]">
+                <AccurateFormActionRail
+                  ariaLabel="Aksi detail Faktur Penjualan"
+                  className="absolute right-4 top-4 z-50 hidden gap-1.5 lg:flex [&>button:first-child]:mb-1.5 [&>div]:mt-1.5"
+                  save={{ disabled: true, title: 'Simpan (buka Edit terlebih dahulu)' }}
+                  print={{ onClick: () => setInvoiceRailMenu('print'), title: 'Cetak / simpan sebagai' }}
+                  attachment={null}
+                  more={{ onClick: () => setInvoiceRailMenu('more'), title: 'Lainnya' }}
+                  remove={{
+                    onClick: () => void handleDelete(invoice),
+                    disabled: !hasPermission('invoice:delete') || invoice.payment > 0 || deletingInvoiceId !== null,
+                    title: !hasPermission('invoice:delete') ? 'Hapus faktur (akses terbatas)' : invoice.payment > 0 ? 'Hapus pembayaran terlebih dahulu' : 'Hapus faktur',
+                  }}
+                />
+                {invoiceActionMenus(invoice, () => printInvoiceDetail(invoice, items, branchName, displayedSubtotal, displayedDiscount), true)}
                 <div data-invoice-view-summary className="flex flex-wrap items-center justify-end gap-1.5">
                   <div className="order-first mr-auto flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
                     <span>Nomor: <strong className="text-gray-800">{invoice.invoiceNumber}</strong></span>
@@ -1551,9 +1626,7 @@ export default function SalesInvoice() {
                 more={{ onClick: () => setInvoiceRailMenu(invoiceRailMenu === 'more' ? '' : 'more'), title: 'Lain-lain' }}
                 remove={{ onClick: selectedFormItemId ? () => removeFormItem(selectedFormItemId) : undefined, disabled: !selectedFormItemId, title: selectedFormItemId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu' }}
               />
-              {invoiceRailMenu && <button type="button" aria-label="Tutup menu aksi faktur" onClick={() => setInvoiceRailMenu('')} className="fixed inset-0 z-[55] cursor-default" />}
-              {invoiceRailMenu === 'print' && <div className="absolute right-[104px] top-[74px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl"><button type="button" onClick={() => { setInvoiceRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Cetak Faktur Penjualan</button><button type="button" onClick={() => { setInvoiceRailMenu(''); window.print(); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Simpan sebagai PDF</button>{editingInvoice && <button type="button" onClick={() => { setInvoiceRailMenu(''); shareInvoiceToWhatsApp(editingInvoice); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">Bagikan Faktur</button>}</div>}
-              {invoiceRailMenu === 'more' && <div className="absolute right-[104px] top-[196px] z-[60] w-56 rounded border border-slate-300 bg-white py-1 text-sm shadow-xl"><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('info'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Info lainnya</button><button type="button" onClick={() => { setInvoiceRailMenu(''); setInvoiceDocumentTab('payment'); }} className="block w-full px-3 py-2 text-left hover:bg-green-50">Pembayaran / Saldo</button></div>}
+              {invoiceActionMenus(editingInvoice, () => window.print())}
               <section className="bg-transparent p-1 lg:p-0">
                 <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
                   <label className="flex h-10 items-center text-sm font-medium text-gray-700">Pelanggan <span className="ml-1 text-red-500">*</span></label>
