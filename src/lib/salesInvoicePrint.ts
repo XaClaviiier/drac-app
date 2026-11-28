@@ -8,6 +8,7 @@ export interface SalesInvoicePrintData {
   customer: string;
   customerCompany?: string;
   customerContact?: string;
+  customerContactPhone?: string;
   customerAccountType?: 'Pribadi' | 'Perusahaan';
   vehicle: string;
   workOrder?: string;
@@ -42,8 +43,13 @@ export function buildSalesInvoicePrintHtml(data: SalesInvoicePrintData, format: 
   const field = (label: string, value?: string) => value?.trim()
     ? `<div><dt>${label}</dt><dd>${escape(value)}</dd></div>` : '';
   const contact = clean(data.customerContact) || clean(data.customer);
-  const customerIdentity = corporateA4 && customerCompany
-    ? `<div>${field('Pelanggan', customerCompany)}${contact.toLowerCase() !== customerCompany.toLowerCase() ? field('PIC / Kontak', contact) : ''}</div>`
+  const customerLabel = customerCompany || clean(data.customer);
+  const contactLine = [
+    contact.toLowerCase() !== customerLabel.toLowerCase() ? contact : '',
+    clean(data.customerContactPhone),
+  ].filter(Boolean).join(' / ');
+  const customerIdentity = corporateA4
+    ? `<div>${field('Pelanggan', customerLabel)}${field('PIC / Kontak', contactLine)}</div>`
     : field('Pelanggan', data.customer);
   const rows = data.lines.map((line, i) => {
     const members = line.members.length ? `<ul>${line.members.map(member =>

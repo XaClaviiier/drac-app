@@ -492,13 +492,15 @@ export default function SalesInvoice() {
     const primaryContact = customer?.primaryContactId ? data.customerPeople.find(person =>
       person.customerId === customer.id && person.id === customer.primaryContactId && person.isActive !== false
     ) : undefined;
+    const contactName = primaryContact?.name.trim() || customer?.name;
+    const accountPhone = contactName?.trim().toLowerCase() === customer?.name.trim().toLowerCase() ? customer?.phone : undefined;
     popup.opener = null;
     popup.document.open();
     popup.document.write(buildSalesInvoicePrintHtml({
       company: data.settings.company, branch: data.branches.find(branch => branch.id === invoice.branchId),
       number: invoice.invoiceNumber, date: formatBusinessDate(invoice.date), draft,
       customer: invoice.customerName, customerCompany: customer?.companyName, customerAccountType: customer?.accountType,
-      customerContact: primaryContact?.name.trim() || customer?.name,
+      customerContact: contactName, customerContactPhone: primaryContact?.phone?.trim() || accountPhone,
       vehicle: invoice.vehicleInfo, workOrder: invoice.woNumber,
       receipt: invoice.manualReceiptNumber, description: invoice.description, printNote: invoice.printNote, lines,
       subtotal, discount, total: invoice.total, payment: invoice.payment,
