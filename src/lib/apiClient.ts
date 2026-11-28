@@ -139,10 +139,10 @@ export const api = {
       method: 'DELETE',
       body: JSON.stringify({ paymentId }),
     }),
-  createInvoiceFromWorkOrder: (woId: string, cashPayment: number, transferPayment: number, date?: string, paymentDate?: string, backdateReason?: string, items?: any[], manualReceiptNumber?: string) =>
+  createInvoiceFromWorkOrder: (woId: string, cashPayment: number, transferPayment: number, date?: string, paymentDate?: string, backdateReason?: string, items?: any[], manualReceiptNumber?: string, printNote?: string) =>
     request('/sales-invoices/from-work-order', {
       method: 'POST',
-      body: JSON.stringify({ woId, cashPayment, transferPayment, date, paymentDate, backdateReason, items, manualReceiptNumber }),
+      body: JSON.stringify({ woId, cashPayment, transferPayment, date, paymentDate, backdateReason, items, manualReceiptNumber, printNote }),
     }),
 };
 

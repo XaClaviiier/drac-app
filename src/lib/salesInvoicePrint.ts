@@ -10,6 +10,7 @@ export interface SalesInvoicePrintData {
   workOrder?: string;
   receipt?: string;
   description?: string;
+  printNote?: string;
   draft?: boolean;
   company: Pick<CompanyProfile, 'name' | 'invoiceFooter'>;
   branch?: Pick<Branch, 'name' | 'address' | 'phone'>;
@@ -29,6 +30,7 @@ const money = (value: number) => `Rp ${number.format(value)}`;
 
 export function buildSalesInvoicePrintHtml(data: SalesInvoicePrintData, format: SalesInvoicePrintFormat = 'a4') {
   const thermal = format === 'thermal80';
+  const showPaymentStatus = thermal || data.status !== 'Belum Lunas';
   const company = data.company.name.trim() || 'DOKTER AC MOBIL';
   const title = data.draft ? 'Pratinjau Faktur' : 'Faktur Penjualan';
   const field = (label: string, value?: string) => value?.trim()
@@ -87,6 +89,9 @@ tr { break-inside:avoid }
 .totals .balance { margin-top:2mm; border-top:.7mm solid #aa2635; padding:2mm 0; color:#8d202c }
 .balance dt { font-weight:bold } .balance dd { font-size:15pt }
 .authorization { flex:1; min-width:0 }
+.print-note { margin-top:4mm; padding:2.5mm; border:.25mm solid #afb7bc; }
+.print-note:first-child { margin-top:0 }
+.print-note h2 { margin-bottom:1mm } .print-note p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
 .signatures { margin-top:5mm; display:grid; grid-template-columns:1fr 1fr; gap:5mm; text-align:center; font-size:8pt }
 .signatures span { display:block; margin-top:18mm; border-top:.25mm solid #68737c; padding-top:1mm; color:#505b63 }
 footer { margin-top:7mm; padding-top:2.5mm; border-top:.25mm solid #cbd1d4; white-space:pre-line; color:#56616b; font-size:8pt; break-inside:avoid }
@@ -125,7 +130,9 @@ ${[data.branch?.address, data.branch?.phone].filter(Boolean).map(value => `<div 
 ${thermal ? `<ol class="items">${rows || `<li class="item">${fallback}</li>`}</ol>` : `<table><colgroup><col class="seq"><col><col class="qty"><col class="price"><col class="amount"></colgroup>
 <thead><tr><th class="seq">No.</th><th>Uraian</th><th class="qty">Qty</th><th class="num">Harga (Rp)</th><th class="num">Jumlah (Rp)</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="5">${fallback}</td></tr>`}</tbody></table>`}
-<section class="settlement"><div class="authorization"><h2>Status pembayaran</h2><span class="status">${escape(data.status)}</span>
+<section class="settlement"><div class="authorization">
+${showPaymentStatus ? `<h2>Status pembayaran</h2><span class="status">${escape(data.status)}</span>` : ''}
+${!thermal && data.printNote?.trim() ? `<div class="print-note"><h2>Catatan</h2><p>${escape(data.printNote.trim())}</p></div>` : ''}
 ${thermal ? '' : '<div class="signatures"><div>Dibuat oleh<span>Nama petugas</span></div><div>Diterima oleh<span>Nama penerima</span></div></div>'}</div>
 <dl class="totals">${field('Subtotal', money(data.subtotal))}${field('Diskon', money(data.discount))}
 <div class="total"><dt>Total faktur</dt><dd>${money(data.total)}</dd></div>${field('Pembayaran', money(data.payment))}

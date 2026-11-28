@@ -476,6 +476,7 @@ try {
     foreach ($rows as &$r) {
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
+        $r['printNote'] = $r['print_note'] ?? '';
         $r['vehicleInfo'] = $r['vehicle_info'];
         $r['total'] = (float)$r['total'];
         $r['payment'] = (float)$r['payment'];

@@ -13,6 +13,9 @@ runVersionedApiBootstrap($pdo, 'sales_invoice_schema_20260827_v1', static functi
     $manualReceiptIndex = $pdo->query("SHOW INDEX FROM sales_invoices WHERE Key_name='uniq_sales_manual_receipt_number'")->fetch();
     if (!$manualReceiptIndex) $pdo->exec("CREATE UNIQUE INDEX uniq_sales_manual_receipt_number ON sales_invoices(manual_receipt_number)");
 });
+runVersionedApiBootstrap($pdo, 'sales_invoice_print_note_v1', static function(PDO $pdo): void {
+    ensureTableColumn($pdo, 'sales_invoices', 'print_note', 'TEXT NULL');
+});
 $normalizeManualReceiptNumber = static function ($value): ?string {
     $number = strtoupper(trim(preg_replace('/\s+/', ' ', (string)$value)));
     if ($number === '') return null;
@@ -123,6 +126,7 @@ switch ($method) {
         foreach ($rows as &$r) {
             $r['invoiceNumber'] = $r['invoice_number'];
             $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
+            $r['printNote'] = $r['print_note'] ?? '';
             $r['manualReceiptNumber'] = $r['manual_receipt_number'] ?? null;
             $r['vehicleInfo'] = $r['vehicle_info'];
             $r['total'] = (float)$r['total'];
@@ -231,7 +235,7 @@ switch ($method) {
                     $description, $total, $payment, $paymentDate, $backdateReason ?: null, $paymentMethod, $status,
                     $woId, $wo['wo_number'], $wo['branch_id'],
                 ]);
-                $pdo->prepare('UPDATE sales_invoices SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $invoiceId]);
+                $pdo->prepare('UPDATE sales_invoices SET billing_treatment=?, print_note=? WHERE id=?')->execute([$billingTreatment, trim((string)($d['printNote'] ?? '')), $invoiceId]);
 
                 $insertItem = $pdo->prepare("
                     INSERT INTO sales_invoice_items
@@ -308,7 +312,7 @@ switch ($method) {
                 $d['woId'] ?? null, $d['woNumber'] ?? null,
                 $branchId
             ]);
-            $pdo->prepare('UPDATE sales_invoices SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $invoiceId]);
+            $pdo->prepare('UPDATE sales_invoices SET billing_treatment=?, print_note=? WHERE id=?')->execute([$billingTreatment, trim((string)($d['printNote'] ?? '')), $invoiceId]);
 
             // Stok dipotong di AKHIR, saat faktur dibuat dari WO.
             // Hanya item Persediaan; jasa dan header Group tidak mengurangi stok.
@@ -495,7 +499,8 @@ switch ($method) {
                 $d['description'] ?? '', $total, $payment, $paymentDate, $backdateReason ?: null, $paymentMethod,
                 $status, $d['age'] ?? 0, $branchId, $id
             ]);
-            $pdo->prepare('UPDATE sales_invoices SET billing_treatment=? WHERE id=?')->execute([$billingTreatment, $id]);
+            $printNote = trim((string)($d['printNote'] ?? $current['print_note'] ?? ''));
+            $pdo->prepare('UPDATE sales_invoices SET billing_treatment=?, print_note=? WHERE id=?')->execute([$billingTreatment, $printNote, $id]);
 
             $pdo->prepare("DELETE FROM sales_invoice_items WHERE invoice_id=?")->execute([$id]);
             $insertItem = $pdo->prepare("INSERT INTO sales_invoice_items (invoice_id,item_id,warehouse_id,code,name,description,price,qty,subtotal) VALUES (?,?,?,?,?,?,?,?,?)");
@@ -515,7 +520,7 @@ switch ($method) {
             if(!$stockImpactChanged&&$movementDateChanged)bumpStockVersionsForMovementReference($pdo,'sales_invoice',$id);
             if(!$stockImpactChanged&&$movementMetadataChanged)$pdo->prepare("UPDATE stock_movements SET occurred_at=CONCAT(?,' 12:00:00') WHERE reference_type='sales_invoice' AND reference_id=? AND is_voided=0")
                 ->execute([$invoiceDate,$id]);
-            $afterSnapshot=['document'=>array_merge($current,['date'=>$invoiceDate,'description'=>$d['description']??'','total'=>$total,'payment'=>$payment,'status'=>$status,'branch_id'=>$branchId,'billing_treatment'=>$billingTreatment]),'items'=>$items];
+            $afterSnapshot=['document'=>array_merge($current,['date'=>$invoiceDate,'description'=>$d['description']??'','total'=>$total,'payment'=>$payment,'status'=>$status,'branch_id'=>$branchId,'billing_treatment'=>$billingTreatment,'print_note'=>$printNote]),'items'=>$items];
             $pdo->prepare("INSERT INTO transaction_activity_logs(entity_type,entity_id,entity_number,action_type,reason,snapshot_json,user_id,user_name) VALUES('sales_invoice',?,?,'update',?,?,?,?)")
                 ->execute([$id,$current['invoice_number'],$stockImpactChanged?'Perubahan berdampak stok':($movementMetadataChanged?'Perubahan tanggal tanpa perubahan saldo':'Perubahan non-stok'),json_encode(['before'=>['document'=>$current,'items'=>$oldDetailsList],'after'=>$afterSnapshot],JSON_UNESCAPED_UNICODE),$actor['id']??null,$actor['name']??$actor['username']??null]);
             $pdo->commit();

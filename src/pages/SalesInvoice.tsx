@@ -243,6 +243,7 @@ export default function SalesInvoice() {
     billingTreatment: 'normal' as BillingTreatment,
     date: localDateKey(),
     manualReceiptNumber: '',
+    printNote: '',
     customerRefId: '',
     customerId: '',
     customerName: '',
@@ -473,7 +474,7 @@ export default function SalesInvoice() {
   type PrintableInvoice = Pick<SalesInvoice,
     'invoiceNumber' | 'branchId' | 'date' | 'customerName' | 'vehicleInfo' | 'woNumber'
     | 'manualReceiptNumber' | 'total' | 'payment' | 'billingTreatment'
-  > & Partial<Pick<SalesInvoice, 'description' | 'status'>>;
+  > & Partial<Pick<SalesInvoice, 'description' | 'printNote' | 'status'>>;
   const printInvoice = (
     format: SalesInvoicePrintFormat, invoice: PrintableInvoice,
     items: InvoiceItem[], subtotal: number, discount: number, draft = false,
@@ -493,7 +494,7 @@ export default function SalesInvoice() {
       company: data.settings.company, branch: data.branches.find(branch => branch.id === invoice.branchId),
       number: invoice.invoiceNumber, date: formatBusinessDate(invoice.date), draft,
       customer: invoice.customerName, vehicle: invoice.vehicleInfo, workOrder: invoice.woNumber,
-      receipt: invoice.manualReceiptNumber, description: invoice.description, lines,
+      receipt: invoice.manualReceiptNumber, description: invoice.description, printNote: invoice.printNote, lines,
       subtotal, discount, total: invoice.total, payment: invoice.payment,
       status: invoiceStatusLabel({ ...invoice, status: invoice.status ?? (invoice.total > 0 && invoice.payment >= invoice.total ? 'Lunas' : 'Belum Lunas') }),
     }, format));
@@ -532,6 +533,7 @@ export default function SalesInvoice() {
       billingTreatment: 'normal',
       date: localDateKey(),
       manualReceiptNumber: '',
+      printNote: '',
       customerRefId: '',
       customerId: '',
       customerName: '',
@@ -588,6 +590,7 @@ export default function SalesInvoice() {
         vehicleRefId: matchedVehicle?.id || '',
         vehicleInfo: invoice.vehicleInfo,
         description: invoice.description,
+        printNote: invoice.printNote || '',
         total: invoice.total,
         payment: invoice.payment,
         paymentDate: invoice.paymentDate || invoice.date,
@@ -653,6 +656,7 @@ export default function SalesInvoice() {
           formData.backdateReason,
           formItems,
           normalizedManualReceiptNumber,
+          formData.printNote,
         );
         if (invoice) {
           if (options.openPaymentAfterSave && !isGoodwill(formData)) {
@@ -812,6 +816,7 @@ export default function SalesInvoice() {
         billingTreatment: wo.billingTreatment || 'normal',
         date: localDateKey(),
         manualReceiptNumber: '',
+        printNote: '',
         customerRefId: wo.customerRefId || '',
         customerId: wo.customerId || '',
         customerName: wo.customerName,
@@ -1617,6 +1622,7 @@ export default function SalesInvoice() {
                   <div>
                     <h3 className="mb-3 border-b border-gray-300 pb-2 text-base font-medium text-blue-600">Keterangan</h3>
                     <div className="min-h-32 border border-gray-300 bg-white p-3 uppercase text-gray-700">{invoice.description || linkedWO?.description || 'TIDAK ADA KETERANGAN SERVICE'}</div>
+                    {invoice.printNote?.trim() && <div className="mt-4"><h3 className="mb-2 font-medium text-blue-600">Catatan</h3><p className="whitespace-pre-wrap break-words border border-gray-300 p-3">{invoice.printNote}</p></div>}
                   </div>
                 </section>}
 
@@ -1789,7 +1795,13 @@ export default function SalesInvoice() {
                   </div>
                 </div>}
 
-                {invoiceDocumentTab === 'info' && <div className="min-h-[320px] p-4"><label className="block text-sm font-medium text-gray-800">Keterangan Faktur<textarea id="invoice-description" rows={5} value={formData.description} onChange={(event) => setFormData({ ...formData, description: event.target.value.toUpperCase() })} placeholder="Keterangan layanan atau faktur (opsional)" className="app-field mt-2 w-full resize-none p-3 text-sm uppercase"/></label>{editingInvoice?.woNumber && <p className="mt-3 text-sm text-gray-600">Referensi Order Kerja: <strong>{editingInvoice.woNumber}</strong></p>}</div>}
+                {invoiceDocumentTab === 'info' && <div className="min-h-[320px] space-y-4 p-4">
+                  <label className="block text-sm font-medium text-gray-800">Keterangan Faktur<textarea id="invoice-description" rows={5} value={formData.description} onChange={(event) => setFormData({ ...formData, description: event.target.value.toUpperCase() })} placeholder="Keterangan layanan atau faktur (opsional)" className="app-field mt-2 w-full resize-none p-3 text-sm uppercase"/></label>
+                  <label className="block text-sm font-medium text-gray-800">Catatan
+                    <textarea rows={3} value={formData.printNote} onChange={event => setFormData({ ...formData, printNote: event.target.value })}
+                      placeholder="Catatan untuk dicetak pada faktur A4" className="app-field mt-2 w-full resize-y p-3 text-sm" />
+                  </label>
+                  {editingInvoice?.woNumber && <p className="mt-3 text-sm text-gray-600">Referensi Order Kerja: <strong>{editingInvoice.woNumber}</strong></p>}</div>}
                 <BillingTreatmentSelect id="invoice-billing-treatment" value={formData.billingTreatment} disabled={Boolean(formFromWOId)} onChange={billingTreatment => { setFormData(current => ({ ...current, billingTreatment })); if (billingTreatment === 'goodwill') { setFormItems(items => items.map(item => ({ ...item, price: 0 }))); setFormDiscount(0); setWoPayment(0); } }} />
                 {invoiceDocumentTab === 'estimate' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Perhitungan Faktur</h4><div className="mt-4 ml-auto max-w-xl space-y-3 text-sm"><div className="flex justify-between border-b pb-2"><span>Subtotal barang/jasa</span><strong>Rp {formItemsTotal.toLocaleString('id-ID')}</strong></div><div className="flex justify-between border-b pb-2"><span>Diskon</span><strong>Rp {formDiscount.toLocaleString('id-ID')}</strong></div><div className="flex justify-between text-base"><span>Total Faktur</span><strong>Rp {formGrandTotal.toLocaleString('id-ID')}</strong></div></div></div>}
                 {invoiceDocumentTab === 'payment' && <div className="min-h-[320px] p-4"><h4 className="border-b border-gray-300 pb-2 text-base font-semibold text-blue-700">Pembayaran / Saldo</h4><div className="mt-4 grid max-w-2xl gap-3 sm:grid-cols-2"><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sudah dibayar</span><strong className="mt-1 block text-lg">Rp {(editingInvoice?.payment || 0).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Sisa tagihan</span><strong className="mt-1 block text-lg">Rp {Math.max(0, formGrandTotal - (editingInvoice?.payment || 0)).toLocaleString('id-ID')}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Status</span><strong className="mt-1 block">{isGoodwill(formData) ? 'Gratis / Goodwill' : editingInvoice && editingInvoice.payment >= formGrandTotal && formGrandTotal > 0 ? 'Lunas' : 'Belum Lunas'}</strong></div><div className="rounded border border-gray-300 bg-white p-3"><span className="text-xs text-gray-500">Metode terakhir</span><strong className="mt-1 block">{editingInvoice?.paymentMethod || '-'}</strong></div></div></div>}

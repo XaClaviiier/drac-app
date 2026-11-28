@@ -78,6 +78,7 @@ export interface SalesInvoice {
   invoiceNumber: string;
   /** Nomor pada nota fisik asli. Opsional, tetapi unik jika diisi. */
   manualReceiptNumber?: string;
+  printNote?: string;
   date: string;
   customerRefId?: string;
   customerId: string;

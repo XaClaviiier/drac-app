@@ -438,6 +438,7 @@ CREATE TABLE IF NOT EXISTS `sales_invoices` (
   `customer_name` VARCHAR(100),
   `vehicle_info` VARCHAR(200),
   `description` TEXT,
+  `print_note` TEXT,
   `total` DECIMAL(15,2) DEFAULT 0,
   `payment` DECIMAL(15,2) DEFAULT 0,
   `payment_date` DATE,

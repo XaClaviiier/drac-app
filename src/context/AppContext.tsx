@@ -61,7 +61,7 @@ interface AppContextType {
   /** Catat tahap operasional timeline tanpa mengubah status inti WO. */
   changeWorkOrderTimelineStage: (woId: string, stage: WorkOrderTimelineStage, note?: string) => Promise<{ ok: boolean; message?: string }>;
   changeWorkOrderOverTime: (woId: string, enabled: boolean) => Promise<{ ok: boolean; message?: string }>;
-  createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string) => Promise<SalesInvoice | null>;
+  createInvoiceFromWO: (woId: string, cashPayment: number, transferPayment: number, invoiceDate?: string, paymentDate?: string, backdateReason?: string, items?: WorkOrder['services'], manualReceiptNumber?: string, printNote?: string) => Promise<SalesInvoice | null>;
   addItem: (item: Item & { autoCode?: boolean; provisional?: boolean }) => Promise<Item>;
   updateItem: (id: string, item: Item) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -979,7 +979,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     paymentDate?: string,
     backdateReason?: string,
     invoiceItems?: WorkOrder['services'],
-    manualReceiptNumber?: string
+    manualReceiptNumber?: string,
+    printNote?: string
   ): Promise<SalesInvoice | null> => {
     const wo = data.workOrders.find((w) => w.id === woId);
     if (!wo) return null;
@@ -1001,7 +1002,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let invoiceId = Date.now().toString();
 
     if (!isDemoMode) {
-      const result = await api.createInvoiceFromWorkOrder(woId, cashPayment, transferPayment, today, paymentDate, backdateReason, finalItems, manualReceiptNumber);
+      const result = await api.createInvoiceFromWorkOrder(woId, cashPayment, transferPayment, today, paymentDate, backdateReason, finalItems, manualReceiptNumber, printNote);
       if (!result.success || !result.data) {
         throw new Error(result.message || 'Gagal membuat faktur dari WO');
       }
@@ -1014,6 +1015,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: invoiceId,
       invoiceNumber, date: today,
       manualReceiptNumber: manualReceiptNumber?.trim().toUpperCase() || undefined,
+      printNote,
       customerRefId: customer?.id || wo.customerRefId,
       customerId: customer?.customerCode || wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
       customerName: customer?.name || wo.customerName,
