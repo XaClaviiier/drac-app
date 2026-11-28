@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../customer-document-identity.php';
 runVersionedApiBootstrap($pdo, 'vehicle_fitment_profile_20260902_v1', static function(PDO $pdo): void {
     $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_id VARCHAR(64) NULL AFTER model_id");
     $pdo->exec("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS generation_name VARCHAR(100) NOT NULL DEFAULT '' AFTER generation_id");
@@ -79,7 +80,7 @@ $resolveVehicleColor = static function (PDO $pdo, array $data): array {
 
 switch ($method) {
     case 'GET':
-        $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
+        $rows = $pdo->query(CUSTOMER_VEHICLE_SELECT . " ORDER BY v.plate_number")->fetchAll();
         foreach ($rows as &$r) {
             $r['plateNumber']        = $r['plate_number'];
             $r['brandId']            = $r['brand_id'] ?? null;
@@ -92,9 +93,6 @@ switch ($method) {
             $r['variant']            = $r['variant'] ?? null;
             $r['transmission']       = $r['transmission'] ?? null;
             $r['hvacType']           = $r['hvac_type'] ?? null;
-            $r['customerRefId']      = $r['customer_id'];
-            $r['customerId']         = $r['customer_code'] ?: $r['customer_id'];
-            $r['customerName']       = $r['customer_name'];
             $r['registrationDate']   = $r['registration_date'];
             $r['createdAt']          = $r['created_at'] ?? null;
             $r['updatedAt']          = $r['updated_at'] ?? null;

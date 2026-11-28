@@ -305,7 +305,7 @@ export default function SalesInvoice() {
 
   const selectedCustomer = data.customers.find((customer) => customer.id === formData.customerRefId) || null;
   const invoiceCustomerPhone = (invoice: SalesInvoice) => data.customers.find(customer => (
-    customer.id === invoice.customerRefId || customer.customerCode === invoice.customerId
+    customer.id === invoice.customerRefId
   ))?.phone || '-';
   const invoiceVehicleSummary = (invoice: SalesInvoice) => {
     const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
@@ -394,6 +394,7 @@ export default function SalesInvoice() {
         const matchesSearch =
           inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (inv.manualReceiptNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (inv.customerId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           inv.vehicleInfo.toLowerCase().includes(searchTerm.toLowerCase());
         const remaining = Math.max(0, Number(inv.total) - Number(inv.payment));
@@ -403,7 +404,7 @@ export default function SalesInvoice() {
           && (!filterDateFrom || invoiceDate >= filterDateFrom)
           && (!filterDateTo || invoiceDate <= filterDateTo);
         const matchesAge = !filterMinAge || (remaining > 0 && Number(inv.age) >= Number(filterMinAge));
-        const matchesCustomer = !filterCustomer || inv.customerName === filterCustomer;
+        const matchesCustomer = !filterCustomer || (inv.customerRefId || 'invoice:' + inv.id) === filterCustomer;
         const matchesBranch = currentBranchId === 'ALL' || inv.branchId === currentBranchId;
         return matchesSearch && matchesStatus && matchesDate && matchesCustomer && matchesAge && matchesBranch;
       })
@@ -432,11 +433,13 @@ export default function SalesInvoice() {
     });
   }, [filteredInvoices, invoiceTable.sort, data.branches]);
 
-  const invoiceCustomers = useMemo(() => Array.from(new Set(
-    data.invoices
-      .map(invoice => invoice.customerName)
-      .filter(Boolean)
-  )).sort((a, b) => a.localeCompare(b)), [data.invoices]);
+  const invoiceCustomers = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const invoice of data.invoices) {
+      labels.set(invoice.customerRefId || 'invoice:' + invoice.id, [invoice.customerId, invoice.customerName].filter(Boolean).join(' · '));
+    }
+    return [...labels].sort((a, b) => a[1].localeCompare(b[1], 'id'));
+  }, [data.invoices]);
 
   const formatShareDate = (date: string) => {
     const [year, month, day] = date.split('-');
@@ -674,6 +677,8 @@ export default function SalesInvoice() {
     )) return;
     const finalForm = {
       ...formData,
+      customerName: formCustomerName,
+      customerId: selectedCustomer?.customerCode ?? formData.customerId,
       manualReceiptNumber: normalizedManualReceiptNumber || undefined,
       total: updatedInvoiceTotal,
       payment: existingPayment,
@@ -760,10 +765,12 @@ export default function SalesInvoice() {
   const visibleUnbilledWOs = unbilledWOs.filter((wo) => {
     const term = woSearchTerm.trim().toLowerCase();
     if (!term) return true;
-    return [wo.woNumber, wo.customerName, wo.plateNumber, wo.vehicleInfo]
+    return [wo.woNumber, wo.customerId, wo.customerName, wo.plateNumber, wo.vehicleInfo]
       .some((value) => value?.toLowerCase().includes(term));
   });
   const selectedWO = data.workOrders.find((wo) => wo.id === selectedWOId);
+  const currentInvoice = data.invoices.find(invoice => invoice.id === editingInvoice?.id);
+  const formCustomerName = selectedCustomer?.name ?? (formFromWOId ? selectedWO?.customerName : undefined) ?? currentInvoice?.customerName ?? formData.customerName;
   const formFromWO = Boolean(formFromWOId && selectedWO?.id === formFromWOId);
   const woDraftTotal = woDraftItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
@@ -1019,7 +1026,7 @@ export default function SalesInvoice() {
   };
 
   const printForm = (format: SalesInvoicePrintFormat) => printInvoice(format, {
-    ...formData, invoiceNumber: editingInvoice?.invoiceNumber || '', branchId: transactionBranchId,
+    ...formData, customerName: formCustomerName, invoiceNumber: editingInvoice?.invoiceNumber || '', branchId: transactionBranchId,
     woNumber: editingInvoice?.woNumber || (formFromWO ? selectedWO?.woNumber : undefined),
     status: undefined, total: formGrandTotal, payment: formFromWO ? woPayment : editingInvoice?.payment || 0,
   }, formItems, formItemsTotal, formDiscount, true);
@@ -1105,7 +1112,7 @@ export default function SalesInvoice() {
               {showFilterPanel && <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[min(360px,calc(100vw-24px))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl">
                 <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2"><strong className="text-sm text-gray-800">Filter Faktur Penjualan</strong><button type="button" onClick={resetInvoiceFilters} className="text-xs font-semibold text-blue-700 hover:underline">Clear</button></div>
                 <div className="space-y-3">
-                  <label className="block text-xs font-semibold text-gray-600">Pelanggan<select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua pelanggan</option>{invoiceCustomers.map(customer => <option key={customer} value={customer}>{customer}</option>)}</select></label>
+                  <label className="block text-xs font-semibold text-gray-600">Pelanggan<select value={filterCustomer} onChange={(event) => setFilterCustomer(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua pelanggan</option>{invoiceCustomers.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
                   <label className="block text-xs font-semibold text-gray-600">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${ui.field} mt-1 w-full px-3 text-sm font-normal`}><option value="">Semua status</option><option value="Lunas">Lunas</option><option value="Belum Lunas">Belum Lunas</option><option value="goodwill">Gratis / Goodwill</option></select></label>
                   <label className="block text-xs font-semibold text-gray-600">Tanggal Faktur<IndonesianDateInput value={filterDate} onChange={updateFilterDate} className="mt-1 h-10 w-full text-sm font-normal" title="Tanggal faktur"/></label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1439,9 +1446,9 @@ export default function SalesInvoice() {
 
       {/* Detail faktur: dibuka langsung dari Asisten AI atau nomor faktur pada daftar. */}
       {viewingInvoice && (() => {
-        const invoice = viewingInvoice;
+        const invoice = data.invoices.find(item => item.id === viewingInvoice.id) || viewingInvoice;
         const branchName = data.branches.find(branch => branch.id === invoice.branchId)?.name || '-';
-        const customer = data.customers.find(item => item.id === invoice.customerRefId || item.customerCode === invoice.customerId);
+        const customer = data.customers.find(item => item.id === invoice.customerRefId);
         const linkedWO = data.workOrders.find(workOrder => workOrder.id === invoice.woId || workOrder.woNumber === invoice.woNumber);
         const remaining = Math.max(0, invoice.total - invoice.payment);
         const items = invoice.items?.length ? invoice.items : linkedWO?.services || [];
@@ -1679,11 +1686,11 @@ export default function SalesInvoice() {
                 more={{ onClick: () => setInvoiceRailMenu(invoiceRailMenu === 'more' ? '' : 'more'), title: 'Lain-lain' }}
                 remove={{ onClick: selectedFormItemId ? () => removeFormItem(selectedFormItemId) : undefined, disabled: !selectedFormItemId, title: selectedFormItemId ? 'Hapus barang/jasa terpilih' : 'Pilih baris barang/jasa terlebih dahulu' }}
               />
-              {invoiceActionMenus(editingInvoice, printForm)}
+              {invoiceActionMenus(currentInvoice || editingInvoice, printForm)}
               <section className="bg-transparent p-1 lg:p-0">
                 <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[120px_minmax(0,1fr)_minmax(0,.8fr)_82px_190px_44px] lg:gap-x-1">
                   <label className="flex h-10 items-center text-sm font-medium text-gray-700">Pelanggan <span className="ml-1 text-red-500">*</span></label>
-                  {editingInvoice || formFromWO ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice?.customerName || formData.customerName}</div> : <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} onVehicleSelect={handleVehicleSelect} />}
+                  {editingInvoice || formFromWO ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{formCustomerName}</div> : <CustomerPicker value={formData.customerRefId} onChange={handleCustomerSelect} onVehicleSelect={handleVehicleSelect} />}
                   {editingInvoice || formFromWO ? <div className="flex h-10 items-center rounded border border-blue-200 bg-blue-50 px-3 text-sm font-semibold">{editingInvoice?.vehicleInfo || formData.vehicleInfo}</div> : <VehiclePicker customer={selectedCustomer} value={formData.vehicleRefId} onChange={handleVehicleSelect} />}
                   <label className="flex h-10 items-center justify-end pr-2 text-sm font-medium text-gray-700">Tanggal <span className="ml-1 text-red-500">*</span></label>
                   <IndonesianDateInput required max={localDateKey()} disabled={!invoiceDateUnlocked} value={formData.date} onChange={date=>setFormData({...formData,date})} className="h-10 min-w-0 w-full" />

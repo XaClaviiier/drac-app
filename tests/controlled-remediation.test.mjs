@@ -99,7 +99,8 @@ test('sales invoice mutations authorize locked invoice and WO branches before ac
 test('sales invoice reads and mutation roots are scoped in SQL before rows enter application memory', () => {
   const source = read('api/endpoints/sales-invoices.php');
   const get = source.slice(source.indexOf("case 'GET':"), source.indexOf("case 'POST':"));
-  assert.match(get, /SELECT \* FROM sales_invoices WHERE branch_id IN \(\$branchMarks\)/);
+  assert.match(read('api/customer-document-identity.php'), /CUSTOMER_INVOICE_SELECT = "SELECT i\.\*, " .* FROM sales_invoices i/);
+  assert.match(get, /prepare\(CUSTOMER_INVOICE_SELECT \. " WHERE i\.branch_id IN \(\$branchMarks\)/);
   assert.match(get, /FROM sales_invoice_items d JOIN sales_invoices i ON i\.id=d\.invoice_id WHERE i\.branch_id IN \(\$branchMarks\)/);
   assert.doesNotMatch(get, /SELECT \* FROM sales_invoices ORDER BY/);
   assert.doesNotMatch(get, /SELECT \* FROM sales_invoice_items ORDER BY/);

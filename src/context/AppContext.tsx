@@ -40,7 +40,7 @@ interface AppContextType {
   updateVehicle: (id: string, vehicle: Vehicle) => Promise<void>;
   deleteVehicle: (id: string) => Promise<void>;
   addCustomer: (customer: Omit<Customer, 'customerCode'> & { customerCode?: string }) => Promise<Customer>;
-  updateCustomer: (id: string, customer: Customer) => Promise<void>;
+  updateCustomer: (id: string, customer: Customer, expectedCustomerCode?: string) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
   generateCustomerCode: () => string;
   addInvoice: (invoice: SalesInvoice) => Promise<void>;
@@ -467,7 +467,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ===== CUSTOMERS =====
   const generateCustomerCode = () => {
     const maxNum = data.customers.reduce((max, c) => {
-      const match = c.customerCode?.match(/PLG-(\d+)/);
+      const match = c.customerCode?.match(/^PLG-(\d+)$/i);
       const num = match ? parseInt(match[1]) : 0;
       return num > max ? num : max;
     }, 0);
@@ -487,11 +487,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     return newCustomer;
   };
-  const updateCustomer = async (id: string, c: Customer) => {
+  useEffect(() => {
+    if (!currentUser || isDemoMode) return;
+    const onCustomerUpdate = (event: StorageEvent) => {
+      if (event.key === 'drac-customer-master-updated') void refreshData();
+    };
+    window.addEventListener('storage', onCustomerUpdate);
+    return () => window.removeEventListener('storage', onCustomerUpdate);
+  }, [currentUser?.id, isDemoMode]);
+
+  const updateCustomer = async (id: string, customer: Customer, expectedCustomerCode?: string) => {
+    const c = { ...customer, customerCode: customer.customerCode.trim() };
+    if (!c.customerCode) throw new Error('ID pelanggan wajib diisi.');
+    if (data.customers.some(other => other.id !== id && other.customerCode.toUpperCase() === c.customerCode.toUpperCase())) {
+      throw new Error('ID pelanggan sudah digunakan pelanggan lain.');
+    }
+    const updateIdentity = <T extends { customerRefId?: string; customerName: string; customerId: string }>(row: T): T =>
+      row.customerRefId === id ? { ...row, customerName: c.name, customerId: c.customerCode } : row;
     await executeCRUD(
-      () => api.update('customers', id, c),
-      () => setData(prev => ({ ...prev, customers: prev.customers.map(x => x.id === id ? c : x) }))
+      () => api.update('customers', id, { ...c, expectedCustomerCode }),
+      () => setData(prev => ({
+        ...prev, customers: prev.customers.map(x => x.id === id ? c : x),
+        workOrders: prev.workOrders.map(updateIdentity), invoices: prev.invoices.map(updateIdentity),
+        vehicles: prev.vehicles.map(updateIdentity),
+      }))
     );
+    if (!isDemoMode) localStorage.setItem('drac-customer-master-updated', String(Date.now()));
   };
   const deleteCustomer = async (id: string) => {
     await executeCRUD(
@@ -975,7 +996,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ? 'Campuran'
       : transferPayment > 0 ? 'Transfer' : 'Tunai';
     const status: SalesInvoice['status'] = payment >= invoiceTotal ? 'Lunas' : 'Belum Lunas';
-    const customer = data.customers.find((c) => c.id === wo.customerRefId || c.name === wo.customerName);
+    const customer = data.customers.find((c) => c.id === wo.customerRefId);
     let invoiceNumber = generateDocumentNumber('invoice', wo.branchId);
     let invoiceId = Date.now().toString();
 
@@ -994,8 +1015,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       invoiceNumber, date: today,
       manualReceiptNumber: manualReceiptNumber?.trim().toUpperCase() || undefined,
       customerRefId: customer?.id || wo.customerRefId,
-      customerId: wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
-      customerName: wo.customerName,
+      customerId: customer?.customerCode || wo.customerId || wo.plateNumber.replace(/[^a-zA-Z0-9]/g, ''),
+      customerName: customer?.name || wo.customerName,
       vehicleInfo: `${wo.vehicleInfo} ${wo.plateNumber}`,
       description: finalItems.map((s) => s.description || s.name).join(', '),
       total: invoiceTotal, payment, paymentMethod, paymentDate: payment > 0 ? (paymentDate || today) : undefined, backdateReason, status, age: 0,

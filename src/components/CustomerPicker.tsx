@@ -10,6 +10,7 @@ interface CustomerPickerProps {
   onVehicleSelect?: (vehicleId: string) => void;
   onNewCustomerCreated?: (customer: Customer) => void;
   disabled?: boolean;
+  savedName?: string;
   selectedAction?: ReactNode;
 }
 
@@ -32,7 +33,7 @@ const getVehicleLabel = (vehicle: Vehicle) => {
 const getSelectedCustomerLabel = (customer: Customer) =>
   [customer.name.trim(), customer.phone?.trim()].filter(Boolean).join(' - ');
 
-export default function CustomerPicker({ value, onChange, onVehicleSelect, onNewCustomerCreated, disabled = false, selectedAction }: CustomerPickerProps) {
+export default function CustomerPicker({ value, onChange, onVehicleSelect, onNewCustomerCreated, disabled = false, savedName, selectedAction }: CustomerPickerProps) {
   const { data, addCustomer, generateCustomerCode, resolveBranchId } = useApp();
   const [inputText, setInputText] = useState('');
   const [open, setOpen] = useState(false);
@@ -69,8 +70,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
     const q = inputText.trim().toLowerCase();
     return data.customers.flatMap((customer) => {
       const vehicles = data.vehicles.filter((vehicle) =>
-        vehicle.customerRefId === customer.id ||
-        (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
+        vehicle.customerRefId === customer.id
       );
       const rows: Array<{ customer: Customer; vehicle: Vehicle | null }> = vehicles.length
         ? vehicles.map((vehicle) => ({ customer, vehicle }))
@@ -188,7 +188,7 @@ export default function CustomerPicker({ value, onChange, onVehicleSelect, onNew
         <input
           ref={inputRef}
           type="text"
-          value={inputText}
+          value={disabled && !selectedCustomer ? savedName || '' : inputText}
           onChange={handleInputChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}

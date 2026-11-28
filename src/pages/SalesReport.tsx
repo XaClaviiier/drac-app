@@ -34,8 +34,8 @@ export default function SalesReport() {
     if (from && invoice.date < from) return false;
     if (to && invoice.date > to) return false;
     if (status !== 'ALL' && invoice.status !== status) return false;
-    const customer = data.customers.find(item => item.id === invoice.customerRefId || item.customerCode === invoice.customerId);
-    return `${invoice.invoiceNumber} ${invoice.customerName} ${customer?.phone || ''} ${invoice.vehicleInfo} ${invoice.woNumber || ''}`.toLowerCase().includes(search.toLowerCase());
+    const customer = data.customers.find(item => item.id === invoice.customerRefId);
+    return `${invoice.invoiceNumber} ${invoice.customerName} ${invoice.customerId} ${customer?.phone || ''} ${invoice.vehicleInfo} ${invoice.woNumber || ''}`.toLowerCase().includes(search.toLowerCase());
   }).sort((a, b) => b.date.localeCompare(a.date) || b.invoiceNumber.localeCompare(a.invoiceNumber)), [data.invoices, data.customers, currentBranchId, branchId, from, to, status, search]);
 
   const billed = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);

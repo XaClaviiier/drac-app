@@ -27,6 +27,7 @@ type PaymentRow = {
   date: string;
   customerName: string;
   customerId: string;
+  customerRefId?: string;
   vehicleInfo: string;
   invoiceTotal: number;
   invoicePaid: number;
@@ -107,7 +108,7 @@ const accountIssue = (account: CashAccount) => account.isActive === false
 export default function CustomerPayments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, currentBranchId, hasPermission, refreshData } = useApp();
-  const [rows, setRows] = useState<PaymentRow[]>([]),
+  const [loadedRows, setRows] = useState<PaymentRow[]>([]),
     [accounts, setAccounts] = useState<CashAccount[]>([]),
     [accountSettings, setAccountSettings] = useState<BranchAccountSetting[]>([]);
   const [loading, setLoading] = useState(false),
@@ -115,7 +116,15 @@ export default function CustomerPayments() {
     [showForm, setShowForm] = useState(false),
     [invoiceSearch, setInvoiceSearch] = useState("");
   const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
-  const [viewingPayment, setViewingPayment] = useState<PaymentRow | null>(null);
+  const [selectedPayment, setViewingPayment] = useState<PaymentRow | null>(null);
+  const rows = useMemo(() => {
+    const customers = new Map(data.customers.map(customer => [customer.id, customer]));
+    return loadedRows.map(row => {
+      const customer = row.customerRefId && customers.get(row.customerRefId);
+      return customer ? { ...row, customerName: customer.name, customerId: customer.customerCode } : row;
+    });
+  }, [loadedRows, data.customers]);
+  const viewingPayment = selectedPayment && (rows.find(row => row.id === selectedPayment.id) || selectedPayment);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isFromWorkOrder, setIsFromWorkOrder] = useState(false);
   const [period, setPeriod] = useState<Period>("this_month"),
@@ -218,11 +227,9 @@ export default function CustomerPayments() {
       .filter((i) => {
         const customer = data.customers.find(
           (c) =>
-            c.id === i.customerRefId ||
-            c.id === i.customerId ||
-            c.name === i.customerName,
+            c.id === i.customerRefId,
         );
-        return `${i.invoiceNumber} ${i.customerName} ${customer?.phone || ""} ${i.vehicleInfo}`
+        return `${i.invoiceNumber} ${i.customerName} ${i.customerId} ${customer?.phone || ""} ${i.vehicleInfo}`
           .toLowerCase()
           .includes(q);
       })
@@ -479,9 +486,7 @@ export default function CustomerPayments() {
   const customerPhone = (row: PaymentRow) =>
     data.customers.find(
       (customer) =>
-        customer.customerCode === row.customerId ||
-        customer.id === row.customerId ||
-        customer.name === row.customerName,
+        customer.id === row.customerRefId,
     )?.phone || "";
   const whatsappNumber = (phone: string) => {
     const digits = phone.replace(/\D/g, "");

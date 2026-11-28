@@ -66,8 +66,7 @@ export default function VehiclePicker({ customer, value, onChange, onNewVehicleC
   const customerVehicles = useMemo(() => {
     if (!customer) return [];
     return data.vehicles.filter((v) =>
-      v.customerRefId === customer.id ||
-      (!v.customerRefId && v.customerId === customer.customerCode)
+      v.customerRefId === customer.id
     );
   }, [data.vehicles, customer]);
 

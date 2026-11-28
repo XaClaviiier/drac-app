@@ -41,7 +41,7 @@ export default function WorkOrderReport() {
 
   const baseRows = useMemo<ReportRow[]>(() => data.workOrders.map(wo => {
     const invoice = data.invoices.find(inv => inv.woId === wo.id || (!!inv.woNumber && inv.woNumber === wo.woNumber));
-    const customer = data.customers.find(item => item.id === wo.customerRefId || item.customerCode === wo.customerId);
+    const customer = data.customers.find(item => item.id === wo.customerRefId);
     return {
       ...wo,
       invoice,
@@ -57,7 +57,7 @@ export default function WorkOrderReport() {
     if (dateTo && wo.date > dateTo) return false;
     if (creator && wo.createdByName !== creator) return false;
     const query = search.trim().toLowerCase();
-    return !query || [wo.woNumber, wo.invoice?.invoiceNumber, wo.customerName, wo.customerPhone, wo.plateNumber, wo.vehicleInfo, wo.createdByName]
+    return !query || [wo.woNumber, wo.invoice?.invoiceNumber, wo.customerName, wo.customerId, wo.customerPhone, wo.plateNumber, wo.vehicleInfo, wo.createdByName]
       .some(value => String(value || '').toLowerCase().includes(query));
   }), [baseRows, currentBranchId, branchId, dateFrom, dateTo, creator, search]);
 
@@ -105,7 +105,7 @@ export default function WorkOrderReport() {
   const exportCsv = () => {
     const header = ['No. WO', 'Tanggal', 'Cabang', 'Pelanggan', 'Telepon', 'Plat', 'Kendaraan', 'Keluhan', 'Layanan/Barang', 'Status', 'Estimasi WO', 'No. Invoice', 'Nilai Invoice', 'Pembayaran', 'Pembuat'];
     const csvRows = rows.map(wo => [
-      wo.woNumber, wo.date, wo.branchName, wo.customerName, wo.customerPhone, wo.plateNumber, wo.vehicleInfo,
+      wo.woNumber, wo.date, wo.branchName, wo.customerName, wo.customerId, wo.customerPhone, wo.plateNumber, wo.vehicleInfo,
       wo.description || '', wo.services.map(item => `${item.name} x${item.qty}`).join('; '), statusLabel(wo.status),
       wo.estimateTotal ?? wo.total, wo.invoice?.invoiceNumber || '', wo.invoice?.total || 0, wo.invoice?.payment || 0,
       wo.createdByName || '',

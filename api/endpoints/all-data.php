@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../customer-document-identity.php';
 require_once __DIR__.'/../auto-close-diagnosis.php';
 ensureItemMinimumStockSchema($pdo);
 runVersionedApiBootstrap($pdo, 'all_data_inventory_schema_20260902_v3', static function(PDO $pdo): void {
@@ -257,7 +258,7 @@ try {
     $data['customerPeople']=$canUseCustomers?$people:[];
 
     // Vehicles
-    $rows = $pdo->query("SELECT * FROM vehicles ORDER BY plate_number")->fetchAll();
+    $rows = $pdo->query(CUSTOMER_VEHICLE_SELECT . " ORDER BY v.plate_number")->fetchAll();
     foreach ($rows as &$r) {
         $r['plateNumber']       = $r['plate_number'];
         $r['brandId']           = $r['brand_id'] ?? null;
@@ -270,9 +271,6 @@ try {
         $r['variant']           = $r['variant'] ?? null;
         $r['transmission']      = $r['transmission'] ?? null;
         $r['hvacType']          = $r['hvac_type'] ?? null;
-        $r['customerRefId']     = $r['customer_id'];
-        $r['customerId']        = $r['customer_code'] ?: $r['customer_id'];
-        $r['customerName']      = $r['customer_name'];
         $r['registrationDate']  = $r['registration_date'];
         $r['createdAt']         = $r['created_at'] ?? null;
         $r['updatedAt']         = $r['updated_at'] ?? null;
@@ -380,7 +378,7 @@ try {
     })) : [];
 
     // Work Orders
-    $rows = $pdo->query("SELECT * FROM work_orders ORDER BY date DESC, wo_number DESC")->fetchAll();
+    $rows = $pdo->query(CUSTOMER_WORK_ORDER_SELECT . " ORDER BY w.date DESC, w.wo_number DESC")->fetchAll();
     $allServices = $pdo->query("SELECT * FROM work_order_services")->fetchAll();
     $allTechnicianAssignments = $pdo->query("SELECT * FROM work_order_technicians ORDER BY wo_id,sort_order,user_name")->fetchAll();
     $servicesByWO = [];
@@ -401,9 +399,6 @@ try {
     }
     foreach ($rows as &$r) {
         $r['woNumber'] = $r['wo_number'];
-        $r['customerRefId'] = $r['customer_ref_id'];
-        $r['customerId'] = $r['customer_id'];
-        $r['customerName'] = $r['customer_name'];
         $r['vehicleRefId'] = $r['vehicle_ref_id'];
         $r['plateNumber'] = $r['plate_number'];
         $r['vehicleInfo'] = $r['vehicle_info'];
@@ -468,7 +463,7 @@ try {
 
     // Sales invoice summaries are maintained by invoice/payment mutations and
     // the one-time legacy ledger migration in the API bootstrap.
-    $rows = $pdo->query("SELECT * FROM sales_invoices ORDER BY date DESC, invoice_number DESC")->fetchAll();
+    $rows = $pdo->query(CUSTOMER_INVOICE_SELECT . " ORDER BY i.date DESC, i.invoice_number DESC")->fetchAll();
     $invoiceItemRows = $pdo->query("SELECT * FROM sales_invoice_items ORDER BY id")->fetchAll();
     $itemsBySalesInvoice = [];
     foreach ($invoiceItemRows as $item) {
@@ -481,9 +476,6 @@ try {
     foreach ($rows as &$r) {
         $r['invoiceNumber'] = $r['invoice_number'];
         $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
-        $r['customerRefId'] = $r['customer_ref_id'];
-        $r['customerId'] = $r['customer_id'];
-        $r['customerName'] = $r['customer_name'];
         $r['vehicleInfo'] = $r['vehicle_info'];
         $r['total'] = (float)$r['total'];
         $r['payment'] = (float)$r['payment'];

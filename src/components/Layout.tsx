@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useOutlet, useLocation, useNavigate } from "react-router-dom";
 import { clearTransferWorkspaces } from '../lib/transferWorkspaceSession';
 import { ui, workspaceTabClass } from "./ui/interfaceStandards";
 import {
@@ -58,7 +58,7 @@ import {
   MonitorCog,
   BookSearch,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Activity as ReactActivity, useState, useEffect, useLayoutEffect, useRef, type ReactElement } from "react";
 import { useApp } from "../context/AppContext";
 import { buildWorkOrderAttentionItems, countWorkOrderAttentionByKind } from "../lib/workOrderAttention";
 import { localDateKey } from "../lib/date";
@@ -645,6 +645,15 @@ export default function Layout() {
     hasPermission,
     isDemoMode,
   } = useApp();
+
+  const outlet = useOutlet();
+  const invoiceActive = location.pathname === '/invoices';
+  const invoiceTabOpen = workspaceTabs.some(tab => tab.path === '/invoices');
+  const lastInvoiceOutlet = useRef<ReactElement | null>(null);
+  useLayoutEffect(() => {
+    if (invoiceActive) lastInvoiceOutlet.current = outlet;
+    else if (!invoiceTabOpen) lastInvoiceOutlet.current = null;
+  }, [outlet, invoiceActive, invoiceTabOpen]);
 
   const isAll = currentBranchId === "ALL";
   const activeBranches = data.branches.filter((branch) => branch.isActive);
@@ -1405,7 +1414,12 @@ export default function Layout() {
           className="app-page-scroll app-page-scroll--module-frame min-h-0 flex-1"
         >
           <div className="app-module-content">
-            <Outlet />
+            {(invoiceActive || (invoiceTabOpen && lastInvoiceOutlet.current)) && (
+              <ReactActivity key={currentUser?.id + ':' + currentBranchId} mode={invoiceActive ? 'visible' : 'hidden'}>
+                {invoiceActive ? outlet : lastInvoiceOutlet.current}
+              </ReactActivity>
+            )}
+            {!invoiceActive && outlet}
           </div>
         </main>
         {(

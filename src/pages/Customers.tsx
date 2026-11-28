@@ -49,6 +49,7 @@ export default function Customers() {
 
   const [formData, setFormData] = useState({
     accountType: 'Pribadi' as 'Pribadi' | 'Perusahaan',
+    customerCode: '',
     name: '',
     companyName: '',
     phone: '',
@@ -59,8 +60,9 @@ export default function Customers() {
   const filteredCustomers = useMemo(() => {
     // Pelanggan bersifat GLOBAL — tampil di semua cabang
     return data.customers.filter((c) => {
-      const matchesPlate = data.vehicles.some(v => (v.customerRefId === c.id || (!v.customerRefId && v.customerId === c.customerCode)) && v.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesPlate = data.vehicles.some(v => (v.customerRefId === c.id) && v.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesSearch =
+        c.customerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (c.categories || []).some(category => category.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -79,15 +81,15 @@ export default function Customers() {
   const toggleColumn = (column: CustomerColumn) => setColumns(visibleColumns.includes(column) ? visibleColumns.filter(item => item !== column) : [...visibleColumns, column]);
 
   const customerFieldValue = (customer: Customer, column: CustomerColumn) => {
-    const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === customer.id || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode));
+    const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === customer.id);
     if (column === 'name') return `${customer.customerCode} - ${customer.companyName ? `${customer.companyName} / ` : ''}${customer.name}`;
     if (column === 'phone') return customer.phone || '';
     if (column === 'plates') return vehicles.map(vehicle => vehicle.plateNumber).join(', ');
     if (column === 'email') return customer.email || '';
     if (column === 'address') return customer.address || '';
     if (column === 'vehicles') return String(vehicles.length);
-    if (column === 'workOrders') return String(data.workOrders.filter(wo => wo.customerRefId === customer.id || wo.customerName === customer.name).length);
-    if (column === 'invoices') return String(data.invoices.filter(invoice => invoice.customerRefId === customer.id || invoice.customerName.includes(customer.name)).length);
+    if (column === 'workOrders') return String(data.workOrders.filter(wo => wo.customerRefId === customer.id).length);
+    if (column === 'invoices') return String(data.invoices.filter(invoice => invoice.customerRefId === customer.id).length);
     if (column === 'firstBranch') return data.branches.find(branch => branch.id === customer.firstSeenBranchId)?.name || '';
     return '';
   };
@@ -114,7 +116,7 @@ export default function Customers() {
   };
 
   const resetForm = () => {
-    setFormData({ accountType: 'Pribadi', name: '', companyName: '', phone: '', address: '', email: '' });
+    setFormData({ customerCode: '', accountType: 'Pribadi', name: '', companyName: '', phone: '', address: '', email: '' });
     setEditingCustomer(null);
   };
 
@@ -126,6 +128,7 @@ export default function Customers() {
       setPersonForm(emptyPersonForm);
       setFormData({
         accountType: customer.accountType || 'Pribadi',
+        customerCode: customer.customerCode,
         name: customer.name,
         companyName: customer.companyName || '',
         phone: customer.phone,
@@ -140,7 +143,7 @@ export default function Customers() {
   };
 
   const formIsDirty = () => {
-    if (editingCustomer) return formData.accountType !== (editingCustomer.accountType || 'Pribadi') || formData.name !== editingCustomer.name || formData.companyName !== (editingCustomer.companyName || '') || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
+    if (editingCustomer) return formData.customerCode !== editingCustomer.customerCode || formData.accountType !== (editingCustomer.accountType || 'Pribadi') || formData.name !== editingCustomer.name || formData.companyName !== (editingCustomer.companyName || '') || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
     return Object.values(formData).some(value => value.trim() !== '');
   };
 
@@ -162,18 +165,23 @@ export default function Customers() {
       phone: formData.phone.trim(),
     };
 
-    if (editingCustomer) {
-      await updateCustomer(editingCustomer.id, {
-        ...editingCustomer,
-        ...payload,
-      });
-    } else {
-      await addCustomer({
-        id: Date.now().toString(),
-        ...payload,
-        createdAt: now,
-        branchId: resolveBranchId(),
-      });
+    try {
+      if (editingCustomer) {
+        await updateCustomer(editingCustomer.id, {
+          ...editingCustomer,
+          ...payload,
+        }, editingCustomer.customerCode);
+      } else {
+        await addCustomer({
+          id: Date.now().toString(),
+          ...payload,
+          createdAt: now,
+          branchId: resolveBranchId(),
+        });
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Gagal menyimpan pelanggan.');
+      return;
     }
     handleCloseModal(true);
   };
@@ -187,9 +195,9 @@ export default function Customers() {
   };
 
   const customerContext = (customer: Customer) => {
-    const vehicles = data.vehicles.filter(v => v.customerRefId === customer.id || (!v.customerRefId && v.customerId === customer.customerCode));
-    const workOrders = data.workOrders.filter(wo => wo.customerRefId === customer.id || wo.customerName === customer.name).sort((a,b)=>(b.createdAt||b.date).localeCompare(a.createdAt||a.date));
-    const invoices = data.invoices.filter(invoice => invoice.customerRefId === customer.id || invoice.customerName === customer.name).sort((a,b)=>(b.createdAt||b.date).localeCompare(a.createdAt||a.date));
+    const vehicles = data.vehicles.filter(v => v.customerRefId === customer.id);
+    const workOrders = data.workOrders.filter(wo => wo.customerRefId === customer.id).sort((a,b)=>(b.createdAt||b.date).localeCompare(a.createdAt||a.date));
+    const invoices = data.invoices.filter(invoice => invoice.customerRefId === customer.id).sort((a,b)=>(b.createdAt||b.date).localeCompare(a.createdAt||a.date));
     const wo = workOrders[0], invoice = invoices[0];
     const vehicle = vehicles.find(v => v.id === wo?.vehicleRefId) || vehicles[0];
     const branchId = wo?.branchId || invoice?.branchId || customer.firstSeenBranchId || customer.branchId;
@@ -310,15 +318,14 @@ export default function Customers() {
               <tbody className="divide-y divide-gray-100">
                 {filteredCustomers.map((customer) => {
                   const customerVehicles = data.vehicles.filter((v) =>
-                    v.customerRefId === customer.id ||
-                    (!v.customerRefId && v.customerId === customer.customerCode)
+                    v.customerRefId === customer.id
                   );
                   const vehicleCount = customerVehicles.length;
                   const invoiceCount = data.invoices.filter(
-                    (invoice) => invoice.customerRefId === customer.id || invoice.customerName.includes(customer.name)
+                    (invoice) => invoice.customerRefId === customer.id
                   ).length;
                   const workOrderCount = data.workOrders.filter(
-                    (wo) => wo.customerRefId === customer.id || wo.customerName === customer.name
+                    (wo) => wo.customerRefId === customer.id
                   ).length;
                   return (
                     <tr key={customer.id} className="transition-colors hover:bg-blue-50/50">
@@ -401,14 +408,13 @@ export default function Customers() {
         ) : (
           filteredCustomers.map((customer) => {
             const vehicleCount = data.vehicles.filter((v) =>
-              v.customerRefId === customer.id ||
-              (!v.customerRefId && v.customerId === customer.customerCode)
+              v.customerRefId === customer.id
             ).length;
             const invoiceCount = data.invoices.filter(
-              (invoice) => invoice.customerRefId === customer.id || invoice.customerName.includes(customer.name)
+              (invoice) => invoice.customerRefId === customer.id
             ).length;
             const workOrderCount = data.workOrders.filter(
-              (wo) => wo.customerRefId === customer.id || wo.customerName === customer.name
+              (wo) => wo.customerRefId === customer.id
             ).length;
             return (
               <div key={customer.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
@@ -522,7 +528,11 @@ export default function Customers() {
                   <div className="flex flex-col gap-4">
                     <div className="order-0 grid items-center gap-2 sm:grid-cols-[150px_1fr]">
                       <label className="text-sm font-medium text-gray-700">ID Pelanggan</label>
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-mono font-bold text-blue-700">{editingCustomer ? editingCustomer.customerCode : generateCustomerCode()}</div>
+                      {editingCustomer ? (
+                        <input aria-label="ID Pelanggan" required maxLength={20} value={formData.customerCode}
+                          onChange={event => setFormData({ ...formData, customerCode: event.target.value })}
+                          className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono font-bold text-blue-700" />
+                      ) : <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 font-mono font-bold text-blue-700">{generateCustomerCode()}</div>}
                     </div>
                     <div className="order-1 grid items-center gap-2 sm:grid-cols-[150px_1fr]">
                       <label className="text-sm font-medium text-gray-700">Nama Akun/PIC <span className="text-red-500">*</span></label>

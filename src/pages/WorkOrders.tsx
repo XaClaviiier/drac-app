@@ -1111,7 +1111,7 @@ export default function WorkOrders() {
         const dateMatch = (!periodRange.from || workOrderDate >= periodRange.from) && (!periodRange.to || workOrderDate <= periodRange.to);
         if (!dateMatch) return false;
 
-        const customer = data.customers.find(item => item.id === wo.customerRefId || item.customerCode === wo.customerId);
+        const customer = data.customers.find(item => item.id === wo.customerRefId);
         const normalizeSearch = (value: string) => value.toLocaleLowerCase('id-ID').replace(/[^a-z0-9]/g, '');
         const query = normalizeSearch(searchTerm.trim());
         const searchValues = [
@@ -2566,8 +2566,6 @@ export default function WorkOrders() {
   const customerPhoneForWO = (wo: WorkOrder) => {
     const customer = data.customers.find(item =>
       item.id === wo.customerRefId
-      || (!!wo.customerId && item.customerCode === wo.customerId)
-      || item.name.trim().toLowerCase() === wo.customerName.trim().toLowerCase()
     );
     if (customer?.phone) return customer.phone;
     const vehicle = data.vehicles.find(item =>
@@ -2580,8 +2578,6 @@ export default function WorkOrders() {
   const customerIdentityForWO = (wo: WorkOrder) => {
     const customer = data.customers.find(item =>
       item.id === wo.customerRefId
-      || (!!wo.customerId && item.customerCode === wo.customerId)
-      || item.name.trim().toLowerCase() === wo.customerName.trim().toLowerCase()
     );
     const picName = customer?.name || wo.customerName;
     const companyName = customer?.companyName?.trim() || '';
@@ -2708,6 +2704,7 @@ export default function WorkOrders() {
     const vehicleLabel = vehicle
       ? `${vehicle.brand} ${vehicle.model}${vehicle.year ? ` ${vehicle.year}` : ''}${vehicle.color ? ` (${vehicle.color})` : ''}`
       : wo.vehicleInfo;
+    const customerName = data.customers.find(item => item.id === wo.customerRefId)?.name ?? wo.customerName;
     const inputBy = wo.statusLog?.[0]?.byUserName || currentUser?.name || '-';
     const phone = customerPhoneForWO(wo).replace(/^[—–-]+$/, '');
     const measurement = [
@@ -2715,7 +2712,7 @@ export default function WorkOrders() {
       wo.diagnosisLp != null ? `LP ${wo.diagnosisLp} PSI` : '',
       wo.diagnosisHp != null ? `HP ${wo.diagnosisHp} PSI` : '',
     ].filter(Boolean).join(' · ');
-    return `${wo.woNumber} ( ${formatShareDate(wo.date)} )\n🚗 ${wo.plateNumber} – ${vehicleLabel}\n👤 ${wo.customerName}${phone ? ` ${phone}` : ''}\nKeluhan: ${wo.description?.trim() || '-'}${wo.findings ? `\nHasil diagnosa: ${wo.findings}` : ''}${measurement ? `\nPengukuran: ${measurement}` : ''}\nInput: ${inputBy}`;
+    return `${wo.woNumber} ( ${formatShareDate(wo.date)} )\n🚗 ${wo.plateNumber} – ${vehicleLabel}\n👤 ${customerName}${phone ? ` ${phone}` : ''}\nKeluhan: ${wo.description?.trim() || '-'}${wo.findings ? `\nHasil diagnosa: ${wo.findings}` : ''}${measurement ? `\nPengukuran: ${measurement}` : ''}\nInput: ${inputBy}`;
   };
 
   const copyWorkOrder = async (wo: WorkOrder) => {
@@ -3987,7 +3984,7 @@ export default function WorkOrders() {
               {diagnosisMode && editingWO ? (
                 <div className="space-y-3">
                   <div className="relative grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
-                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
+                    <div><span className="block text-xs font-semibold uppercase text-slate-500">Pelanggan</span><strong>{selectedCustomer?.name || editingWO.customerName}</strong><span className="ml-2 text-slate-500">{customerPhoneForWO(editingWO)}</span></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Tanggal masuk</span><strong>{editingWO.date}</strong></div>
                     <div><span className="block text-xs font-semibold uppercase text-slate-500">Kendaraan</span><strong>{editingWO.vehicleInfo}</strong><span className="ml-2 font-mono text-blue-700">{editingWO.plateNumber}</span></div>
                     <div className="md:col-span-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"><span className="block text-xs font-semibold uppercase text-blue-600">Keluhan awal</span><strong className="mt-0.5 block whitespace-pre-wrap text-slate-900">{editingWO.description || '-'}</strong></div>
@@ -4000,7 +3997,7 @@ export default function WorkOrders() {
                   <div data-wo-registered-identity className="grid grid-cols-2 gap-2 lg:hidden">
                     <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
                       <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500"><span>Pelanggan</span><LockKeyhole className="h-3.5 w-3.5" /></div>
-                      <p className="mt-1 truncate text-sm font-bold text-slate-900">{formData.customerName || editingWO.customerName}</p>
+                      <p className="mt-1 truncate text-sm font-bold text-slate-900">{selectedCustomer?.name || formData.customerName || editingWO.customerName}</p>
                       <p className="truncate text-[11px] text-slate-500">{selectedCustomer?.phone || customerPhoneForWO(editingWO) || '-'}</p>
                     </section>
                     <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
@@ -4021,6 +4018,7 @@ export default function WorkOrders() {
                   onVehicleSelect={handleVehicleSelect}
                   onNewCustomerCreated={handleNewCustomerCreated}
                   disabled={customerVehicleLocked}
+                  savedName={formData.customerName}
                   selectedAction={!customerVehicleLocked && !showQuickContact ? (
                     <button type="button" onClick={() => setShowQuickContact(true)} className="grid h-6 w-6 place-items-center rounded text-blue-600 hover:bg-blue-100 hover:text-blue-800" title="Tambah kontak" aria-label="Tambah kontak">
                       <Plus className="h-4 w-4" />

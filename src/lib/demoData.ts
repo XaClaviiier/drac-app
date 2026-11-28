@@ -96,9 +96,9 @@ export const demoData: AppData = {
   ],
   customerPeople: [],
   vehicles: [
-    { id: '1', plateNumber: 'DD1486QZ', brand: 'Suzuki', model: 'APV', year: 2018, color: 'Putih', customerName: 'AHMAD', customerId: 'PLG-001', phone: '085179958522', address: 'Jl. Sudirman No. 10', registrationDate: '2026-06-20', notes: 'AC bocor', branchId: 'BR-001' },
-    { id: '2', plateNumber: 'DD1502AZ', brand: 'Toyota', model: 'Avanza', year: 2019, color: 'Hitam', customerName: 'DIKI', customerId: 'PLG-003', phone: '082134567891', address: 'Jl. Ahmad Yani No. 15', registrationDate: '2026-06-25', notes: 'Isi freon', branchId: 'BR-001' },
-    { id: '3', plateNumber: 'DD1915KB', brand: 'Toyota', model: 'Avanza', year: 2021, color: 'Merah', customerName: 'INTAN', customerId: 'PLG-004', phone: '083134567892', address: 'Jl. Diponegoro No. 8', registrationDate: '2026-06-26', notes: 'Kompresor', branchId: 'BR-002' },
+    { id: '1', plateNumber: 'DD1486QZ', brand: 'Suzuki', model: 'APV', year: 2018, color: 'Putih', customerName: 'AHMAD', customerRefId: '1', customerId: 'PLG-001', phone: '085179958522', address: 'Jl. Sudirman No. 10', registrationDate: '2026-06-20', notes: 'AC bocor', branchId: 'BR-001' },
+    { id: '2', plateNumber: 'DD1502AZ', brand: 'Toyota', model: 'Avanza', year: 2019, color: 'Hitam', customerName: 'DIKI', customerRefId: '3', customerId: 'PLG-003', phone: '082134567891', address: 'Jl. Ahmad Yani No. 15', registrationDate: '2026-06-25', notes: 'Isi freon', branchId: 'BR-001' },
+    { id: '3', plateNumber: 'DD1915KB', brand: 'Toyota', model: 'Avanza', year: 2021, color: 'Merah', customerName: 'INTAN', customerRefId: '4', customerId: 'PLG-004', phone: '083134567892', address: 'Jl. Diponegoro No. 8', registrationDate: '2026-06-26', notes: 'Kompresor', branchId: 'BR-002' },
   ],
   suppliers: [
     { id: '1', code: 'SUP-001', name: 'PT WURTH INDONESIA', contactPerson: 'Pak Andi', phone: '021-5551111', email: 'sales@wurth.id', address: 'Jakarta', isActive: true, createdAt: '2026-01-05' },
@@ -134,13 +134,13 @@ export const demoData: AppData = {
     },
   ],
   invoices: [
-    { id: '1', invoiceNumber: 'D-1970', date: '2026-06-27', customerId: 'PLG-002', customerName: 'TATO', vehicleInfo: 'CRV / ABU DN1435BY', description: 'Service AC', total: 2050000, payment: 2050000, status: 'Lunas', age: 0, branchId: 'BR-001' },
-    { id: '2', invoiceNumber: 'D-1969', date: '2026-06-27', customerId: 'PLG-003', customerName: 'DIKI', vehicleInfo: 'AVANZA / HITAM DD1502AZ', description: 'Isi freon', total: 900000, payment: 900000, status: 'Lunas', age: 0, branchId: 'BR-001' },
+    { id: '1', invoiceNumber: 'D-1970', date: '2026-06-27', customerRefId: '2', customerId: 'PLG-002', customerName: 'TATO', vehicleInfo: 'CRV / ABU DN1435BY', description: 'Service AC', total: 2050000, payment: 2050000, status: 'Lunas', age: 0, branchId: 'BR-001' },
+    { id: '2', invoiceNumber: 'D-1969', date: '2026-06-27', customerRefId: '3', customerId: 'PLG-003', customerName: 'DIKI', vehicleInfo: 'AVANZA / HITAM DD1502AZ', description: 'Isi freon', total: 900000, payment: 900000, status: 'Lunas', age: 0, branchId: 'BR-001' },
     { id: '9', invoiceNumber: 'D-1962', date: '2026-06-24', customerId: 'PLG-002', customerName: 'ENSEVAL', vehicleInfo: 'GRANDMAX', description: 'Service', total: 1800000, payment: 0, status: 'Belum Lunas', age: 4, branchId: 'BR-001' },
   ],
   workOrders: [
     {
-      id: '1', woNumber: 'WO-P-2026-001', date: '2026-06-27', customerId: 'PLG-001', customerName: 'AHMAD',
+      id: '1', woNumber: 'WO-P-2026-001', date: '2026-06-27', customerRefId: '1', customerId: 'PLG-001', customerName: 'AHMAD',
       plateNumber: 'DD1486QZ', vehicleInfo: 'Suzuki APV 2018 - Putih',
       description: 'AC tidak dingin, keluar bau tidak sedap',
       findings: 'Evaporator kotor, freon berkurang. Perlu flushing & isi ulang.',
@@ -152,7 +152,7 @@ export const demoData: AppData = {
       total: 1550000, estimateTotal: 1550000, status: 'Selesai', notes: 'Sudah dikerjakan, siap difakturkan', branchId: 'BR-001',
     },
     {
-      id: '2', woNumber: 'WO-C-2026-001', date: '2026-06-28', customerId: 'PLG-004', customerName: 'INTAN',
+      id: '2', woNumber: 'WO-C-2026-001', date: '2026-06-28', customerRefId: '4', customerId: 'PLG-004', customerName: 'INTAN',
       plateNumber: 'DD1915KB', vehicleInfo: 'Toyota Avanza 2021 - Merah',
       description: 'AC bunyi berisik saat dinyalakan',
       findings: 'Bearing kompresor aus. Rekomendasi ganti kompresor.',

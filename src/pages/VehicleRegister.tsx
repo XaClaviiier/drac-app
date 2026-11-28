@@ -233,9 +233,7 @@ export default function VehicleRegister() {
   const handleOpenModal = (vehicle?: Vehicle) => {
     if (vehicle) {
       const owner = data.customers.find(customer =>
-        customer.id === vehicle.customerRefId ||
-        customer.customerCode === vehicle.customerId ||
-        customer.name === vehicle.customerName
+        customer.id === vehicle.customerRefId
       );
       setEditingVehicle(vehicle);
       setFormData({

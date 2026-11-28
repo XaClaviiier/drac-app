@@ -645,7 +645,7 @@ export default function AIAssistant() {
           candidates.length === 1 ? 'Apakah yang dimaksud kendaraan berikut?' : `Ditemukan **${candidates.length} saran nomor plat**:`,
           '',
           ...candidates.map(({ item }, index) => {
-            const customer = data.customers.find((entry) => entry.id === item.customerRefId || entry.customerCode === item.customerId);
+            const customer = data.customers.find((entry) => entry.id === item.customerRefId);
             const woCount = data.workOrders.filter((wo) =>
               (wo.vehicleRefId && wo.vehicleRefId === item.id)
               || normalizePlate(wo.plateNumber) === normalizePlate(item.plateNumber)
@@ -662,7 +662,6 @@ export default function AIAssistant() {
 
     const customer = data.customers.find((item) =>
       item.id === vehicle.customerRefId
-      || item.customerCode === vehicle.customerId
     );
     const canSeeAllBranches = hasPermission('all_branches');
     const allowedBranchIds = new Set(
@@ -860,7 +859,7 @@ export default function AIAssistant() {
 
   const buildVehicleSummary = (vehicle: typeof data.vehicles[number], showAll = false): VehicleHistorySummary => {
     const customer = data.customers.find((item) =>
-      item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId
+      item.id === vehicle.customerRefId
     );
     const canSeeAllBranches = hasPermission('all_branches');
     const allowedBranchIds = new Set(
@@ -915,7 +914,6 @@ export default function AIAssistant() {
       const choices = candidates.slice(0, 8).map((customer, index) => {
         const plates = data.vehicles.filter((vehicle) =>
           vehicle.customerRefId === customer.id
-          || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
         ).map(vehicle => vehicle.plateNumber);
         return `${index + 1}. **${customer.name}** — ${customer.customerCode}\n   ${customer.phone || 'tanpa telepon'}\n   Kendaraan: ${plates.length ? plates.join(', ') : 'Belum ada kendaraan'}`;
       });
@@ -931,7 +929,6 @@ export default function AIAssistant() {
     const customer = candidates[0];
     const vehicles = data.vehicles.filter((vehicle) =>
       vehicle.customerRefId === customer.id
-      || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
     );
     const canSeeAllBranches = hasPermission('all_branches');
     const allowedBranchIds = new Set(
@@ -1023,7 +1020,7 @@ export default function AIAssistant() {
         .sort((a, b) => a.name.localeCompare(b.name));
       const rows = filtered.slice(start, start + pageSize).map((customer, index) => {
         const vehicleCount = data.vehicles.filter((vehicle) =>
-          vehicle.customerRefId === customer.id || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode)
+          vehicle.customerRefId === customer.id
         ).length;
         return `${start + index + 1}. **${customer.name}** — ${customer.customerCode}\n   ${customer.phone || 'tanpa telepon'} · ${vehicleCount} kendaraan`;
       });
@@ -1037,7 +1034,7 @@ export default function AIAssistant() {
         ))
         .sort((a, b) => a.plateNumber.localeCompare(b.plateNumber));
       const rows = filtered.slice(start, start + pageSize).map((vehicle, index) => {
-        const customer = data.customers.find((item) => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
+        const customer = data.customers.find((item) => item.id === vehicle.customerRefId);
         const woCount = data.workOrders.filter((wo) =>
           (wo.vehicleRefId && wo.vehicleRefId === vehicle.id) || normalizePlate(wo.plateNumber) === normalizePlate(vehicle.plateNumber)
         ).length;
@@ -1132,7 +1129,7 @@ export default function AIAssistant() {
       const normalized = normalizePlate(plateMatch);
       const vehicle = data.vehicles.find((item) => normalizePlate(item.plateNumber) === normalized);
       if (vehicle) {
-        const customer = data.customers.find((item) => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
+        const customer = data.customers.find((item) => item.id === vehicle.customerRefId);
         setRegistrationDraft({
           mode: registrationDraft.mode,
           step: 'complaint',
@@ -1239,8 +1236,7 @@ export default function AIAssistant() {
       parts.push(`\nPELANGGAN (${list.length} dari ${data.customers.length}):`);
       list.forEach(c => {
         const vs = data.vehicles.filter(v =>
-          v.customerRefId === c.id ||
-          (!v.customerRefId && v.customerId === c.customerCode)
+          v.customerRefId === c.id
         ).map(v => v.plateNumber).join(', ');
         parts.push(`- ${c.customerCode} ${c.name} | ${c.phone} | ${vs || 'belum ada kendaraan'}`);
       });
@@ -1622,9 +1618,7 @@ ${buildSmartContext(userMsgText)}`;
     const workOrder = woNumber ? data.workOrders.find(wo => wo.woNumber === woNumber) : undefined;
     if (!workOrder) return text;
 
-    const customer = data.customers.find(item => item.id === workOrder.customerRefId)
-      || data.customers.find(item => item.customerCode === workOrder.customerId)
-      || data.customers.find(item => item.name.trim().toUpperCase() === workOrder.customerName.trim().toUpperCase());
+    const customer = data.customers.find(item => item.id === workOrder.customerRefId);
     const normalizedPlate = workOrder.plateNumber.replace(/[^A-Z0-9]/gi, '').toUpperCase();
     const vehicle = data.vehicles.find(item => item.id === workOrder.vehicleRefId)
       || data.vehicles.find(item => item.plateNumber.replace(/[^A-Z0-9]/gi, '').toUpperCase() === normalizedPlate);
@@ -2117,11 +2111,11 @@ ${buildSmartContext(userMsgText)}`;
       } else if (ambiguousCustomers.length > 0) {
         ambiguousCustomers.slice(0, 8).forEach(customer => {
           data.vehicles
-            .filter(vehicle => vehicle.customerRefId === customer.id || (!vehicle.customerRefId && vehicle.customerId === customer.customerCode))
+            .filter(vehicle => vehicle.customerRefId === customer.id)
             .forEach(vehicle => actions.push({ label: vehicle.plateNumber, type: 'select_vehicle', value: vehicle.plateNumber }));
         });
       } else if (exactCustomer) {
-        const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === exactCustomer.id || vehicle.customerId === exactCustomer.customerCode);
+        const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === exactCustomer.id);
         vehicles.forEach(vehicle => actions.push({ label: vehicle.plateNumber, type: 'select_vehicle', value: vehicle.plateNumber }));
         if (vehicles.length === 0) {
           actions.push({ label: 'Riwayat WO', type: 'command', value: `cek riwayat ${exactCustomer.customerCode}` });
@@ -2280,7 +2274,7 @@ ${buildSmartContext(userMsgText)}`;
     if (action.type === 'create_wo_vehicle' && action.value) {
       const vehicle = data.vehicles.find(item => item.id === action.value);
       if (!vehicle) return;
-      const customer = data.customers.find(item => item.id === vehicle.customerRefId || item.customerCode === vehicle.customerId);
+      const customer = data.customers.find(item => item.id === vehicle.customerRefId);
       setRegistrationDraft({
         mode: 'wo',
         step: 'complaint',

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../customer-document-identity.php';
 // Pembayaran pelanggan adalah transaksi kas tersendiri dan memiliki hak akses
 // terpisah dari perubahan faktur.
 
@@ -76,12 +77,12 @@ function paymentIsIncludedInDeposit(PDO $pdo, array $payment): bool {
 switch ($method) {
 case 'GET':
     $user = requireUserPermission($pdo, 'payment:view');
-    $rows = $pdo->query("SELECT p.*,i.invoice_number,i.customer_name,i.customer_id,i.vehicle_info,
+    $rows = $pdo->query("SELECT p.*,i.invoice_number," . INVOICE_CUSTOMER_FIELDS . ",i.vehicle_info,
                 i.total invoice_total,i.payment invoice_paid,i.status invoice_status,
                 EXISTS(SELECT 1 FROM branch_deposits d
                     WHERE d.branch_id=p.branch_id AND d.source_account_id=p.account_id
                       AND d.status IN ('Dikirim','Terverifikasi') AND d.date>=p.date) is_deposited
-        FROM customer_payments p JOIN sales_invoices i ON i.id=p.invoice_id
+        FROM customer_payments p JOIN sales_invoices i ON i.id=p.invoice_id" . INVOICE_CUSTOMER_JOIN . "
         ORDER BY p.invoice_id,p.date ASC,p.created_at ASC,p.id ASC")->fetchAll();
     $running = [];$result = [];
     foreach ($rows as $row) {
@@ -89,7 +90,7 @@ case 'GET':
         $invoiceKey = (string)$row['invoice_id'];
         $running[$invoiceKey] = ($running[$invoiceKey] ?? 0) + (float)$row['amount'];
         $row['paymentNumber']=$row['payment_number'];$row['invoiceId']=$row['invoice_id'];$row['invoiceNumber']=$row['invoice_number'];
-        $row['customerName']=$row['customer_name'];$row['customerId']=$row['customer_id'];$row['vehicleInfo']=$row['vehicle_info'];
+        $row['vehicleInfo']=$row['vehicle_info'];
         $row['invoiceTotal']=(float)$row['invoice_total'];$row['invoicePaid']=(float)$row['invoice_paid'];$row['amount']=(float)$row['amount'];
         $row['balanceAfter']=max(0,(float)$row['invoice_total']-$running[$invoiceKey]);
         $row['paymentStatus']=$row['balanceAfter']<=0?'Lunas':'Cicilan';

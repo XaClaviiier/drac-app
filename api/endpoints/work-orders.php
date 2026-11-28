@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../customer-document-identity.php';
 require_once __DIR__.'/../billing-treatment.php';
 require_once __DIR__.'/../work-order-overtime.php';
 require_once __DIR__.'/../auto-close-diagnosis.php';
@@ -390,14 +391,11 @@ switch ($method) {
         }
         $allowedBranchMap = array_fill_keys(getAccessibleBranchIds($pdo, $actor), true);
         $rows = array_values(array_filter(
-            $pdo->query("SELECT * FROM work_orders ORDER BY date DESC, wo_number DESC")->fetchAll(),
+            $pdo->query(CUSTOMER_WORK_ORDER_SELECT . " ORDER BY w.date DESC, w.wo_number DESC")->fetchAll(),
             fn($row) => isset($allowedBranchMap[(string)$row['branch_id']])
         ));
         foreach ($rows as &$r) {
             $r['woNumber']                = $r['wo_number'];
-            $r['customerRefId']           = $r['customer_ref_id'];
-            $r['customerId']              = $r['customer_id'];
-            $r['customerName']            = $r['customer_name'];
             $r['vehicleRefId']            = $r['vehicle_ref_id'];
             $r['plateNumber']             = $r['plate_number'];
             $r['vehicleInfo']             = $r['vehicle_info'];

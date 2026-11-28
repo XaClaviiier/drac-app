@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../customer-document-identity.php';
 require_once __DIR__.'/../billing-treatment.php';
 $logSalesInvoiceFailure = static function(string $operation, Throwable $error): string {
     $reference = substr(hash('sha256', uniqid('', true)), 0, 10);
@@ -109,7 +110,7 @@ $actor = $requestUser ?? requireAuthenticatedUser($pdo);
 switch ($method) {
     case 'GET':
         $allowedBranchIds=getAccessibleBranchIds($pdo,$actor);if(!$allowedBranchIds)respondSuccess([]);$branchMarks=implode(',',array_fill(0,count($allowedBranchIds),'?'));
-        $invoiceStmt=$pdo->prepare("SELECT * FROM sales_invoices WHERE branch_id IN ($branchMarks) ORDER BY date DESC, invoice_number DESC");$invoiceStmt->execute($allowedBranchIds);$rows=$invoiceStmt->fetchAll();
+        $invoiceStmt=$pdo->prepare(CUSTOMER_INVOICE_SELECT . " WHERE i.branch_id IN ($branchMarks) ORDER BY i.date DESC, i.invoice_number DESC");$invoiceStmt->execute($allowedBranchIds);$rows=$invoiceStmt->fetchAll();
         $detailStmt=$pdo->prepare("SELECT d.* FROM sales_invoice_items d JOIN sales_invoices i ON i.id=d.invoice_id WHERE i.branch_id IN ($branchMarks) ORDER BY d.id");$detailStmt->execute($allowedBranchIds);$detailRows=$detailStmt->fetchAll();
         $detailsByInvoice = [];
         foreach ($detailRows as $detail) {
@@ -123,9 +124,6 @@ switch ($method) {
             $r['invoiceNumber'] = $r['invoice_number'];
             $r['billingTreatment'] = $r['billing_treatment'] ?? 'normal';
             $r['manualReceiptNumber'] = $r['manual_receipt_number'] ?? null;
-            $r['customerRefId'] = $r['customer_ref_id'];
-            $r['customerId'] = $r['customer_id'];
-            $r['customerName'] = $r['customer_name'];
             $r['vehicleInfo'] = $r['vehicle_info'];
             $r['total'] = (float)$r['total'];
             $r['payment'] = (float)$r['payment'];
@@ -223,9 +221,12 @@ switch ($method) {
                         wo_id, wo_number, branch_id
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
                 ");
+                $identityStmt = $pdo->prepare('SELECT customer_code,name FROM customers WHERE id=?');
+                $identityStmt->execute([$wo['customer_ref_id']]);
+                $customer = $identityStmt->fetch();
                 $insertInvoice->execute([
                     $invoiceId, $invoiceNumber, $manualReceiptNumber, $date,
-                    $wo['customer_ref_id'], $wo['customer_id'], $wo['customer_name'],
+                    $wo['customer_ref_id'], $customer['customer_code'] ?? $wo['customer_id'], $customer['name'] ?? $wo['customer_name'],
                     trim($wo['vehicle_info'] . ' ' . $wo['plate_number']),
                     $description, $total, $payment, $paymentDate, $backdateReason ?: null, $paymentMethod, $status,
                     $woId, $wo['wo_number'], $wo['branch_id'],

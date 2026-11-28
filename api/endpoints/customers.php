@@ -74,36 +74,46 @@ switch ($method) {
     case 'PUT':
         if (!$id) respondError('ID required');
         $d = getInput();
-        $currentStmt = $pdo->prepare("SELECT * FROM customers WHERE id=?");
-        $currentStmt->execute([$id]);
-        $current = $currentStmt->fetch();
-        if (!$current) respondError('Pelanggan tidak ditemukan', 404);
-        // Master pelanggan bersifat global. Cabang asal tetap dipertahankan,
-        // tetapi teknisi cabang lain yang berhak edit boleh melengkapi datanya.
-        $branchId = (string)$current['branch_id'];
         $name = $sanitizeCustomerName($d['name'] ?? '');
         if ($name === '') respondError('Nama pelanggan wajib diisi.', 422);
-        $companyName = trim((string)($d['companyName'] ?? ($current['company_name'] ?? '')));
-        $accountType = $companyName !== '' ? 'Perusahaan' : 'Pribadi';
         if ((int)$pdo->query("SELECT GET_LOCK('customer_code_sequence', 10)")->fetchColumn() !== 1) respondError('Master pelanggan sedang diproses. Coba lagi.', 409);
-        $newPhone = customerImportPhone((string)($d['phone'] ?? ''));
-        foreach ($pdo->query('SELECT id,phone FROM customers')->fetchAll() as $other) {
-            if ($other['id'] !== $id && $newPhone !== '' && customerImportPhone((string)$other['phone']) === $newPhone) {
-                $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
-                respondError('Nomor HP sudah digunakan pelanggan lain.', 409);
-            }
-        }
-        $pdo->beginTransaction();
         try {
-        $after = ['name'=>$name,'companyName'=>$companyName,'accountType'=>$accountType,'phone'=>$d['phone']??'','email'=>$d['email']??'','address'=>$d['address']??'','branchId'=>$branchId];
-        $stmt = $pdo->prepare("UPDATE customers SET name=?,company_name=?,account_type=?,phone=?,email=?,address=?,branch_id=? WHERE id=?");
-        $stmt->execute([$name,$companyName,$accountType,$d['phone'] ?? '',$d['email'] ?? '',$d['address'] ?? '',$branchId,$id]);
-        $pdo->prepare("UPDATE customer_people SET name=?,phone=?,email=? WHERE id=? AND relationship_label='Pemilik akun'")
-            ->execute([$name,$d['phone'] ?? '',$d['email'] ?? '',$current['primary_contact_id'] ?? '']);
-        $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,before_json,after_json,user_id,user_name) VALUES('customer',?,'update',?,?,?,?)")->execute([$id,json_encode($current,JSON_UNESCAPED_UNICODE),json_encode($after,JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
-        $pdo->commit();
-        } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
-        finally { $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')"); }
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare('SELECT * FROM customers WHERE id=? FOR UPDATE');
+            $stmt->execute([$id]);
+            $current = $stmt->fetch();
+            if (!$current) throw new DomainException('Pelanggan tidak ditemukan.', 404);
+            $code = trim((string)($d['customerCode'] ?? $current['customer_code']));
+            if (!preg_match('/^.{1,20}$/uD', $code)) throw new DomainException('ID pelanggan wajib diisi, maksimal 20 karakter.', 422);
+            if (isset($d['expectedCustomerCode']) && $d['expectedCustomerCode'] !== $current['customer_code']) {
+                throw new DomainException('ID pelanggan telah berubah. Muat ulang data pelanggan.', 409);
+            }
+            $duplicate = $pdo->prepare('SELECT 1 FROM customers WHERE customer_code=? AND id<>?');
+            $duplicate->execute([$code,$id]);
+            if ($duplicate->fetchColumn()) throw new DomainException('ID pelanggan sudah digunakan pelanggan lain.', 409);
+            $newPhone = customerImportPhone((string)($d['phone'] ?? ''));
+            foreach ($pdo->query('SELECT id,phone FROM customers')->fetchAll() as $other) {
+                if ($other['id'] !== $id && $newPhone !== '' && customerImportPhone((string)$other['phone']) === $newPhone) {
+                    throw new DomainException('Nomor HP sudah digunakan pelanggan lain.', 409);
+                }
+            }
+            $companyName = trim((string)($d['companyName'] ?? $current['company_name'] ?? ''));
+            $accountType = $companyName !== '' ? 'Perusahaan' : 'Pribadi';
+            $after = ['customerCode'=>$code,'name'=>$name,'companyName'=>$companyName,'accountType'=>$accountType,'phone'=>$d['phone']??'','email'=>$d['email']??'','address'=>$d['address']??'','branchId'=>$current['branch_id']];
+            $stmt = $pdo->prepare("UPDATE customers SET customer_code=?,name=?,company_name=?,account_type=?,phone=?,email=?,address=? WHERE id=?");
+            $stmt->execute([$code,$name,$companyName,$accountType,$after['phone'],$after['email'],$after['address'],$id]);
+            $pdo->prepare("UPDATE customer_people SET name=?,phone=?,email=? WHERE id=? AND relationship_label='Pemilik akun'")
+                ->execute([$name,$after['phone'],$after['email'],$current['primary_contact_id'] ?? '']);
+            $pdo->prepare("INSERT INTO customer_master_audit_logs(entity_type,entity_id,action_type,before_json,after_json,user_id,user_name) VALUES('customer',?,'update',?,?,?,?)")->execute([$id,json_encode($current,JSON_UNESCAPED_UNICODE),json_encode($after,JSON_UNESCAPED_UNICODE),$requestUser['id']??null,$requestUser['name']??null]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            if (!$e instanceof DomainException) throw $e;
+            $validationError = $e;
+        } finally {
+            $pdo->query("SELECT RELEASE_LOCK('customer_code_sequence')");
+        }
+        if (isset($validationError)) respondError($validationError->getMessage(), $validationError->getCode());
         respondSuccess(null, 'Pelanggan diupdate');
         break;
 
