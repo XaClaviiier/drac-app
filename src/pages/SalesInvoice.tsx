@@ -641,10 +641,10 @@ export default function SalesInvoice() {
       try {
         const invoice = await createInvoiceFromWO(
           selectedWO.id,
-          options.openPaymentAfterSave ? 0 : woPaymentMethod === 'Pembayaran 1' ? woPayment : 0,
-          options.openPaymentAfterSave ? 0 : woPaymentMethod === 'Pembayaran 2' ? woPayment : 0,
+          0,
+          0,
           formData.date,
-          woPayment > 0 ? formData.paymentDate : undefined,
+          undefined,
           formData.backdateReason,
           formItems,
           normalizedManualReceiptNumber,
@@ -801,7 +801,7 @@ export default function SalesInvoice() {
       const copiedItems = wo.services.map((item, index) => ({ ...item, id: `invoice-${Date.now()}-${index}` }));
       setWoDraftItems(copiedItems);
       const total = copiedItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-      setWoPayment(total);
+      setWoPayment(0);
       setFormFromWOId(wo.id);
       setFormData({
         billingTreatment: wo.billingTreatment || 'normal',
@@ -814,11 +814,11 @@ export default function SalesInvoice() {
         vehicleInfo: wo.vehicleInfo || `${wo.plateNumber || ''}`.trim(),
         description: wo.description || '',
         total,
-        payment: total,
+        payment: 0,
         paymentDate: localDateKey(),
         backdateReason: '',
         paymentMethod: 'Tunai',
-        status: 'Lunas',
+        status: 'Belum Lunas',
       });
       setFormItems(copiedItems);
       setFormDiscount(0);
@@ -939,11 +939,7 @@ export default function SalesInvoice() {
   };
 
   const updateWODraftItem = (id: string, field: 'qty' | 'price', value: number) => {
-    setWoDraftItems((current) => {
-      const next = updateInvoiceItems(current, id, field, field === 'price' && isGoodwill(formData) ? 0 : value);
-      setWoPayment(next.reduce((sum, item) => sum + item.price * item.qty, 0));
-      return next;
-    });
+    setWoDraftItems(current => updateInvoiceItems(current, id, field, field === 'price' && isGoodwill(formData) ? 0 : value));
   };
 
   const removeFormItem = (id: string) => {
@@ -952,11 +948,7 @@ export default function SalesInvoice() {
   };
 
   const removeWODraftItem = (id: string) => {
-    setWoDraftItems(current => {
-      const next = removeInvoiceItem(current, id);
-      setWoPayment(next.reduce((sum, item) => sum + item.price * item.qty, 0));
-      return next;
-    });
+    setWoDraftItems(current => removeInvoiceItem(current, id));
   };
 
   const addWODraftItem = () => {
@@ -964,11 +956,9 @@ export default function SalesInvoice() {
     if (!item) return;
     setWoDraftItems((current) => {
       const existing = current.find((entry) => entry.itemId === item.id);
-      const next = existing
+      return existing
         ? current.map((entry) => entry.id === existing.id ? { ...entry, qty: entry.qty + 1 } : entry)
         : [...current, { id: `invoice-${Date.now()}`, itemId: item.id, code: item.code, name: item.name, description: item.receiptDescription || item.description || item.name, price: isGoodwill(formData) ? 0 : item.sellingPrice, qty: 1 }];
-      setWoPayment(next.reduce((sum, entry) => sum + entry.price * entry.qty, 0));
-      return next;
     });
     setWoItemToAdd('');
   };
@@ -1028,7 +1018,7 @@ export default function SalesInvoice() {
   const printForm = (format: SalesInvoicePrintFormat) => printInvoice(format, {
     ...formData, customerName: formCustomerName, invoiceNumber: editingInvoice?.invoiceNumber || '', branchId: transactionBranchId,
     woNumber: editingInvoice?.woNumber || (formFromWO ? selectedWO?.woNumber : undefined),
-    status: undefined, total: formGrandTotal, payment: formFromWO ? woPayment : editingInvoice?.payment || 0,
+    status: undefined, total: formGrandTotal, payment: editingInvoice?.payment || 0,
   }, formItems, formItemsTotal, formDiscount, true);
 
   const printFromWO = (format: SalesInvoicePrintFormat) => selectedWO && printInvoice(format, {
