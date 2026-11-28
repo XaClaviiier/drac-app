@@ -189,6 +189,11 @@ export default function Customers() {
     setShowModal(true);
   };
 
+  const openCustomerFromRow = (event: React.MouseEvent, customer: Customer) => {
+    if (event.target instanceof Element && event.target.closest('button, a')) return;
+    handleOpenModal(customer);
+  };
+
   const formIsDirty = () => {
     if (editingCustomer) return formData.customerCode !== editingCustomer.customerCode || formData.accountType !== (editingCustomer.accountType || 'Pribadi') || formData.name !== editingCustomer.name || formData.companyName !== (editingCustomer.companyName || '') || formData.phone !== editingCustomer.phone || formData.address !== editingCustomer.address || formData.email !== editingCustomer.email;
     return Object.values(formData).some(value => value.trim() !== '');
@@ -200,8 +205,10 @@ export default function Customers() {
     resetForm();
   };
 
+  const canWriteCustomer = hasPermission(editingCustomer ? 'customer:edit' : 'customer:create');
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canWriteCustomer) return;
     const now = localDateKey();
     const payload = {
       ...formData,
@@ -267,7 +274,7 @@ export default function Customers() {
         <button type="button" onClick={() => showModal && handleCloseModal()} title="Daftar Pelanggan" className={ui.childListTab}><List className="h-5 w-5" /></button>
         {showModal && (
           <div className={`${ui.childTabActive} ml-0.5 flex h-10 min-w-48 max-w-80 items-center`}>
-            <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `Edit — ${editingCustomer.companyName || editingCustomer.name}` : 'Akun Pelanggan Baru'}</span>
+            <span className="min-w-0 flex-1 truncate px-4 text-sm font-semibold">{editingCustomer ? `${canWriteCustomer ? 'Edit' : 'Detail'} — ${editingCustomer.companyName || editingCustomer.name}` : 'Akun Pelanggan Baru'}</span>
             <button type="button" onClick={() => handleCloseModal()} className="mr-1 rounded p-1.5 hover:bg-blue-700" title="Tutup tab"><X className="h-4 w-4" /></button>
           </div>
         )}
@@ -343,7 +350,7 @@ export default function Customers() {
                 {filteredCustomers.map(row => {
                   const { customer, customerVehicles } = row;
                   return (
-                    <tr key={customer.id} className="transition-colors hover:bg-blue-50/50">
+                    <tr key={customer.id} onClick={event => openCustomerFromRow(event, customer)} className="cursor-pointer transition-colors hover:bg-blue-50/50">
                       {orderedColumns.map(key => {
                         switch (key) {
                           case 'name': return <td key={key} className="px-4 py-3">
@@ -352,10 +359,10 @@ export default function Customers() {
                                   {customer.name.charAt(0)}
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-gray-900">{customer.name}</p>
+                                  <button type="button" onClick={() => handleOpenModal(customer)} className="block max-w-full truncate text-left text-sm font-semibold text-blue-700 hover:underline">{customer.name}</button>
                                   {!!customer.categories?.length && <p className="text-xs text-gray-500">{customer.categories.join(', ')}</p>}
                                   {customer.companyName && <p className="truncate text-xs text-gray-500">{customer.companyName}</p>}
-                                  <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
+                                  <p className="truncate font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
                                 </div>
                               </div>
                             </td>;
@@ -429,14 +436,14 @@ export default function Customers() {
           filteredCustomers.map(row => {
             const { customer } = row;
             return (
-              <div key={customer.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+              <div key={customer.id} onClick={event => openCustomerFromRow(event, customer)} className="cursor-pointer bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                       {customer.name.charAt(0)}
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">{customer.name}</h3>
+                      <h3 className="font-semibold text-blue-700"><button type="button" onClick={() => handleOpenModal(customer)} className="text-left hover:underline">{customer.name}</button></h3>
                       {!!customer.categories?.length && <p className="text-xs text-gray-500">{customer.categories.join(', ')}</p>}
                       {customer.companyName && <p className="text-xs text-gray-500">{customer.companyName}</p>}
                       <p className="text-xs text-blue-600 font-mono font-medium">{customer.customerCode}</p>
@@ -524,12 +531,13 @@ export default function Customers() {
             <div className="sticky top-0 flex items-center justify-between rounded-t-xl border-b border-gray-200 bg-white px-6 py-4 lg:hidden">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {editingCustomer ? 'Edit Akun Pelanggan' : 'Akun Pelanggan Baru'}
+                  {editingCustomer ? (canWriteCustomer ? 'Edit Akun Pelanggan' : 'Detail Pelanggan') : 'Akun Pelanggan Baru'}
                 </h3>
                 <p className="text-sm text-gray-500">Satu akun dapat memiliki perusahaan, beberapa kontak, dan beberapa kendaraan.</p>
               </div>
               <button
                 onClick={() => handleCloseModal()}
+                aria-label="Tutup detail pelanggan"
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5 text-gray-500" />
@@ -555,7 +563,7 @@ export default function Customers() {
             </div>
             <div id="customer-panel-Umum" role="tabpanel" aria-labelledby="customer-tab-Umum" hidden={customerTab !== 'Umum'}>
             <form id="customer-data-form" onSubmit={handleSubmit} className="space-y-5 p-4 sm:p-6 lg:p-4">
-              <div className="max-w-3xl">
+              <fieldset disabled={!canWriteCustomer} className="min-w-0 max-w-3xl">
                 <section>
                   <h4 className="mb-4 border-b border-gray-200 pb-2 text-lg font-medium text-blue-600">Info Umum</h4>
                   <div className="flex flex-col gap-4">
@@ -590,7 +598,7 @@ export default function Customers() {
                       placeholder="Email PIC (opsional)" className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-normal outline-none focus:ring-2 focus:ring-blue-500" />
                   </label>
                 </section>
-              </div>
+              </fieldset>
 
               <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4 lg:hidden">
                 <button
@@ -598,16 +606,16 @@ export default function Customers() {
                   onClick={() => handleCloseModal()}
                   className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50"
                 >
-                  Batal
+                  {canWriteCustomer ? 'Batal' : 'Tutup'}
                 </button>
-                <button
+                {canWriteCustomer && <button
                   type="submit"
                   disabled={!canSaveCustomer}
                   className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
                 >
                   <Save className="h-4 w-4" />
                   <span>{editingCustomer ? 'Simpan Perubahan' : 'Simpan Akun'}</span>
-                </button>
+                </button>}
               </div>
             </form>
             </div>
@@ -615,7 +623,7 @@ export default function Customers() {
               {customerTab === 'Kontak' && <CustomerContactsTab customer={editingCustomer} openGeneral={() => setCustomerTab('Umum')} />}
             </div>
           </div>
-          {customerTab === 'Umum' && <button type="submit" form="customer-data-form" disabled={!canSaveCustomer} title={editingCustomer ? 'Simpan Perubahan' : 'Simpan Akun'} className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
+          {customerTab === 'Umum' && canWriteCustomer && <button type="submit" form="customer-data-form" disabled={!canSaveCustomer} title={editingCustomer ? 'Simpan Perubahan' : 'Simpan Akun'} className="sticky top-[60px] mt-[45px] hidden h-28 w-28 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none lg:inline-flex">
             <Save className="h-12 w-12" />
           </button>}
         </div>
