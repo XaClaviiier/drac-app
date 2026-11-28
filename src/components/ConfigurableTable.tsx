@@ -16,6 +16,7 @@ export function useConfigurableTable<K extends string>({
   sortableKeys,
   fixedRightKeys = [],
   inventoryLayout = false,
+  moveToTargetIndex = inventoryLayout,
   defaultSort = null,
 }: {
   storageKey: string;
@@ -24,6 +25,7 @@ export function useConfigurableTable<K extends string>({
   sortableKeys: K[];
   fixedRightKeys?: K[];
   inventoryLayout?: boolean;
+  moveToTargetIndex?: boolean;
   defaultSort?: TableSort<K>;
 }) {
   const [order, setOrder] = useState<K[]>(defaultOrder);
@@ -81,7 +83,7 @@ export function useConfigurableTable<K extends string>({
     if (!defaultOrder.includes(source) || !defaultOrder.includes(target) || source === target || fixedRightKeys.includes(source) || fixedRightKeys.includes(target)) return;
     setOrder(current => {
       const next = current.filter(key => key !== source);
-      next.splice(inventoryLayout ? current.indexOf(target) : next.indexOf(target), 0, source);
+      next.splice(moveToTargetIndex ? current.indexOf(target) : next.indexOf(target), 0, source);
       const normalized = normalizeOrder(next);
       persist(normalized, widths, sort);
       return normalized;

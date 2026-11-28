@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, Users, X, Save, Phone, Mail, MapPin, List, Settings2, RotateCcw, Printer, Download, ExternalLink, MessageCircle, History, Clock3, Filter, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import { ConfigurableTableHeaderCell, useConfigurableTable } from '../components/ConfigurableTable';
 import CustomerContactsTab from '../components/CustomerContactsTab';
-import type { Customer } from '../types';
+import type { Customer, Vehicle } from '../types';
 import { localDateKey } from '../lib/date';
 import { api } from '../lib/apiClient';
 import { ui } from '../components/ui/interfaceStandards';
@@ -12,17 +13,25 @@ type ContactTemplate = 'Hubungi Kembali' | 'Terima Kasih' | 'Minta Ulasan' | 'Pe
 type ContactLog = { id:string; templateType:string; messageText:string; vehicleInfo?:string; workOrderNumber?:string; invoiceNumber?:string; status:string; createdByName?:string; createdAt:string };
 
 type CustomerColumn = 'name' | 'phone' | 'plates' | 'email' | 'address' | 'vehicles' | 'workOrders' | 'invoices' | 'receivable' | 'firstBranch' | 'actions';
-const customerColumns: Array<{ id: CustomerColumn; label: string; locked?: boolean }> = [
-  { id: 'name', label: 'Kode / Nama Pelanggan', locked: true }, { id: 'phone', label: 'No. Telepon' },
+const customerColumns: Array<{ id: CustomerColumn; label: string; heading?: string; locked?: boolean }> = [
+  { id: 'name', label: 'Kode / Nama Pelanggan', heading: 'Nama', locked: true }, { id: 'phone', label: 'No. Telepon' },
   { id: 'plates', label: 'No. Plat Kendaraan' }, { id: 'email', label: 'Email' }, { id: 'address', label: 'Alamat' },
-  { id: 'vehicles', label: 'Jumlah Kendaraan' }, { id: 'workOrders', label: 'Jumlah WO' },
-  { id: 'invoices', label: 'Jumlah Faktur' }, { id: 'receivable', label: 'Saldo Piutang' }, { id: 'firstBranch', label: 'Cabang Pertama' },
+  { id: 'vehicles', label: 'Jumlah Kendaraan', heading: 'Kendaraan' }, { id: 'workOrders', label: 'Jumlah WO', heading: 'WO' },
+  { id: 'invoices', label: 'Jumlah Faktur', heading: 'Faktur' }, { id: 'receivable', label: 'Saldo Piutang' }, { id: 'firstBranch', label: 'Cabang Pertama' },
   { id: 'actions', label: 'Aksi', locked: true },
 ];
 const defaultCustomerColumns: CustomerColumn[] = ['name', 'phone', 'plates', 'vehicles', 'workOrders', 'invoices', 'receivable', 'actions'];
 
+const columnOrder = customerColumns.map(column => column.id);
+const sortableColumns = columnOrder.filter(column => column !== 'actions');
+const columnWidths: Record<CustomerColumn, number> = {
+  name: 230, phone: 150, plates: 185, email: 190, address: 240, vehicles: 110,
+  workOrders: 76, invoices: 88, receivable: 155, firstBranch: 165, actions: 166,
+};
+const customerCollator = new Intl.Collator('id-ID', { numeric: true, sensitivity: 'base' });
+
 export default function Customers() {
-  const { data, currentBranchId, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
+  const { data, currentUser, currentBranchId, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -55,35 +64,70 @@ export default function Customers() {
     email: '',
   });
 
-  const filteredCustomers = useMemo(() => {
-    // Pelanggan bersifat GLOBAL — tampil di semua cabang
-    return data.customers.filter((c) => {
-      const matchesPlate = data.vehicles.some(v => (v.customerRefId === c.id) && v.plateNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesSearch =
-        c.customerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (c.categories || []).some(category => category.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.companyName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone.includes(searchTerm) ||
-        c.email.toLowerCase().includes(searchTerm.toLowerCase()) || matchesPlate;
-      return matchesSearch && (!categoryFilter || (c.categories || []).includes(categoryFilter));
-    });
-  }, [data.customers, data.vehicles, searchTerm, categoryFilter]);
+  const table = useConfigurableTable<CustomerColumn>({
+    storageKey: `drac-customer-table:${currentUser?.id || 'guest'}`,
+    defaultOrder: columnOrder,
+    defaultWidths: columnWidths,
+    sortableKeys: sortableColumns,
+    moveToTargetIndex: true,
+  });
+  const orderedColumns = table.order.filter(key => visibleColumns.includes(key));
+  const tableWidth = orderedColumns.reduce((total, key) => total + table.widths[key], 0);
   const customerCategories = useMemo(() => Array.from(new Set(data.customers.flatMap(customer => customer.categories || []))).sort((a, b) => a.localeCompare(b)), [data.customers]);
-
   const canViewReceivable = hasPermission('invoice:view') || hasPermission('payment:view') || hasPermission('report:sales') || hasPermission('report:view');
-  const receivables = useMemo(() => {
+  const customerRows = useMemo(() => {
+    const vehiclesByCustomer = new Map<string, Vehicle[]>();
+    const workOrdersByCustomer = new Map<string, number>();
+    const invoicesByCustomer = new Map<string, number>();
     const balances = new Map<string, number>();
-    if (!canViewReceivable) return balances;
-    for (const invoice of data.invoices) {
-      if (!invoice.customerRefId || (currentBranchId !== 'ALL' && invoice.branchId !== currentBranchId)) continue;
-      const outstanding = Math.max(0, invoice.total - invoice.payment);
-      balances.set(invoice.customerRefId, (balances.get(invoice.customerRefId) ?? 0) + outstanding);
+    const branchNames = new Map(data.branches.map(branch => [branch.id, branch.name]));
+    for (const vehicle of data.vehicles) {
+      if (!vehicle.customerRefId) continue;
+      const vehicles = vehiclesByCustomer.get(vehicle.customerRefId);
+      if (vehicles) vehicles.push(vehicle);
+      else vehiclesByCustomer.set(vehicle.customerRefId, [vehicle]);
     }
-    return balances;
-  }, [canViewReceivable, currentBranchId, data.invoices]);
-  const receivableLabel = (customerId: string) => canViewReceivable
-    ? `Rp ${(receivables.get(customerId) ?? 0).toLocaleString('id-ID')}` : '—';
+    for (const wo of data.workOrders) {
+      if (wo.customerRefId) workOrdersByCustomer.set(wo.customerRefId, (workOrdersByCustomer.get(wo.customerRefId) ?? 0) + 1);
+    }
+    for (const invoice of data.invoices) {
+      const id = invoice.customerRefId;
+      if (!id) continue;
+      invoicesByCustomer.set(id, (invoicesByCustomer.get(id) ?? 0) + 1);
+      if (canViewReceivable && (currentBranchId === 'ALL' || currentBranchId === invoice.branchId)) {
+        balances.set(id, (balances.get(id) ?? 0) + Math.max(0, invoice.total - invoice.payment));
+      }
+    }
+    return data.customers.map(customer => {
+      const customerVehicles = vehiclesByCustomer.get(customer.id) ?? [];
+      return {
+        customer, customerVehicles, name: customer.name, phone: customer.phone, email: customer.email, address: customer.address,
+        plates: customerVehicles.map(vehicle => vehicle.plateNumber).join(', '),
+        vehicles: customerVehicles.length, workOrders: workOrdersByCustomer.get(customer.id) ?? 0,
+        invoices: invoicesByCustomer.get(customer.id) ?? 0, receivable: balances.get(customer.id) ?? 0,
+        firstBranch: branchNames.get(customer.firstSeenBranchId || '') || '',
+      };
+    });
+  }, [data.customers, data.vehicles, data.workOrders, data.invoices, data.branches, canViewReceivable, currentBranchId]);
+
+  const filteredCustomers = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    const rows = customerRows.filter(({ customer, plates }) => {
+      const matches = [customer.customerCode, customer.name, customer.companyName, customer.phone, customer.email, plates, ...(customer.categories || [])]
+        .some(value => value?.toLowerCase().includes(term));
+      return matches && (!categoryFilter || customer.categories?.includes(categoryFilter));
+    });
+    if (!table.sort || table.sort.key === 'actions' || !visibleColumns.includes(table.sort.key)) return rows;
+    const { key, direction } = table.sort;
+    const multiplier = direction === 'asc' ? 1 : -1;
+    return rows.sort((a, b) => {
+      const left = a[key], right = b[key];
+      const comparison = typeof left === 'number' && typeof right === 'number'
+        ? left - right : customerCollator.compare(String(left ?? ''), String(right ?? ''));
+      return comparison * multiplier;
+    });
+  }, [customerRows, searchTerm, categoryFilter, table.sort, visibleColumns]);
+  const receivableLabel = (balance: number) => canViewReceivable ? `Rp ${balance.toLocaleString('id-ID')}` : '—';
 
   const setColumns = (columns: CustomerColumn[]) => {
     const next = Array.from(new Set<CustomerColumn>(['name', ...columns, 'actions']));
@@ -92,22 +136,15 @@ export default function Customers() {
   };
   const toggleColumn = (column: CustomerColumn) => setColumns(visibleColumns.includes(column) ? visibleColumns.filter(item => item !== column) : [...visibleColumns, column]);
 
-  const customerFieldValue = (customer: Customer, column: CustomerColumn) => {
-    const vehicles = data.vehicles.filter(vehicle => vehicle.customerRefId === customer.id);
+  const customerFieldValue = (row: typeof customerRows[number], column: CustomerColumn) => {
+    const { customer } = row;
     if (column === 'name') return `${customer.customerCode} - ${customer.companyName ? `${customer.companyName} / ` : ''}${customer.name}`;
-    if (column === 'phone') return customer.phone || '';
-    if (column === 'plates') return vehicles.map(vehicle => vehicle.plateNumber).join(', ');
-    if (column === 'email') return customer.email || '';
-    if (column === 'address') return customer.address || '';
-    if (column === 'vehicles') return String(vehicles.length);
-    if (column === 'workOrders') return String(data.workOrders.filter(wo => wo.customerRefId === customer.id).length);
-    if (column === 'invoices') return String(data.invoices.filter(invoice => invoice.customerRefId === customer.id).length);
-    if (column === 'receivable') return receivableLabel(customer.id);
-    if (column === 'firstBranch') return data.branches.find(branch => branch.id === customer.firstSeenBranchId)?.name || '';
-    return '';
+    if (column === 'receivable') return receivableLabel(row.receivable);
+    if (column === 'actions') return '';
+    return String(row[column] ?? '');
   };
 
-  const printableColumns = customerColumns.filter(column => column.id !== 'actions' && visibleColumns.includes(column.id));
+  const printableColumns = orderedColumns.filter(key => key !== 'actions').map(key => customerColumns.find(column => column.id === key)!);
   const exportCustomers = () => {
     const csv = [printableColumns.map(column => `"${column.label}"`).join(','), ...filteredCustomers.map(customer => printableColumns.map(column => `"${customerFieldValue(customer, column.id).replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
@@ -276,7 +313,7 @@ export default function Customers() {
                       </label>
                     ))}
                   </div>
-                  <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3"><button type="button" onClick={() => setColumns(customerColumns.map(column => column.id))} className="text-xs font-semibold text-blue-600 hover:text-blue-800">Tampilkan Semua</button><button type="button" onClick={() => setColumns(defaultCustomerColumns)} className="flex items-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900"><RotateCcw className="h-3.5 w-3.5" /> Reset Default</button></div>
+                  <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3"><button type="button" onClick={() => setColumns(customerColumns.map(column => column.id))} className="text-xs font-semibold text-blue-600 hover:text-blue-800">Tampilkan Semua</button><button type="button" onClick={() => { setColumns(defaultCustomerColumns); table.resetLayout(); }} className="flex items-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900"><RotateCcw className="h-3.5 w-3.5" /> Reset Default</button></div>
                 </div>
               </>
             )}
@@ -288,84 +325,77 @@ export default function Customers() {
       {filteredCustomers.length > 0 && (
         <div className={"app-fill-stack " + (`${ui.tableShell} mx-3 mt-0.5 hidden shadow-sm lg:block`)}>
           <div className="app-table-scroll app-table-scroll--fill max-h-[calc(100vh-245px)] overflow-auto">
-            <table className="w-full min-w-[1050px] text-left">
+            <table className="customer-list-table table-fixed text-left [&_td]:overflow-hidden" style={{ width: tableWidth }}>
+              <colgroup>{orderedColumns.map(key => <col key={key} style={{ width: table.widths[key] }} />)}</colgroup>
               <thead className="sticky top-0 z-10 bg-blue-800 text-xs uppercase tracking-wide text-white">
-                <tr>
-                  {visibleColumns.includes('name') && <th className="px-4 py-3 font-semibold">Nama</th>}
-                  {visibleColumns.includes('phone') && <th className="px-4 py-3 font-semibold">No. Telepon</th>}
-                  {visibleColumns.includes('plates') && <th className="px-4 py-3 font-semibold">No. Plat Kendaraan</th>}
-                  {visibleColumns.includes('email') && <th className="px-4 py-3 font-semibold">Email</th>}
-                  {visibleColumns.includes('address') && <th className="px-4 py-3 font-semibold">Alamat</th>}
-                  {visibleColumns.includes('vehicles') && <th className="px-4 py-3 text-center font-semibold">Kendaraan</th>}
-                  {visibleColumns.includes('workOrders') && <th className="px-4 py-3 text-center font-semibold">WO</th>}
-                  {visibleColumns.includes('invoices') && <th className="px-4 py-3 text-center font-semibold">Faktur</th>}
-                  {visibleColumns.includes('receivable') && <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">Saldo Piutang</th>}
-                  {visibleColumns.includes('firstBranch') && <th className="px-4 py-3 font-semibold">Cabang Pertama</th>}
-                  {visibleColumns.includes('actions') && <th className="px-4 py-3 text-right font-semibold">Aksi</th>}
+                <tr className="h-10">
+                  {orderedColumns.map(key => {
+                    const column = customerColumns.find(item => item.id === key)!;
+                    return <ConfigurableTableHeaderCell key={key} columnKey={key} label={column.heading ?? column.label}
+                      sortable={key !== 'actions' && (key !== 'receivable' || canViewReceivable)} movable sort={table.sort}
+                      align={key === 'receivable' || key === 'actions' ? 'right' : ['vehicles', 'workOrders', 'invoices'].includes(key) ? 'center' : 'left'}
+                      onMove={table.moveColumn} onSort={table.toggleSort} onResize={table.beginResize} onResetWidth={table.resetWidth}
+                    />;
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredCustomers.map((customer) => {
-                  const customerVehicles = data.vehicles.filter((v) =>
-                    v.customerRefId === customer.id
-                  );
-                  const vehicleCount = customerVehicles.length;
-                  const invoiceCount = data.invoices.filter(
-                    (invoice) => invoice.customerRefId === customer.id
-                  ).length;
-                  const workOrderCount = data.workOrders.filter(
-                    (wo) => wo.customerRefId === customer.id
-                  ).length;
+                {filteredCustomers.map(row => {
+                  const { customer, customerVehicles } = row;
                   return (
                     <tr key={customer.id} className="transition-colors hover:bg-blue-50/50">
-                      {visibleColumns.includes('name') && <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-sm font-bold text-white">
-                            {customer.name.charAt(0)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="max-w-[220px] truncate text-sm font-semibold text-gray-900">{customer.name}</p>
-                            {!!customer.categories?.length && <p className="max-w-[220px] text-xs text-gray-500">{customer.categories.join(', ')}</p>}
-                            {customer.companyName && <p className="max-w-[220px] truncate text-xs text-gray-500">{customer.companyName}</p>}
-                            <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
-                          </div>
-                        </div>
-                      </td>}
-                      {visibleColumns.includes('phone') && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-800">{customer.phone || '—'}</td>}
-                      {visibleColumns.includes('plates') && <td className="px-4 py-3"><div className="flex max-w-[240px] flex-wrap gap-1">{customerVehicles.slice(0, 2).map(vehicle => <span key={vehicle.id} title={`${vehicle.brand} ${vehicle.model} ${vehicle.year || ''} - ${vehicle.color}`} className="rounded-md bg-sky-100 px-2 py-1 font-mono text-xs font-semibold text-sky-800">{vehicle.plateNumber}</span>)}{customerVehicles.length > 2 && <span title={customerVehicles.slice(2).map(vehicle => `${vehicle.plateNumber} — ${vehicle.brand} ${vehicle.model} ${vehicle.year || ''} - ${vehicle.color}`).join('\n')} className="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">+{customerVehicles.length - 2} lainnya</span>}{customerVehicles.length === 0 && <span className="text-sm text-gray-400">—</span>}</div></td>}
-                      {visibleColumns.includes('email') && <td className="px-4 py-3 text-sm text-gray-700">
-                        <span className="block max-w-[190px] truncate" title={customer.email}>{customer.email || '—'}</span>
-                      </td>}
-                      {visibleColumns.includes('address') && <td className="px-4 py-3 text-sm text-gray-700">
-                        <span className="block max-w-[260px] truncate" title={customer.address}>{customer.address || '—'}</span>
-                      </td>}
-                      {visibleColumns.includes('vehicles') && <td className="px-4 py-3 text-center">
-                        <span className="inline-flex min-w-8 justify-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">{vehicleCount}</span>
-                      </td>}
-                      {visibleColumns.includes('workOrders') && <td className="px-4 py-3 text-center">
-                        <span className="inline-flex min-w-8 justify-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800">{workOrderCount}</span>
-                      </td>}
-                      {visibleColumns.includes('invoices') && <td className="px-4 py-3 text-center">
-                        <span className="inline-flex min-w-8 justify-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">{invoiceCount}</span>
-                      </td>}
-                      {visibleColumns.includes('receivable') && <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums">{receivableLabel(customer.id)}</td>}
-                      {visibleColumns.includes('firstBranch') && <td className="px-4 py-3 text-sm text-gray-700">{data.branches.find(branch => branch.id === customer.firstSeenBranchId)?.name || '—'}</td>}
-                      {visibleColumns.includes('actions') && <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => openContact(customer)} disabled={!customer.phone} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:text-gray-300" title="Hubungi via WhatsApp"><MessageCircle className="h-4 w-4" /></button>
-                          <button onClick={() => void openHistory(customer)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100" title="Riwayat kontak"><History className="h-4 w-4" /></button>
-                          {hasPermission('customer:edit') && (
-                            <button onClick={() => handleOpenModal(customer)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit pelanggan">
-                              <Edit className="h-4 w-4" />
-                            </button>
-                          )}
-                          {hasPermission('customer:delete') && (
-                            <button onClick={() => handleDelete(customer.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus pelanggan">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>}
+                      {orderedColumns.map(key => {
+                        switch (key) {
+                          case 'name': return <td key={key} className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-sm font-bold text-white">
+                                  {customer.name.charAt(0)}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-gray-900">{customer.name}</p>
+                                  {!!customer.categories?.length && <p className="text-xs text-gray-500">{customer.categories.join(', ')}</p>}
+                                  {customer.companyName && <p className="truncate text-xs text-gray-500">{customer.companyName}</p>}
+                                  <p className="font-mono text-xs font-medium text-blue-600">{customer.customerCode}</p>
+                                </div>
+                              </div>
+                            </td>;
+                          case 'phone': return <td key={key} className="whitespace-nowrap px-4 py-3 text-sm text-gray-800">{customer.phone || '—'}</td>;
+                          case 'plates': return <td key={key} className="px-4 py-3"><div className="flex flex-wrap gap-1">{customerVehicles.slice(0, 2).map(vehicle => <span key={vehicle.id} title={`${vehicle.brand} ${vehicle.model} ${vehicle.year || ''} - ${vehicle.color}`} className="rounded-md bg-sky-100 px-2 py-1 font-mono text-xs font-semibold text-sky-800">{vehicle.plateNumber}</span>)}{customerVehicles.length > 2 && <span title={customerVehicles.slice(2).map(vehicle => `${vehicle.plateNumber} — ${vehicle.brand} ${vehicle.model} ${vehicle.year || ''} - ${vehicle.color}`).join('\n')} className="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">+{customerVehicles.length - 2} lainnya</span>}{customerVehicles.length === 0 && <span className="text-sm text-gray-400">—</span>}</div></td>;
+                          case 'email': return <td key={key} className="px-4 py-3 text-sm text-gray-700">
+                              <span className="block truncate" title={customer.email}>{customer.email || '—'}</span>
+                            </td>;
+                          case 'address': return <td key={key} className="px-4 py-3 text-sm text-gray-700">
+                              <span className="block truncate" title={customer.address}>{customer.address || '—'}</span>
+                            </td>;
+                          case 'vehicles': return <td key={key} className="px-4 py-3 text-center">
+                              <span className="inline-flex min-w-8 justify-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">{row.vehicles}</span>
+                            </td>;
+                          case 'workOrders': return <td key={key} className="px-4 py-3 text-center">
+                              <span className="inline-flex min-w-8 justify-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800">{row.workOrders}</span>
+                            </td>;
+                          case 'invoices': return <td key={key} className="px-4 py-3 text-center">
+                              <span className="inline-flex min-w-8 justify-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">{row.invoices}</span>
+                            </td>;
+                          case 'receivable': return <td key={key} className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums">{receivableLabel(row.receivable)}</td>;
+                          case 'firstBranch': return <td key={key} className="px-4 py-3 text-sm text-gray-700">{row.firstBranch || '—'}</td>;
+                          case 'actions': return <td key={key} className="px-4 py-3">
+                              <div className="flex flex-wrap items-center justify-end gap-1">
+                                <button onClick={() => openContact(customer)} disabled={!customer.phone} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:text-gray-300" title="Hubungi via WhatsApp"><MessageCircle className="h-4 w-4" /></button>
+                                <button onClick={() => void openHistory(customer)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100" title="Riwayat kontak"><History className="h-4 w-4" /></button>
+                                {hasPermission('customer:edit') && (
+                                  <button onClick={() => handleOpenModal(customer)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Edit pelanggan">
+                                    <Edit className="h-4 w-4" />
+                                  </button>
+                                )}
+                                {hasPermission('customer:delete') && (
+                                  <button onClick={() => handleDelete(customer.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-100" title="Hapus pelanggan">
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>;
+                        }
+                      })}
                     </tr>
                   );
                 })}
@@ -396,16 +426,8 @@ export default function Customers() {
             <p className="text-sm text-gray-500">Klik "Tambah Pelanggan" untuk menambahkan data baru</p>
           </div>
         ) : (
-          filteredCustomers.map((customer) => {
-            const vehicleCount = data.vehicles.filter((v) =>
-              v.customerRefId === customer.id
-            ).length;
-            const invoiceCount = data.invoices.filter(
-              (invoice) => invoice.customerRefId === customer.id
-            ).length;
-            const workOrderCount = data.workOrders.filter(
-              (wo) => wo.customerRefId === customer.id
-            ).length;
+          filteredCustomers.map(row => {
+            const { customer } = row;
             return (
               <div key={customer.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-4">
@@ -448,7 +470,7 @@ export default function Customers() {
                 <div className="space-y-2 text-sm">
                   {visibleColumns.includes('receivable') && <div className="flex items-baseline justify-between gap-2">
                     <span className="text-gray-600">Saldo Piutang</span>
-                    <span className="font-semibold tabular-nums">{receivableLabel(customer.id)}</span>
+                    <span className="font-semibold tabular-nums">{receivableLabel(row.receivable)}</span>
                   </div>}
                   <div className="flex items-center gap-2 text-gray-600">
                     <Phone className="w-4 h-4 text-gray-400" />
@@ -470,13 +492,13 @@ export default function Customers() {
 
                 <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap gap-2">
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    {vehicleCount} kendaraan
+                    {row.vehicles} kendaraan
                   </span>
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    {invoiceCount} faktur
+                    {row.invoices} faktur
                   </span>
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                    {workOrderCount} WO
+                    {row.workOrders} WO
                   </span>
                   {/* Cabang input pertama */}
                   {customer.firstSeenBranchId && (

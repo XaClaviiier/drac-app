@@ -500,6 +500,9 @@
     color: var(--app-table-header-color) !important;
     white-space: nowrap;
   }
+  .app-table-scroll > table.customer-list-table > thead th {
+    position: relative !important;
+  }
 }
 .app-fill-stack { min-width: 0; }
 @media (min-width: 1024px) {
