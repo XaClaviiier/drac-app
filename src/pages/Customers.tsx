@@ -11,18 +11,18 @@ import { ui } from '../components/ui/interfaceStandards';
 type ContactTemplate = 'Hubungi Kembali' | 'Terima Kasih' | 'Minta Ulasan' | 'Pengingat Servis' | 'Pesan Bebas';
 type ContactLog = { id:string; templateType:string; messageText:string; vehicleInfo?:string; workOrderNumber?:string; invoiceNumber?:string; status:string; createdByName?:string; createdAt:string };
 
-type CustomerColumn = 'name' | 'phone' | 'plates' | 'email' | 'address' | 'vehicles' | 'workOrders' | 'invoices' | 'firstBranch' | 'actions';
+type CustomerColumn = 'name' | 'phone' | 'plates' | 'email' | 'address' | 'vehicles' | 'workOrders' | 'invoices' | 'receivable' | 'firstBranch' | 'actions';
 const customerColumns: Array<{ id: CustomerColumn; label: string; locked?: boolean }> = [
   { id: 'name', label: 'Kode / Nama Pelanggan', locked: true }, { id: 'phone', label: 'No. Telepon' },
   { id: 'plates', label: 'No. Plat Kendaraan' }, { id: 'email', label: 'Email' }, { id: 'address', label: 'Alamat' },
   { id: 'vehicles', label: 'Jumlah Kendaraan' }, { id: 'workOrders', label: 'Jumlah WO' },
-  { id: 'invoices', label: 'Jumlah Faktur' }, { id: 'firstBranch', label: 'Cabang Pertama' },
+  { id: 'invoices', label: 'Jumlah Faktur' }, { id: 'receivable', label: 'Saldo Piutang' }, { id: 'firstBranch', label: 'Cabang Pertama' },
   { id: 'actions', label: 'Aksi', locked: true },
 ];
-const defaultCustomerColumns: CustomerColumn[] = ['name', 'phone', 'plates', 'vehicles', 'workOrders', 'invoices', 'actions'];
+const defaultCustomerColumns: CustomerColumn[] = ['name', 'phone', 'plates', 'vehicles', 'workOrders', 'invoices', 'receivable', 'actions'];
 
 export default function Customers() {
-  const { data, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
+  const { data, currentBranchId, addCustomer, updateCustomer, deleteCustomer, generateCustomerCode, resolveBranchId, hasPermission, refreshData } = useApp();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -39,7 +39,8 @@ export default function Customers() {
   const [customerTab, setCustomerTab] = useState<'Umum' | 'Kontak'>('Umum');
   const [visibleColumns, setVisibleColumns] = useState<CustomerColumn[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('drac-customer-columns') || '[]');
+      const preferences = JSON.parse(localStorage.getItem('drac-customer-columns') || 'null');
+      const saved = Array.isArray(preferences) ? [...preferences, 'receivable'] : preferences?.columns;
       return Array.isArray(saved) && saved.length ? Array.from(new Set<CustomerColumn>(['name', ...saved, 'actions'])) : defaultCustomerColumns;
     } catch { return defaultCustomerColumns; }
   });
@@ -70,10 +71,24 @@ export default function Customers() {
   }, [data.customers, data.vehicles, searchTerm, categoryFilter]);
   const customerCategories = useMemo(() => Array.from(new Set(data.customers.flatMap(customer => customer.categories || []))).sort((a, b) => a.localeCompare(b)), [data.customers]);
 
+  const canViewReceivable = hasPermission('invoice:view') || hasPermission('payment:view') || hasPermission('report:sales') || hasPermission('report:view');
+  const receivables = useMemo(() => {
+    const balances = new Map<string, number>();
+    if (!canViewReceivable) return balances;
+    for (const invoice of data.invoices) {
+      if (!invoice.customerRefId || (currentBranchId !== 'ALL' && invoice.branchId !== currentBranchId)) continue;
+      const outstanding = Math.max(0, invoice.total - invoice.payment);
+      balances.set(invoice.customerRefId, (balances.get(invoice.customerRefId) ?? 0) + outstanding);
+    }
+    return balances;
+  }, [canViewReceivable, currentBranchId, data.invoices]);
+  const receivableLabel = (customerId: string) => canViewReceivable
+    ? `Rp ${(receivables.get(customerId) ?? 0).toLocaleString('id-ID')}` : '—';
+
   const setColumns = (columns: CustomerColumn[]) => {
     const next = Array.from(new Set<CustomerColumn>(['name', ...columns, 'actions']));
     setVisibleColumns(next);
-    localStorage.setItem('drac-customer-columns', JSON.stringify(next));
+    localStorage.setItem('drac-customer-columns', JSON.stringify({ columns: next }));
   };
   const toggleColumn = (column: CustomerColumn) => setColumns(visibleColumns.includes(column) ? visibleColumns.filter(item => item !== column) : [...visibleColumns, column]);
 
@@ -87,6 +102,7 @@ export default function Customers() {
     if (column === 'vehicles') return String(vehicles.length);
     if (column === 'workOrders') return String(data.workOrders.filter(wo => wo.customerRefId === customer.id).length);
     if (column === 'invoices') return String(data.invoices.filter(invoice => invoice.customerRefId === customer.id).length);
+    if (column === 'receivable') return receivableLabel(customer.id);
     if (column === 'firstBranch') return data.branches.find(branch => branch.id === customer.firstSeenBranchId)?.name || '';
     return '';
   };
@@ -283,6 +299,7 @@ export default function Customers() {
                   {visibleColumns.includes('vehicles') && <th className="px-4 py-3 text-center font-semibold">Kendaraan</th>}
                   {visibleColumns.includes('workOrders') && <th className="px-4 py-3 text-center font-semibold">WO</th>}
                   {visibleColumns.includes('invoices') && <th className="px-4 py-3 text-center font-semibold">Faktur</th>}
+                  {visibleColumns.includes('receivable') && <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">Saldo Piutang</th>}
                   {visibleColumns.includes('firstBranch') && <th className="px-4 py-3 font-semibold">Cabang Pertama</th>}
                   {visibleColumns.includes('actions') && <th className="px-4 py-3 text-right font-semibold">Aksi</th>}
                 </tr>
@@ -331,6 +348,7 @@ export default function Customers() {
                       {visibleColumns.includes('invoices') && <td className="px-4 py-3 text-center">
                         <span className="inline-flex min-w-8 justify-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">{invoiceCount}</span>
                       </td>}
+                      {visibleColumns.includes('receivable') && <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums">{receivableLabel(customer.id)}</td>}
                       {visibleColumns.includes('firstBranch') && <td className="px-4 py-3 text-sm text-gray-700">{data.branches.find(branch => branch.id === customer.firstSeenBranchId)?.name || '—'}</td>}
                       {visibleColumns.includes('actions') && <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
@@ -428,6 +446,10 @@ export default function Customers() {
                 </div>
 
                 <div className="space-y-2 text-sm">
+                  {visibleColumns.includes('receivable') && <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-gray-600">Saldo Piutang</span>
+                    <span className="font-semibold tabular-nums">{receivableLabel(customer.id)}</span>
+                  </div>}
                   <div className="flex items-center gap-2 text-gray-600">
                     <Phone className="w-4 h-4 text-gray-400" />
                     <span>{customer.phone}</span>
