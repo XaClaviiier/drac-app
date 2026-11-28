@@ -16,7 +16,7 @@ export interface SalesInvoicePrintData {
   description?: string;
   printNote?: string;
   draft?: boolean;
-  company: Pick<CompanyProfile, 'name' | 'invoiceFooter'>;
+  company: Pick<CompanyProfile, 'name' | 'address' | 'invoiceFooter'>;
   branch?: Pick<Branch, 'name' | 'address' | 'phone'>;
   status: string;
   lines: { name: string; qty: number; price: number; members: { name: string; qty: number }[] }[];
@@ -39,6 +39,7 @@ export function buildSalesInvoicePrintHtml(data: SalesInvoicePrintData, format: 
   const corporateA4 = !thermal && Boolean(customerCompany || data.customerAccountType === 'Perusahaan');
   const showPaymentStatus = !corporateA4 && (thermal || data.status !== 'Belum Lunas');
   const company = data.company.name.trim() || 'DOKTER AC MOBIL';
+  const address = thermal ? data.branch?.address : data.company.address;
   const title = data.draft ? 'Pratinjau Faktur' : 'Faktur Penjualan';
   const field = (label: string, value?: string) => value?.trim()
     ? `<div><dt>${label}</dt><dd>${escape(value)}</dd></div>` : '';
@@ -75,6 +76,7 @@ header { display:flex; align-items:flex-start; justify-content:space-between; ga
 .brand strong { display:block; font-size:15pt; letter-spacing:-.35pt }
 .branch { margin-top:1mm; font-weight:600; font-size:9pt }
 .contact, .date { margin-top:1.5mm; color:#505b63; font-size:9pt }
+.contact { white-space:pre-line }
 .heading { text-align:right; overflow-wrap:anywhere }
 h1 { margin:0; font-size:23pt; line-height:1.05; letter-spacing:-1pt }
 .ref { margin-top:2mm; font-weight:700; font-size:13pt; color:#9e2634 }
@@ -138,7 +140,7 @@ footer { margin-top:2mm; font-size:8pt; color:#000; border-top:1px dashed black;
 ` : ''}
 </style></head><body>
 <header><div class="brand"><strong>${escape(company)}</strong>${data.branch?.name ? `<div class="branch">${escape(data.branch.name)}</div>` : ''}
-${[data.branch?.address, data.branch?.phone].filter(Boolean).map(value => `<div class="contact">${escape(value!)}</div>`).join('')}</div>
+${[address, data.branch?.phone].map(clean).filter(Boolean).map(value => `<div class="contact">${escape(value)}</div>`).join('')}</div>
 <div class="heading"><h1>${title}</h1>${data.number ? `<div class="ref">${escape(data.number)}</div>` : ''}<div class="date">${escape(data.date)}</div></div></header>
 <dl class="identity">${customerIdentity}${field('Kendaraan', data.vehicle)}
 <div>${field('Work order', data.workOrder)}${field('Nota fisik', data.receipt)}</div></dl>
