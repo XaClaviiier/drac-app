@@ -6,6 +6,9 @@ export interface SalesInvoicePrintData {
   number: string;
   date: string;
   customer: string;
+  customerCompany?: string;
+  customerContact?: string;
+  customerAccountType?: 'Pribadi' | 'Perusahaan';
   vehicle: string;
   workOrder?: string;
   receipt?: string;
@@ -22,6 +25,7 @@ export interface SalesInvoicePrintData {
   payment: number;
 }
 
+const clean = (value?: string | null) => value?.trim() || '';
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]!);
@@ -30,11 +34,17 @@ const money = (value: number) => `Rp ${number.format(value)}`;
 
 export function buildSalesInvoicePrintHtml(data: SalesInvoicePrintData, format: SalesInvoicePrintFormat = 'a4') {
   const thermal = format === 'thermal80';
-  const showPaymentStatus = thermal || data.status !== 'Belum Lunas';
+  const customerCompany = clean(data.customerCompany);
+  const corporateA4 = !thermal && Boolean(customerCompany || data.customerAccountType === 'Perusahaan');
+  const showPaymentStatus = !corporateA4 && (thermal || data.status !== 'Belum Lunas');
   const company = data.company.name.trim() || 'DOKTER AC MOBIL';
   const title = data.draft ? 'Pratinjau Faktur' : 'Faktur Penjualan';
   const field = (label: string, value?: string) => value?.trim()
     ? `<div><dt>${label}</dt><dd>${escape(value)}</dd></div>` : '';
+  const contact = clean(data.customerContact) || clean(data.customer);
+  const customerIdentity = corporateA4 && customerCompany
+    ? `<div>${field('Pelanggan', customerCompany)}${contact.toLowerCase() !== customerCompany.toLowerCase() ? field('PIC / Kontak', contact) : ''}</div>`
+    : field('Pelanggan', data.customer);
   const rows = data.lines.map((line, i) => {
     const members = line.members.length ? `<ul>${line.members.map(member =>
       `<li>${escape(member.name)} <span>× ${number.format(member.qty)}</span></li>`).join('')}</ul>` : '';
@@ -124,7 +134,7 @@ footer { margin-top:2mm; font-size:8pt; color:#000; border-top:1px dashed black;
 <header><div class="brand"><strong>${escape(company)}</strong>${data.branch?.name ? `<div class="branch">${escape(data.branch.name)}</div>` : ''}
 ${[data.branch?.address, data.branch?.phone].filter(Boolean).map(value => `<div class="contact">${escape(value!)}</div>`).join('')}</div>
 <div class="heading"><h1>${title}</h1>${data.number ? `<div class="ref">${escape(data.number)}</div>` : ''}<div class="date">${escape(data.date)}</div></div></header>
-<dl class="identity">${field('Pelanggan', data.customer)}${field('Kendaraan', data.vehicle)}
+<dl class="identity">${customerIdentity}${field('Kendaraan', data.vehicle)}
 <div>${field('Work order', data.workOrder)}${field('Nota fisik', data.receipt)}</div></dl>
 <h2>Rincian barang dan jasa</h2>
 ${thermal ? `<ol class="items">${rows || `<li class="item">${fallback}</li>`}</ol>` : `<table><colgroup><col class="seq"><col><col class="qty"><col class="price"><col class="amount"></colgroup>
@@ -135,8 +145,8 @@ ${showPaymentStatus ? `<h2>Status pembayaran</h2><span class="status">${escape(d
 ${!thermal && data.printNote?.trim() ? `<div class="print-note"><h2>Catatan</h2><p>${escape(data.printNote.trim())}</p></div>` : ''}
 ${thermal ? '' : '<div class="signatures"><div>Dibuat oleh<span>Nama petugas</span></div><div>Diterima oleh<span>Nama penerima</span></div></div>'}</div>
 <dl class="totals">${field('Subtotal', money(data.subtotal))}${field('Diskon', money(data.discount))}
-<div class="total"><dt>Total faktur</dt><dd>${money(data.total)}</dd></div>${field('Pembayaran', money(data.payment))}
-<div class="balance"><dt>Sisa tagihan</dt><dd>${money(remaining)}</dd></div></dl></section>
+<div class="total${corporateA4 ? ' balance' : ''}"><dt>Total faktur</dt><dd>${money(data.total)}</dd></div>
+${corporateA4 ? '' : `${field('Pembayaran', money(data.payment))}<div class="balance"><dt>Sisa tagihan</dt><dd>${money(remaining)}</dd></div>`}</dl></section>
 ${data.company.invoiceFooter?.trim() ? `<footer>${escape(data.company.invoiceFooter)}</footer>` : ''}
 </body></html>`;
 }

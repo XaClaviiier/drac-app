@@ -472,7 +472,7 @@ export default function SalesInvoice() {
   };
 
   type PrintableInvoice = Pick<SalesInvoice,
-    'invoiceNumber' | 'branchId' | 'date' | 'customerName' | 'vehicleInfo' | 'woNumber'
+    'invoiceNumber' | 'branchId' | 'date' | 'customerRefId' | 'customerName' | 'vehicleInfo' | 'woNumber'
     | 'manualReceiptNumber' | 'total' | 'payment' | 'billingTreatment'
   > & Partial<Pick<SalesInvoice, 'description' | 'printNote' | 'status'>>;
   const printInvoice = (
@@ -488,12 +488,18 @@ export default function SalesInvoice() {
       name: invoiceItemReceiptName(item), qty: item.qty, price: item.price,
       members: packageMembersAfter(items, index).map(member => ({ name: invoiceItemReceiptName(member), qty: member.qty })),
     }]);
+    const customer = data.customers.find(item => item.id === invoice.customerRefId);
+    const primaryContact = customer?.primaryContactId ? data.customerPeople.find(person =>
+      person.customerId === customer.id && person.id === customer.primaryContactId && person.isActive !== false
+    ) : undefined;
     popup.opener = null;
     popup.document.open();
     popup.document.write(buildSalesInvoicePrintHtml({
       company: data.settings.company, branch: data.branches.find(branch => branch.id === invoice.branchId),
       number: invoice.invoiceNumber, date: formatBusinessDate(invoice.date), draft,
-      customer: invoice.customerName, vehicle: invoice.vehicleInfo, workOrder: invoice.woNumber,
+      customer: invoice.customerName, customerCompany: customer?.companyName, customerAccountType: customer?.accountType,
+      customerContact: primaryContact?.name.trim() || customer?.name,
+      vehicle: invoice.vehicleInfo, workOrder: invoice.woNumber,
       receipt: invoice.manualReceiptNumber, description: invoice.description, printNote: invoice.printNote, lines,
       subtotal, discount, total: invoice.total, payment: invoice.payment,
       status: invoiceStatusLabel({ ...invoice, status: invoice.status ?? (invoice.total > 0 && invoice.payment >= invoice.total ? 'Lunas' : 'Belum Lunas') }),
