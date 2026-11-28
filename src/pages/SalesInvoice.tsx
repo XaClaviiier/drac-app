@@ -560,6 +560,11 @@ export default function SalesInvoice() {
     setTransactionBranchId(resolveBranchId());
   };
 
+  const openInvoiceFromRow = (event: React.MouseEvent, invoice: SalesInvoice) => {
+    if (event.target instanceof Element && event.target.closest('button, a')) return;
+    setViewingInvoice(invoice);
+  };
+
   const handleOpenModal = (invoice?: SalesInvoice) => {
     setFormActionMenu(null);
     setInvoiceDocumentTab('details');
@@ -1201,7 +1206,7 @@ export default function SalesInvoice() {
             const invoicePaid = invoice.total > 0 && invoice.payment >= invoice.total;
             const invoiceRemaining = Math.max(0, invoice.total - invoice.payment);
             return (
-              <article key={invoice.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <article key={invoice.id} onClick={event => openInvoiceFromRow(event, invoice)} className="cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div className="px-3 pb-2.5 pt-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1328,7 +1333,7 @@ export default function SalesInvoice() {
                   const vehicleSummary = invoiceVehicleSummary(invoice);
                   const invoicePaid = invoice.total > 0 && invoice.payment >= invoice.total;
                   return (
-                  <tr key={invoice.id} className="group transition-colors even:bg-gray-50 hover:bg-blue-50/50">
+                  <tr key={invoice.id} onClick={event => openInvoiceFromRow(event, invoice)} className="group cursor-pointer transition-colors even:bg-gray-50 hover:bg-blue-50/50">
                     {orderedVisibleInvoiceColumns.map(key => {
                       if (key === 'date') return <td key={key} className="overflow-hidden whitespace-nowrap border-r border-gray-200 px-3 py-2.5 text-sm text-gray-900">{formatShareDate(invoice.date)}</td>;
                       if (key === 'number') return <td key={key} className="overflow-hidden whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">
